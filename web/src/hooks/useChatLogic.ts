@@ -14,9 +14,11 @@ interface UseChatLogicProps {
   conversationId: string;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  userId?: string;
+  onQuotaExceeded?: () => void;
 }
 
-export function useChatLogic({ conversationId, messages, setMessages }: UseChatLogicProps) {
+export function useChatLogic({ conversationId, messages, setMessages, userId, onQuotaExceeded }: UseChatLogicProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [examContext, setExamContext] = useState<ExamContext>({});
@@ -102,6 +104,37 @@ export function useChatLogic({ conversationId, messages, setMessages }: UseChatL
     voiceData?: { blob: Blob; base64: string }
   ) => {
     if (!textToSend && selectedImages.length === 0 && !voiceData) return;
+
+    // ✅ CHECK QUOTA BEFORE SENDING MESSAGE
+    if (userId) {
+      try {
+        const { data: quotaCheck } = await supabase.rpc('check_ai_usage_limit', {
+          p_user_id: userId,
+          p_request_type: 'chat_message',
+        });
+
+        if (quotaCheck && !quotaCheck.allowed) {
+          const upgradeText = quotaCheck.upgrade_available 
+            ? `💡 [Upgrade your plan](/dashboard/parent/upgrade) for ${quotaCheck.remaining > 0 ? 'more messages' : 'unlimited messages'}!` 
+            : 'Your limit resets tomorrow.';
+          
+          const quotaMessage: ChatMessage = {
+            id: `msg-${Date.now()}-quota`,
+            role: 'assistant',
+            content: `⚠️ **Daily Chat Limit Reached**\n\nYou've used ${quotaCheck.limit} messages today on the ${quotaCheck.current_tier} plan.\n\n${upgradeText}`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, quotaMessage]);
+          onQuotaExceeded?.();
+          return;
+        }
+
+        console.log('[Chat] Quota check passed:', quotaCheck);
+      } catch (error) {
+        console.error('[Chat] Quota check failed:', error);
+        // Continue anyway - don't block on quota check errors
+      }
+    }
 
     // Check if request will be queued
     if (dashAIThrottler.wouldWait()) {
@@ -267,6 +300,21 @@ export function useChatLogic({ conversationId, messages, setMessages }: UseChatL
 
       const finalMessages = [...newMessages, assistantMessage];
       setMessages(finalMessages);
+
+      // ✅ INCREMENT USAGE AFTER SUCCESSFUL RESPONSE
+      if (userId) {
+        try {
+          await supabase.rpc('increment_ai_usage', {
+            p_user_id: userId,
+            p_request_type: 'chat_message',
+            p_status: 'success',
+          });
+          console.log('[Chat] Usage incremented successfully');
+        } catch (error) {
+          console.error('[Chat] Failed to increment usage:', error);
+          // Don't block on increment failures
+        }
+      }
 
       // Check for exam request
       if (detectExamRequest(textToSend)) {

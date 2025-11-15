@@ -20,18 +20,21 @@ interface ChatInterfaceProps {
   conversationId: string;
   onNewConversation?: () => void;
   initialMessages?: ChatMessage[];
+  userId?: string;
 }
 
 export function ChatInterface({
   conversationId,
   onNewConversation,
-  initialMessages = []
+  initialMessages = [],
+  userId
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   const {
     isLoading,
@@ -40,7 +43,13 @@ export function ChatInterface({
     setExamContext,
     loadConversation,
     sendMessage,
-  } = useChatLogic({ conversationId, messages, setMessages });
+  } = useChatLogic({ 
+    conversationId, 
+    messages, 
+    setMessages,
+    userId,
+    onQuotaExceeded: () => setQuotaExceeded(true)
+  });
 
   // Load conversation on mount
   useEffect(() => {

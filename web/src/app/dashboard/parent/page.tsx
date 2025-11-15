@@ -21,6 +21,7 @@ import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActiviti
 import { ExamPrepWidget } from '@/components/dashboard/exam-prep/ExamPrepWidget';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
+import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { Users, BarChart3, Calendar, BookOpen, GraduationCap, Zap, Target, Lightbulb } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -144,6 +145,11 @@ export default function ParentDashboard() {
           preschoolName={preschoolName}
           userId={userId}
         />
+
+        {/* AI Usage Quota Card - Shows remaining AI credits */}
+        {userId && (
+          <QuotaCard userId={userId} />
+        )}
 
         {/* Pending Requests (ONLY for organization-linked parents) */}
         {hasOrganization && <PendingRequestsWidget userId={userId} />}
