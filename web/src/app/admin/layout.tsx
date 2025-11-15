@@ -66,8 +66,37 @@ export default function AdminLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: 120,
+            height: 120,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
+            boxShadow: '0 0 60px rgba(124, 58, 237, 0.6)',
+            animation: 'pulse-glow 2s ease-in-out infinite'
+          }}>
+            <span style={{ fontSize: 48, fontWeight: 'bold', color: 'white' }}>📚</span>
+          </div>
+          <h2 style={{ color: 'white', fontSize: 24, fontWeight: 700, marginBottom: 8 }}>EduDash Pro</h2>
+          <p style={{ color: '#9ca3af', fontSize: 14 }}>Loading your dashboard...</p>
+          <style jsx>{`
+            @keyframes pulse-glow {
+              0%, 100% { 
+                transform: scale(1);
+                boxShadow: 0 0 60px rgba(124, 58, 237, 0.6);
+              }
+              50% { 
+                transform: scale(1.05);
+                boxShadow: 0 0 80px rgba(236, 72, 153, 0.8);
+              }
+            }
+          `}</style>
+        </div>
       </div>
     );
   }
