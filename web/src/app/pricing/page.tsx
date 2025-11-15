@@ -2,20 +2,26 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft } from "lucide-react";
+import { createSubscriptionPayment, initiatePayFastPayment } from "@/lib/payfast";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 type UserType = "parents" | "schools";
 
 export default function PricingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [userType, setUserType] = useState<UserType>("parents");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isOnTrial, setIsOnTrial] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAuthAndTrial = async () => {
@@ -23,6 +29,10 @@ export default function PricingPage() {
       setIsLoggedIn(!!session);
 
       if (session) {
+        setUserId(session.user.id);
+        setUserEmail(session.user.email || null);
+        setUserName(session.user.user_metadata?.full_name || null);
+        
         try {
           const { data: trialData } = await supabase.rpc('get_my_trial_status');
           setIsOnTrial(trialData?.is_trial || false);
@@ -34,6 +44,53 @@ export default function PricingPage() {
     };
     checkAuthAndTrial();
   }, [supabase]);
+
+  const handleSubscribe = (planName: string, price: number) => {
+    if (!isLoggedIn) {
+      router.push('/sign-in?redirect=/pricing');
+      return;
+    }
+
+    if (!userId || !userEmail) {
+      alert('Please log in to subscribe');
+      return;
+    }
+
+    if (price === 0) {
+      router.push('/dashboard/parent');
+      return;
+    }
+
+    // Map plan names to tiers
+    const tierMap: Record<string, 'basic' | 'premium' | 'school'> = {
+      'Parent Starter': 'basic',
+      'Parent Plus': 'premium',
+      'Starter Plan': 'school',
+      'Premium Plan': 'school',
+      'Enterprise Plan': 'school',
+    };
+
+    const tier = tierMap[planName];
+    if (!tier) {
+      alert('Invalid plan selected');
+      return;
+    }
+
+    setProcessingPayment(planName);
+
+    try {
+      // Create PayFast payment data
+      const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName || undefined);
+      const passphrase = process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
+
+      // Initiate payment (redirects to PayFast)
+      initiatePayFastPayment(paymentData, passphrase);
+    } catch (error) {
+      console.error('[Pricing] Payment initiation failed:', error);
+      alert('Failed to initiate payment. Please try again.');
+      setProcessingPayment(null);
+    }
+  };
 
   const parentPlans = [
     {
@@ -147,6 +204,10 @@ export default function PricingPage() {
         body {
           overflow-x: hidden;
           max-width: 100vw;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
       <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#fff", fontFamily: "system-ui, sans-serif" }}>
@@ -338,25 +399,79 @@ export default function PricingPage() {
                     ))}
                   </ul>
 
-                  <Link 
-                    href="/sign-in"
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      padding: "14px",
-                      background: plan.popular ? "#0a0a0f" : "linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)",
-                      color: plan.popular ? "#fff" : "#0a0a0f",
-                      border: "none",
-                      borderRadius: "10px",
-                      fontSize: "16px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      textDecoration: "none",
-                      textAlign: "center"
-                    }}
-                  >
-                    {isEnterprise ? "Contact Sales" : price === 0 ? "Get Started Free" : "Start Free Trial"}
-                  </Link>
+                  {isEnterprise ? (
+                    <Link 
+                      href="/contact"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "14px",
+                        background: plan.popular ? "#0a0a0f" : "linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)",
+                        color: plan.popular ? "#fff" : "#0a0a0f",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "16px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        textDecoration: "none",
+                        textAlign: "center"
+                      }}
+                    >
+                      Contact Sales
+                    </Link>
+                  ) : price === 0 ? (
+                    <Link 
+                      href={isLoggedIn ? "/dashboard/parent" : "/sign-in"}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "14px",
+                        background: plan.popular ? "#0a0a0f" : "linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)",
+                        color: plan.popular ? "#fff" : "#0a0a0f",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "16px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        textDecoration: "none",
+                        textAlign: "center"
+                      }}
+                    >
+                      Get Started Free
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => handleSubscribe(plan.name, price || 0)}
+                      disabled={processingPayment === plan.name}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        width: "100%",
+                        padding: "14px",
+                        background: plan.popular ? "#0a0a0f" : "linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)",
+                        color: plan.popular ? "#fff" : "#0a0a0f",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "16px",
+                        fontWeight: 700,
+                        cursor: processingPayment === plan.name ? "not-allowed" : "pointer",
+                        textDecoration: "none",
+                        textAlign: "center",
+                        opacity: processingPayment === plan.name ? 0.6 : 1,
+                      }}
+                    >
+                      {processingPayment === plan.name ? (
+                        <>
+                          <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+                          Processing...
+                        </>
+                      ) : (
+                        "Subscribe Now"
+                      )}
+                    </button>
+                  )}
                 </div>
               );
             })}
