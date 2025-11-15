@@ -95,7 +95,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
           .limit(10);
 
         if (assignments && assignments.length > 0) {
-          const assignmentIds = assignments.map((a) => a.id);
+          const assignmentIds = assignments.map((a: any) => a.id);
           const { data: submissions } = await supabase
             .from('homework_submissions')
             .select('assignment_id')
@@ -103,8 +103,8 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
             .eq('preschool_id', studentData.preschool_id)
             .in('assignment_id', assignmentIds);
 
-          const submittedIds = new Set(submissions?.map((s) => s.assignment_id) || []);
-          pendingHomework = assignmentIds.filter((id) => !submittedIds.has(id)).length;
+          const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
+          pendingHomework = assignmentIds.filter((id: any) => !submittedIds.has(id)).length;
         }
       }
 

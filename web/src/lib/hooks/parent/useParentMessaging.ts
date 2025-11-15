@@ -91,7 +91,7 @@ export const useParentThreads = (userId: string | undefined) => {
       
       // Get last message and unread count for each thread
       const threadsWithDetails = await Promise.all(
-        (threads || []).map(async (thread) => {
+        (threads || []).map(async (thread: any) => {
           // Get last message
           const { data: lastMessage } = await client
             .from('messages')
@@ -107,7 +107,7 @@ export const useParentThreads = (userId: string | undefined) => {
             .maybeSingle();
           
           // Get unread count (messages after user's last_read_at)
-          const userParticipant = thread.participants?.find(p => p.user_id === userId);
+          const userParticipant = thread.participants?.find((p: any) => p.user_id === userId);
           let unreadCount = 0;
           
           if (userParticipant) {

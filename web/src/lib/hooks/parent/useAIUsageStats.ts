@@ -50,9 +50,9 @@ export function useAIUsageStats(userId: string | undefined): UseAIUsageStatsRetu
         .gte('created_at', startOfMonth.toISOString());
 
       if (usageData) {
-        const homeworkCount = usageData.filter((u) => u.service_type === 'homework_help').length;
-        const lessonCount = usageData.filter((u) => u.service_type === 'lesson_generation').length;
-        const tutoringCount = usageData.filter((u) => u.service_type === 'tutoring').length;
+        const homeworkCount = usageData.filter((u: any) => u.service_type === 'homework_help').length;
+        const lessonCount = usageData.filter((u: any) => u.service_type === 'lesson_generation').length;
+        const tutoringCount = usageData.filter((u: any) => u.service_type === 'tutoring').length;
 
         setUsage({
           ai_help: homeworkCount,

@@ -81,7 +81,7 @@ export default function OrganizationSelector({
       console.log('[OrganizationSelector] Data count:', data?.length || 0);
 
       // Transform data to match interface
-      const transformed = (data || []).map(org => ({
+      const transformed = (data || []).map((org: any) => ({
         id: org.id,
         name: org.name,
         type: org.type,
@@ -335,7 +335,7 @@ export default function OrganizationSelector({
               {availableTypes.map((type) => (
                 <button
                   key={type}
-                  onClick={() => setTypeFilter(type)}
+                  onClick={() => setTypeFilter(type || '')}
                   style={{
                     padding: "6px 12px",
                     background: typeFilter === type ? "#00f5ff" : "#2a2a2f",

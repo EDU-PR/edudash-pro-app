@@ -63,7 +63,7 @@ export function useTeacherDashboard(userId?: string) {
 
       // For each class, get student count and pending assignments
       const classesWithMetrics = await Promise.all(
-        (classesData || []).map(async (cls) => {
+        (classesData || []).map(async (cls: any) => {
           // Get student count
           const { count: studentCount } = await supabase
             .from('students')

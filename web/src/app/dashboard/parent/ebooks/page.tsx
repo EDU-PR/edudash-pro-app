@@ -82,7 +82,7 @@ export default function EBooksPage() {
         .eq('user_id', user.id);
 
       if (data) {
-        setBookmarks(new Set(data.map(b => b.textbook_id)));
+        setBookmarks(new Set(data.map((b: { textbook_id: string }) => b.textbook_id)));
       }
     } catch (error) {
       console.error('Error loading bookmarks:', error);

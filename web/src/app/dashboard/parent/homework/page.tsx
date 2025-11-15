@@ -83,8 +83,8 @@ export default function HomeworkPage() {
         setHomework(data || []);
         
         // Calculate stats
-        const pending = data?.filter(hw => !hw.submissions || hw.submissions.length === 0).length || 0;
-        const completed = data?.filter(hw => hw.submissions && hw.submissions.length > 0).length || 0;
+        const pending = data?.filter((hw: any) => !hw.submissions || hw.submissions.length === 0).length || 0;
+        const completed = data?.filter((hw: any) => hw.submissions && hw.submissions.length > 0).length || 0;
         setStats({ pending, completed, total: data?.length || 0 });
       } catch (err: any) {
         setError(err.message);

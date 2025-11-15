@@ -78,18 +78,18 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
             .lte('due_date', thirtyDaysLater.toISOString().split('T')[0]);
           
           if (homework) {
-            const homeworkIds = homework.map(hw => hw.id);
+            const homeworkIds = homework.map((hw: any) => hw.id);
             const { data: submissions } = await client
               .from('homework_submissions')
               .select('assignment_id')
               .eq('student_id', studentId)
               .in('assignment_id', homeworkIds);
             
-            const submittedIds = new Set(submissions?.map(s => s.assignment_id) || []);
+            const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
             
             const homeworkEvents = homework
-              .filter(hw => !submittedIds.has(hw.id))
-              .map(hw => ({
+              .filter((hw: any) => !submittedIds.has(hw.id))
+              .map((hw: any) => ({
                 id: 'hw-' + hw.id,
                 title: '📚 ' + hw.title + ' (Due)',
                 description: 'Homework assignment due',

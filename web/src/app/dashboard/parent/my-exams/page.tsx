@@ -68,12 +68,12 @@ export default function MyExamsPage() {
         setExams(examsData || []);
         
         // Calculate stats
-        const completedExams = (examsData || []).filter(e => e.progress && e.progress.length > 0);
-        const scores = completedExams.map(e => e.progress[0].percentage);
+        const completedExams = (examsData || []).filter((e: any) => e.progress && e.progress.length > 0);
+        const scores = completedExams.map((e: any) => e.progress[0].percentage);
         
         setStats({
           totalExams: completedExams.length,
-          averageScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0,
+          averageScore: scores.length > 0 ? scores.reduce((a: number, b: number) => a + b, 0) / scores.length : 0,
           bestScore: scores.length > 0 ? Math.max(...scores) : 0
         });
       }
@@ -214,7 +214,7 @@ export default function MyExamsPage() {
           <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
             {exams.map(exam => {
               const hasProgress = exam.progress && exam.progress.length > 0;
-              const latestProgress = hasProgress ? exam.progress[0] : null;
+              const latestProgress = hasProgress && exam.progress ? exam.progress[0] : null;
               
               return (
                 <div key={exam.id} className="card">

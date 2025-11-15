@@ -52,14 +52,14 @@ export function ParentApprovalWidget({ preschoolId, userId }: ParentApprovalWidg
         if (error) throw error;
 
         // Get parent emails and names
-        const parentIds = data?.map(r => r.parent_auth_id) || [];
+        const parentIds = data?.map((r: any) => r.parent_auth_id) || [];
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, email, first_name, last_name')
           .in('id', parentIds);
 
         const profileMap = new Map<string, { email: string; name: string }>(
-          profiles?.map(p => [
+          profiles?.map((p: any) => [
             p.id,
             {
               email: p.email || 'No email',
@@ -68,7 +68,7 @@ export function ParentApprovalWidget({ preschoolId, userId }: ParentApprovalWidg
           ])
         );
 
-        const mapped: PendingRequest[] = (data || []).map(r => ({
+        const mapped: PendingRequest[] = (data || []).map((r: any) => ({
           id: r.id,
           parent_email: profileMap.get(r.parent_auth_id)?.email || 'No email',
           parent_name: profileMap.get(r.parent_auth_id)?.name || 'Parent',

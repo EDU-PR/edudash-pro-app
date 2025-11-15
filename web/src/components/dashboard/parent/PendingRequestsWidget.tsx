@@ -49,7 +49,7 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
 
         // Create a Set of normalized student names to check against
         const linkedStudentNames = new Set(
-          (linkedStudents || []).map(s => 
+          (linkedStudents || []).map((s: any) => 
             `${s.first_name} ${s.last_name}`.toLowerCase().trim()
           )
         );
@@ -93,7 +93,7 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
 
         if (!claimError && claimRequests) {
           // Get student IDs from linked students
-          const linkedStudentIds = new Set((linkedStudents || []).map(s => s.id));
+          const linkedStudentIds = new Set((linkedStudents || []).map((s: any) => s.id));
 
           claimRequests.forEach((req: any) => {
             // Only show if student is NOT already linked

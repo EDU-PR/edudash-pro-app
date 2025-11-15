@@ -194,16 +194,16 @@ export default function SuperAdminDashboard() {
           setDashboardData({
             user_stats: {
               total_users: profiles.length,
-              active_users: profiles.filter(p => 
+              active_users: profiles.filter((p: any) => 
                 p.updated_at && new Date(p.updated_at) > oneDayAgo
               ).length,
-              inactive_users: profiles.filter(p => 
+              inactive_users: profiles.filter((p: any) => 
                 !p.updated_at || new Date(p.updated_at) <= oneDayAgo
               ).length,
-              superadmins: profiles.filter(p => p.role === 'superadmin').length,
-              principals: profiles.filter(p => p.role === 'principal').length,
-              teachers: profiles.filter(p => p.role === 'teacher').length,
-              parents: profiles.filter(p => p.role === 'parent').length,
+              superadmins: profiles.filter((p: any) => p.role === 'superadmin').length,
+              principals: profiles.filter((p: any) => p.role === 'principal').length,
+              teachers: profiles.filter((p: any) => p.role === 'teacher').length,
+              parents: profiles.filter((p: any) => p.role === 'parent').length,
             },
             generated_at: new Date().toISOString(),
             success: true,

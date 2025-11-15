@@ -36,7 +36,7 @@ export function createClient() {
 
   // Global auth events
   try {
-    browserClient.auth.onAuthStateChange((event) => {
+    browserClient.auth.onAuthStateChange((event: any) => {
       if (event === 'SIGNED_OUT') {
         try {
           localStorage.removeItem('edudash_user_session');

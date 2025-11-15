@@ -61,14 +61,14 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         console.log('✅ [ChildRegistrationWidget] Found requests:', data?.length || 0);
 
         // Get parent details
-        const parentIds = data?.map(r => r.parent_id) || [];
+        const parentIds = data?.map((r: any) => r.parent_id) || [];
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, email, first_name, last_name')
           .in('id', parentIds);
 
         const profileMap = new Map<string, { email: string; name: string }>(
-          profiles?.map(p => [
+          profiles?.map((p: any) => [
             p.id,
             {
               email: p.email || 'No email',
@@ -77,7 +77,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
           ])
         );
 
-        const mapped: ChildRegistration[] = (data || []).map(r => ({
+        const mapped: ChildRegistration[] = (data || []).map((r: any) => ({
           id: r.id,
           parent_id: r.parent_id,
           parent_email: profileMap.get(r.parent_id)?.email || 'No email',

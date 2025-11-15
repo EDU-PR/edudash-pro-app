@@ -73,7 +73,7 @@ export default function RegisterChildPage() {
           .order('name');
 
         if (error) throw error;
-        setOrganizations((data || []).map(p => ({ id: p.id, name: p.name, type: 'preschool' })));
+        setOrganizations((data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' })));
       } catch (err) {
         console.error('Failed to load organizations:', err);
       } finally {

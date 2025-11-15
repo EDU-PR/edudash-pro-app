@@ -161,7 +161,7 @@ export function ConversationalExamBuilder({
 
       // Extract topic titles
       const topics = capsTopics && capsTopics.length > 0
-        ? capsTopics.map(t => t.topic_title)
+        ? capsTopics.map((t: any) => t.topic_title)
         : getExampleTopics(grade, subject);
 
       showTopicSelection(topics);

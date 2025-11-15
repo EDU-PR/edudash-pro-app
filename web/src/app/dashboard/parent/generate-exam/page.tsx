@@ -65,7 +65,8 @@ function GenerateExamContent() {
     
     // Try to load existing exam first
     if (existingExamId || activeKey) {
-      loadExistingExam(existingExamId || localStorage.getItem(activeKey));
+      const storedId = activeKey ? localStorage.getItem(activeKey) : null;
+      loadExistingExam(existingExamId || (storedId ? storedId : ''));
     } else {
       generateNewExam();
     }

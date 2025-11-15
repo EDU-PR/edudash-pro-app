@@ -70,7 +70,7 @@ export const useChildHomework = (studentId: string | undefined, userId: string |
       if (!assignments) return [];
       
       // Get submissions for each assignment
-      const assignmentIds = assignments.map(a => a.id);
+      const assignmentIds = assignments.map((a: any) => a.id);
       const { data: submissions } = await client
         .from('homework_submissions')
         .select('id, assignment_id, submitted_at, status, grade, feedback')
@@ -78,9 +78,9 @@ export const useChildHomework = (studentId: string | undefined, userId: string |
         .in('assignment_id', assignmentIds);
       
       // Map submissions to assignments
-      const assignmentsWithSubmissions = assignments.map(assignment => ({
+      const assignmentsWithSubmissions = assignments.map((assignment: any) => ({
         ...assignment,
-        submissions: submissions?.filter(s => s.assignment_id === assignment.id) || []
+        submissions: submissions?.filter((s: any) => s.assignment_id === assignment.id) || []
       }));
       
       return assignmentsWithSubmissions;
@@ -123,14 +123,14 @@ export const useHomeworkStats = (studentId: string | undefined, userId: string |
       }
       
       // Get submissions
-      const assignmentIds = assignments.map(a => a.id);
+      const assignmentIds = assignments.map((a: any) => a.id);
       const { data: submissions } = await client
         .from('homework_submissions')
         .select('assignment_id, status')
         .eq('student_id', studentId)
         .in('assignment_id', assignmentIds);
       
-      const submittedIds = new Set(submissions?.map(s => s.assignment_id) || []);
+      const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
       
       let pending = 0;
       let overdue = 0;
