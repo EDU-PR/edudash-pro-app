@@ -63,21 +63,45 @@ export async function POST(request: NextRequest) {
 
     // Handle payment success
     if (payment_status === 'COMPLETE') {
-      // Update user tier in user_ai_usage table
+      // Update user tier in user_ai_tiers table (FIXED: was using wrong table)
+      const tierUppercase = tier.toUpperCase(); // FREE, BASIC, PREMIUM, etc.
+      const { error: tierError } = await supabaseAdmin
+        .from('user_ai_tiers')
+        .upsert({
+          user_id,
+          tier: tierUppercase,
+          assigned_reason: `PayFast subscription payment ${data.pf_payment_id}`,
+          is_active: true,
+          metadata: {
+            payment_id: data.m_payment_id,
+            pf_payment_id: data.pf_payment_id,
+            amount: data.amount_gross,
+            payment_date: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (tierError) {
+        console.error('[PayFast Webhook] Failed to update user tier:', tierError);
+      } else {
+        console.log('[PayFast Webhook] Successfully updated user tier to:', tierUppercase);
+      }
+
+      // Also update current_tier in user_ai_usage for quota tracking
       const { error: usageError } = await supabaseAdmin
         .from('user_ai_usage')
         .upsert({
           user_id,
-          current_tier: tier,
+          current_tier: tier.toLowerCase(), // free, basic, premium
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id'
         });
 
       if (usageError) {
-        console.error('[PayFast Webhook] Failed to update user tier:', usageError);
-      } else {
-        console.log('[PayFast Webhook] Successfully updated user tier to:', tier);
+        console.error('[PayFast Webhook] Failed to update usage tier:', usageError);
       }
 
       // Log the payment in subscriptions table (create if doesn't exist)

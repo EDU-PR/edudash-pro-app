@@ -194,6 +194,7 @@ export default function DashChatPage() {
               <ChatInterface
                 conversationId={activeConversationId}
                 onNewConversation={handleNewConversation}
+                userId={userId}
               />
             )}
 
