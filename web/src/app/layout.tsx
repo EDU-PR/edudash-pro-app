@@ -7,6 +7,7 @@ import { PWARegister } from "@/components/PWARegister";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdateChecker } from "@/components/PWAUpdateChecker";
 import { DeploymentNotificationProvider } from "@/components/DeploymentNotificationProvider";
+import { PWASplashScreen } from "@/components/PWASplashScreen";
 import 'katex/dist/katex.min.css';
 
 const geistSans = Geist({
@@ -62,6 +63,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="EduDash Pro" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <PWASplashScreen />
         <PWARegister />
         <PWAInstallPrompt />
         <PWAUpdateChecker />
