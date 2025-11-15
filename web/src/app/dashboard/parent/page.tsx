@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
+import { useTierUpdates } from '@/hooks/useTierUpdates';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { DashboardHeader } from '@/components/dashboard/parent/DashboardHeader';
 import { TrialBanner } from '@/components/dashboard/parent/TrialBanner';
@@ -46,6 +47,13 @@ export default function ParentDashboard() {
     trialStatus,
     loading,
   } = useParentDashboardData();
+  
+  // Listen for tier updates
+  useTierUpdates(userId, (newTier) => {
+    console.log('[Dashboard] Tier updated to:', newTier);
+    // Reload the page to refresh quota data
+    window.location.reload();
+  });
   
   // Local state
   const [greeting, setGreeting] = useState('');

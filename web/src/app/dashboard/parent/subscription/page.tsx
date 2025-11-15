@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
+import { useTierUpdates } from '@/hooks/useTierUpdates';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import {
   Crown,
@@ -145,6 +146,14 @@ export default function SubscriptionPage() {
   const [currentTier, setCurrentTier] = useState<string>('free');
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Listen for real-time tier updates
+  useTierUpdates(userId, (newTier) => {
+    console.log('[Subscription] Tier updated to:', newTier);
+    setCurrentTier(newTier);
+    loadSubscriptionData();
+    refreshUsage();
+  });
 
   useEffect(() => {
     if (userId) {
