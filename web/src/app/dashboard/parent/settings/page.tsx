@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle } from 'lucide-react';
+import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -216,6 +216,21 @@ export default function SettingsPage() {
                     <span className="toggleThumb" />
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Subscription & Billing */}
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+                <CreditCard className="icon20" style={{ color: 'var(--primary)' }} />
+                <h2 className="h2" style={{ margin: 0 }}>Subscription & Billing</h2>
+              </div>
+              <div className="listItem" style={{ cursor: 'pointer' }} onClick={() => router.push('/dashboard/parent/subscription')}>
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Manage Subscription</div>
+                  <div className="muted" style={{ fontSize: 12 }}>View your plan, usage, and upgrade options</div>
+                </div>
+                <ChevronRight className="icon20" style={{ color: 'var(--textMuted)' }} />
               </div>
             </div>
 

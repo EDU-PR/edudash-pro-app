@@ -179,7 +179,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
           }}
         >
           <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-            💡 Need more? <a href="/dashboard/parent/upgrade" className="link">Upgrade your plan</a> for higher limits and priority support.
+            💡 Need more? <a href="/dashboard/parent/subscription" className="link">Upgrade your plan</a> for higher limits and priority support.
           </p>
         </div>
       )}
