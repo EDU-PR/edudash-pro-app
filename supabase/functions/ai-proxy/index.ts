@@ -477,12 +477,21 @@ serve(async (req: Request): Promise<Response> => {
         metadata: { ...metadata, scope, error: (aiError as Error).message, error_stack: (aiError as Error).stack, redaction_count: redactionCount }
       })
 
-      // Handle rate limit errors - try OpenAI fallback if available
-      if (isRateLimitError(aiError)) {
-        const retryMs = getRetryAfter(aiError);
+      // Handle rate limit and quota errors - try OpenAI fallback if available
+      const errorMessage = (aiError as Error).message || '';
+      const isQuotaError = errorMessage.includes('usage limits') || errorMessage.includes('quota');
+      const isRateLimit = isRateLimitError(aiError);
+      
+      if (isRateLimit || isQuotaError) {
+        const retryMs = isRateLimit ? getRetryAfter(aiError) : 0;
         const retrySeconds = Math.ceil(retryMs / 1000);
-        console.warn(`[ai-proxy:${requestId}] Rate limit hit. Retry after ${retrySeconds}s`);
-        console.warn(`[ai-proxy:${requestId}] Queue status:`, aiRequestQueue.getStatus());
+        
+        if (isQuotaError) {
+          console.warn(`[ai-proxy:${requestId}] Claude quota exceeded. Attempting OpenAI fallback...`);
+        } else {
+          console.warn(`[ai-proxy:${requestId}] Rate limit hit. Retry after ${retrySeconds}s`);
+          console.warn(`[ai-proxy:${requestId}] Queue status:`, aiRequestQueue.getStatus());
+        }
         
         // Try OpenAI as fallback if configured
         if (OPENAI_API_KEY && !stream && !tools) {
@@ -524,7 +533,7 @@ serve(async (req: Request): Promise<Response> => {
                 image_count: payload.images?.length || 0, 
                 redaction_count: redactionCount,
                 fallback_provider: 'openai',
-                original_error: 'anthropic_rate_limit'
+                original_error: isQuotaError ? 'anthropic_quota_exceeded' : 'anthropic_rate_limit'
               }
             });
             
@@ -537,7 +546,8 @@ serve(async (req: Request): Promise<Response> => {
                 cost: fallbackResult.cost 
               },
               fallback: true,
-              fallback_provider: 'openai'
+              fallback_provider: 'openai',
+              fallback_reason: isQuotaError ? 'quota_exceeded' : 'rate_limit'
             });
             
           } catch (fallbackError) {

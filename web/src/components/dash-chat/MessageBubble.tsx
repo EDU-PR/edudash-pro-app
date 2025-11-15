@@ -76,22 +76,37 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         gap: 8,
         alignItems: 'flex-start',
         flexDirection: isUser ? 'row-reverse' : 'row',
-        paddingLeft: isUser ? 16 : 4,
-        paddingRight: isUser ? 4 : 16,
+        paddingLeft: 4,
+        paddingRight: 4,
         width: '100%',
-        justifyContent: isUser ? 'flex-end' : 'flex-start'
+        maxWidth: '100%'
       }}
     >
+      {/* Avatar - Only for AI */}
+      {!isUser && (
+        <div style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          <Sparkles size={16} color="white" />
+        </div>
+      )}
+
       {/* Message Container - Dynamic Width */}
       <div
         style={{
           width: 'auto',
-          minWidth: '200px',
-          maxWidth: isUser ? '85%' : '90%', // User messages narrower, AI messages wider
+          minWidth: '150px',
+          maxWidth: isUser ? '75%' : '85%',
           display: 'flex',
           flexDirection: 'column',
-          gap: 4,
-          flex: isUser ? 'none' : '1'
+          gap: 8
         }}
       >
         {/* Images */}
@@ -169,14 +184,13 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
               : 'var(--surface-1)',
             color: isUser ? 'white' : 'var(--text)',
             padding: '12px 16px',
-            borderRadius: 16,
+            borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
             border: isUser ? 'none' : '1px solid var(--border)',
             fontSize: 14,
             lineHeight: 1.6,
-            width: 'fit-content',
-            minWidth: '150px',
-            maxWidth: '100%',
-            wordWrap: 'break-word'
+            width: '100%',
+            wordWrap: 'break-word',
+            alignSelf: isUser ? 'flex-end' : 'flex-start'
           }}
         >
           {isUser ? (
