@@ -214,7 +214,11 @@ export function calculateCost(
   tokensIn: number,
   tokensOut: number
 ): number {
+  // Safety check: return 0 if model pricing not found or tokens are invalid
   const pricing = MODEL_PRICING[model]
+  if (!pricing || typeof tokensIn !== 'number' || typeof tokensOut !== 'number') {
+    return 0
+  }
   return (tokensIn * pricing.input) + (tokensOut * pricing.output)
 }
 
@@ -359,11 +363,12 @@ export async function callClaude(
   // Non-streaming: parse full response
   const result = await response.json()
 
+  // Safely extract token usage (may be undefined if API returned error)
   const tokensIn = result.usage?.input_tokens || 0
   const tokensOut = result.usage?.output_tokens || 0
 
-  // Calculate cost
-  const cost = calculateCost(model, tokensIn, tokensOut)
+  // Calculate cost (handle case where usage is missing)
+  const cost = result.usage ? calculateCost(model, tokensIn, tokensOut) : 0
 
   // Extract tool use if present
   const toolUse = result.content
