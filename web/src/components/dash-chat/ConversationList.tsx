@@ -96,8 +96,30 @@ export function ConversationList({
 
   if (loading) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted)' }}>
-        <p>Loading conversations...</p>
+      <div style={{ 
+        padding: 20, 
+        textAlign: 'center', 
+        color: 'var(--muted)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12
+      }}>
+        <div style={{
+          width: 40,
+          height: 40,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+          animation: 'pulse 1.5s ease-in-out infinite'
+        }} />
+        <p style={{ margin: 0 }}>Loading conversations...</p>
+        <style jsx>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
       </div>
     );
   }

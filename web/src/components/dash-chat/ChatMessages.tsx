@@ -191,19 +191,58 @@ export function ChatMessages({
           </div>
         )}
 
-        {/* Typing Indicator */}
+        {/* Typing Indicator - Animated */}
         {isTyping && (
-          <div className="chat-typing">
-            <div className="chat-logo" style={{width:32,height:32,margin:0}}>
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'flex-start',
+            paddingLeft: 4,
+            paddingRight: 4
+          }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              animation: 'spin 2s linear infinite'
+            }}>
               <Sparkles size={16} color="white" />
             </div>
-            <div className="chat-typing-bubble">
-              <div style={{ display: 'flex', gap: 4 }}>
-                <div className="typing-dot" style={{ animationDelay: '0ms' }}></div>
-                <div className="typing-dot" style={{ animationDelay: '150ms' }}></div>
-                <div className="typing-dot" style={{ animationDelay: '300ms' }}></div>
-              </div>
+            <div style={{
+              background: 'var(--surface-1)',
+              padding: '12px 16px',
+              borderRadius: '16px 16px 16px 4px',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              gap: 4,
+              alignItems: 'center'
+            }}>
+              <div className="typing-dot" style={{ animationDelay: '0ms' }}></div>
+              <div className="typing-dot" style={{ animationDelay: '150ms' }}></div>
+              <div className="typing-dot" style={{ animationDelay: '300ms' }}></div>
             </div>
+            <style jsx>{`
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+              .typing-dot {
+                width: 8px;
+                height: 8px;
+                borderRadius: '50%';
+                background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
+                animation: typing-bounce 1.4s infinite ease-in-out;
+              }
+              @keyframes typing-bounce {
+                0%, 60%, 100% { transform: translateY(0); opacity: 0.7; }
+                30% { transform: translateY(-10px); opacity: 1; }
+              }
+            `}</style>
           </div>
         )}
 
