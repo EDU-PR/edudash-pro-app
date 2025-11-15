@@ -12,8 +12,9 @@ export function PWAUpdateChecker() {
       return;
     }
 
-    // Check for updates every 30 seconds (was 5 minutes - changed for faster update detection)
+    // Check for updates every 30 seconds
     const CHECK_INTERVAL = 30 * 1000;
+    let intervalId: NodeJS.Timeout;
 
     const checkForUpdates = async () => {
       try {
@@ -27,52 +28,67 @@ export function PWAUpdateChecker() {
       }
     };
 
-    // Listen for new service worker waiting
-    const onUpdateFound = () => {
-      navigator.serviceWorker.ready.then((reg) => {
-        if (reg.waiting) {
-          console.log('✨ [PWA] Update found!');
+    const handleUpdateFound = (reg: ServiceWorkerRegistration) => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+
+      console.log('✨ [PWA] New service worker installing...');
+
+      newWorker.addEventListener('statechange', () => {
+        console.log(`🔄 [PWA] Service worker state: ${newWorker.state}`);
+        
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // New service worker installed and old one is still controlling
+          console.log('✅ [PWA] Update available!');
           setRegistration(reg);
           setUpdateAvailable(true);
 
-          // Auto-reload after 10 seconds if user doesn't act
+          // Auto-reload after 15 seconds if user doesn't act
           setTimeout(() => {
             if (reg.waiting) {
               console.log('⏰ [PWA] Auto-applying update...');
               reg.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
-          }, 10000);
+          }, 15000);
         }
       });
     };
 
     // Listen for controller change (new service worker activated)
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const handleControllerChange = () => {
       console.log('🔄 [PWA] New service worker activated, reloading...');
       window.location.reload();
-    });
+    };
 
-    // Register update listener
-    let intervalId: NodeJS.Timeout;
-    
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+    // Initialize
     navigator.serviceWorker.ready.then((reg) => {
+      setRegistration(reg);
+
       // Check for waiting service worker immediately
       if (reg.waiting) {
-        onUpdateFound();
+        console.log('✅ [PWA] Update already waiting!');
+        setUpdateAvailable(true);
       }
-      
-      // Listen for updatefound event
-      reg.addEventListener('updatefound', onUpdateFound);
+
+      // Listen for new service worker installing
+      reg.addEventListener('updatefound', () => {
+        handleUpdateFound(reg);
+      });
 
       // Initial check
       checkForUpdates();
 
       // Periodic checks
       intervalId = setInterval(checkForUpdates, CHECK_INTERVAL);
+
+      console.log('📡 [PWA] Update checker initialized');
     });
 
     return () => {
       if (intervalId) clearInterval(intervalId);
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
   }, []);
 
