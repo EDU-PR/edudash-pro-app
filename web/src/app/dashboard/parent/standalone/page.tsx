@@ -656,6 +656,7 @@ export default function StandaloneParentDashboard() {
           <div style={{ marginBottom: 32 }}>
             <div style={{ background: '#1e293b', padding: 24, borderRadius: 16, border: '1px solid #334155' }}>
               <ExamPrepWidget
+                userId={userId}
                 onAskDashAI={(prompt, display, language, enableInteractive) => {
                   handleAskFromActivity(prompt, display, language, enableInteractive);
                 }}
