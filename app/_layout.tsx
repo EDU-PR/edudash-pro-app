@@ -30,6 +30,7 @@ import DashWakeWordListener from '@/components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { DashChatButton } from '@/components/ui/DashChatButton';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
+import { AnimatedSplash } from '@/components/ui/AnimatedSplash';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '@/hooks/useRouteGuard';
@@ -141,6 +142,7 @@ export default function RootLayout() {
 
 function RootLayoutContent() {
   const [dashInstance, setDashInstance] = useState<IDashAIAssistant | null>(null);
+  const [showSplash, setShowSplash] = useState(true);
   const { session } = useAuth();
   
   if (__DEV__) console.log('[RootLayoutContent] Rendering...');
@@ -215,6 +217,11 @@ function RootLayoutContent() {
       return cleanup;
     }
   }, []);
+  
+  // Show splash screen only on native
+  if (showSplash && Platform.OS !== 'web') {
+    return <AnimatedSplash onFinish={() => setShowSplash(false)} />;
+  }
   
   return <LayoutContent />;
 }
