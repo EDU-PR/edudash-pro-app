@@ -379,6 +379,7 @@ export default function ParentDashboard() {
               displayMessage={aiDisplay}
               language={aiLanguage}
               enableInteractive={aiInteractive}
+              userId={userId}
               onClose={handleCloseAI}
             />
           </div>

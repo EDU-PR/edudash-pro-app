@@ -217,7 +217,7 @@ export default function PrincipalDashboard() {
           setDashAIFullscreen(true);
         }
       }}>
-        <AskAIWidget inline />
+        <AskAIWidget inline userId={userId} />
       </div>
     </>
   );
@@ -420,7 +420,7 @@ export default function PrincipalDashboard() {
             </button>
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <AskAIWidget fullscreen />
+            <AskAIWidget fullscreen userId={userId} />
           </div>
         </div>
       )}

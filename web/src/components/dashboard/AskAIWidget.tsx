@@ -45,6 +45,7 @@ interface AskAIWidgetProps {
   language?: string;
   enableInteractive?: boolean;
   conversationId?: string; // NEW: For persistence
+  userId?: string;
   onClose?: () => void;
 }
 
@@ -56,6 +57,7 @@ export function AskAIWidget({
   language = 'en-ZA', 
   enableInteractive = false,
   conversationId, // NEW
+  userId,
   onClose 
 }: AskAIWidgetProps) {
   const [open, setOpen] = useState(inline);
@@ -423,6 +425,7 @@ export function AskAIWidget({
             <ExamInteractiveView
               exam={interactiveExam}
               generationId={currentGenerationId}
+              userId={userId}
               onClose={() => setInteractiveExam(null)}
             />
           </div>

@@ -749,6 +749,7 @@ export default function StandaloneParentDashboard() {
               displayMessage={aiDisplay}
               language={aiLanguage}
               enableInteractive={aiInteractive}
+              userId={userId}
               inline
               fullscreen
             />

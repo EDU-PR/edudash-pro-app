@@ -370,6 +370,7 @@ function GenerateExamContent() {
           <ExamInteractiveView
             exam={exam}
             generationId={examId}
+            userId={userId}
             onClose={handleClose}
             onSubmitted={() => {
               if (activeKey) {
