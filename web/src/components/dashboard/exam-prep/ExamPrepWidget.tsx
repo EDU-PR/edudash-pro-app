@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, FileText, Brain, Target, Sparkles, GraduationCap, Clock, Award, Globe, MessageSquare } from 'lucide-react';
 import { ConversationalExamBuilder } from './ConversationalExamBuilder';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
+import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import { createClient } from '@/lib/supabase/client';
 
 interface ExamPrepWidgetProps {
@@ -338,8 +339,35 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const [subjectSearch, setSubjectSearch] = useState('');
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [showConversationalBuilder, setShowConversationalBuilder] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeModalData, setUpgradeModalData] = useState<{ currentUsage: number; currentLimit: number } | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
 
   const [customPrompt, setCustomPrompt] = useState('');
+
+  // Fetch user info for UpgradeModal
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (!userId) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || '');
+        setUserName(user.user_metadata?.full_name || '');
+      }
+
+      const { data: tierData } = await supabase
+        .from('user_ai_tiers')
+        .select('tier')
+        .eq('user_id', userId)
+        .single();
+      if (tierData) {
+        setCurrentTier(tierData.tier || 'free');
+      }
+    };
+    fetchUserInfo();
+  }, [userId, supabase]);
 
   // Show conversational builder if requested
   if (showConversationalBuilder) {
@@ -378,16 +406,11 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
       const quotaResult = await checkQuota('exam_generation');
       
       if (quotaResult && !quotaResult.allowed) {
-        const upgradeMessage = quotaResult.upgrade_available
-          ? `\n\n💡 Upgrade to ${quotaResult.current_tier === 'free' ? 'Basic' : 'Premium'} plan for more exams!`
-          : '';
-        
-        alert(`⚠️ Monthly Exam Limit Reached\n\nYou've used all ${quotaResult.limit} exams this month on the ${quotaResult.current_tier} plan.${upgradeMessage}\n\nYour limit resets next month.`);
-        
-        // Optionally redirect to upgrade page
-        if (quotaResult.upgrade_available) {
-          router.push('/dashboard/parent/upgrade');
-        }
+        setUpgradeModalData({
+          currentUsage: quotaResult.remaining === 0 ? quotaResult.limit : quotaResult.limit - quotaResult.remaining,
+          currentLimit: quotaResult.limit,
+        });
+        setShowUpgradeModal(true);
         return;
       }
       
@@ -401,7 +424,7 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
       const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
       
       if (stored === today) {
-        alert('Free limit reached for today. Upgrade to Parent Starter (R49.99/month) for unlimited exam generation.');
+        router.push('/sign-in?message=Sign in to continue generating exams');
         return;
       }
       
@@ -1422,6 +1445,19 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
           </div>
         </>
       )}
+
+      {/* UpgradeModal for quota exceeded */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentTier={currentTier}
+        userId={userId || ''}
+        userEmail={userEmail}
+        userName={userName}
+        featureBlocked="exam_generation"
+        currentUsage={upgradeModalData?.currentUsage}
+        currentLimit={upgradeModalData?.currentLimit}
+      />
     </>
   );
 }
