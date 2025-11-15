@@ -75,12 +75,11 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         display: 'flex',
         gap: 8,
         alignItems: 'flex-start',
-        flexDirection: isUser ? 'row-reverse' : 'row',
+        flexDirection: 'row',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
         paddingLeft: 4,
         paddingRight: 4,
-        width: '100%',
-        maxWidth: '100%'
+        width: '100%'
       }}
     >
       {/* Avatar - Only for AI */}
@@ -107,7 +106,8 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           maxWidth: isUser ? '75%' : '85%',
           display: 'flex',
           flexDirection: 'column',
-          gap: 8
+          gap: 8,
+          marginLeft: isUser ? 'auto' : 0
         }}
       >
         {/* Images */}

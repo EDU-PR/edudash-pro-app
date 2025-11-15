@@ -2,7 +2,7 @@
  * PDF Export Utility for EduDash Pro
  * 
  * Generates PDF documents from exam data, flashcards, and study materials.
- * Uses jsPDF for client-side PDF generation.
+ * Uses jsPDF for client-side PDF generation with professional formatting.
  */
 
 import jsPDF from 'jspdf';
@@ -13,13 +13,30 @@ import autoTable from 'jspdf-autotable';
  */
 export function exportExamToPDF(examData: any): void {
   const doc = new jsPDF();
-  let yPos = 20;
+  let yPos = 15;
   
-  // Header
+  // Add EduDash Pro branding header with gradient effect
+  doc.setFillColor(124, 58, 237); // Purple
+  doc.rect(0, 0, 210, 25, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('📚 EduDash Pro', 105, 12, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Empowering Education Through AI', 105, 19, { align: 'center' });
+  
+  yPos = 35;
+  doc.setTextColor(0, 0, 0);
+  
+  // Main Title with underline
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text(examData.title || 'CAPS Practice Examination', 105, yPos, { align: 'center' });
-  yPos += 10;
+  doc.setDrawColor(124, 58, 237);
+  doc.setLineWidth(0.5);
+  doc.line(40, yPos + 2, 170, yPos + 2);
+  yPos += 12;
   
   // Metadata
   doc.setFontSize(11);
@@ -64,11 +81,15 @@ export function exportExamToPDF(examData: any): void {
         yPos = 20;
       }
       
-      // Section header
+      // Section header with background
+      doc.setFillColor(245, 243, 255); // Light purple background
+      doc.roundedRect(15, yPos - 5, 180, 10, 2, 2, 'F');
+      doc.setTextColor(124, 58, 237); // Purple text
       doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.text(`SECTION ${String.fromCharCode(65 + sectionIndex)}: ${section.title || section.name || 'Questions'}`, 20, yPos);
-      yPos += 8;
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
       
       // Section description (if present)
       if (section.description) {
@@ -325,32 +346,126 @@ export function exportStudyGuideToPDF(studyGuideData: any): void {
 }
 
 /**
- * Generic text-to-PDF export
+ * Generic text-to-PDF export with enhanced markdown formatting
  */
 export function exportTextToPDF(text: string, title: string = 'Document'): void {
   const doc = new jsPDF();
-  let yPos = 20;
+  let yPos = 15;
   
-  // Header
+  // Add branded header
+  doc.setFillColor(124, 58, 237);
+  doc.rect(0, 0, 210, 25, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('📚 EduDash Pro', 105, 12, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('AI-Generated Educational Content', 105, 19, { align: 'center' });
+  
+  yPos = 35;
+  doc.setTextColor(0, 0, 0);
+  
+  // Main title
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.text(title, 105, yPos, { align: 'center' });
+  doc.setDrawColor(124, 58, 237);
+  doc.setLineWidth(0.5);
+  doc.line(50, yPos + 2, 160, yPos + 2);
   yPos += 15;
   
-  // Content
+  // Parse and format content with markdown support
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   
-  const lines = doc.splitTextToSize(text, 170);
+  const textLines = text.split('\n');
+  let inCodeBlock = false;
   
-  lines.forEach((line: string) => {
-    if (yPos > 280) {
+  textLines.forEach((line: string) => {
+    if (yPos > 275) {
       doc.addPage();
       yPos = 20;
     }
     
-    doc.text(line, 20, yPos);
-    yPos += 5;
+    // Code blocks
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      if (inCodeBlock) {
+        doc.setFillColor(245, 245, 245);
+      }
+      yPos += 5;
+      return;
+    }
+    
+    if (inCodeBlock) {
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(50, 50, 50);
+      const wrappedCode = doc.splitTextToSize(line, 170);
+      doc.text(wrappedCode, 20, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      yPos += wrappedCode.length * 4 + 1;
+      return;
+    }
+    
+    // Main headings (# Heading)
+    if (line.match(/^#\\s+/)) {
+      doc.setFillColor(124, 58, 237);
+      doc.rect(15, yPos - 5, 180, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text(line.replace(/^#\\s+/, ''), 20, yPos);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      yPos += 12;
+      return;
+    }
+    
+    // Sub-headings (## Heading)
+    if (line.match(/^##\\s+/)) {
+      doc.setTextColor(124, 58, 237);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(line.replace(/^##\\s+/, ''), 20, yPos);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      yPos += 9;
+      return;
+    }
+    
+    // Bullet points (- item or * item)
+    if (line.match(/^[-*]\\s+/)) {
+      const bullet = '\u2022';
+      const content = line.replace(/^[-*]\\s+/, '');
+      doc.text(bullet, 20, yPos);
+      const contentLines = doc.splitTextToSize(content, 165);
+      doc.text(contentLines, 25, yPos);
+      yPos += contentLines.length * 5 + 2;
+      return;
+    }
+    
+    // Bold text (**text**)
+    let textContent = line.replace(/\\*\\*(.+?)\\*\\*/g, '$1');
+    const isBold = line.includes('**');
+    if (isBold) {
+      doc.setFont('helvetica', 'bold');
+    }
+    
+    // Regular text
+    if (textContent.trim()) {
+      const wrappedLines = doc.splitTextToSize(textContent, 170);
+      doc.text(wrappedLines, 20, yPos);
+      yPos += wrappedLines.length * 5 + 2;
+      doc.setFont('helvetica', 'normal');
+    } else {
+      yPos += 4;
+    }
   });
   
   // Save PDF
