@@ -4,7 +4,7 @@ import { User, Sparkles, RefreshCw, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useEffect, useState } from 'react';
-import { ChatMessage } from './ChatInterface';
+import type { ChatMessage } from './types';
 import { exportTextToPDF } from '@/lib/utils/pdf-export';
 
 interface MessageBubbleProps {

@@ -1,11 +1,9 @@
-import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import parser from '@typescript-eslint/parser';
 import reactHooks from 'eslint-plugin-react-hooks';
 import i18next from 'eslint-plugin-i18next';
 
 export default [
-  js.configs.recommended,
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
