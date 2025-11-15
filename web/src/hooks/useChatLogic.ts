@@ -398,23 +398,23 @@ function formatErrorMessage(error: any): string {
           day: 'numeric', 
           year: 'numeric' 
         });
-        errorContent = `⚠️ **Claude API Quota Exceeded**\n\nThe AI service has reached its monthly usage limit. Service will resume on **${formattedDate}**.\n\nWe apologize for the inconvenience. Please check back after this date or contact support for alternatives.`;
+        errorContent = `💤 **Our AI assistant needs a rest!**\n\nService will resume on **${formattedDate}**. Thank you for your patience!`;
       } else {
-        errorContent = `⚠️ **Claude API Quota Exceeded**\n\nThe AI service has reached its usage limit. Please contact support for assistance.`;
+        errorContent = `💤 **Our AI assistant needs a rest!**\n\nService temporarily unavailable. Please contact support.`;
       }
     } else if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
-      errorContent = `⏳ **Too many requests right now.**\n\nThe AI service is busy. Please wait 30 seconds and try again.\n\n💡 **Tip**: Avoid sending multiple questions rapidly.`;
+      errorContent = `⏳ **Slow down there!**\n\nPlease wait a moment before sending another message.`;
     } else if (errorMsg.includes('quota')) {
-      errorContent = `📊 **Daily AI quota reached.**\n\nYou've used your free daily limit. Upgrade to Premium or try again tomorrow.`;
-    } else if (errorMsg.includes('503') || errorMsg.includes('service unavailable')) {
-      errorContent = '🔧 The AI service is temporarily unavailable. Please try again in a few moments.';
+      errorContent = `📊 **High demand right now**\n\nPlease try again in a few moments.`;
+    } else if (errorMsg.includes('503') || errorMsg.includes('service unavailable') || errorMsg.includes('edge function')) {
+      errorContent = '💤 **Taking a quick break** - Our AI assistant is temporarily unavailable. Please try again in a moment.';
     } else if (errorMsg.includes('timeout')) {
-      errorContent = '⏱️ Request took too long. Please try with a shorter message or without images.';
+      errorContent = '⏱️ **That took too long** - Try sending a shorter message or breaking it into parts.';
     } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-      errorContent = '🌐 Network error. Please check your connection and try again.';
+      errorContent = '🌐 **Connection issue** - Please check your internet and try again.';
     } else {
-      const truncatedError = errorMsg.substring(0, 100);
-      errorContent = `❌ **Error**: ${truncatedError}${errorMsg.length > 100 ? '...' : ''}\n\nPlease try again or contact support if this persists.`;
+      // Generic fallback (no technical details)
+      errorContent = `🤔 **Hmm, something went wrong** - Please try again. If this keeps happening, contact support.`;
     }
   }
   

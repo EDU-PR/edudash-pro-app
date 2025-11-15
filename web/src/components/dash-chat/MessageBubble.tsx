@@ -76,6 +76,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         gap: 8,
         alignItems: 'flex-start',
         flexDirection: isUser ? 'row-reverse' : 'row',
+        justifyContent: isUser ? 'flex-end' : 'flex-start',
         paddingLeft: 4,
         paddingRight: 4,
         width: '100%',

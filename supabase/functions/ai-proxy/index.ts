@@ -33,6 +33,7 @@ import { aiRequestQueue, isRateLimitError, getRetryAfter } from './utils/request
 import type { AIProxyRequest, ToolContext } from './types.ts'
 
 const ANTHROPIC_API_KEY=REDACTED
+const ZAI_API_KEY = Deno.env.get('ZAI_API_KEY')
 const OPENAI_API_KEY=REDACTED
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
@@ -41,10 +42,12 @@ const SUPABASE_SERVICE_ROLE_KEY=REDACTED
 console.log('[ai-proxy] Edge function starting up...')
 console.log('[ai-proxy] Configuration check:', {
   hasAnthropicKey: !!ANTHROPIC_API_KEY,
+  hasZaiKey: !!ZAI_API_KEY,
   hasOpenAIKey: !!OPENAI_API_KEY,
   hasSupabaseUrl: !!SUPABASE_URL,
   hasServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
   anthropicKeyLength: ANTHROPIC_API_KEY?.length || 0,
+  zaiKeyLength: ZAI_API_KEY?.length || 0,
   openaiKeyLength: OPENAI_API_KEY?.length || 0
 })
 
@@ -693,15 +696,15 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       // Return more specific error
-      const errorMessage = (aiError as Error).message
-      if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+      const finalErrorMsg = (aiError as Error).message
+      if (finalErrorMsg.includes('timeout') || finalErrorMsg.includes('ETIMEDOUT')) {
         return createErrorResponse('timeout', 'Request timed out. Please try again with a simpler request.', 504)
       }
-      if (errorMessage.includes('API key')) {
+      if (finalErrorMsg.includes('API key')) {
         return createErrorResponse('configuration_error', 'AI service configuration error', 500)
       }
 
-      return createErrorResponse('ai_service_error', `AI service error: ${errorMessage.substring(0, 100)}`, 503)
+      return createErrorResponse('ai_service_error', `AI service error: ${finalErrorMsg.substring(0, 100)}`, 503)
     }
 
   } catch (error) {

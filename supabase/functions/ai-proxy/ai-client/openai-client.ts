@@ -3,6 +3,7 @@
  * 
  * Provides fallback AI service when Anthropic is rate-limited or unavailable.
  * Supports GPT-4 and GPT-3.5 models.
+ * Also supports Z.ai (OpenAI-compatible API) and other OpenAI-compatible endpoints.
  */
 
 export interface OpenAIClientConfig {
@@ -16,6 +17,7 @@ export interface OpenAIClientConfig {
   maxTokens?: number;
   tools?: Array<any>; // Claude-format tools
   tool_choice?: any;
+  baseURL?: string; // Custom base URL (e.g., for Z.ai)
 }
 
 export interface OpenAIResponse {
@@ -199,7 +201,8 @@ export async function callOpenAI(
     systemPrompt = DASH_SYSTEM_PROMPT,
     maxTokens = 4096,
     tools,
-    tool_choice
+    tool_choice,
+    baseURL = 'https://api.openai.com/v1' // Default to OpenAI, can be overridden for Z.ai
   } = config;
 
   if (!apiKey) {
@@ -256,8 +259,11 @@ export async function callOpenAI(
 
   let response: Response;
   try {
-    // Call OpenAI API
-    response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call OpenAI API (or OpenAI-compatible endpoint like Z.ai)
+    const endpoint = `${baseURL}/chat/completions`;
+    console.log(`[openai-client] Using endpoint: ${endpoint}`);
+    
+    response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
