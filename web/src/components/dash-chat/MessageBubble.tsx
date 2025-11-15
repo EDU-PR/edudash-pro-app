@@ -82,21 +82,6 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         width: '100%'
       }}
     >
-      {/* Avatar - Only for AI */}
-      {!isUser && (
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0
-        }}>
-          <Sparkles size={16} color="white" />
-        </div>
-      )}
 
       {/* Message Container - Dynamic Width */}
       <div
