@@ -189,7 +189,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             border: isUser ? 'none' : '1px solid var(--border)',
             fontSize: 14,
             lineHeight: 1.6,
-            width: '100%',
+            maxWidth: isUser ? '75%' : '85%',
             wordWrap: 'break-word',
             alignSelf: isUser ? 'flex-end' : 'flex-start'
           }}
