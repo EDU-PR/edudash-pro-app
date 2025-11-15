@@ -213,10 +213,12 @@ export function useChatLogic({ conversationId, messages, setMessages }: UseChatL
       const { data, error } = result as any;
       setIsTyping(false);
 
-      if (error) {
-        console.error('AI proxy error:', error);
+      // Check for function invocation errors
+      if (error || !data) {
+        console.error('AI proxy error:', error, 'Response data:', data);
 
-        if (error.message?.includes('daily_limit_exceeded')) {
+        // Handle specific error types
+        if (error?.message?.includes('daily_limit_exceeded')) {
           const dailyLimitMessage: ChatMessage = {
             id: `msg-${Date.now()}-daily-limit`,
             role: 'assistant',
@@ -229,7 +231,21 @@ export function useChatLogic({ conversationId, messages, setMessages }: UseChatL
           return;
         }
 
-        throw error;
+        // Handle 503 Service Unavailable
+        if (error?.message?.includes('503') || error?.message?.includes('FunctionsHttpError')) {
+          const serviceMessage: ChatMessage = {
+            id: `msg-${Date.now()}-service`,
+            role: 'assistant',
+            content: `⚠️ **AI Service Temporarily Unavailable**\n\nThe AI service is currently experiencing high load or is being updated. Please try again in a moment.\n\nIf this persists, please contact support.`,
+            timestamp: new Date(),
+            isError: true,
+          };
+          setMessages(prev => [...prev, serviceMessage]);
+          setIsLoading(false);
+          return;
+        }
+
+        throw error || new Error('Empty response from AI service');
       }
 
       // Format response
@@ -372,7 +388,21 @@ function formatErrorMessage(error: any): string {
   if (error && typeof error === 'object' && 'message' in error) {
     const errorMsg = String(error.message).toLowerCase();
     
-    if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
+    // Check for Claude API quota limit
+    if (errorMsg.includes('workspace api usage limits') || errorMsg.includes('regain access on')) {
+      const dateMatch = String(error.message).match(/(\d{4}-\d{2}-\d{2})/);
+      if (dateMatch) {
+        const resetDate = new Date(dateMatch[1]);
+        const formattedDate = resetDate.toLocaleDateString('en-US', { 
+          month: 'long', 
+          day: 'numeric', 
+          year: 'numeric' 
+        });
+        errorContent = `⚠️ **Claude API Quota Exceeded**\n\nThe AI service has reached its monthly usage limit. Service will resume on **${formattedDate}**.\n\nWe apologize for the inconvenience. Please check back after this date or contact support for alternatives.`;
+      } else {
+        errorContent = `⚠️ **Claude API Quota Exceeded**\n\nThe AI service has reached its usage limit. Please contact support for assistance.`;
+      }
+    } else if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
       errorContent = `⏳ **Too many requests right now.**\n\nThe AI service is busy. Please wait 30 seconds and try again.\n\n💡 **Tip**: Avoid sending multiple questions rapidly.`;
     } else if (errorMsg.includes('quota')) {
       errorContent = `📊 **Daily AI quota reached.**\n\nYou've used your free daily limit. Upgrade to Premium or try again tomorrow.`;
