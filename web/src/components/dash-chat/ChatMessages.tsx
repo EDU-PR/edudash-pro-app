@@ -43,11 +43,15 @@ export function ChatMessages({
       msOverflowStyle: 'none',
       WebkitOverflowScrolling: 'touch',
       paddingTop: '1rem',
-      paddingBottom: '1rem',
-      display: 'flex',
-      alignItems: 'center'
+      paddingBottom: '1rem'
     }}>
-      <div className="w-full max-w-4xl mx-auto px-4 flex flex-col gap-4">
+      <div className="w-full max-w-4xl mx-auto px-4" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        minHeight: messages.length === 0 ? 'calc(100vh - 200px)' : 'auto',
+        justifyContent: messages.length === 0 ? 'center' : 'flex-start'
+      }}>
         {/* Empty State */}
         {messages.length === 0 && (
           <div style={{
@@ -56,8 +60,7 @@ export function ChatMessages({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '60vh'
+            justifyContent: 'center'
           }}>
             <div style={{
               width: 80,
@@ -93,7 +96,11 @@ export function ChatMessages({
               flexWrap: 'wrap'
             }}>
               <button
-                onClick={() => showExamBuilder && onExamBuilderClick && onExamBuilderClick({})}
+                onClick={() => {
+                  // Focus the chat input
+                  const input = document.querySelector('textarea[placeholder*="Message"]') as HTMLTextAreaElement;
+                  if (input) input.focus();
+                }}
                 style={{
                   padding: '12px 24px',
                   borderRadius: 12,
