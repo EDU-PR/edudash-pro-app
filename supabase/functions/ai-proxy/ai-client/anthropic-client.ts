@@ -323,9 +323,9 @@ export async function callClaude(
     toolChoice: tool_choice ? JSON.stringify(tool_choice) : 'auto'
   })
 
-  // Create abort controller for timeout (60 second timeout for complex requests)
+  // Create abort controller for timeout (120 second timeout for complex requests)
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  const timeoutId = setTimeout(() => controller.abort(), 120000)
 
   let response: Response
   try {
@@ -344,8 +344,8 @@ export async function callClaude(
   } catch (error) {
     clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('[anthropic-client] Request timeout after 60 seconds')
-      throw new Error('AI request timed out after 60 seconds. The request may be too complex. Please try with a smaller image or shorter prompt.')
+      console.error('[anthropic-client] Request timeout after 120 seconds')
+      throw new Error('AI request timed out after 120 seconds. The request may be too complex. Please try with a smaller image or shorter prompt.')
     }
     throw error
   }
