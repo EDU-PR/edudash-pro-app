@@ -4,6 +4,27 @@ const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
   
+  // Webpack configuration to reduce file watchers
+  webpack: (config, { isServer }) => {
+    // Reduce file watching overhead
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: ['**/node_modules', '**/.git', '**/.next', '**/docs', '**/build'],
+      poll: false, // Disable polling
+      aggregateTimeout: 300,
+    };
+    
+    // Fix module resolution issues
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+    
+    return config;
+  },
+  
   // Optimize production builds
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
