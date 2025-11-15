@@ -39,7 +39,7 @@ export default function MyExamsPage() {
   });
   
   // Get parent dashboard data for shell
-  const { userName, preschoolName, hasOrganization, tenantSlug } = useParentDashboardData();
+  const { userId, userName, preschoolName, hasOrganization, tenantSlug } = useParentDashboardData();
   
   useEffect(() => {
     fetchMyExams();
@@ -108,6 +108,7 @@ export default function MyExamsPage() {
       <ExamInteractiveView
         exam={selectedExam}
         generationId={selectedExam.generationId}
+        userId={userId}
         onClose={() => {
           setSelectedExam(null);
           fetchMyExams(); // Refresh to show new scores

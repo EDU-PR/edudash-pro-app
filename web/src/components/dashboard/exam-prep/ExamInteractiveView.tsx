@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X } from 'lucide-react';
 import { ParsedExam, ExamQuestion, gradeAnswer } from '@/lib/examParser';
 import { useExamSession } from '@/lib/hooks/useExamSession';
+import { useQuotaCheck } from '@/hooks/useQuotaCheck';
 import { createClient } from '@/lib/supabase/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -46,6 +47,7 @@ function MathText({ text }: { text: string }) {
 interface ExamInteractiveViewProps {
   exam: ParsedExam;
   generationId?: string | null;
+  userId?: string;
   onClose?: () => void;
   onSubmitted?: (score: { earned: number; total: number }) => void;
 }
@@ -60,7 +62,7 @@ interface QuestionFeedback {
   marks: number;
 }
 
-export function ExamInteractiveView({ exam, generationId, onClose, onSubmitted }: ExamInteractiveViewProps) {
+export function ExamInteractiveView({ exam, generationId, userId, onClose, onSubmitted }: ExamInteractiveViewProps) {
   const [studentAnswers, setStudentAnswers] = useState<StudentAnswers>({});
   const [submitted, setSubmitted] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, QuestionFeedback>>({});
@@ -71,6 +73,7 @@ export function ExamInteractiveView({ exam, generationId, onClose, onSubmitted }
   const [isMobile, setIsMobile] = useState(false);
   
   const { saveProgress } = useExamSession(generationId || null);
+  const { checkQuota, incrementUsage } = useQuotaCheck(userId);
 
   // Helper key for clearing active exam session from parent page (set there)
   const activeKeyFromMeta = typeof window !== 'undefined' && exam?.grade && exam?.subject
@@ -138,6 +141,20 @@ export function ExamInteractiveView({ exam, generationId, onClose, onSubmitted }
 
   // Individual question explanation
   const getAIExplanation = async (questionId: string) => {
+    // ✅ CHECK QUOTA BEFORE REQUESTING EXPLANATION
+    if (userId) {
+      const quotaResult = await checkQuota('explanation');
+      if (!quotaResult?.allowed) {
+        const tierName = quotaResult?.current_tier === 'free' ? 'Free' : 
+                         quotaResult?.current_tier === 'trial' ? 'Trial' : 
+                         quotaResult?.current_tier === 'basic' ? 'Basic' : 
+                         quotaResult?.current_tier === 'premium' ? 'Premium' : 
+                         quotaResult?.current_tier === 'school' ? 'School' : 'Free';
+        alert(`You've reached your ${tierName} tier explanation limit! Upgrade to get more explanations.`);
+        return;
+      }
+    }
+
     setLoadingExplanations((prev) => ({ ...prev, [questionId]: true }));
     const user = await supabase.auth.getUser();
     if (!user.data.user?.id) {
@@ -178,6 +195,12 @@ export function ExamInteractiveView({ exam, generationId, onClose, onSubmitted }
           ...prev,
           [questionId]: data.explanation,
         }));
+        // ✅ INCREMENT USAGE COUNTER AFTER SUCCESSFUL EXPLANATION
+        if (userId) {
+          incrementUsage('explanation', 'success').catch(err => {
+            console.error('[ExamInteractiveView] Failed to increment explanation usage:', err);
+          });
+        }
       } else if (data?.warning) {
         // Service returned a fallback with warning
         const fallbackExplanation = data.explanation || generateFallbackExplanation(question, studentAnswers[questionId]);
