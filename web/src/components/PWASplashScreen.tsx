@@ -8,17 +8,17 @@ interface PWASplashScreenProps {
   duration?: number;
 }
 
-export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreenProps) {
+export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
     // Animation sequence
     const timers = [
-      setTimeout(() => setStep(1), 100),   // Logo appears
-      setTimeout(() => setStep(2), 500),   // Rings expand
-      setTimeout(() => setStep(3), 1200),  // Sparkle effect
-      setTimeout(() => setStep(4), 2000),  // Fade out prep
+      setTimeout(() => setStep(1), 200),   // Logo appears
+      setTimeout(() => setStep(2), 800),   // Rings expand
+      setTimeout(() => setStep(3), 2000),  // Sparkle effect
+      setTimeout(() => setStep(4), 3200),  // Fade out prep
       setTimeout(() => {
         setIsVisible(false);
         onComplete?.();
@@ -43,7 +43,7 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
         alignItems: 'center',
         justifyContent: 'center',
         opacity: step >= 4 ? 0 : 1,
-        transition: 'opacity 0.5s ease-out',
+        transition: 'opacity 0.8s ease-out',
       }}
     >
       {/* Animated gradient blobs */}
@@ -64,7 +64,7 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
             borderRadius: '50%',
             background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
             filter: 'blur(80px)',
-            animation: 'blob-float 8s ease-in-out infinite',
+            animation: 'blob-float 12s ease-in-out infinite',
             opacity: step >= 1 ? 1 : 0,
             transition: 'opacity 0.6s ease-out'
           }}
@@ -80,7 +80,7 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
             borderRadius: '50%',
             background: 'linear-gradient(135deg, #ec4899, #7c3aed)',
             filter: 'blur(80px)',
-            animation: 'blob-float 8s ease-in-out infinite 2s',
+            animation: 'blob-float 12s ease-in-out infinite 3s',
             opacity: step >= 1 ? 1 : 0,
             transition: 'opacity 0.6s ease-out 0.2s'
           }}
@@ -112,8 +112,8 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
             borderRadius: '50%',
             border: '3px solid rgba(124, 58, 237, 0.3)',
             opacity: step >= 2 ? 0.6 : 0,
-            transition: 'all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            animation: step >= 2 ? 'spin-slow 20s linear infinite' : 'none'
+            transition: 'all 1.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            animation: step >= 2 ? 'spin-slow 30s linear infinite' : 'none'
           }} />
           
           {/* Middle ring */}
@@ -124,8 +124,8 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
             borderRadius: '50%',
             border: '3px solid rgba(168, 85, 247, 0.4)',
             opacity: step >= 2 ? 0.8 : 0,
-            transition: 'all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s',
-            animation: step >= 2 ? 'spin-slow 15s linear infinite reverse' : 'none'
+            transition: 'all 1.0s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s',
+            animation: step >= 2 ? 'spin-slow 25s linear infinite reverse' : 'none'
           }} />
           
           {/* Logo circle */}
@@ -140,8 +140,8 @@ export function PWASplashScreen({ onComplete, duration = 2500 }: PWASplashScreen
             boxShadow: step >= 1 ? '0 20px 60px rgba(124, 58, 237, 0.5), 0 0 80px rgba(236, 72, 153, 0.3)' : 'none',
             transform: step >= 1 ? 'scale(1)' : 'scale(0.3)',
             opacity: step >= 1 ? 1 : 0,
-            transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            animation: step >= 1 ? 'float-gentle 3s ease-in-out infinite, rotate-slow 20s linear infinite' : 'none'
+            transition: 'all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            animation: step >= 1 ? 'float-gentle 4s ease-in-out infinite, rotate-slow 30s linear infinite' : 'none'
           }}>
             <TrendingUp size={64} color="white" strokeWidth={2.5} />
           </div>
