@@ -163,37 +163,76 @@ export function createSubscriptionPayment(
 
 /**
  * Initiate PayFast payment (client-side)
+ * @throws Error if called server-side or if required environment variables are missing
  */
-export function initiatePayFastPayment(paymentData: PayFastPaymentData, passphrase?: string) {
-  if (typeof window === 'undefined') {
-    throw new Error('initiatePayFastPayment can only be called on the client side');
-  }
-  
-  // Create form dynamically
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
-  
-  // Add all payment data as hidden fields
-  Object.entries(paymentData).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = String(value);
-      form.appendChild(input);
+export function initiatePayFastPayment(
+  paymentData: PayFastPaymentData, 
+  passphrase?: string,
+  onError?: (error: Error) => void
+): void {
+  try {
+    if (typeof window === 'undefined') {
+      throw new Error('initiatePayFastPayment can only be called on the client side');
     }
-  });
-  
-  // Generate and add signature
-  const signature = generatePayFastSignature(paymentData, passphrase);
-  const sigInput = document.createElement('input');
-  sigInput.type = 'hidden';
-  sigInput.name = 'signature';
-  sigInput.value = signature;
-  form.appendChild(sigInput);
-  
-  // Submit form
-  document.body.appendChild(form);
-  form.submit();
+    
+    // Validate required fields
+    if (!paymentData.merchant_id || !paymentData.merchant_key) {
+      throw new Error('PayFast merchant credentials are missing. Please configure PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.');
+    }
+    
+    if (!paymentData.amount || paymentData.amount <= 0) {
+      throw new Error('Invalid payment amount');
+    }
+    
+    if (!paymentData.email_address || !paymentData.email_address.includes('@')) {
+      throw new Error('Invalid email address');
+    }
+    
+    const payfastUrl = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
+    
+    // Create form dynamically
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = payfastUrl;
+    
+    // Add all payment data as hidden fields
+    Object.entries(paymentData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = String(value);
+        form.appendChild(input);
+      }
+    });
+    
+    // Generate and add signature
+    const signature = generatePayFastSignature(paymentData, passphrase);
+    const sigInput = document.createElement('input');
+    sigInput.type = 'hidden';
+    sigInput.name = 'signature';
+    sigInput.value = signature;
+    form.appendChild(sigInput);
+    
+    // Submit form
+    document.body.appendChild(form);
+    
+    console.log('[PayFast] Submitting payment:', {
+      amount: paymentData.amount,
+      tier: paymentData.item_name,
+      email: paymentData.email_address,
+      url: payfastUrl,
+    });
+    
+    form.submit();
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error('Unknown payment error');
+    console.error('[PayFast] Payment initiation failed:', err);
+    
+    if (onError) {
+      onError(err);
+    } else {
+      throw err;
+    }
+  }
 }

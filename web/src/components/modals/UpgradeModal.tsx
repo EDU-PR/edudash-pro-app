@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { createSubscriptionPayment, initiatePayFastPayment } from '@/lib/payfast';
-import { X, Crown, Zap, Sparkles, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { X, Crown, Zap, Sparkles, CheckCircle, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 
 export interface UpgradeModalProps {
   isOpen: boolean;
@@ -94,19 +94,28 @@ export function UpgradeModal({
   currentLimit,
 }: UpgradeModalProps) {
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleUpgrade = (tier: 'basic' | 'premium') => {
     setProcessingPayment(tier);
+    setPaymentError(null);
 
     try {
       const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName);
       const passphrase = process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
-      initiatePayFastPayment(paymentData, passphrase);
+      
+      initiatePayFastPayment(paymentData, passphrase, (error) => {
+        // Error callback
+        console.error('[UpgradeModal] Payment initiation failed:', error);
+        setPaymentError(error.message || 'Failed to initiate payment. Please try again or contact support.');
+        setProcessingPayment(null);
+      });
     } catch (error) {
-      console.error('[UpgradeModal] Payment initiation failed:', error);
-      alert('Failed to initiate payment. Please try again or contact support.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('[UpgradeModal] Payment setup failed:', error);
+      setPaymentError(errorMessage);
       setProcessingPayment(null);
     }
   };
@@ -411,6 +420,48 @@ export function UpgradeModal({
             );
           })}
         </div>
+
+        {/* Error message */}
+        {paymentError && (
+          <div
+            style={{
+              margin: '0 32px 20px',
+              padding: '16px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+            }}
+          >
+            <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: '#ef4444', margin: '0 0 4px 0' }}>
+                Payment Error
+              </p>
+              <p style={{ fontSize: '13px', color: 'rgba(239, 68, 68, 0.9)', margin: 0 }}>
+                {paymentError}
+              </p>
+              <button
+                onClick={() => setPaymentError(null)}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 12px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '6px',
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div

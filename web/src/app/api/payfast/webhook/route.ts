@@ -28,6 +28,8 @@ function generateSignature(data: Record<string, any>, passPhrase: string = '') {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     // Parse form data from PayFast
     const formData = await request.formData();
@@ -37,21 +39,45 @@ export async function POST(request: NextRequest) {
       data[key] = value.toString();
     });
 
-    console.log('[PayFast Webhook] Received data:', data);
+    console.log('[PayFast Webhook] Received data:', {
+      payment_id: data.m_payment_id,
+      pf_payment_id: data.pf_payment_id,
+      status: data.payment_status,
+      amount: data.amount_gross,
+      user_id: data.custom_str1,
+      tier: data.custom_str2,
+    });
+
+    // Validate required fields
+    if (!data.custom_str1 || !data.custom_str2) {
+      console.error('[PayFast Webhook] Missing required custom fields:', data);
+      return NextResponse.json({ error: 'Missing user_id or tier' }, { status: 400 });
+    }
 
     // Verify signature
     const receivedSignature = data.signature;
+    if (!receivedSignature) {
+      console.error('[PayFast Webhook] Missing signature');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    }
+    
     delete data.signature;
     const calculatedSignature = generateSignature(data, PAYFAST_PASSPHRASE);
 
     if (receivedSignature !== calculatedSignature) {
-      console.error('[PayFast Webhook] Invalid signature');
+      console.error('[PayFast Webhook] Invalid signature:', {
+        received: receivedSignature,
+        calculated: calculatedSignature,
+      });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
     // Verify merchant details
     if (data.merchant_id !== PAYFAST_MERCHANT_ID) {
-      console.error('[PayFast Webhook] Invalid merchant ID');
+      console.error('[PayFast Webhook] Invalid merchant ID:', {
+        received: data.merchant_id,
+        expected: PAYFAST_MERCHANT_ID,
+      });
       return NextResponse.json({ error: 'Invalid merchant' }, { status: 400 });
     }
 
@@ -85,6 +111,10 @@ export async function POST(request: NextRequest) {
 
       if (tierError) {
         console.error('[PayFast Webhook] Failed to update user tier:', tierError);
+        return NextResponse.json({ 
+          error: 'Failed to update tier', 
+          details: tierError.message 
+        }, { status: 500 });
       } else {
         console.log('[PayFast Webhook] Successfully updated user tier to:', tierUppercase);
       }
@@ -102,6 +132,7 @@ export async function POST(request: NextRequest) {
 
       if (usageError) {
         console.error('[PayFast Webhook] Failed to update usage tier:', usageError);
+        // Don't fail the webhook - tier update succeeded
       }
 
       // Log the payment in subscriptions table (create if doesn't exist)
@@ -121,23 +152,50 @@ export async function POST(request: NextRequest) {
 
       if (subError && subError.code !== '42P01') { // Ignore table doesn't exist error
         console.error('[PayFast Webhook] Failed to log subscription:', subError);
+        // Don't fail the webhook - main tier update succeeded
       }
 
-      return NextResponse.json({ success: true, message: 'Payment processed' });
+      const duration = Date.now() - startTime;
+      console.log(`[PayFast Webhook] Payment processed successfully in ${duration}ms`);
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Payment processed',
+        tier: tierUppercase,
+      });
     }
 
     // Handle payment cancellation or failure
     if (payment_status === 'CANCELLED' || payment_status === 'FAILED') {
-      console.log('[PayFast Webhook] Payment cancelled or failed:', payment_status);
-      return NextResponse.json({ success: true, message: 'Payment status recorded' });
+      console.log('[PayFast Webhook] Payment cancelled or failed:', {
+        status: payment_status,
+        payment_id: data.m_payment_id,
+      });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Payment status recorded',
+        status: payment_status,
+      });
     }
 
     return NextResponse.json({ success: true, message: 'Webhook received' });
 
   } catch (error) {
-    console.error('[PayFast Webhook] Error:', error);
+    const duration = Date.now() - startTime;
+    console.error('[PayFast Webhook] Error after ${duration}ms:', error);
+    
+    // Log error details
+    if (error instanceof Error) {
+      console.error('[PayFast Webhook] Error details:', {
+        message: error.message,
+        stack: error.stack,
+      });
+    }
+    
     return NextResponse.json(
-      { error: 'Webhook processing failed' },
+      { 
+        error: 'Webhook processing failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }
