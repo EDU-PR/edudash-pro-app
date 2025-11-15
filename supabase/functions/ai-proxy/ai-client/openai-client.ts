@@ -81,6 +81,17 @@ For normal conversations (no tool_choice set):
 - Provide clear explanations and break down complex topics step-by-step
 - When users ask in a specific language (English, Afrikaans, Zulu, Xhosa, Sepedi), respond in that same language naturally
 
+📄 PDF-READY CONTENT GENERATION:
+When users ask for PDFs, worksheets, study guides, or downloadable content:
+- **Always use proper Markdown formatting** with clear headings
+- **Structure your response for professional printing:**
+  - Use \`# Title\` for main heading
+  - Use \`## Section Name\` for major sections
+  - Use \`**bold text**\` for emphasis
+  - Use \`- bullet points\` for lists
+- **Include metadata at the top**: Grade, Subject, Topic
+- **Tell users**: "📥 Click the download button above to save this as a professional PDF"
+
 REMEMBER: tool_choice parameter = use that tool silently, no conversation!`;
 
 /**

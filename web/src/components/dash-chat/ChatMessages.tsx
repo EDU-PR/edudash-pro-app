@@ -43,7 +43,9 @@ export function ChatMessages({
       msOverflowStyle: 'none',
       WebkitOverflowScrolling: 'touch',
       paddingTop: '1rem',
-      paddingBottom: '1rem'
+      paddingBottom: '1rem',
+      display: 'flex',
+      alignItems: 'center'
     }}>
       <div className="w-full max-w-4xl mx-auto px-4 flex flex-col gap-4">
         {/* Empty State */}
@@ -54,7 +56,8 @@ export function ChatMessages({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            minHeight: '60vh'
           }}>
             <div style={{
               width: 80,
@@ -79,8 +82,46 @@ export function ChatMessages({
               fontSize: 14,
               lineHeight: 1.5,
               maxWidth: 500,
-              margin: '0 auto'
+              margin: '0 auto 24px'
             }}>Ask me anything! I can help with homework, explain concepts, solve problems, and more.</p>
+            
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                onClick={() => showExamBuilder && onExamBuilderClick && onExamBuilderClick({})}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+                  border: 'none',
+                  color: 'white',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 58, 237, 0.3)';
+                }}
+              >
+                <Sparkles size={16} />
+                Start Your First Chat
+              </button>
+            </div>
           </div>
         )}
 
