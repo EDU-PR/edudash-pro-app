@@ -32,8 +32,6 @@ const nextConfig: NextConfig = {
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none' },
-          // Cache static assets aggressively
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
       // Prevent indexing of app manifest and icons without using deprecated middleware
@@ -41,7 +39,7 @@ const nextConfig: NextConfig = {
       { source: '/manifest.json', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
       { source: '/sw.js', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
       { source: '/api/manifest', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
-      // Static assets cache
+      // Static assets cache - only cache truly static files for 1 year
       {
         source: '/_next/static/:path*',
         headers: [
@@ -50,6 +48,12 @@ const nextConfig: NextConfig = {
       },
       {
         source: '/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/icons/:path*',
         headers: [
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
