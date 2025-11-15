@@ -7,13 +7,16 @@ const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
 
 // Message event - handle skip waiting command from client
 self.addEventListener('message', (event) => {
+  console.log('[SW] Message received:', event.data);
   if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[SW] Skipping waiting...');
     self.skipWaiting();
   }
 });
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
+  console.log(`[SW] Installing version ${SW_VERSION}...`);
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -25,12 +28,16 @@ self.addEventListener('install', (event) => {
           '/icon-512.png',
         ]);
       })
-      // Don't auto skip waiting - let update checker control it
+      .then(() => {
+        console.log(`[SW] Version ${SW_VERSION} installed successfully`);
+        // Don't auto skip waiting - let update checker control it
+      })
   );
 });
 
 // Activate event - cleanup old caches
 self.addEventListener('activate', (event) => {
+  console.log(`[SW] Activating version ${SW_VERSION}...`);
   const currentCaches = [STATIC_CACHE, RUNTIME_CACHE];
   event.waitUntil(
     caches.keys()
@@ -38,10 +45,16 @@ self.addEventListener('activate', (event) => {
         return Promise.all(
           cacheNames
             .filter((cacheName) => !currentCaches.includes(cacheName))
-            .map((cacheName) => caches.delete(cacheName))
+            .map((cacheName) => {
+              console.log(`[SW] Deleting old cache: ${cacheName}`);
+              return caches.delete(cacheName);
+            })
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => {
+        console.log(`[SW] Version ${SW_VERSION} activated, claiming clients`);
+        return self.clients.claim();
+      })
   );
 });
 
