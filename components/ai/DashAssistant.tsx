@@ -1399,10 +1399,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <KeyboardAvoidingView 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
       <StatusBar style={isDark ? 'light' : 'dark'} />
       

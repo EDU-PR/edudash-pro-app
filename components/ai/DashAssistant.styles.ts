@@ -528,4 +528,76 @@ export const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  // Empty state styles
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 500,
+  },
+  emptyStateGradient: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyStateLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    ...(Platform.OS === 'ios' ? {
+      shadowColor: '#7c3aed',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    } : {
+      elevation: 8,
+    }),
+  },
+  emptyStateTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 40,
+    maxWidth: 320,
+  },
+  quickActionsContainer: {
+    width: '100%',
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    ...(Platform.OS === 'ios' ? {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    } : {
+      elevation: 2,
+    }),
+  },
+  actionButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });
