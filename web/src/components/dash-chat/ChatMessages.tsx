@@ -1,0 +1,166 @@
+/**
+ * Chat Messages Component
+ * WARP.md compliant: ≤250 lines
+ * 
+ * Displays message list, empty state, typing indicator
+ */
+
+'use client';
+
+import { useRef, useEffect } from 'react';
+import { Sparkles, FileText } from 'lucide-react';
+import { MessageBubble } from './MessageBubble';
+import type { ChatMessage } from './types.js';
+
+interface ChatMessagesProps {
+  messages: ChatMessage[];
+  isTyping: boolean;
+  onRetry?: (messageId: string, userMessage: ChatMessage) => void;
+  onExamBuilderClick?: (context: { grade?: string; subject?: string; topics?: string[] }) => void;
+  showExamBuilder: boolean;
+  examContext: { grade?: string; subject?: string; topics?: string[] };
+}
+
+export function ChatMessages({
+  messages,
+  isTyping,
+  onRetry,
+  onExamBuilderClick,
+  showExamBuilder,
+  examContext,
+}: ChatMessagesProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isTyping]);
+
+  return (
+    <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-950 [&::-webkit-scrollbar]:hidden" style={{
+      scrollBehavior: 'smooth',
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none',
+      WebkitOverflowScrolling: 'touch',
+      paddingTop: '1rem',
+      paddingBottom: '1rem'
+    }}>
+      <div className="w-full max-w-4xl mx-auto px-4 flex flex-col gap-4">
+        {/* Empty State */}
+        {messages.length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            color: 'var(--muted)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 24,
+              boxShadow: '0 8px 32px rgba(124, 58, 237, 0.3)',
+            }}>
+              <Sparkles size={40} color="white" />
+            </div>
+            <h3 style={{
+              fontSize: 24,
+              fontWeight: 700,
+              marginBottom: 12,
+              color: 'var(--text)'
+            }}>Hi! I&apos;m Dash</h3>
+            <p style={{
+              fontSize: 14,
+              lineHeight: 1.5,
+              maxWidth: 500,
+              margin: '0 auto'
+            }}>Ask me anything! I can help with homework, explain concepts, solve problems, and more.</p>
+          </div>
+        )}
+
+        {/* Message List */}
+        {messages.map((message, index) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onRetry={message.isError && index > 0 && onRetry ? () => {
+              const lastUserMessage = messages[index - 1];
+              if (lastUserMessage && lastUserMessage.role === 'user') {
+                onRetry(message.id, lastUserMessage);
+              }
+            } : undefined}
+          />
+        ))}
+
+        {/* Exam Builder Prompt */}
+        {messages.length > 0 && 
+         messages[messages.length - 1]?.role === 'assistant' &&
+         messages[messages.length - 1]?.content.toLowerCase().includes('exam builder') && 
+         onExamBuilderClick && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            marginTop: '12px',
+            marginBottom: '8px',
+            width: '100%'
+          }}>
+            <button
+              onClick={() => onExamBuilderClick(examContext)}
+              className="btn btnPrimary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.35)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 58, 237, 0.25)';
+              }}
+            >
+              <FileText size={18} />
+              Launch Exam Builder
+              <Sparkles size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Typing Indicator */}
+        {isTyping && (
+          <div className="chat-typing">
+            <div className="chat-logo" style={{width:32,height:32,margin:0}}>
+              <Sparkles size={16} color="white" />
+            </div>
+            <div className="chat-typing-bubble">
+              <div style={{ display: 'flex', gap: 4 }}>
+                <div className="typing-dot" style={{ animationDelay: '0ms' }}></div>
+                <div className="typing-dot" style={{ animationDelay: '150ms' }}></div>
+                <div className="typing-dot" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+    </div>
+  );
+}

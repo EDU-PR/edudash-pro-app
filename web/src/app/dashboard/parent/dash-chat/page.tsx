@@ -18,234 +18,163 @@ export default function DashChatPage() {
   const { slug } = useTenantSlug(userId);
   const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Keyboard navigation - Escape to close overlays
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showSidebar) setShowSidebar(false);
+        if (showExamBuilder) setShowExamBuilder(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showSidebar, showExamBuilder]);
 
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { 
-        router.push('/sign-in'); 
-        return; 
+      if (!session) {
+        router.push('/sign-in');
+        return;
       }
       setEmail(session.user.email || '');
       setUserId(session.user.id);
-      
-      // Generate initial conversation ID
-      if (!activeConversationId) {
-        setActiveConversationId(`dash_conv_${Date.now()}_${Math.random().toString(36).substring(7)}`);
-      }
     })();
-  }, [router, supabase.auth, activeConversationId]);
+  }, [router, supabase.auth]);
 
-  // Detect mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (!mobile) setShowSidebar(false);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  // Hydration flag
+  useEffect(() => { setHydrated(true); }, []);
 
   const handleNewConversation = () => {
     const newId = `dash_conv_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     setActiveConversationId(newId);
-    if (isMobile) setShowSidebar(false);
+    setShowSidebar(false);
   };
 
   const handleSelectConversation = (conversationId: string) => {
     setActiveConversationId(conversationId);
-    if (isMobile) setShowSidebar(false);
+    setShowSidebar(false);
   };
 
   return (
     <ParentShell tenantSlug={slug} userEmail={email}>
-      <div style={{ 
-        margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', 
-        marginBottom: 'calc(var(--bottomnav-h, 0px) * -1)',
-        padding: 0, 
-        height: '100vh',
-        maxHeight: '100vh',
-        display: 'flex', 
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div
-          style={{
-            padding: isMobile ? '10px 16px' : '12px 20px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface-0)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {isMobile && (
-              <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className="btn"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--border)',
-                  padding: '8px',
-                  borderRadius: 8,
-                }}
-              >
-                {showSidebar ? <X size={18} /> : <Menu size={18} />}
-              </button>
-            )}
+      {/* Full viewport height container - No scroll */}
+      <div
+        className="h-screen flex flex-col bg-gray-950 overflow-hidden relative"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingLeft: 'var(--sidebar-w, 0px)'
+        }}
+      >
+        {/* Header - Fixed below topnav, aligned with content */}
+        <header className="flex-shrink-0 py-3 border-b border-gray-800 bg-gray-950 flex items-center justify-between gap-3 z-20" style={{
+          marginTop: 'var(--topnav-h, 56px)',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right))',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)'
+        }}>
+          <div className="flex items-center gap-3">
+            {/* Mobile/Tablet toggle button */}
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              aria-label={showSidebar ? 'Close conversations' : 'Open conversations'}
+              aria-expanded={showSidebar}
+              aria-controls="conversations-sidebar"
+              className="inline-flex lg:hidden items-center bg-slate-900 hover:bg-slate-800 border border-gray-800 p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {showSidebar ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+            </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div
-                style={{
-                  width: isMobile ? 32 : 40,
-                  height: isMobile ? 32 : 40,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Sparkles size={isMobile ? 18 : 22} color="white" />
+            <div className="flex items-center gap-3">
+              <div className={`
+                w-10 h-10
+                rounded-full bg-gradient-to-br from-purple-600 to-pink-500
+                flex items-center justify-center flex-shrink-0
+              `}>
+                <Sparkles size={22} color="white" aria-hidden="true" />
               </div>
               <div>
-                <h1 style={{ margin: 0, fontSize: isMobile ? 16 : 18, fontWeight: 700 }}>Dash</h1>
-                <p style={{ margin: 0, fontSize: isMobile ? 11 : 12, color: 'var(--muted)' }}>
+                <h1 className="m-0 text-lg font-bold">Dash</h1>
+                <p className="m-0 text-xs text-gray-400">
                   AI Assistant • Multilingual • Context-aware
                 </p>
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setShowExamBuilder(true)}
-              className="btn"
-              style={{
-                padding: isMobile ? '6px 12px' : '8px 16px',
-                fontSize: isMobile ? 13 : 14,
-                fontWeight: 600,
-                borderRadius: 8,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                color: 'white',
-                border: 'none',
-              }}
+              aria-label="Create exam with AI"
+              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
-              <FileText size={14} />
-              {!isMobile && 'Create Exam'}
+              <FileText size={14} aria-hidden="true" />
+              <span className="hidden md:inline">Create Exam</span>
             </button>
             <button
               onClick={handleNewConversation}
-              className="btn btnPrimary"
-              style={{
-                padding: isMobile ? '6px 12px' : '8px 16px',
-                fontSize: isMobile ? 13 : 14,
-                fontWeight: 600,
-                borderRadius: 8,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              aria-label="Start new conversation"
+              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
-              <Sparkles size={14} />
-              {!isMobile && 'New Chat'}
+              <Sparkles size={14} aria-hidden="true" />
+              <span className="hidden md:inline">New Chat</span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Main Content */}
-        <div
-          style={{
-            display: 'flex',
-            flex: 1,
-            position: 'relative',
-            overflow: 'hidden',
-            minHeight: 0,
-          }}
-        >
-          {/* Sidebar - Conversation List */}
-          {!isMobile && (
-            <div
-              style={{
-                width: 280,
-                borderRight: '1px solid var(--border)',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--surface-0)',
-              }}
-            >
-              <ConversationList
-                activeConversationId={activeConversationId}
-                onSelectConversation={handleSelectConversation}
-                onNewConversation={handleNewConversation}
-              />
-            </div>
-          )}
+        {/* Main Content - Takes remaining height */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          {/* Desktop Sidebar - Fixed position on desktop */}
+          <aside
+            id="conversations-sidebar"
+            className="hidden lg:flex flex-col bg-gradient-to-b from-gray-950 to-gray-900 border-r border-gray-800 overflow-hidden"
+            style={{
+              position: 'fixed',
+              left: 0,
+              top: 'calc(var(--topnav-h, 56px) + 57px)',
+              bottom: 0,
+              width: '280px',
+              zIndex: 10
+            }}
+          >
+            <ConversationList
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
+              onNewConversation={handleNewConversation}
+            />
+          </aside>
 
           {/* Mobile Sidebar Overlay */}
-          {isMobile && showSidebar && (
+          {hydrated && showSidebar && (
             <>
               <div
                 onClick={() => setShowSidebar(false)}
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'rgba(0, 0, 0, 0.6)',
-                  zIndex: 999,
-                }}
+                onKeyDown={(e) => e.key === 'Enter' && setShowSidebar(false)}
+                role="button"
+                tabIndex={0}
+                aria-label="Close sidebar overlay"
+                className="fixed inset-0 bg-black/60 z-[999] lg:hidden"
               />
-              <div
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  width: '85%',
-                  maxWidth: '320px',
-                  background: 'var(--surface-0)',
-                  zIndex: 1000,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  boxShadow: '4px 0 12px rgba(0, 0, 0, 0.3)',
-                }}
+              <aside
+                id="conversations-sidebar"
+                className="fixed top-10 left-0 bottom-0 w-[85%] max-w-[320px] bg-gradient-to-b from-gray-950 to-gray-900 z-[1000] flex flex-col shadow-2xl shadow-black/50 lg:hidden"
               >
-                <div style={{ 
-                  padding: '16px', 
-                  borderBottom: '1px solid var(--border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}>
-                  <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Conversations</h2>
+                <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-950/80 backdrop-blur-sm">
+                  <h2 className="m-0 text-base font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Conversations</h2>
                   <button
                     onClick={() => setShowSidebar(false)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 8,
-                      cursor: 'pointer',
-                      color: 'var(--text)',
-                    }}
+                    aria-label="Close conversations sidebar"
+                    className="bg-gray-800 hover:bg-gray-700 border-0 p-2 cursor-pointer text-white rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <X size={20} />
+                    <X size={20} aria-hidden="true" />
                   </button>
                 </div>
                 <ConversationList
@@ -253,41 +182,61 @@ export default function DashChatPage() {
                   onSelectConversation={handleSelectConversation}
                   onNewConversation={handleNewConversation}
                 />
-              </div>
+              </aside>
             </>
           )}
 
-          {/* Chat Area */}
-          <div
-            style={{
-              flex: 1,
-              background: 'var(--surface-0)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              minHeight: 0,
-              position: 'relative',
-            }}
-          >
-            <ChatInterface
-              conversationId={activeConversationId}
-              onNewConversation={handleNewConversation}
-            />
+          {/* Chat Area - Offset by sidebar on desktop */}
+          <main className="flex-1 overflow-hidden flex flex-col relative" style={{
+            marginLeft: 'var(--conversations-w, 0px)'
+          }}>
+            {hydrated && activeConversationId && (
+              <ChatInterface
+                conversationId={activeConversationId}
+                onNewConversation={handleNewConversation}
+              />
+            )}
+
+            {hydrated && !activeConversationId && (
+              <div className="flex flex-1 items-center justify-center overflow-hidden">
+                <div className="max-w-md w-full text-center flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-2">
+                    <Sparkles size={32} aria-hidden="true" />
+                  </div>
+                  <h2 className="text-xl font-bold m-0">Start Your First Chat</h2>
+                  <p className="text-sm text-gray-400 m-0 mb-2">Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.</p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
+                    <button
+                      onClick={handleNewConversation}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                    >
+                      <Sparkles size={16} aria-hidden="true" />
+                      New Chat
+                    </button>
+                    <button
+                      onClick={() => setShowExamBuilder(true)}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                    >
+                      <FileText size={16} aria-hidden="true" />
+                      Create Exam
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Exam Builder Modal */}
-            {showExamBuilder && (
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 100,
-              }}>
+            {hydrated && showExamBuilder && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Exam builder"
+                className="absolute inset-0 z-[100]"
+              >
                 <ExamBuilderLauncher onClose={() => setShowExamBuilder(false)} />
               </div>
             )}
-          </div>
+          </main>
         </div>
       </div>
     </ParentShell>

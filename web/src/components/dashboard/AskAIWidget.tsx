@@ -10,7 +10,6 @@ import { ExamInteractiveView } from './exam-prep/ExamInteractiveView';
 import { useAIConversation } from '@/lib/hooks/useAIConversation';
 import { useExamSession } from '@/lib/hooks/useExamSession';
 import { getUserEditablePrompt, reconstructFullPrompt } from '@/lib/utils/prompt-filter';
-import './exam-modal-close-fix.css';
 
 const TRUTHY_ENV_VALUES = new Set(['true', '1', 'yes', 'y', 'on', 'enabled']);
 const FALSY_ENV_VALUES = new Set(['false', '0', 'no', 'n', 'off', 'disabled']);
@@ -408,18 +407,12 @@ export function AskAIWidget({
                     </div>
                   </div>
                 </div>
-                <button 
-                  className="iconBtn close-button" 
-                  onClick={() => setInteractiveExam(null)} 
+                <button
+                  onClick={() => setInteractiveExam(null)}
                   aria-label="Close"
-                  style={{
-                    minWidth: '44px',
-                    minHeight: '44px',
-                    width: '44px',
-                    height: '44px'
-                  }}
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-white/90 border border-black/20 shadow backdrop-blur-sm text-slate-900 dark:bg-slate-700 dark:text-white dark:border-white/20 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <X className="icon20" strokeWidth={2.5} />
+                  <X className="w-5 h-5" strokeWidth={2.5} />
                 </button>
               </div>
             </div>
@@ -655,18 +648,12 @@ export function AskAIWidget({
             <Sparkles className="icon16" style={{ color: 'white' }} />
             <span style={{ fontWeight: 700, fontSize: 14, color: 'white' }}>Dash AI</span>
           </div>
-          <button 
-            className="iconBtn close-button"
-            onClick={() => setOpen(false)} 
+          <button
+            onClick={() => setOpen(false)}
             aria-label="Close"
-            style={{
-              minWidth: '44px',
-              minHeight: '44px',
-              width: '44px',
-              height: '44px'
-            }}
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-white/90 border border-black/20 shadow text-slate-900 dark:bg-slate-700 dark:text-white dark:border-white/30 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
-            <X className="icon16" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -757,18 +744,13 @@ export function AskAIWidget({
               borderRadius: "var(--radius-2)"
             }}>
               {/* Close button for loading overlay */}
-              <button 
-                className="close-button loading"
+              <button
                 onClick={cancelExamGeneration}
                 aria-label="Cancel exam generation"
                 title="Cancel and return to chat"
-                style={{
-                  position: 'absolute',
-                  top: 12,
-                  right: 12
-                }}
+                className="absolute top-3 right-3 w-11 h-11 flex items-center justify-center rounded-full bg-red-600 text-white border border-red-700 shadow transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-400"
               >
-                <X size={20} strokeWidth={2.5} />
+                <X className="w-5 h-5" strokeWidth={2.5} />
               </button>
               
               <div className="loading-spinner" style={{

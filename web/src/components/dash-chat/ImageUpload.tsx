@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { uploadMultipleImages } from '@/lib/simple-image-upload';
 
@@ -21,6 +21,21 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup memory on unmount - IMPORTANT!
+  useEffect(() => {
+    return () => {
+      // Revoke all object URLs to prevent memory leaks
+      previews.forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+      // Cancel any pending uploads
+      abortControllerRef.current?.abort();
+    };
+  }, [previews]);
 
   const handleFileSelect = async (files: FileList | null) => {
     if (!files) return;

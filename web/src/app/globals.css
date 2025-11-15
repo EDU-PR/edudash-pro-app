@@ -15,6 +15,19 @@
   --slate-900: #0f172a;
   --slate-800: #1e293b;
   --slate-700: #334155;
+  
+  /* Layout dimensions */
+  --topnav-h: 56px;
+  --conversations-w: 0px;
+  --sidebar-w: 0px;
+}
+
+/* Desktop layout dimensions */
+@media (min-width: 1024px) {
+  :root {
+    --conversations-w: 280px;
+    --sidebar-w: 288px; /* 280px + 8px for border */
+  }
 }
 
 html,
@@ -23,6 +36,18 @@ body {
   /* Allow vertical scrolling while preventing horizontal overflow */
   overflow-x: hidden;
   overflow-y: auto;
+  /* Hide scrollbars globally */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Hide scrollbars in webkit browsers (Chrome, Safari, Edge) */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 body {

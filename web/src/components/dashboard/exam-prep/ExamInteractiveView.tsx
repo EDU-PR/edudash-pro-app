@@ -8,7 +8,6 @@ import { createClient } from '@/lib/supabase/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ExamDiagram } from './ExamDiagram';
-import '../exam-modal-close-fix.css';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
@@ -577,19 +576,13 @@ Every question you attempt is helping you learn and grow. Keep up the great work
       }}>
         {/* Close button for mobile-friendly exit */}
         {onClose && (
-          <button 
-            className="close-button" 
+          <button
             onClick={onClose}
             aria-label="Close exam and return to chat"
             title="Close exam and return to chat"
-            style={{
-              position: 'absolute',
-              top: isMobile ? 'var(--space-4)' : 'var(--space-5)',
-              right: isMobile ? 'var(--space-4)' : 'var(--space-5)',
-              zIndex: 10,
-            }}
+            className={`absolute z-10 ${isMobile ? 'top-4 right-4' : 'top-5 right-5'} w-11 h-11 flex items-center justify-center rounded-full bg-white/90 border border-black/20 shadow backdrop-blur-sm text-slate-900 dark:bg-slate-700 dark:text-white dark:border-white/30 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500`}
           >
-            <X size={isMobile ? 24 : 20} strokeWidth={2.5} />
+            <X className={`${isMobile ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={2.5} />
           </button>
         )}
         
