@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, FileText, Brain, Target, Sparkles, GraduationCap, Clock, Award, Globe, MessageSquare } from 'lucide-react';
 import { ConversationalExamBuilder } from './ConversationalExamBuilder';
+import { useQuotaCheck } from '@/hooks/useQuotaCheck';
+import { createClient } from '@/lib/supabase/client';
 
 interface ExamPrepWidgetProps {
   onAskDashAI?: (prompt: string, display: string, language?: string, enableInteractive?: boolean) => void;
   guestMode?: boolean;
+  userId?: string;
 }
 
 // South African language codes (aligned with lib/voice/language.ts)
@@ -324,8 +327,10 @@ const GRADE_COMPLEXITY = {
   },
 };
 
-export function ExamPrepWidget({ onAskDashAI, guestMode = false }: ExamPrepWidgetProps) {
+export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamPrepWidgetProps) {
   const router = useRouter();
+  const { checkQuota, incrementUsage } = useQuotaCheck(userId);
+  const supabase = createClient();
   const [selectedGrade, setSelectedGrade] = useState<string>('grade_9');
   const [selectedSubject, setSelectedSubject] = useState<string>('Mathematics');
   const [selectedExamType, setSelectedExamType] = useState<string>('practice_test');
@@ -365,8 +370,29 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false }: ExamPrepWidge
   const gradeInfo = GRADES.find(g => g.value === selectedGrade);
   const examType = EXAM_TYPES.find(e => e.id === selectedExamType);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!onAskDashAI) return;
+
+    // ✅ CHECK QUOTA BEFORE GENERATING EXAM (for logged-in users)
+    if (userId && !guestMode) {
+      const quotaResult = await checkQuota('exam_generation');
+      
+      if (quotaResult && !quotaResult.allowed) {
+        const upgradeMessage = quotaResult.upgrade_available
+          ? `\n\n💡 Upgrade to ${quotaResult.current_tier === 'free' ? 'Basic' : 'Premium'} plan for more exams!`
+          : '';
+        
+        alert(`⚠️ Monthly Exam Limit Reached\n\nYou've used all ${quotaResult.limit} exams this month on the ${quotaResult.current_tier} plan.${upgradeMessage}\n\nYour limit resets next month.`);
+        
+        // Optionally redirect to upgrade page
+        if (quotaResult.upgrade_available) {
+          router.push('/dashboard/parent/upgrade');
+        }
+        return;
+      }
+      
+      console.log('[ExamPrep] Quota check passed:', quotaResult);
+    }
 
     // Check guest mode limit
     if (guestMode) {
@@ -889,6 +915,13 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
     // Store prompt and display for preview
     setCustomPrompt(prompt);
     setShowPromptPreview(true);
+
+    // ✅ INCREMENT USAGE COUNTER WHEN EXAM GENERATION STARTS
+    if (userId && !guestMode) {
+      incrementUsage('exam_generation', 'success').catch(err => {
+        console.error('[ExamPrep] Failed to increment usage:', err);
+      });
+    }
   };
 
   const handleConfirmGenerate = () => {

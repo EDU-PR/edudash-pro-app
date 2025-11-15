@@ -287,6 +287,7 @@ export default function ParentDashboard() {
           onToggle={() => setOpenSection(openSection === 'exam-prep' ? null : 'exam-prep')}
         >
           <ExamPrepWidget
+            userId={userId}
             onAskDashAI={(prompt, display, language, enableInteractive) => 
               handleAskFromActivity(prompt, display, language, enableInteractive)
             }
