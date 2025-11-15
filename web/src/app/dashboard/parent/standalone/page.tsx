@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
 import { ExamPrepWidget } from '@/components/dashboard/exam-prep/ExamPrepWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
+import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import {
   BookOpen,
   Brain,
@@ -49,6 +50,8 @@ export default function StandaloneParentDashboard() {
   const [aiLanguage, setAiLanguage] = useState<string>('en-ZA');
   const [aiInteractive, setAiInteractive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeModalData, setUpgradeModalData] = useState<{ currentUsage: number; currentLimit: number } | null>(null);
 
   // Stats for standalone parents
   const [stats, setStats] = useState({
@@ -144,14 +147,15 @@ export default function StandaloneParentDashboard() {
     initAuth();
   }, [router, supabase]);
 
-  const handleAskFromActivity = async (prompt: string, display: string, language?: string, enableInteractive?: boolean) => {
-    // Check usage limits for free/starter tiers
+  const handleAskFromActivity = async (prompt: string, display: string, language?: string, enableInteractive?: boolean) => {    // Check usage limits for free/starter tiers
     if (subscriptionTier === 'free' && stats.homeworkHelpsUsed >= stats.homeworkHelpsLimit) {
-      alert('Free tier limit reached. Upgrade to Parent Starter for 30 queries/month!');
+      setShowUpgradeModal(true);
+      setUpgradeModalData({ currentUsage: stats.homeworkHelpsUsed, currentLimit: stats.homeworkHelpsLimit });
       return;
     }
     if (subscriptionTier === 'parent-starter' && stats.homeworkHelpsUsed >= stats.homeworkHelpsLimit) {
-      alert('Monthly limit reached. Upgrade to Parent Plus for 100 queries/month!');
+      setShowUpgradeModal(true);
+      setUpgradeModalData({ currentUsage: stats.homeworkHelpsUsed, currentLimit: stats.homeworkHelpsLimit });
       return;
     }
 
@@ -756,6 +760,19 @@ export default function StandaloneParentDashboard() {
           </div>
         </div>
       )}
+
+      {/* UpgradeModal for quota exceeded */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentTier={subscriptionTier === 'parent-starter' ? 'basic' : subscriptionTier === 'parent-plus' ? 'premium' : 'free'}
+        userId={userId || ''}
+        userEmail={userEmail}
+        userName={userName}
+        featureBlocked="homework_help"
+        currentUsage={upgradeModalData?.currentUsage}
+        currentLimit={upgradeModalData?.currentLimit}
+      />
     </div>
   );
 }

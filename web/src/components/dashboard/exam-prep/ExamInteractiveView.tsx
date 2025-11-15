@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as S
 import { ParsedExam, ExamQuestion, gradeAnswer } from '@/lib/examParser';
 import { useExamSession } from '@/lib/hooks/useExamSession';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
+import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import { createClient } from '@/lib/supabase/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -71,9 +72,37 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeModalData, setUpgradeModalData] = useState<{ currentUsage: number; currentLimit: number } | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
   
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
+  const supabase = createClient();
+
+  // Fetch user info for UpgradeModal
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (!userId) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || '');
+        setUserName(user.user_metadata?.full_name || '');
+      }
+
+      const { data: tierData } = await supabase
+        .from('user_ai_tiers')
+        .select('tier')
+        .eq('user_id', userId)
+        .single();
+      if (tierData) {
+        setCurrentTier(tierData.tier || 'free');
+      }
+    };
+    fetchUserInfo();
+  }, [userId, supabase]);
 
   // Helper key for clearing active exam session from parent page (set there)
   const activeKeyFromMeta = typeof window !== 'undefined' && exam?.grade && exam?.subject
@@ -145,12 +174,11 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
     if (userId) {
       const quotaResult = await checkQuota('explanation');
       if (!quotaResult?.allowed) {
-        const tierName = quotaResult?.current_tier === 'free' ? 'Free' : 
-                         quotaResult?.current_tier === 'trial' ? 'Trial' : 
-                         quotaResult?.current_tier === 'basic' ? 'Basic' : 
-                         quotaResult?.current_tier === 'premium' ? 'Premium' : 
-                         quotaResult?.current_tier === 'school' ? 'School' : 'Free';
-        alert(`You've reached your ${tierName} tier explanation limit! Upgrade to get more explanations.`);
+        setUpgradeModalData({
+          currentUsage: quotaResult.remaining === 0 ? quotaResult.limit : quotaResult.limit - quotaResult.remaining,
+          currentLimit: quotaResult.limit,
+        });
+        setShowUpgradeModal(true);
         return;
       }
     }
@@ -879,6 +907,19 @@ Every question you attempt is helping you learn and grow. Keep up the great work
           </button>
         </div>
       )}
+
+      {/* UpgradeModal for explanation quota exceeded */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentTier={currentTier}
+        userId={userId || ''}
+        userEmail={userEmail}
+        userName={userName}
+        featureBlocked="explanation"
+        currentUsage={upgradeModalData?.currentUsage}
+        currentLimit={upgradeModalData?.currentLimit}
+      />
     </div>
   );
 }
