@@ -50,14 +50,19 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
   // Create parameter string
   let paramString = '';
   
-  // Sort keys alphabetically
+  // Sort keys alphabetically (CRITICAL for PayFast)
   const sortedKeys = Object.keys(data).sort();
+  
+  console.log('[PayFast Signature] Sorted keys:', sortedKeys);
+  console.log('[PayFast Signature] Data values:', data);
   
   for (const key of sortedKeys) {
     if (key !== 'signature') {
       const value = data[key];
       if (value !== undefined && value !== null && value !== '') {
-        paramString += `${key}=${encodeURIComponent(String(value).trim()).replace(/%20/g, '+')}&`;
+        const encodedValue = encodeURIComponent(String(value).trim()).replace(/%20/g, '+');
+        paramString += `${key}=${encodedValue}&`;
+        console.log(`[PayFast Signature] ${key}=${encodedValue}`);
       }
     }
   }
@@ -69,6 +74,7 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
   // Only add passphrase for production mode
   if (!isSandbox && passphrase && passphrase.trim() !== '') {
     paramString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
+    console.log('[PayFast Signature] Added passphrase to param string');
   }
   
   // Generate MD5 hash
@@ -77,7 +83,8 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
   console.log('[PayFast Signature]', {
     mode: isSandbox ? 'sandbox' : 'production',
     hasPassphrase: !isSandbox && !!passphrase,
-    paramString: paramString.substring(0, 100) + '...', // First 100 chars for debugging
+    paramStringLength: paramString.length,
+    paramStringPreview: paramString.substring(0, 200) + '...',
     signature,
   });
   
@@ -126,6 +133,13 @@ export function createSubscriptionPayment(
   
   const merchantId = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_ID || '10000100'; // Sandbox default
   const merchantKey = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_KEY || '46f0cd694581a'; // Sandbox default
+  
+  console.log('[PayFast] Creating payment with:', {
+    merchantId,
+    merchantKey,
+    tier,
+    mode: process.env.NEXT_PUBLIC_PAYFAST_MODE,
+  });
   
   // Tier pricing (FULL PRICES - in ZAR)
   // Promotional pricing is handled by the database
