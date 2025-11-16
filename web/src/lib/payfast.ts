@@ -42,9 +42,11 @@ export interface PayFastPaymentData {
 
 /**
  * Generate MD5 signature for PayFast payment
- * Note: PayFast sandbox does NOT use passphrase
+ * IMPORTANT: PayFast sandbox does NOT use passphrase - only production does
  */
 export function generatePayFastSignature(data: Record<string, any>, passphrase?: string): string {
+  const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
+  
   // Create parameter string
   let paramString = '';
   
@@ -63,13 +65,23 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
   // Remove trailing &
   paramString = paramString.slice(0, -1);
   
-  // Add passphrase if provided AND not empty (production only)
-  if (passphrase && passphrase.trim() !== '') {
+  // CRITICAL: PayFast sandbox does NOT use passphrase!
+  // Only add passphrase for production mode
+  if (!isSandbox && passphrase && passphrase.trim() !== '') {
     paramString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
   }
   
   // Generate MD5 hash
-  return crypto.createHash('md5').update(paramString).digest('hex');
+  const signature = crypto.createHash('md5').update(paramString).digest('hex');
+  
+  console.log('[PayFast Signature]', {
+    mode: isSandbox ? 'sandbox' : 'production',
+    hasPassphrase: !isSandbox && !!passphrase,
+    paramString: paramString.substring(0, 100) + '...', // First 100 chars for debugging
+    signature,
+  });
+  
+  return signature;
 }
 
 /**
@@ -212,6 +224,10 @@ export function initiatePayFastPayment(
     }
     
     const payfastUrl = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
+    const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
+    
+    // CRITICAL: Do not use passphrase in sandbox mode
+    const effectivePassphrase = isSandbox ? undefined : passphrase;
     
     // Create form dynamically
     const form = document.createElement('form');
@@ -229,8 +245,8 @@ export function initiatePayFastPayment(
       }
     });
     
-    // Generate and add signature
-    const signature = generatePayFastSignature(paymentData, passphrase);
+    // Generate and add signature (without passphrase for sandbox)
+    const signature = generatePayFastSignature(paymentData, effectivePassphrase);
     const sigInput = document.createElement('input');
     sigInput.type = 'hidden';
     sigInput.name = 'signature';
@@ -239,6 +255,7 @@ export function initiatePayFastPayment(
     
     // Debug logging
     console.log('[PayFast] Payment data being sent:', {
+      mode: isSandbox ? 'SANDBOX' : 'PRODUCTION',
       merchant_id: paymentData.merchant_id,
       merchant_key: paymentData.merchant_key,
       amount: paymentData.amount,

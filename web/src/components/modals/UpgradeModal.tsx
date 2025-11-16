@@ -104,7 +104,10 @@ export function UpgradeModal({
 
     try {
       const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName);
-      const passphrase = process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
+      
+      // Only use passphrase in production mode (sandbox doesn't need it)
+      const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
+      const passphrase = isSandbox ? undefined : process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
       
       initiatePayFastPayment(paymentData, passphrase, (error) => {
         // Error callback
