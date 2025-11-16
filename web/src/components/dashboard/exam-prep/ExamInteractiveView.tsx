@@ -166,14 +166,12 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   /**
    * Get AI-powered explanations for incorrect answers
    */
-  const supabase = createClient();
-
   // Individual question explanation
   const getAIExplanation = async (questionId: string) => {
     // ✅ CHECK QUOTA BEFORE REQUESTING EXPLANATION
     if (userId) {
       const quotaResult = await checkQuota('explanation');
-      if (!quotaResult?.allowed) {
+      if (!quotaResult?.allowed && quotaResult) {
         setUpgradeModalData({
           currentUsage: quotaResult.remaining === 0 ? quotaResult.limit : quotaResult.limit - quotaResult.remaining,
           currentLimit: quotaResult.limit,
