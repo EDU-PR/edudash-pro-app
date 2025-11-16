@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy initialization to avoid build-time errors
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID || '';
 const PAYFAST_MERCHANT_KEY=REDACTED
@@ -89,6 +92,8 @@ export async function POST(request: NextRequest) {
 
     // Handle payment success
     if (payment_status === 'COMPLETE') {
+      const supabaseAdmin = getSupabaseAdmin();
+      
       // Update user tier in user_ai_tiers table (FIXED: was using wrong table)
       const tierUppercase = tier.toUpperCase(); // FREE, BASIC, PREMIUM, etc.
       const { error: tierError } = await supabaseAdmin

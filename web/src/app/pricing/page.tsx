@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createSubscriptionPayment, initiatePayFastPayment } from "@/lib/payfast";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -11,7 +11,6 @@ type UserType = "parents" | "schools";
 
 export default function PricingPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
   const [userType, setUserType] = useState<UserType>("parents");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");

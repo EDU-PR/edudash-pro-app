@@ -17,7 +17,7 @@ export interface UpgradeModalProps {
 }
 
 interface TierOption {
-  tier: 'basic' | 'premium';
+  tier: 'parent_starter' | 'parent_plus';
   name: string;
   price: number;
   color: string;
@@ -34,7 +34,7 @@ interface TierOption {
 
 const TIER_OPTIONS: TierOption[] = [
   {
-    tier: 'basic',
+    tier: 'parent_starter',
     name: 'Parent Starter',
     price: 99,
     color: '#3b82f6',
@@ -56,7 +56,7 @@ const TIER_OPTIONS: TierOption[] = [
     },
   },
   {
-    tier: 'premium',
+    tier: 'parent_plus',
     name: 'Parent Plus',
     price: 199,
     color: '#8b5cf6',
@@ -98,7 +98,7 @@ export function UpgradeModal({
 
   if (!isOpen) return null;
 
-  const handleUpgrade = (tier: 'basic' | 'premium') => {
+  const handleUpgrade = (tier: 'parent_starter' | 'parent_plus') => {
     setProcessingPayment(tier);
     setPaymentError(null);
 
@@ -123,7 +123,7 @@ export function UpgradeModal({
   // Filter tiers based on current tier
   const availableTiers = TIER_OPTIONS.filter((option) => {
     if (currentTier === 'free' || currentTier === 'trial') return true;
-    if (currentTier === 'basic') return option.tier === 'premium';
+    if (currentTier === 'basic') return option.tier === 'parent_plus';
     return false; // Already on premium
   });
 

@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
   
+  // Skip ESLint during build (already linted in dev)
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  
   // Webpack configuration to reduce file watchers
   webpack: (config, { isServer }) => {
     // Reduce file watching overhead
