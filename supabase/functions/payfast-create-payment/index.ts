@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { createHash } from "https://deno.land/std@0.208.0/node/crypto.ts";
+import { Md5 } from 'https://deno.land/std@0.208.0/hash/md5.ts';
 
 // PayFast configuration from environment
 const PAYFAST_MODE = Deno.env.get('PAYFAST_MODE') || 'sandbox';
@@ -59,8 +59,10 @@ function generateSignature(data: Record<string, string>, isSandbox: boolean): st
     paramString += `&passphrase=${encodeURIComponent(PAYFAST_PASSPHRASE.trim()).replace(/%20/g, '+')}`;
   }
   
-  // Generate MD5 hash using Deno's crypto
-  const signature = createHash('md5').update(paramString).digest('hex');
+  // Generate MD5 hash using Deno's MD5 hasher
+  const md5 = new Md5();
+  md5.update(paramString);
+  const signature = md5.toString();
   
   console.log('[PayFast Edge] Signature generated:', {
     mode: isSandbox ? 'sandbox' : 'production',
