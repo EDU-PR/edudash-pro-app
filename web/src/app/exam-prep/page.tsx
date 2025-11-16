@@ -222,7 +222,7 @@ export default function ExamPrepPage() {
             Unlock Unlimited Practice Tests
           </h2>
           <p style={{ fontSize: '18px', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '24px' }}>
-            Upgrade to Parent Starter for just <strong style={{ color: '#00f5ff' }}>R49.99/month</strong>
+            Upgrade to Parent Starter for just <strong style={{ color: '#00f5ff' }}>R49.50/month</strong>
           </p>
           <ul style={{
             textAlign: 'left',

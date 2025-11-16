@@ -1203,7 +1203,7 @@ Generate 30 flashcards for ${gradeInfo?.label} ${selectedSubject} covering essen
             <strong>Free Trial: 1 exam resource per day</strong>
           </div>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-            Upgrade to Parent Starter (R49.99/month) for unlimited practice tests, study guides, and more.
+            Upgrade to Parent Starter (R49.50/month) for unlimited practice tests, study guides, and more.
           </p>
         </div>
       )}

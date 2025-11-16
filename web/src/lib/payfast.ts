@@ -42,6 +42,7 @@ export interface PayFastPaymentData {
 
 /**
  * Generate MD5 signature for PayFast payment
+ * Note: PayFast sandbox does NOT use passphrase
  */
 export function generatePayFastSignature(data: Record<string, any>, passphrase?: string): string {
   // Create parameter string
@@ -62,8 +63,8 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
   // Remove trailing &
   paramString = paramString.slice(0, -1);
   
-  // Add passphrase if provided
-  if (passphrase) {
+  // Add passphrase if provided AND not empty (production only)
+  if (passphrase && passphrase.trim() !== '') {
     paramString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
   }
   
@@ -95,32 +96,51 @@ export function buildPayFastUrl(paymentData: PayFastPaymentData, passphrase?: st
 
 /**
  * Create payment data for a subscription
+ * NOTE: This uses FULL PRICES. Promotional pricing is applied via database.
+ * Call getPromotionalPrice() first to get the actual amount to charge.
  */
 export function createSubscriptionPayment(
   userId: string,
-  tier: 'basic' | 'premium' | 'school',
+  tier: 'parent_starter' | 'parent_plus' | 'school_starter' | 'school_premium' | 'school_pro',
   userEmail: string,
-  userName?: string
+  userName?: string,
+  promotionalAmount?: number // If provided, use this instead of full price
 ): PayFastPaymentData {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  // For PayFast webhook to work, we need a publicly accessible URL
+  // Use LocalTunnel URL if available, otherwise localhost (for testing only)
+  const baseUrl = process.env.NEXT_PUBLIC_LOCALTUNNEL_URL || 
+                  process.env.NEXT_PUBLIC_BASE_URL || 
+                  'http://localhost:3000';
+  
   const merchantId = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_ID || '10000100'; // Sandbox default
   const merchantKey = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_KEY || '46f0cd694581a'; // Sandbox default
   
-  // Tier pricing (in ZAR)
-  const tierPricing: Record<string, { amount: number; name: string; description: string }> = {
-    basic: {
-      amount: 99.00,
+  // Tier pricing (FULL PRICES - in ZAR)
+  // Promotional pricing is handled by the database
+  const tierPricing: Record<string, { fullAmount: number; name: string; description: string }> = {
+    parent_starter: {
+      fullAmount: 99.00,
       name: 'Parent Starter',
-      description: 'Monthly subscription - 50 exams, 50 explanations, 100 chats per day',
+      description: 'Monthly subscription - 30 Homework Helper/month, AI lesson support, Child-safe explanations',
     },
-    premium: {
-      amount: 199.00,
+    parent_plus: {
+      fullAmount: 199.00,
       name: 'Parent Plus',
-      description: 'Monthly subscription - Unlimited exams, explanations, and chats',
+      description: 'Monthly subscription - 100 Homework Helper/month, Priority processing, Up to 3 children',
     },
-    school: {
-      amount: 999.00,
-      name: 'School Plan',
+    school_starter: {
+      fullAmount: 299.00,
+      name: 'School Starter',
+      description: 'Monthly subscription - Basic school management and AI features',
+    },
+    school_premium: {
+      fullAmount: 499.00,
+      name: 'School Premium',
+      description: 'Monthly subscription - Advanced school management and unlimited AI features',
+    },
+    school_pro: {
+      fullAmount: 899.00,
+      name: 'School Pro',
       description: 'Monthly subscription - Full school management and unlimited AI features',
     },
   };
@@ -128,6 +148,9 @@ export function createSubscriptionPayment(
   const pricing = tierPricing[tier];
   const [firstName, ...lastNameParts] = (userName || userEmail.split('@')[0]).split(' ');
   const lastName = lastNameParts.join(' ') || 'User';
+  
+  // Use promotional amount if provided, otherwise use full amount
+  const chargeAmount = promotionalAmount || pricing.fullAmount;
   
   // Generate unique payment ID
   const paymentId = `SUB_${tier.toUpperCase()}_${userId.substring(0, 8)}_${Date.now()}`;
@@ -144,7 +167,7 @@ export function createSubscriptionPayment(
     email_address: userEmail,
     
     m_payment_id: paymentId,
-    amount: pricing.amount,
+    amount: chargeAmount,
     item_name: pricing.name,
     item_description: pricing.description,
     
@@ -155,7 +178,7 @@ export function createSubscriptionPayment(
     
     // Recurring subscription
     subscription_type: '1', // Subscription
-    recurring_amount: pricing.amount,
+    recurring_amount: chargeAmount,
     frequency: '3', // Monthly
     cycles: 0, // Until cancelled
   };
@@ -214,16 +237,29 @@ export function initiatePayFastPayment(
     sigInput.value = signature;
     form.appendChild(sigInput);
     
-    // Submit form
-    document.body.appendChild(form);
-    
-    console.log('[PayFast] Submitting payment:', {
+    // Debug logging
+    console.log('[PayFast] Payment data being sent:', {
+      merchant_id: paymentData.merchant_id,
+      merchant_key: paymentData.merchant_key,
       amount: paymentData.amount,
-      tier: paymentData.item_name,
-      email: paymentData.email_address,
-      url: payfastUrl,
+      item_name: paymentData.item_name,
+      email_address: paymentData.email_address,
+      return_url: paymentData.return_url,
+      cancel_url: paymentData.cancel_url,
+      notify_url: paymentData.notify_url,
+      subscription_type: paymentData.subscription_type,
+      recurring_amount: paymentData.recurring_amount,
+      frequency: paymentData.frequency,
+      cycles: paymentData.cycles,
+      custom_str1: paymentData.custom_str1,
+      custom_str2: paymentData.custom_str2,
+      custom_str3: paymentData.custom_str3,
+      signature: signature,
+      passphrase_used: passphrase ? 'yes' : 'no',
     });
     
+    // Submit form
+    document.body.appendChild(form);
     form.submit();
   } catch (error) {
     const err = error instanceof Error ? error : new Error('Unknown payment error');

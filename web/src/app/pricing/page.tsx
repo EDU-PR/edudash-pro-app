@@ -62,12 +62,12 @@ export default function PricingPage() {
     }
 
     // Map plan names to tiers
-    const tierMap: Record<string, 'basic' | 'premium' | 'school'> = {
-      'Parent Starter': 'basic',
-      'Parent Plus': 'premium',
-      'Starter Plan': 'school',
-      'Premium Plan': 'school',
-      'Enterprise Plan': 'school',
+    const tierMap: Record<string, 'parent_starter' | 'parent_plus' | 'school_starter' | 'school_premium' | 'school_pro'> = {
+      'Parent Starter': 'parent_starter',
+      'Parent Plus': 'parent_plus',
+      'Starter Plan': 'school_starter',
+      'Premium Plan': 'school_premium',
+      'Enterprise Plan': 'school_pro',
     };
 
     const tier = tierMap[planName];
@@ -81,7 +81,10 @@ export default function PricingPage() {
     try {
       // Create PayFast payment data
       const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName || undefined);
-      const passphrase = process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
+      
+      // For sandbox, do NOT use passphrase (PayFast sandbox requirement)
+      const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_URL?.includes('sandbox') ?? true;
+      const passphrase = isSandbox ? undefined : process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
 
       // Initiate payment (redirects to PayFast)
       initiatePayFastPayment(paymentData, passphrase);
@@ -108,8 +111,9 @@ export default function PricingPage() {
     },
     {
       name: "Parent Starter",
-      price: 49.99,
-      priceAnnual: 479.90,
+      price: 49.50,
+      originalPrice: 99.00,
+      priceAnnual: 475.00,
       popular: true,
       features: [
         "30 Homework Helper/month",
@@ -122,8 +126,9 @@ export default function PricingPage() {
     },
     {
       name: "Parent Plus",
-      price: 149.99,
-      priceAnnual: 1439.90,
+      price: 99.50,
+      originalPrice: 199.00,
+      priceAnnual: 955.00,
       popular: false,
       features: [
         "100 Homework Helper/month",
@@ -241,6 +246,32 @@ export default function PricingPage() {
           </div>
         </header>
 
+        {/* PROMO BANNER */}
+        {userType === "parents" && (
+          <div style={{ 
+            background: "linear-gradient(135deg, rgb(99, 102, 241) 0%, rgb(139, 92, 246) 100%)",
+            padding: "20px",
+            textAlign: "center" as const,
+            borderBottom: "2px solid rgba(255, 255, 255, 0.2)",
+            boxShadow: "0 4px 20px rgba(139, 92, 246, 0.4)"
+          }}>
+            <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", flexWrap: "wrap" as const }}>
+                <span style={{ fontSize: "32px" }}>🔥</span>
+                <div>
+                  <p style={{ fontSize: "clamp(18px, 3vw, 24px)", fontWeight: 800, margin: 0, color: "#fff", textTransform: "uppercase" as const, letterSpacing: "0.05em", textShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>
+                    LAUNCH SPECIAL: 50% OFF FOR 6 MONTHS!
+                  </p>
+                  <p style={{ fontSize: "clamp(13px, 2vw, 16px)", margin: "6px 0 0", color: "rgba(255, 255, 255, 0.95)", fontWeight: 600 }}>
+                    🎁 Join before Dec 31, 2025 • R49.50/mo (was R99) or R99.50/mo (was R199) for 6 months
+                  </p>
+                </div>
+                <span style={{ fontSize: "32px" }}>⚡</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
         <section style={{ paddingTop: "60px", paddingBottom: "40px", textAlign: "center", maxWidth: "900px", margin: "0 auto", padding: "60px 20px 40px" }}>
           <div style={{ marginBottom: "16px" }}>
@@ -336,6 +367,8 @@ export default function PricingPage() {
             {activePlans.map((plan) => {
               const price = billingPeriod === "annual" ? plan.priceAnnual : plan.price;
               const isEnterprise = plan.price === null;
+              const hasPromo = userType === "parents" && (plan as any).originalPrice;
+              const originalPrice = (plan as any).originalPrice;
               
               return (
                 <div
@@ -350,8 +383,12 @@ export default function PricingPage() {
                   }}
                 >
                   {plan.popular && (
-                    <div style={{ position: "absolute", top: "-12px", right: "24px", background: "#22c55e", color: "#fff", padding: "4px 12px", borderRadius: "12px", fontSize: "11px", fontWeight: 700 }}>
-                      MOST POPULAR
+                    <div style={{ position: "absolute", top: "-12px", left: "16px", background: "#fbbf24", color: "#0a0a0f", padding: "6px 20px", borderRadius: "20px", fontSize: "12px", fontWeight: 700, textTransform: "uppercase" }}>Most Popular</div>
+                  )}
+
+                  {hasPromo && (
+                    <div style={{ position: "absolute", top: "-12px", right: "16px", background: "rgb(139, 92, 246)", color: "#fff", padding: "6px 16px", borderRadius: "20px", fontSize: "12px", fontWeight: 700, textTransform: "uppercase", boxShadow: "0 4px 12px rgba(139, 92, 246, 0.4)" }}>
+                      🔥 50% OFF
                     </div>
                   )}
                   
@@ -372,12 +409,26 @@ export default function PricingPage() {
                       </>
                     ) : (
                       <>
+                        {hasPromo && originalPrice && (
+                          <div style={{ marginBottom: "4px" }}>
+                            <span style={{ fontSize: "18px", textDecoration: "line-through", color: plan.popular ? "rgba(10, 10, 15, 0.5)" : "rgba(255, 255, 255, 0.4)", fontWeight: 600 }}>
+                              R{originalPrice.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                         <div style={{ fontSize: "48px", fontWeight: 800, color: plan.popular ? "#0a0a0f" : "#fff" }}>
                           R{typeof price === "number" ? price.toFixed(price % 1 === 0 ? 0 : 2) : "0"}
                         </div>
                         <div style={{ fontSize: "14px", color: plan.popular ? "rgba(10, 10, 15, 0.7)" : "#6B7280" }}>
                           per {billingPeriod === "annual" ? "year" : "month"}
                         </div>
+                        {hasPromo && originalPrice && (
+                          <div style={{ marginTop: "8px", padding: "6px 12px", background: "rgba(34, 197, 94, 0.2)", borderRadius: "12px", display: "inline-block" }}>
+                            <span style={{ fontSize: "14px", fontWeight: 700, color: plan.popular ? "#0a0a0f" : "#22c55e" }}>
+                              💰 Save R{(originalPrice - (price as number)).toFixed(2)}/mo
+                            </span>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

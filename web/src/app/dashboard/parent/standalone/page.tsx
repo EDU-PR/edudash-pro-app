@@ -253,7 +253,7 @@ export default function StandaloneParentDashboard() {
                 <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Unlock More Learning</h3>
               </div>
               <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                Get 30 AI Homework Helpers per month + priority support for just R49.99/month
+                Get 30 AI Homework Helpers per month + priority support for just R49.50/month
               </p>
             </div>
             <Link href="/pricing" style={{ 
@@ -684,7 +684,7 @@ export default function StandaloneParentDashboard() {
               Upgrade to Parent Plus
             </h3>
             <p style={{ fontSize: 16, opacity: 0.9, marginBottom: 20, maxWidth: 600, margin: '0 auto 20px' }}>
-              Get 100 AI queries/month, support for 3 children, advanced insights, and priority support for R149.99/month
+              Get 100 AI queries/month, support for 3 children, advanced insights, and priority support for R99.50/month
             </p>
             <Link href="/pricing" style={{ 
               padding: '14px 32px', 

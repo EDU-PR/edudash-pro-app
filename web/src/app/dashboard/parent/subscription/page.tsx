@@ -84,38 +84,35 @@ const TIER_INFO: Record<string, TierInfo> = {
   basic: {
     name: 'basic',
     displayName: 'Parent Starter',
-    price: 99,
+    price: 49.50,
     color: '#3b82f6',
     icon: Zap,
     features: [
-      '50 exams per month',
-      '50 explanations per month',
-      '100 chat messages per day',
-      'All CAPS subjects',
-      'Interactive exercises',
+      '30 Homework Helper/month',
+      'AI lesson support',
+      'Child-safe explanations',
       'Progress tracking',
       'Email support',
     ],
-    limits: { exams: 50, explanations: 50, chat: 100 },
+    limits: { exams: 30, explanations: 30, chat: 100 },
   },
   premium: {
     name: 'premium',
     displayName: 'Parent Plus',
-    price: 199,
+    price: 99.50,
     color: '#8b5cf6',
     icon: Crown,
     features: [
-      'Unlimited exams',
-      'Unlimited explanations',
-      'Unlimited chat',
-      'All CAPS subjects',
-      'Interactive exercises',
-      'Advanced progress analytics',
-      'Multiple children support',
+      '100 Homework Helper/month',
+      'Priority processing',
+      'Up to 3 children',
+      'Advanced learning insights',
       'Priority support',
-      'Gamification features',
+      'WhatsApp Connect',
+      'Learning Resources',
+      'Progress Analytics',
     ],
-    limits: { exams: 999999, explanations: 999999, chat: 999999 },
+    limits: { exams: 100, explanations: 100, chat: 999999 },
   },
   school: {
     name: 'school',
@@ -215,6 +212,51 @@ export default function SubscriptionPage() {
       tenantSlug={tenantSlug}
     >
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+        {/* PROMO ALERT */}
+        {(currentTier === 'free' || currentTier === 'trial') && (
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgb(99, 102, 241) 0%, rgb(139, 92, 246) 100%)', 
+            borderRadius: '16px',
+            padding: '20px 24px',
+            marginBottom: '24px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 4px 20px rgba(139, 92, 246, 0.4)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '250px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '24px' }}>🔥</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: '#fff' }}>
+                    LAUNCH SPECIAL: 50% OFF FOR 6 MONTHS!
+                  </h3>
+                </div>
+                <p style={{ fontSize: '14px', margin: 0, color: 'rgba(255, 255, 255, 0.95)', lineHeight: 1.5 }}>
+                  🎁 Join before Dec 31, 2025: Parent Starter at <strong>R49.50/mo</strong> (was R99) or Parent Plus at <strong>R99.50/mo</strong> (was R199) for 6 months
+                  <br />
+                  ⏰ Then reverts to full price • Lock in your savings by joining now!
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/pricing')}
+                style={{
+                  background: '#fff',
+                  color: 'rgb(99, 102, 241)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 24px',
+                  fontSize: '16px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                View Special Pricing →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '8px' }}>

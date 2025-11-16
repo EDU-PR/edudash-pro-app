@@ -355,7 +355,7 @@ export default function Home() {
             <div className="pricingCard highlight" style={{position: 'relative'}}>
               <div style={{position: 'absolute', top: '-12px', right: '24px', background: '#22c55e', color: '#fff', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 700}}>POPULAR</div>
               <p style={{marginBottom: '12px', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.1em'}}>Parent Starter</p>
-              <h3 style={{fontSize: '36px', fontWeight: 800, marginBottom: '4px', color: '#0a0a0f'}}>R49.99</h3>
+              <h3 style={{fontSize: '36px', fontWeight: 800, marginBottom: '4px', color: '#0a0a0f'}}>R49.50</h3>
               <p style={{fontSize: '13px', marginBottom: '24px', color: '#0a0a0f'}}>per month</p>
               <ul style={{listStyleType: 'disc', paddingLeft: '20px', textAlign: 'left', color: '#0a0a0f', marginBottom: '32px', lineHeight: '2'}}>
                 <li>30 Homework Helper/month</li>
