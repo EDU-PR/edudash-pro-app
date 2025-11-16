@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createSubscriptionPayment, initiatePayFastPayment } from "@/lib/payfast";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
 type UserType = "parents" | "schools";
@@ -44,7 +43,7 @@ export default function PricingPage() {
     checkAuthAndTrial();
   }, [supabase]);
 
-  const handleSubscribe = (planName: string, price: number) => {
+  const handleSubscribe = async (planName: string, price: number) => {
     if (!isLoggedIn) {
       router.push('/sign-in?redirect=/pricing');
       return;
@@ -78,17 +77,40 @@ export default function PricingPage() {
     setProcessingPayment(planName);
 
     try {
-      // Create PayFast payment data
-      const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName || undefined);
-      
-      // For sandbox, do NOT use passphrase (PayFast sandbox requirement)
-      const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_URL?.includes('sandbox') ?? true;
-      const passphrase = isSandbox ? undefined : process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
+      // Call secure API endpoint to create payment
+      const response = await fetch('/api/payfast/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          tier: tier,
+          amount: price,
+          email: userEmail,
+          firstName: userName?.split(' ')[0] || userEmail.split('@')[0],
+          lastName: userName?.split(' ').slice(1).join(' ') || 'User',
+          itemName: planName,
+          itemDescription: `${planName} subscription`,
+          subscriptionType: '1', // Subscription
+          frequency: '3', // Monthly
+          cycles: '0', // Until cancelled
+        }),
+      });
 
-      // Initiate payment (redirects to PayFast)
-      initiatePayFastPayment(paymentData, passphrase);
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Failed to create payment');
+      }
+
+      // Redirect to PayFast payment page
+      if (data.payment_url) {
+        console.log('[Pricing] Redirecting to PayFast:', data.mode);
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error('No payment URL received');
+      }
     } catch (error) {
-      console.error('[Pricing] Payment initiation failed:', error);
+      console.error('[Pricing] Payment failed:', error);
       alert('Failed to initiate payment. Please try again.');
       setProcessingPayment(null);
     }

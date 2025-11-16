@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createSubscriptionPayment, initiatePayFastPayment } from '@/lib/payfast';
 import { X, Crown, Zap, Sparkles, CheckCircle, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 
 export interface UpgradeModalProps {
@@ -98,26 +97,55 @@ export function UpgradeModal({
 
   if (!isOpen) return null;
 
-  const handleUpgrade = (tier: 'parent_starter' | 'parent_plus') => {
+  const handleUpgrade = async (tier: 'parent_starter' | 'parent_plus') => {
     setProcessingPayment(tier);
     setPaymentError(null);
 
     try {
-      const paymentData = createSubscriptionPayment(userId, tier, userEmail, userName);
-      
-      // Only use passphrase in production mode (sandbox doesn't need it)
-      const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
-      const passphrase = isSandbox ? undefined : process.env.NEXT_PUBLIC_PAYFAST_PASSPHRASE;
-      
-      initiatePayFastPayment(paymentData, passphrase, (error) => {
-        // Error callback
-        console.error('[UpgradeModal] Payment initiation failed:', error);
-        setPaymentError(error.message || 'Failed to initiate payment. Please try again or contact support.');
-        setProcessingPayment(null);
+      const tierOption = TIER_OPTIONS.find(t => t.tier === tier);
+      if (!tierOption) {
+        throw new Error('Invalid tier selected');
+      }
+
+      // Call secure API endpoint to create payment
+      const response = await fetch('/api/payfast/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          tier: tier,
+          amount: tierOption.price,
+          email: userEmail,
+          firstName: userName?.split(' ')[0] || userEmail.split('@')[0],
+          lastName: userName?.split(' ').slice(1).join(' ') || 'User',
+          itemName: tierOption.name,
+          itemDescription: tierOption.tagline,
+          subscriptionType: '1', // Subscription
+          frequency: '3', // Monthly
+          cycles: '0', // Until cancelled
+        }),
       });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Failed to create payment');
+      }
+
+      // Redirect to PayFast payment page
+      if (data.payment_url) {
+        console.log('[UpgradeModal] Redirecting to PayFast:', {
+          tier,
+          paymentId: data.payment_id,
+          mode: data.mode,
+        });
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error('No payment URL received');
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error('[UpgradeModal] Payment setup failed:', error);
+      console.error('[UpgradeModal] Payment failed:', error);
       setPaymentError(errorMessage);
       setProcessingPayment(null);
     }
