@@ -266,6 +266,10 @@ serve(async (req: Request): Promise<Response> => {
       isGuest
     }
 
+    // Track which Anthropic key is used (needed for error handling)
+    let anthropicKeyName = 'unknown';
+    let anthropicKey = '';
+
     try {
       // Determine which AI provider to use (prefer_openai overrides config)
       const useOpenAI = prefer_openai 
@@ -399,8 +403,10 @@ serve(async (req: Request): Promise<Response> => {
       
       // Use Claude with load-balanced API key
       // Use request queue to prevent rate limiting from concurrent requests
-      const { key: anthropicKey, keyName } = getAnthropicApiKey();
-      console.log(`[ai-proxy:${requestId}] Using ${keyName}. Enqueuing request to Claude. Queue status before:`, aiRequestQueue.getStatus());
+      const apiKeySelection = getAnthropicApiKey();
+      anthropicKey = apiKeySelection.key;
+      anthropicKeyName = apiKeySelection.keyName;
+      console.log(`[ai-proxy:${requestId}] Using ${anthropicKeyName}. Enqueuing request to Claude. Queue status before:`, aiRequestQueue.getStatus());
       
       const result = await aiRequestQueue.enqueue(() => callClaude({
         apiKey: anthropicKey,
@@ -414,7 +420,7 @@ serve(async (req: Request): Promise<Response> => {
         maxTokens: hasImages ? 1536 : 4096
       }));
 
-      console.log(`[ai-proxy:${requestId}] Request completed using ${keyName}. Queue status after:`, aiRequestQueue.getStatus());
+      console.log(`[ai-proxy:${requestId}] Request completed using ${anthropicKeyName}. Queue status after:`, aiRequestQueue.getStatus());
 
       // Handle streaming
       if (stream && result.response) {
@@ -468,7 +474,7 @@ serve(async (req: Request): Promise<Response> => {
         processingTimeMs: Date.now() - startTime,
         inputText: redactedText,
         outputText: result.content,
-        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount, api_key_used: keyName }
+        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount, api_key_used: anthropicKeyName }
       })
 
       // Return response
@@ -505,7 +511,7 @@ serve(async (req: Request): Promise<Response> => {
         metadata: { ...metadata, scope, error: (aiError as Error).message, error_stack: (aiError as Error).stack, redaction_count: redactionCount }
       })
 
-      // Handle rate limit and quota errors - try OpenAI fallback if available
+      // Handle rate limit and quota errors - try alternate Anthropic key if available
       const errorMessage = (aiError as Error).message || '';
       const isQuotaError = errorMessage.includes('usage limits') || errorMessage.includes('quota');
       const isRateLimit = isRateLimitError(aiError);
@@ -515,37 +521,41 @@ serve(async (req: Request): Promise<Response> => {
         const retrySeconds = Math.ceil(retryMs / 1000);
         
         if (isQuotaError) {
-          console.warn(`[ai-proxy:${requestId}] Claude quota exceeded. Attempting OpenAI fallback...`);
+          console.warn(`[ai-proxy:${requestId}] Claude quota exceeded for ${anthropicKeyName}.`);
         } else {
-          console.warn(`[ai-proxy:${requestId}] Rate limit hit. Retry after ${retrySeconds}s`);
+          console.warn(`[ai-proxy:${requestId}] Rate limit hit on ${anthropicKeyName}. Retry after ${retrySeconds}s`);
           console.warn(`[ai-proxy:${requestId}] Queue status:`, aiRequestQueue.getStatus());
         }
         
-        // Try OpenAI as fallback if configured
-        if (OPENAI_API_KEY && !stream && !tools) {
-          console.log(`[ai-proxy:${requestId}] Attempting OpenAI fallback...`);
+        // Try alternate Anthropic key if we have 2 keys configured
+        const hasAlternateKey = ANTHROPIC_API_KEY && ANTHROPIC_API_KEY_2;
+        if (hasAlternateKey && !stream && !tools) {
+          console.log(`[ai-proxy:${requestId}] Attempting retry with alternate Anthropic key...`);
           
           try {
-            // Map Claude model to OpenAI model
-            const openaiModel = model.includes('haiku') ? 'gpt-3.5-turbo' : 
-                               hasImages ? 'gpt-4-turbo' : 'gpt-4';
+            // Get the OTHER Anthropic key (not the one that just failed)
+            const { key: alternateKey, keyName: alternateKeyName } = getAnthropicApiKey();
+            console.log(`[ai-proxy:${requestId}] Retrying with ${alternateKeyName}`);
             
-            const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY!,
-              model: openaiModel as any,
+            const fallbackResult = await callClaude({
+              apiKey: alternateKey,
+              model: model as any,
               prompt: redactedText,
               images: payload.images,
-              conversationHistory: payload.conversationHistory
+              conversationHistory: payload.conversationHistory,
+              stream: false,
+              tools: undefined, // Disable tools on retry to simplify
+              maxTokens: hasImages ? 1536 : 4096
             });
             
-            console.log(`[ai-proxy:${requestId}] OpenAI fallback succeeded`);
+            console.log(`[ai-proxy:${requestId}] Retry with ${alternateKeyName} succeeded`);
             
             // Log usage with fallback indicator
             await logUsage(supabase, {
               userId: user.id,
               organizationId,
               serviceType: service_type,
-              model: `${fallbackResult.model} (fallback)`,
+              model: `${fallbackResult.model} (retry)`,
               status: 'success',
               tokensIn: fallbackResult.tokensIn,
               tokensOut: fallbackResult.tokensOut,
@@ -560,148 +570,37 @@ serve(async (req: Request): Promise<Response> => {
                 has_images: hasImages, 
                 image_count: payload.images?.length || 0, 
                 redaction_count: redactionCount,
-                fallback_provider: 'openai',
+                retry_key: alternateKeyName,
+                original_key: anthropicKeyName,
                 original_error: isQuotaError ? 'anthropic_quota_exceeded' : 'anthropic_rate_limit'
               }
             });
             
-            // Return fallback response
+            // Return retry response
             return createSuccessResponse({
               content: fallbackResult.content,
               usage: { 
                 tokens_in: fallbackResult.tokensIn, 
                 tokens_out: fallbackResult.tokensOut, 
                 cost: fallbackResult.cost 
-              },
-              fallback: true,
-              fallback_provider: 'openai',
-              fallback_reason: isQuotaError ? 'quota_exceeded' : 'rate_limit'
+              }
             });
             
           } catch (fallbackError) {
-            console.error(`[ai-proxy:${requestId}] OpenAI fallback also failed:`, fallbackError);
+            console.error(`[ai-proxy:${requestId}] Alternate key retry also failed:`, fallbackError);
             // Continue to return rate limit error below
           }
         } else {
-          if (!OPENAI_API_KEY) {
-            console.log(`[ai-proxy:${requestId}] No OpenAI fallback available (API key not configured)`);
+          if (!hasAlternateKey) {
+            console.log(`[ai-proxy:${requestId}] No alternate Anthropic key available for retry`);
           } else if (stream) {
-            console.log(`[ai-proxy:${requestId}] OpenAI fallback not available for streaming requests`);
-          }
-        }
-
-        // Special case: tools were requested. Try OpenAI fallback by generating a compatible JSON exam
-        if (OPENAI_API_KEY && tools && !stream) {
-          try {
-            console.log(`[ai-proxy:${requestId}] Attempting OpenAI fallback for tool-calling request...`)
-
-            // Choose OpenAI model (text-only generation)
-            const openaiModel = hasImages ? 'gpt-4-turbo' : 'gpt-4'
-
-            // Build strict JSON output instruction so client can parse it as tool_result
-            const gradeHint = (metadata as any)?.grade || 'Grade'
-            const subjectHint = (metadata as any)?.subject || 'General'
-            const strictInstruction = [
-              `You must output ONLY a single JSON object with this exact shape:`,
-              '{',
-              '  "title": string,',
-              '  "grade": string,',
-              '  "subject": string,',
-              '  "instructions": string[],',
-              '  "sections": [ {',
-              '    "title": string,',
-              '    "questions": [ {',
-              '      "id": string,',
-              '      "number": string | number,',
-              '      "text": string,',
-              '      "type": "multiple_choice" | "short_answer" | "essay" | "numeric",',
-              '      "marks": number,',
-              '      "options"?: string[],',
-              '      "correctAnswer"?: string',
-              '    } ]',
-              '  } ],',
-              '  "totalMarks": number,',
-              '  "hasMemo": false',
-              '}',
-              '',
-              `Constraints:`,
-              `- Grade: ${gradeHint}`,
-              `- Subject: ${subjectHint}`,
-              `- The sum of all question marks MUST equal the specified totalMarks.`,
-              `- Provide at least 20 questions for Grade 4 and above.`,
-              `- No references to external images/diagrams.`,
-              `- Return ONLY JSON (no Markdown, no prose).`
-            ].join('\n')
-
-            const promptForOpenAI = `${redactedText}\n\n${strictInstruction}`
-
-            const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY!,
-              model: openaiModel as any,
-              prompt: promptForOpenAI,
-              images: payload.images,
-              conversationHistory: payload.conversationHistory
-            })
-
-            // Try to parse JSON
-            let examObj: any = null
-            try {
-              examObj = JSON.parse(fallbackResult.content)
-            } catch {
-              const match = fallbackResult.content.match(/\{[\s\S]*\}$/)
-              if (match) {
-                try { examObj = JSON.parse(match[0]) } catch {}
-              }
-            }
-
-            if (examObj && examObj.sections) {
-              console.log(`[ai-proxy:${requestId}] OpenAI tool-fallback produced JSON exam; returning as tool_results`)
-
-              // Log usage with fallback indicator
-              await logUsage(supabase, {
-                userId: user.id,
-                organizationId,
-                serviceType: service_type,
-                model: `${fallbackResult.model} (fallback)`,
-                status: 'success',
-                tokensIn: fallbackResult.tokensIn,
-                tokensOut: fallbackResult.tokensOut,
-                cost: fallbackResult.cost,
-                processingTimeMs: Date.now() - startTime,
-                inputText: redactedText,
-                outputText: '[tool_result: openai_fallback] ',
-                metadata: { 
-                  ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0,
-                  redaction_count: redactionCount, fallback_provider: 'openai', original_error: 'anthropic_rate_limit',
-                }
-              })
-
-              // Wrap as a synthetic tool_result so existing clients can parse it
-              const toolResults = [
-                {
-                  type: 'tool_result',
-                  tool_use_id: 'openai_fallback_generate_caps_exam',
-                  content: JSON.stringify({ success: true, data: examObj })
-                }
-              ]
-
-              return createSuccessResponse({
-                content: '',
-                tool_results: toolResults,
-                usage: { tokens_in: fallbackResult.tokensIn, tokens_out: fallbackResult.tokensOut, cost: fallbackResult.cost },
-                fallback: true,
-                fallback_provider: 'openai'
-              })
-            }
-
-            console.warn(`[ai-proxy:${requestId}] OpenAI tool-fallback returned non-JSON or invalid schema`)
-          } catch (fallbackToolError) {
-            console.error(`[ai-proxy:${requestId}] OpenAI tool-fallback failed:`, fallbackToolError)
-            // fall through to return 429 below
+            console.log(`[ai-proxy:${requestId}] Retry not available for streaming requests`);
+          } else if (tools) {
+            console.log(`[ai-proxy:${requestId}] Retry not available for tool-calling requests`);
           }
         }
         
-        // Return rate limit error if fallback didn't work
+        // Return rate limit error if retry didn't work
         return new Response(JSON.stringify({
           success: false,
           error: { 
