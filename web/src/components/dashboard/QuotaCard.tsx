@@ -88,6 +88,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   }
 
   const isUnlimited = ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isHighestTier = ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
 
   const quotaItems = [
     {
@@ -193,7 +194,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
         })}
       </div>
 
-      {!isUnlimited && (
+      {!isUnlimited && !isHighestTier && (
         <div 
           style={{
             marginTop: 'var(--space-4)',

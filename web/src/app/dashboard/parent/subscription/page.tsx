@@ -672,7 +672,15 @@ function SubscriptionPageContent() {
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                 {Object.values(TIER_INFO)
-                  .filter((tier) => tier.name !== currentTier && tier.name !== 'school')
+                  .filter((tier) => {
+                    // Don't show current tier
+                    if (tier.name === currentTier) return false;
+                    // Don't show school plan (not for parents)
+                    if (tier.name === 'school') return false;
+                    // Don't show trial if user already has a paid plan or is on free
+                    if (tier.name === 'trial' && currentTier !== 'free') return false;
+                    return true;
+                  })
                   .map((tier) => {
                     const Icon = tier.icon;
                     const isCurrent = tier.name === currentTier;
