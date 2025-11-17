@@ -88,23 +88,51 @@ export async function checkQuota(
       }
     }
 
-    // Get subscription tier (use provided tier or fetch from org)
+    // Get subscription tier (use provided tier or fetch from user)
     let tier = effectiveTier || 'free'
     
-    // Only fetch from org if tier not provided
-    if (!effectiveTier && organizationId) {
-      const { data: orgData } = await supabaseAdmin
-        .from('preschools')
-        .select('subscription_tier')
-        .eq('id', organizationId)
-        .single()
+    // Only fetch if tier not provided
+    if (!effectiveTier) {
+      // PRIORITY 1: Check user_ai_usage.current_tier (most accurate, updated by payment webhook)
+      const { data: usageTierData } = await supabaseAdmin
+        .from('user_ai_usage')
+        .select('current_tier')
+        .eq('user_id', userId)
+        .maybeSingle()
+      
+      if (usageTierData?.current_tier) {
+        tier = usageTierData.current_tier.toLowerCase()
+        console.log('[Quota] Tier from user_ai_usage.current_tier:', tier)
+      }
+      // PRIORITY 2: Check user_ai_tiers.tier (fallback)
+      else {
+        const { data: userTierData } = await supabaseAdmin
+          .from('user_ai_tiers')
+          .select('tier')
+          .eq('user_id', userId)
+          .maybeSingle()
+        
+        if (userTierData?.tier) {
+          tier = userTierData.tier.toLowerCase()
+          console.log('[Quota] Tier from user_ai_tiers.tier:', tier)
+        }
+        // PRIORITY 3: Check organization tier (last resort)
+        else if (organizationId) {
+          const { data: orgData } = await supabaseAdmin
+            .from('preschools')
+            .select('subscription_tier')
+            .eq('id', organizationId)
+            .maybeSingle()
 
-      if (orgData?.subscription_tier) {
-        tier = orgData.subscription_tier.toLowerCase()
+          if (orgData?.subscription_tier) {
+            tier = orgData.subscription_tier.toLowerCase()
+            console.log('[Quota] Tier from preschools.subscription_tier:', tier)
+          }
+        }
       }
     }
     
-    console.log('[Quota] Using tier:', tier, effectiveTier ? '(provided)' : '(from org or default)')
+    console.log('[Quota] Final tier:', tier, effectiveTier ? '(provided)' : '(from database)')
 
     // Get quota limit for this tier and service
     const tierLimits = defaultQuotas[tier] || defaultQuotas.free
