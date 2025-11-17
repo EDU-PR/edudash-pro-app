@@ -5,13 +5,14 @@
  * Checks BEFORE calling AI to prevent overage charges.
  */
 
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import type { QuotaCheckResult } from '../types.ts'
 
 /**
  * Check if user has quota remaining for the requested service
  */
 export async function checkQuota(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   organizationId: string | null,
   serviceType: string,
@@ -174,7 +175,7 @@ export async function checkQuota(
  * Log AI usage to database
  */
 export async function logUsage(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   params: {
     userId: string
     organizationId: string | null
@@ -188,7 +189,7 @@ export async function logUsage(
     inputText?: string
     outputText?: string
     errorMessage?: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }
 ): Promise<void> {
   try {
@@ -223,7 +224,7 @@ export async function logUsage(
  * Get usage statistics for a user
  */
 export async function getUsageStats(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   serviceType?: string,
   startDate?: Date,
@@ -263,11 +264,17 @@ export async function getUsageStats(
     }
   }
 
+  type UsageLogRow = {
+    status: string
+    tokens_used?: number
+    estimated_cost?: number
+  }
+
   return {
     totalCalls: data.length,
-    successfulCalls: data.filter((d: any) => d.status === 'success').length,
-    failedCalls: data.filter((d: any) => d.status === 'error').length,
-    totalTokens: data.reduce((sum: number, d: any) => sum + (d.tokens_used || 0), 0),
-    totalCost: data.reduce((sum: number, d: any) => sum + (d.estimated_cost || 0), 0),
+    successfulCalls: data.filter((d: UsageLogRow) => d.status === 'success').length,
+    failedCalls: data.filter((d: UsageLogRow) => d.status === 'error').length,
+    totalTokens: data.reduce((sum: number, d: UsageLogRow) => sum + (d.tokens_used || 0), 0),
+    totalCost: data.reduce((sum: number, d: UsageLogRow) => sum + (d.estimated_cost || 0), 0),
   }
 }
