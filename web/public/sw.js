@@ -19,18 +19,35 @@ self.addEventListener('install', (event) => {
   console.log(`[SW] Installing version ${SW_VERSION}...`);
   event.waitUntil(
     caches.open(STATIC_CACHE)
-      .then((cache) => {
-        return cache.addAll([
+      .then(async (cache) => {
+        // Try to cache each file individually to avoid complete failure
+        const urlsToCache = [
           OFFLINE_URL,
           '/manifest.json',
           '/manifest.webmanifest',
           '/icon-192.png',
           '/icon-512.png',
-        ]);
-      })
-      .then(() => {
+        ];
+        
+        const cachePromises = urlsToCache.map(async (url) => {
+          try {
+            const response = await fetch(url);
+            if (response.ok) {
+              await cache.put(url, response);
+              console.log(`[SW] Cached: ${url}`);
+            } else {
+              console.warn(`[SW] Skipped ${url} (status: ${response.status})`);
+            }
+          } catch (error) {
+            console.warn(`[SW] Failed to cache ${url}:`, error.message);
+          }
+        });
+        
+        await Promise.allSettled(cachePromises);
         console.log(`[SW] Version ${SW_VERSION} installed successfully`);
-        // Don't auto skip waiting - let update checker control it
+      })
+      .catch((error) => {
+        console.error(`[SW] Install failed:`, error);
       })
   );
 });
