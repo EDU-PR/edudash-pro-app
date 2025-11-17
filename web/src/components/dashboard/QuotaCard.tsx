@@ -14,7 +14,7 @@ interface TierLimits {
   chat_messages_per_day: number;
 }
 
-// Tier limits from database configuration
+// Tier limits from database configuration (aligned with tier_name_aligned enum)
 const TIER_LIMITS: Record<string, TierLimits> = {
   free: {
     exams_per_month: 3,
@@ -26,17 +26,42 @@ const TIER_LIMITS: Record<string, TierLimits> = {
     explanations_per_month: 20,
     chat_messages_per_day: 50,
   },
-  basic: {
+  parent_starter: {
     exams_per_month: 30,
     explanations_per_month: 100,
     chat_messages_per_day: 200,
   },
-  premium: {
+  parent_plus: {
     exams_per_month: 100,
     explanations_per_month: 500,
     chat_messages_per_day: 1000,
   },
-  school: {
+  teacher_starter: {
+    exams_per_month: 50,
+    explanations_per_month: 200,
+    chat_messages_per_day: 300,
+  },
+  teacher_pro: {
+    exams_per_month: 200,
+    explanations_per_month: 1000,
+    chat_messages_per_day: 2000,
+  },
+  school_starter: {
+    exams_per_month: 500,
+    explanations_per_month: 2000,
+    chat_messages_per_day: 5000,
+  },
+  school_premium: {
+    exams_per_month: 2000,
+    explanations_per_month: 10000,
+    chat_messages_per_day: 20000,
+  },
+  school_pro: {
+    exams_per_month: 999999,
+    explanations_per_month: 999999,
+    chat_messages_per_day: 999999,
+  },
+  school_enterprise: {
     exams_per_month: 999999,
     explanations_per_month: 999999,
     chat_messages_per_day: 999999,
@@ -62,7 +87,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     );
   }
 
-  const isUnlimited = usage.current_tier.toLowerCase() === 'school';
+  const isUnlimited = ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
 
   const quotaItems = [
     {
