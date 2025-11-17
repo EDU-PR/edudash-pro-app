@@ -364,6 +364,9 @@ serve(async (req: Request) => {
     const isSandbox = PAYFAST_MODE === 'sandbox';
     const payFastUrl = isSandbox ? PAYFAST_URLS.sandbox : PAYFAST_URLS.production;
 
+    // Normalize tier name: convert underscores to hyphens for database enum compatibility
+    const normalizedTier = tier.replace(/_/g, '-');
+    
     // Create unique payment reference
     const paymentId = `SUB_${tier.toUpperCase()}_${user_id.slice(0, 8)}_${Date.now()}`;
 
@@ -381,7 +384,7 @@ serve(async (req: Request) => {
       amount: amount.toFixed(2),
       item_name: itemName || `EduDash Pro ${tier} Subscription`,
       item_description: itemDescription || `Monthly subscription to EduDash Pro ${tier} plan`,
-      custom_str1: tier, // Plan tier for webhook processing
+      custom_str1: normalizedTier, // Plan tier for webhook processing (normalized with hyphens)
       custom_str2: 'user', // Scope: 'user' or 'school'
       custom_str3: user_id, // Owner user ID
       custom_str4: JSON.stringify({ billing: 'monthly', seats: 1 }), // Additional data
@@ -421,7 +424,7 @@ serve(async (req: Request) => {
         status: 'pending',
         provider: 'payfast',
         provider_payment_id: null, // Will be updated by webhook
-        tier: tier,
+        tier: normalizedTier, // Normalized tier with hyphens
         billing_cycle: 'monthly',
         metadata: {
           item_name: payFastData.item_name,
