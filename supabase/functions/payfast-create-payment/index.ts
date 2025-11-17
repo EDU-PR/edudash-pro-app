@@ -1,8 +1,8 @@
 // Supabase Edge Function: payfast-create-payment
 // Secure server-side PayFast payment creation with signature generation
 
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
 // MD5 hash function using a proper MD5 implementation
 // Web Crypto API doesn't support MD5, so we use a JS implementation
@@ -73,22 +73,22 @@ function md5(text: string): string {
   }
   
   function convertToWordArray(string: string): number[] {
-    let wordArray = [];
-    let messageLength = string.length;
-    let numberOfWords = (((messageLength + 8) - ((messageLength + 8) % 64)) / 64 + 1) * 16;
+    const wordArray: number[] = [];
+    const messageLength = string.length;
+    const numberOfWords = (((messageLength + 8) - ((messageLength + 8) % 64)) / 64 + 1) * 16;
     
     for (let i = 0; i < numberOfWords; i++) {
       wordArray[i] = 0;
     }
     
     for (let i = 0; i < messageLength; i++) {
-      let bytePosition = (i - (i % 4)) / 4;
-      let byteOffset = (i % 4) * 8;
+      const bytePosition = (i - (i % 4)) / 4;
+      const byteOffset = (i % 4) * 8;
       wordArray[bytePosition] = wordArray[bytePosition] | (string.charCodeAt(i) << byteOffset);
     }
     
-    let bytePosition = (messageLength - (messageLength % 4)) / 4;
-    let byteOffset = (messageLength % 4) * 8;
+    const bytePosition = (messageLength - (messageLength % 4)) / 4;
+    const byteOffset = (messageLength % 4) * 8;
     wordArray[bytePosition] = wordArray[bytePosition] | (0x80 << byteOffset);
     wordArray[numberOfWords - 2] = messageLength << 3;
     wordArray[numberOfWords - 1] = messageLength >>> 29;
@@ -261,11 +261,11 @@ function generateSignature(data: Record<string, string>, isSandbox: boolean): st
     paramStringLength: paramString.length,
     signature,
   });
-  
   return signature;
 }
 
-serve(async (req) => {
+
+serve(async (req: Request) => {
   // Handle CORS
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -281,7 +281,14 @@ serve(async (req) => {
   try {
     // Validate authentication
     const authHeader = req.headers.get('Authorization');
+    console.log('[PayFast Edge] Headers received:', {
+      hasAuth: !!authHeader,
+      authPreview: authHeader?.substring(0, 20),
+      allHeaders: Object.fromEntries(req.headers.entries())
+    });
+    
     if (!authHeader) {
+      console.error('[PayFast Edge] No Authorization header');
       return new Response(
         JSON.stringify({ error: 'Authentication required' }), 
         { status: 401, headers: corsHeaders }
