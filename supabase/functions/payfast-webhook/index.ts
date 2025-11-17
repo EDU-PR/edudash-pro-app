@@ -201,7 +201,7 @@ serve(async (req: Request) => {
       ip_address: req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || null,
       is_valid: signatureValid && isValidWithPayFast,
       processing_notes: `Signature: ${signatureValid ? 'Valid' : 'Invalid'}, PayFast: ${isValidWithPayFast ? 'Valid' : 'Invalid'}`,
-      related_payment_id: m_payment_id,
+      // related_payment_id removed - m_payment_id is the transaction ID
     });
 
     if (logError) {
