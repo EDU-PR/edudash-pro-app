@@ -371,8 +371,8 @@ serve(async (req: Request) => {
     const payFastData: Record<string, string> = {
       merchant_id: PAYFAST_MERCHANT_ID,
       merchant_key: PAYFAST_MERCHANT_KEY,
-      return_url: `${BASE_URL}/dashboard/parent/subscription?payment=success`,
-      cancel_url: `${BASE_URL}/dashboard/parent/subscription?payment=cancelled`,
+      return_url: `${BASE_URL}/dashboard/parent?payment=success`,
+      cancel_url: `${BASE_URL}/dashboard/parent?payment=cancelled`,
       notify_url: `${SUPABASE_URL}/functions/v1/payfast-webhook`,
       name_first: firstName || email.split('@')[0],
       name_last: lastName || 'User',
@@ -403,6 +403,41 @@ serve(async (req: Request) => {
 
     // Add signature to data
     payFastData.signature = signature;
+
+    // Create payment transaction record in database
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey!, {
+      auth: { persistSession: false }
+    });
+
+    const { error: txError } = await supabaseAdmin
+      .from('payment_transactions')
+      .insert({
+        id: paymentId,
+        user_id: user_id,
+        amount: amount,
+        currency: 'ZAR',
+        status: 'pending',
+        provider: 'payfast',
+        provider_payment_id: null, // Will be updated by webhook
+        tier: tier,
+        billing_cycle: 'monthly',
+        metadata: {
+          item_name: payFastData.item_name,
+          item_description: payFastData.item_description,
+          merchant_id: PAYFAST_MERCHANT_ID,
+        },
+      });
+
+    if (txError) {
+      console.error('[PayFast Edge] Failed to create transaction record:', txError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create payment record' }), 
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    console.log('[PayFast Edge] Payment transaction created:', paymentId);
 
     console.log('[PayFast Edge] Data being sent to PayFast:', {
       amount: payFastData.amount,
