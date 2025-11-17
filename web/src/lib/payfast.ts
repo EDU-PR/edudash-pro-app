@@ -43,9 +43,18 @@ export interface PayFastPaymentData {
 /**
  * Generate MD5 signature for PayFast payment
  * IMPORTANT: PayFast sandbox does NOT use passphrase - only production does
+ * NOTE: This function is for server-side use only.
+ * 
+ * @param data - Payment data object
+ * @param passphrase - PayFast passphrase (required for production, leave empty for sandbox)
+ * @param mode - 'sandbox' or 'production' (default: 'sandbox')
  */
-export function generatePayFastSignature(data: Record<string, any>, passphrase?: string): string {
-  const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
+export function generatePayFastSignature(
+  data: Record<string, any>, 
+  passphrase?: string,
+  mode: 'sandbox' | 'production' = 'sandbox'
+): string {
+  const isSandbox = mode === 'sandbox';
   
   // Create parameter string
   let paramString = '';
@@ -93,13 +102,24 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
 
 /**
  * Build PayFast payment URL with all parameters
+ * NOTE: This function is for server-side use only.
+ * Use the /api/payfast/create-payment endpoint from client code.
+ * 
+ * @param paymentData - PayFast payment data
+ * @param passphrase - PayFast passphrase (required for production, leave empty for sandbox)
+ * @param mode - 'sandbox' or 'production' (default: 'sandbox')
  */
-export function buildPayFastUrl(paymentData: PayFastPaymentData, passphrase?: string): string {
-  const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_URL?.includes('sandbox') ?? true;
-  const baseUrl = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
+export function buildPayFastUrl(
+  paymentData: PayFastPaymentData, 
+  passphrase?: string,
+  mode: 'sandbox' | 'production' = 'sandbox'
+): string {
+  const baseUrl = mode === 'sandbox' 
+    ? 'https://sandbox.payfast.co.za/eng/process'
+    : 'https://www.payfast.co.za/eng/process';
   
   // Generate signature
-  const signature = generatePayFastSignature(paymentData, passphrase);
+  const signature = generatePayFastSignature(paymentData, passphrase, mode);
   
   // Build URL parameters
   const params = new URLSearchParams();
@@ -111,198 +131,4 @@ export function buildPayFastUrl(paymentData: PayFastPaymentData, passphrase?: st
   params.append('signature', signature);
   
   return `${baseUrl}?${params.toString()}`;
-}
-
-/**
- * Create payment data for a subscription
- * NOTE: This uses FULL PRICES. Promotional pricing is applied via database.
- * Call getPromotionalPrice() first to get the actual amount to charge.
- */
-export function createSubscriptionPayment(
-  userId: string,
-  tier: 'parent_starter' | 'parent_plus' | 'school_starter' | 'school_premium' | 'school_pro',
-  userEmail: string,
-  userName?: string,
-  promotionalAmount?: number // If provided, use this instead of full price
-): PayFastPaymentData {
-  // For PayFast webhook to work, we need a publicly accessible URL
-  // Use Supabase Edge Function for webhook (more secure)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const webhookUrl = supabaseUrl 
-    ? `${supabaseUrl}/functions/v1/payfast-webhook`
-    : `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/payfast/webhook`; // Fallback for development
-  
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  
-  const merchantId = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_ID || '10000100'; // Sandbox default
-  const merchantKey = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_KEY || '46f0cd694581a'; // Sandbox default
-  
-  console.log('[PayFast] Creating payment with:', {
-    merchantId,
-    merchantKey,
-    tier,
-    mode: process.env.NEXT_PUBLIC_PAYFAST_MODE,
-  });
-  
-  // Tier pricing (FULL PRICES - in ZAR)
-  // Promotional pricing is handled by the database
-  const tierPricing: Record<string, { fullAmount: number; name: string; description: string }> = {
-    parent_starter: {
-      fullAmount: 99.00,
-      name: 'Parent Starter',
-      description: 'Monthly subscription - 30 Homework Helper/month, AI lesson support, Child-safe explanations',
-    },
-    parent_plus: {
-      fullAmount: 199.00,
-      name: 'Parent Plus',
-      description: 'Monthly subscription - 100 Homework Helper/month, Priority processing, Up to 3 children',
-    },
-    school_starter: {
-      fullAmount: 299.00,
-      name: 'School Starter',
-      description: 'Monthly subscription - Basic school management and AI features',
-    },
-    school_premium: {
-      fullAmount: 499.00,
-      name: 'School Premium',
-      description: 'Monthly subscription - Advanced school management and unlimited AI features',
-    },
-    school_pro: {
-      fullAmount: 899.00,
-      name: 'School Pro',
-      description: 'Monthly subscription - Full school management and unlimited AI features',
-    },
-  };
-  
-  const pricing = tierPricing[tier];
-  const [firstName, ...lastNameParts] = (userName || userEmail.split('@')[0]).split(' ');
-  const lastName = lastNameParts.join(' ') || 'User';
-  
-  // Use promotional amount if provided, otherwise use full amount
-  const chargeAmount = promotionalAmount || pricing.fullAmount;
-  
-  // Generate unique payment ID
-  const paymentId = `SUB_${tier.toUpperCase()}_${userId.substring(0, 8)}_${Date.now()}`;
-  
-  return {
-    merchant_id: merchantId,
-    merchant_key: merchantKey,
-    return_url: `${baseUrl}/dashboard/parent/subscription?payment=success`,
-    cancel_url: `${baseUrl}/dashboard/parent/subscription?payment=cancelled`,
-    notify_url: webhookUrl,
-    
-    name_first: firstName,
-    name_last: lastName,
-    email_address: userEmail,
-    
-    m_payment_id: paymentId,
-    amount: chargeAmount,
-    item_name: pricing.name,
-    item_description: pricing.description,
-    
-    // Custom fields for webhook
-    custom_str1: userId,
-    custom_str2: tier,
-    custom_str3: 'monthly_subscription',
-    
-    // Recurring subscription
-    subscription_type: '1', // Subscription
-    recurring_amount: chargeAmount,
-    frequency: '3', // Monthly
-    cycles: 0, // Until cancelled
-  };
-}
-
-/**
- * Initiate PayFast payment (client-side)
- * @throws Error if called server-side or if required environment variables are missing
- */
-export function initiatePayFastPayment(
-  paymentData: PayFastPaymentData, 
-  passphrase?: string,
-  onError?: (error: Error) => void
-): void {
-  try {
-    if (typeof window === 'undefined') {
-      throw new Error('initiatePayFastPayment can only be called on the client side');
-    }
-    
-    // Validate required fields
-    if (!paymentData.merchant_id || !paymentData.merchant_key) {
-      throw new Error('PayFast merchant credentials are missing. Please configure PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY.');
-    }
-    
-    if (!paymentData.amount || paymentData.amount <= 0) {
-      throw new Error('Invalid payment amount');
-    }
-    
-    if (!paymentData.email_address || !paymentData.email_address.includes('@')) {
-      throw new Error('Invalid email address');
-    }
-    
-    const payfastUrl = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
-    const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
-    
-    // CRITICAL: Do not use passphrase in sandbox mode
-    const effectivePassphrase = isSandbox ? undefined : passphrase;
-    
-    // Create form dynamically
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = payfastUrl;
-    
-    // Add all payment data as hidden fields
-    Object.entries(paymentData).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = key;
-        input.value = String(value);
-        form.appendChild(input);
-      }
-    });
-    
-    // Generate and add signature (without passphrase for sandbox)
-    const signature = generatePayFastSignature(paymentData, effectivePassphrase);
-    const sigInput = document.createElement('input');
-    sigInput.type = 'hidden';
-    sigInput.name = 'signature';
-    sigInput.value = signature;
-    form.appendChild(sigInput);
-    
-    // Debug logging
-    console.log('[PayFast] Payment data being sent:', {
-      mode: isSandbox ? 'SANDBOX' : 'PRODUCTION',
-      merchant_id: paymentData.merchant_id,
-      merchant_key: paymentData.merchant_key,
-      amount: paymentData.amount,
-      item_name: paymentData.item_name,
-      email_address: paymentData.email_address,
-      return_url: paymentData.return_url,
-      cancel_url: paymentData.cancel_url,
-      notify_url: paymentData.notify_url,
-      subscription_type: paymentData.subscription_type,
-      recurring_amount: paymentData.recurring_amount,
-      frequency: paymentData.frequency,
-      cycles: paymentData.cycles,
-      custom_str1: paymentData.custom_str1,
-      custom_str2: paymentData.custom_str2,
-      custom_str3: paymentData.custom_str3,
-      signature: signature,
-      passphrase_used: passphrase ? 'yes' : 'no',
-    });
-    
-    // Submit form
-    document.body.appendChild(form);
-    form.submit();
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error('Unknown payment error');
-    console.error('[PayFast] Payment initiation failed:', err);
-    
-    if (onError) {
-      onError(err);
-    } else {
-      throw err;
-    }
-  }
 }
