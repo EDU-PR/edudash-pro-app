@@ -145,7 +145,8 @@ serve(async (req: Request): Promise<Response> => {
     const organizationId = profile?.organization_id || profile?.preschool_id || null
     
     // Determine effective tier (handle both org-level and user-level trials)
-    let tier = (profile?.subscription_tier?.toLowerCase() || 'free') as any
+    // CHANGED: Don't determine tier here - let quota-checker fetch from user_ai_usage.current_tier
+    let tier: string | undefined = undefined
     
     try {
       // Check user-level trial (new system - for independent users)
@@ -180,19 +181,19 @@ serve(async (req: Request): Promise<Response> => {
       }
     } catch (tierError) {
       console.error(`[ai-proxy:${requestId}] Error determining tier:`, tierError)
-      // Fallback to free tier on error
-      tier = 'free'
+      // Don't fallback here - let quota-checker determine tier from database
+      tier = undefined
     }
     
-    console.log(`[ai-proxy:${requestId}] Effective tier: ${tier}`)
+    console.log(`[ai-proxy:${requestId}] Effective tier from trials/profile:`, tier || '(will fetch from user_ai_usage)')
     
     const role = profile?.role || metadata.role || scope
     const hasOrganization = !!organizationId
     const isGuest = !user.email_confirmed_at
     const startTime = Date.now()
 
-    // Check quota (pass tier for trial users)
-    console.log(`[ai-proxy:${requestId}] Checking quota for user ${user.id}, service: ${service_type}, tier: ${tier}`)
+    // Check quota (tier will be fetched from user_ai_usage if not provided)
+    console.log(`[ai-proxy:${requestId}] Checking quota for user ${user.id}, service: ${service_type}, tier: ${tier || '(auto-detect)'}`)
     const quota = await checkQuota(supabase, user.id, organizationId, service_type, tier)
     console.log(`[ai-proxy:${requestId}] Quota check result:`, { allowed: quota.allowed, quotaInfo: quota.quotaInfo, error: quota.error })
     if (!quota.allowed) {
