@@ -21,13 +21,15 @@ interface ChatInterfaceProps {
   onNewConversation?: () => void;
   initialMessages?: ChatMessage[];
   userId?: string;
+  onMessageSent?: () => void; // Callback when message is successfully sent
 }
 
 export function ChatInterface({
   conversationId,
   onNewConversation,
   initialMessages = [],
-  userId
+  userId,
+  onMessageSent
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -48,7 +50,8 @@ export function ChatInterface({
     messages, 
     setMessages,
     userId,
-    onQuotaExceeded: () => setQuotaExceeded(true)
+    onQuotaExceeded: () => setQuotaExceeded(true),
+    onMessageSent
   });
 
   // Load conversation on mount

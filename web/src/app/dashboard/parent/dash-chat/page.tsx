@@ -21,6 +21,7 @@ export default function DashChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -132,7 +133,7 @@ export default function DashChatPage() {
         </header>
 
         {/* Quota Progress Bar */}
-        {userId && <QuotaProgress userId={userId} />}
+        {userId && <QuotaProgress userId={userId} refreshTrigger={quotaRefreshTrigger} />}
 
         {/* Main Content - Takes remaining height */}
         <div className="flex flex-1 overflow-hidden min-h-0">
@@ -199,6 +200,7 @@ export default function DashChatPage() {
                 conversationId={activeConversationId}
                 onNewConversation={handleNewConversation}
                 userId={userId}
+                onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
               />
             )}
 

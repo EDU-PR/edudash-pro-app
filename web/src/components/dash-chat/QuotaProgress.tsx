@@ -6,6 +6,7 @@ import { TrendingUp, Zap } from 'lucide-react';
 
 interface QuotaProgressProps {
   userId: string;
+  refreshTrigger?: number; // Increment this to trigger a refresh
 }
 
 interface QuotaData {
@@ -15,14 +16,14 @@ interface QuotaData {
   resetDate?: string;
 }
 
-export function QuotaProgress({ userId }: QuotaProgressProps) {
+export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
   const [quota, setQuota] = useState<QuotaData | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
     fetchQuota();
-  }, [userId]);
+  }, [userId, refreshTrigger]); // Re-fetch when refreshTrigger changes
 
   const fetchQuota = async () => {
     if (!userId) return;
