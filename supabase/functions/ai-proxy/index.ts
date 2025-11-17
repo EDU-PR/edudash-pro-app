@@ -145,8 +145,7 @@ serve(async (req: Request): Promise<Response> => {
     const organizationId = profile?.organization_id || profile?.preschool_id || null
     
     // Determine effective tier (handle both org-level and user-level trials)
-    // CHANGED: Don't determine tier here - let quota-checker fetch from user_ai_usage.current_tier
-    let tier: string | undefined = undefined
+    let tier: string = 'free' // Default to free if no tier found
     
     try {
       // Check user-level trial (new system - for independent users)
@@ -160,7 +159,7 @@ serve(async (req: Request): Promise<Response> => {
           tier = 'free'
         } else {
           // Active user trial - grant premium access
-          const trialTier = (profile?.trial_plan_tier?.toLowerCase() || 'premium') as any
+          const trialTier = profile?.trial_plan_tier?.toLowerCase() || 'premium'
           console.log(`[ai-proxy:${requestId}] Active user trial until ${profile.trial_end_date}, tier: ${trialTier}`)
           tier = trialTier
         }
@@ -177,15 +176,15 @@ serve(async (req: Request): Promise<Response> => {
         } else {
           // Active org trial - use the tier from profile
           console.log(`[ai-proxy:${requestId}] Active org trial until ${profile.trial_ends_at}`)
+          tier = profile?.subscription_tier || 'premium'
         }
       }
     } catch (tierError) {
       console.error(`[ai-proxy:${requestId}] Error determining tier:`, tierError)
-      // Don't fallback here - let quota-checker determine tier from database
-      tier = undefined
+      tier = 'free'
     }
     
-    console.log(`[ai-proxy:${requestId}] Effective tier from trials/profile:`, tier || '(will fetch from user_ai_usage)')
+    console.log(`[ai-proxy:${requestId}] Effective tier from trials/profile:`, tier)
     
     const role = profile?.role || metadata.role || scope
     const hasOrganization = !!organizationId
@@ -214,12 +213,9 @@ serve(async (req: Request): Promise<Response> => {
     const hasImages = !!(payload.images && payload.images.length > 0)
     console.log(`[ai-proxy:${requestId}] Model selection:`, { service_type, tier, hasImages })
     
-    let configuredProvider: string
-    let model: string
-    
     // Temporarily use hardcoded logic (database config disabled due to permissions)
-    model = selectModelForTier(tier, hasImages)
-    configuredProvider = prefer_openai ? 'openai' : 'claude'
+    const model = selectModelForTier(tier as any, hasImages)
+    const configuredProvider = prefer_openai ? 'openai' : 'claude'
     
     console.log(`[ai-proxy:${requestId}] Final provider/model:`, { provider: configuredProvider, model, hasImages })
 
@@ -275,7 +271,7 @@ serve(async (req: Request): Promise<Response> => {
         }
 
         const result = await callOpenAI({
-          apiKey: OPENAI_API_KEY,
+          apiKey: OPENAI_API_KEY!,
           model: openaiModel as any,
           prompt: redactedText,
           images: payload.images,
@@ -331,7 +327,7 @@ serve(async (req: Request): Promise<Response> => {
           };
           
           return handleToolExecution(aiResult, toolContext, {
-            apiKey: OPENAI_API_KEY,
+            apiKey: OPENAI_API_KEY!,
             originalPrompt: redactedText,
             tier,
             hasImages,
@@ -507,7 +503,7 @@ serve(async (req: Request): Promise<Response> => {
                                hasImages ? 'gpt-4-turbo' : 'gpt-4';
             
             const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY,
+              apiKey: OPENAI_API_KEY!,
               model: openaiModel as any,
               prompt: redactedText,
               images: payload.images,
@@ -612,7 +608,7 @@ serve(async (req: Request): Promise<Response> => {
             const promptForOpenAI = `${redactedText}\n\n${strictInstruction}`
 
             const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY,
+              apiKey: OPENAI_API_KEY!,
               model: openaiModel as any,
               prompt: promptForOpenAI,
               images: payload.images,

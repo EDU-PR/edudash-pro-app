@@ -463,23 +463,23 @@ function formatErrorMessage(error: any): string {
           day: 'numeric', 
           year: 'numeric' 
         });
-        errorContent = `💤 **Our AI assistant needs a rest!**\n\nService will resume on **${formattedDate}**. Thank you for your patience!`;
+        errorContent = `🚫 **AI Service Quota Exceeded**\n\nOur Claude API quota has been exhausted. Service will resume on **${formattedDate}**.\n\nThis is a platform-wide limit, not your personal quota. We apologize for the inconvenience.`;
       } else {
-        errorContent = `💤 **Our AI assistant needs a rest!**\n\nService temporarily unavailable. Please contact support.`;
+        errorContent = `🚫 **AI Service Quota Exceeded**\n\nOur AI provider's quota has been reached. Please contact support for updates.`;
       }
     } else if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
-      errorContent = `⏳ **Slow down there!**\n\nPlease wait a moment before sending another message.`;
+      errorContent = `⏳ **Rate Limit**\n\nToo many requests. Please wait a moment before sending another message.\n\n**Technical details:** ${error.message}`;
     } else if (errorMsg.includes('quota') || errorMsg.includes('quota_exceeded')) {
       errorContent = `📊 **Daily Quota Reached**\n\nYou've used all your AI messages for today. Your quota will reset tomorrow, or upgrade your plan for more messages!\n\n💡 *Tip: Check the quota bar at the top of the chat to track your usage.*`;
     } else if (errorMsg.includes('503') || errorMsg.includes('service unavailable') || errorMsg.includes('edge function')) {
-      errorContent = '💤 **Taking a quick break** - Our AI assistant is temporarily unavailable. Please try again in a moment.';
+      errorContent = `🔧 **Service Unavailable (503)**\n\nThe AI service is temporarily down or being updated. Please try again in a few moments.\n\n**Error:** ${error.message}`;
     } else if (errorMsg.includes('timeout')) {
-      errorContent = '⏱️ **That took too long** - Try sending a shorter message or breaking it into parts.';
+      errorContent = '⏱️ **Request Timeout** - Your request took too long. Try sending a shorter message or breaking it into parts.';
     } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
-      errorContent = '🌐 **Connection issue** - Please check your internet and try again.';
+      errorContent = '🌐 **Network Error** - Please check your internet connection and try again.';
     } else {
-      // Generic fallback (no technical details)
-      errorContent = `🤔 **Hmm, something went wrong** - Please try again. If this keeps happening, contact support.`;
+      // Show actual error message for debugging
+      errorContent = `❌ **Error**\n\n${error.message}\n\nIf this persists, please contact support with this error message.`;
     }
   }
   
