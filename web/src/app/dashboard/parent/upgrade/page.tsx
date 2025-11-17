@@ -126,33 +126,18 @@ export default function UpgradePage() {
         return;
       }
 
-      // Get current session for auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert('Please sign in to continue');
-        router.push('/sign-in');
-        return;
-      }
-
-      // Create PayFast payment
-      const response = await fetch('/api/payfast/create-payment', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
+      // Call Supabase Edge Function to create payment
+      const { data, error } = await supabase.functions.invoke('payfast-create-payment', {
+        body: {
           user_id: user.id,
           tier: tierId,
           amount: price,
           email: userEmail,
-        }),
+        },
       });
 
-      const data = await response.json();
-
-      if (data.error) {
-        alert(`Payment error: ${data.error}`);
+      if (error || !data) {
+        alert(`Payment error: ${error?.message || data?.error || 'Failed to create payment'}`);
         return;
       }
 
