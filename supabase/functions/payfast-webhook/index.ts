@@ -48,6 +48,15 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Only accept POST requests from PayFast
+  if (req.method !== "POST") {
+    console.error(`PayFast webhook received invalid method: ${req.method}`);
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { 
+      status: 405, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
+  }
+
   try {
     // IP Whitelist validation for PayFast
     const PAYFAST_IPS = [
@@ -87,6 +96,9 @@ serve(async (req: Request) => {
 
     // PayFast sends application/x-www-form-urlencoded
     const rawBody = await req.text();
+    
+    console.log('[PayFast ITN] Raw body received:', rawBody.substring(0, 200));
+    
     const params = new URLSearchParams(rawBody);
 
     // Extract key parameters
@@ -103,15 +115,16 @@ serve(async (req: Request) => {
       payment_status,
       amount_gross,
       signature,
-      ...otherFields
+      ..._otherFields
     } = payload;
 
-    console.log('PayFast ITN received:', {
+    console.log('[PayFast ITN] Parsed payload:', {
       merchant_id,
       m_payment_id,
       pf_payment_id,
       payment_status,
-      amount_gross
+      amount_gross,
+      has_signature: !!signature
     });
 
     // Basic validation
