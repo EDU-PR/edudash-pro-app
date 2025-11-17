@@ -127,15 +127,10 @@ export default function PricingPage() {
         return;
       }
 
-      // Call secure API endpoint to create payment
-      console.log('[Pricing] Calling create-payment API...');
-      const response = await fetch('/api/payfast/create-payment', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${finalSession.access_token}`
-        },
-        body: JSON.stringify({
+      // Call Supabase Edge Function to create payment
+      console.log('[Pricing] Calling payfast-create-payment Edge Function...');
+      const { data, error } = await supabase.functions.invoke('payfast-create-payment', {
+        body: {
           user_id: userId,
           tier: tier,
           amount: price,
@@ -147,13 +142,11 @@ export default function PricingPage() {
           subscriptionType: '1', // Subscription
           frequency: '3', // Monthly
           cycles: '0', // Until cancelled
-        }),
+        },
       });
 
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || 'Failed to create payment');
+      if (error || !data) {
+        throw new Error(error?.message || data?.error || 'Failed to create payment');
       }
 
       // Redirect to PayFast payment page

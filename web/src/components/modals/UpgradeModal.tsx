@@ -115,14 +115,9 @@ export function UpgradeModal({
         throw new Error('Please log in to continue');
       }
 
-      // Call secure API endpoint to create payment
-      const response = await fetch('/api/payfast/create-payment', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
+      // Call Supabase Edge Function to create payment
+      const { data, error } = await supabase.functions.invoke('payfast-create-payment', {
+        body: {
           user_id: userId,
           tier: tier,
           amount: tierOption.price,
@@ -134,13 +129,11 @@ export function UpgradeModal({
           subscriptionType: '1', // Subscription
           frequency: '3', // Monthly
           cycles: '0', // Until cancelled
-        }),
+        },
       });
 
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        throw new Error(data.error || 'Failed to create payment');
+      if (error || !data) {
+        throw new Error(error?.message || data?.error || 'Failed to create payment');
       }
 
       // Redirect to PayFast payment page

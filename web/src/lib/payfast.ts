@@ -102,8 +102,7 @@ export function generatePayFastSignature(
 
 /**
  * Build PayFast payment URL with all parameters
- * NOTE: This function is for server-side use only.
- * Use the /api/payfast/create-payment endpoint from client code.
+ * NOTE: This function is deprecated. Use the payfast-create-payment Edge Function instead.
  * 
  * @param paymentData - PayFast payment data
  * @param passphrase - PayFast passphrase (required for production, leave empty for sandbox)
