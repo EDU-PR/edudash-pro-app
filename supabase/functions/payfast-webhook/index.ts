@@ -280,16 +280,12 @@ serve(async (req: Request) => {
       console.log('Processing successful payment:', m_payment_id);
       
       // Extract custom data from PayFast
-      const planTier = payload.custom_str1 || ''; // Database enum format (parent_plus with underscores)
+      const planTier = payload.custom_str1 || ''; // Database enum format (parent_plus, parent_starter, etc)
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       const customData = payload.custom_str4 || '{}';
       
       console.log('[PayFast ITN] Received tier from custom_str1:', planTier);
-      
-      // Normalize tier for database lookup: parent_plus -> parent-plus
-      const normalizedTier = planTier.replace(/_/g, '-');
-      console.log('[PayFast ITN] Normalized tier for DB lookup:', normalizedTier);
       
       let billing = 'monthly';
       let seats = 1;
@@ -302,16 +298,16 @@ serve(async (req: Request) => {
         console.warn('Error parsing custom_str4:', e);
       }
 
-      // Get plan details using normalized tier (with hyphens)
+      // Get plan details - now using same tier format everywhere (underscores)
       const { data: plan } = await supabase
         .from('subscription_plans')
         .select('id, tier, name, max_teachers')
-        .eq('tier', normalizedTier)
+        .eq('tier', planTier)
         .eq('is_active', true)
         .maybeSingle();
 
       if (!plan) {
-        console.error('Plan not found for tier:', normalizedTier, '(original:', planTier, ')');
+        console.error('Plan not found for tier:', planTier);
         return new Response("Plan not found", { status: 400, headers: corsHeaders });
       }
 
