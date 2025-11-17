@@ -390,6 +390,27 @@ serve(async (req: Request) => {
         } else {
           console.log('Updated user_ai_tiers for school users:', existingTx.school_id);
         }
+        
+        // CRITICAL: Also update user_ai_usage.current_tier for all school users (this is what the UI reads)
+        // First get all user IDs for this school
+        const { data: schoolUsers } = await supabase
+          .from('user_ai_tiers')
+          .select('user_id')
+          .eq('organization_id', existingTx.school_id);
+        
+        if (schoolUsers && schoolUsers.length > 0) {
+          const userIds = schoolUsers.map(u => u.user_id);
+          const { error: usageUpdateError } = await supabase
+            .from('user_ai_usage')
+            .update({ current_tier: plan.tier })
+            .in('user_id', userIds);
+          
+          if (usageUpdateError) {
+            console.error('Error updating user_ai_usage for school:', usageUpdateError);
+          } else {
+            console.log('Updated user_ai_usage.current_tier for school users:', existingTx.school_id);
+          }
+        }
 
         // Send email notification (sandbox & production)
         try {
@@ -574,6 +595,18 @@ serve(async (req: Request) => {
           console.error('Error updating user_ai_tiers for user:', tierUpdateError);
         } else {
           console.log('Updated user_ai_tiers for user:', ownerId);
+        }
+        
+        // CRITICAL: Also update user_ai_usage.current_tier (this is what the UI reads)
+        const { error: usageUpdateError } = await supabase
+          .from('user_ai_usage')
+          .update({ current_tier: plan.tier })
+          .eq('user_id', ownerId);
+        
+        if (usageUpdateError) {
+          console.error('Error updating user_ai_usage for user:', usageUpdateError);
+        } else {
+          console.log('Updated user_ai_usage.current_tier for user:', ownerId);
         }
 
         // Send email notification for user subscription
