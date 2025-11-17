@@ -126,10 +126,13 @@ export function createSubscriptionPayment(
   promotionalAmount?: number // If provided, use this instead of full price
 ): PayFastPaymentData {
   // For PayFast webhook to work, we need a publicly accessible URL
-  // Use LocalTunnel URL if available, otherwise localhost (for testing only)
-  const baseUrl = process.env.NEXT_PUBLIC_LOCALTUNNEL_URL || 
-                  process.env.NEXT_PUBLIC_BASE_URL || 
-                  'http://localhost:3000';
+  // Use Supabase Edge Function for webhook (more secure)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const webhookUrl = supabaseUrl 
+    ? `${supabaseUrl}/functions/v1/payfast-webhook`
+    : `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/payfast/webhook`; // Fallback for development
+  
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   
   const merchantId = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_ID || '10000100'; // Sandbox default
   const merchantKey = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_KEY || '46f0cd694581a'; // Sandbox default
@@ -186,7 +189,7 @@ export function createSubscriptionPayment(
     merchant_key: merchantKey,
     return_url: `${baseUrl}/dashboard/parent/subscription?payment=success`,
     cancel_url: `${baseUrl}/dashboard/parent/subscription?payment=cancelled`,
-    notify_url: `${baseUrl}/api/payfast/webhook`,
+    notify_url: webhookUrl,
     
     name_first: firstName,
     name_last: lastName,
