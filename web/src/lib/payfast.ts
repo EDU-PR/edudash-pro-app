@@ -43,9 +43,18 @@ export interface PayFastPaymentData {
 /**
  * Generate MD5 signature for PayFast payment
  * IMPORTANT: PayFast sandbox does NOT use passphrase - only production does
+ * NOTE: This function is for server-side use only.
+ * 
+ * @param data - Payment data object
+ * @param passphrase - PayFast passphrase (required for production, leave empty for sandbox)
+ * @param mode - 'sandbox' or 'production' (default: 'sandbox')
  */
-export function generatePayFastSignature(data: Record<string, any>, passphrase?: string): string {
-  const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_MODE === 'sandbox';
+export function generatePayFastSignature(
+  data: Record<string, any>, 
+  passphrase?: string,
+  mode: 'sandbox' | 'production' = 'sandbox'
+): string {
+  const isSandbox = mode === 'sandbox';
   
   // Create parameter string
   let paramString = '';
@@ -95,13 +104,22 @@ export function generatePayFastSignature(data: Record<string, any>, passphrase?:
  * Build PayFast payment URL with all parameters
  * NOTE: This function is for server-side use only.
  * Use the /api/payfast/create-payment endpoint from client code.
+ * 
+ * @param paymentData - PayFast payment data
+ * @param passphrase - PayFast passphrase (required for production, leave empty for sandbox)
+ * @param mode - 'sandbox' or 'production' (default: 'sandbox')
  */
-export function buildPayFastUrl(paymentData: PayFastPaymentData, passphrase?: string): string {
-  const isSandbox = process.env.NEXT_PUBLIC_PAYFAST_URL?.includes('sandbox') ?? true;
-  const baseUrl = process.env.NEXT_PUBLIC_PAYFAST_URL || 'https://sandbox.payfast.co.za/eng/process';
+export function buildPayFastUrl(
+  paymentData: PayFastPaymentData, 
+  passphrase?: string,
+  mode: 'sandbox' | 'production' = 'sandbox'
+): string {
+  const baseUrl = mode === 'sandbox' 
+    ? 'https://sandbox.payfast.co.za/eng/process'
+    : 'https://www.payfast.co.za/eng/process';
   
   // Generate signature
-  const signature = generatePayFastSignature(paymentData, passphrase);
+  const signature = generatePayFastSignature(paymentData, passphrase, mode);
   
   // Build URL parameters
   const params = new URLSearchParams();
