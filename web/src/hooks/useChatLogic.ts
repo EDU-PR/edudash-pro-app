@@ -16,9 +16,10 @@ interface UseChatLogicProps {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   userId?: string;
   onQuotaExceeded?: () => void;
+  onMessageSent?: () => void; // Callback when message is sent successfully
 }
 
-export function useChatLogic({ conversationId, messages, setMessages, userId, onQuotaExceeded }: UseChatLogicProps) {
+export function useChatLogic({ conversationId, messages, setMessages, userId, onQuotaExceeded, onMessageSent }: UseChatLogicProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [examContext, setExamContext] = useState<ExamContext>({});
@@ -335,6 +336,9 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
             p_status: 'success',
           });
           console.log('[Chat] Usage incremented successfully');
+          
+          // Notify parent to refresh quota bar
+          onMessageSent?.();
         } catch (error) {
           console.error('[Chat] Failed to increment usage:', error);
           // Don't block on increment failures
