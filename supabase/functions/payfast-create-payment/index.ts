@@ -288,16 +288,23 @@ serve(async (req) => {
       );
     }
 
+    // Extract bearer token explicitly to avoid header merge issues
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    console.log('[PayFast Edge] Auth header received:', {
+      hasHeader: !!authHeader,
+      headerPrefix: authHeader.slice(0, 10),
+      tokenLength: token.length,
+    });
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
+      console.error('[PayFast Edge] User verification failed:', authError?.message);
       return new Response(
         JSON.stringify({ error: 'Invalid authentication' }), 
         { status: 401, headers: corsHeaders }

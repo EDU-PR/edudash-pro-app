@@ -86,12 +86,17 @@ export async function POST(request: NextRequest) {
     console.log('[PayFast API] Calling edge function with user:', user.id);
     console.log('[PayFast API] Auth header being sent:', authHeader.substring(0, 30) + '...');
 
-    // Call Supabase Edge Function with the user's auth token
-    const { data, error } = await supabaseForAuth.functions.invoke('payfast-create-payment', {
+    // Call Supabase Edge Function directly via fetch to avoid header merge issues
+    const functionsUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/payfast-create-payment`;
+    const efRes = await fetch(functionsUrl, {
+      method: 'POST',
       headers: {
-        Authorization: authHeader, // Pass the auth header to the edge function
+        'Content-Type': 'application/json',
+        // Required headers for Supabase Edge Functions
+        'Authorization': authHeader,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       },
-      body: {
+      body: JSON.stringify({
         user_id,
         tier,
         amount,
@@ -104,16 +109,19 @@ export async function POST(request: NextRequest) {
         frequency,
         cycles,
         billingDate,
-      },
+      }),
     });
 
-    if (error) {
-      console.error('[PayFast API] Edge function error:', error);
+    if (!efRes.ok) {
+      const errText = await efRes.text();
+      console.error('[PayFast API] Edge function HTTP error:', efRes.status, errText);
       return NextResponse.json(
-        { error: error.message || 'Failed to create payment' },
+        { error: 'Failed to create payment', details: errText || `HTTP ${efRes.status}` },
         { status: 500 }
       );
     }
+
+    const data = await efRes.json();
 
     console.log('[PayFast API] Payment created via Edge Function:', {
       paymentId: data?.payment_id,
