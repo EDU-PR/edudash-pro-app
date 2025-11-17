@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { Camera, Upload, X, ImageIcon, CheckCircle, Sparkles } from 'lucide-react';
 import { uploadMultipleImages } from '@/lib/simple-image-upload';
 
 interface ImageUploadProps {
@@ -264,223 +264,85 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.85)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: 0,
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-      }}
+      className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-end justify-center z-[1000] p-0 animate-in fade-in duration-300"
       onClick={onClose}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <div
-        style={{
-          background: 'var(--surface-0)',
-          borderRadius: '32px 32px 0 0',
-          padding: '32px 24px 40px',
-          maxWidth: 680,
-          width: '100%',
-          maxHeight: '88vh',
-          overflow: 'auto',
-          border: isDragging ? '3px dashed var(--primary)' : '1px solid var(--border)',
-          boxShadow: isDragging
-            ? '0 -8px 40px rgba(124, 58, 237, 0.3)'
-            : '0 -8px 32px rgba(0, 0, 0, 0.4)',
-          animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-          transition: 'all 0.3s ease',
-        }}
+        className={`bg-gray-900/95 backdrop-blur-2xl rounded-t-[32px] p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-800 shadow-2xl shadow-purple-500/10 animate-in slide-in-from-bottom duration-500 ${
+          isDragging ? 'border-purple-500 border-2 shadow-purple-500/30' : ''
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag Overlay */}
         {isDragging && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(124, 58, 237, 0.1)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderRadius: '32px 32px 0 0',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 10,
-              border: '3px dashed var(--primary)',
-            }}
-          >
-            <div
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: '20px',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 20,
-                animation: 'pulse 1.5s ease-in-out infinite',
-              }}
-            >
-              <Upload size={40} color="white" />
+          <div className="absolute inset-0 bg-purple-500/10 backdrop-blur-md rounded-t-[32px] flex flex-col items-center justify-center z-10 border-2 border-dashed border-purple-500 animate-pulse">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center mb-5 shadow-lg shadow-purple-500/50">
+              <Upload className="w-10 h-10 text-white" />
             </div>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 24,
-                fontWeight: 700,
-                color: 'var(--text)',
-                textAlign: 'center',
-              }}
-            >
-              Drop images here
-            </h3>
-            <p
-              style={{
-                margin: '8px 0 0',
-                fontSize: 16,
-                color: 'var(--muted)',
-                textAlign: 'center',
-              }}
-            >
-              Release to add photos to your message
-            </p>
+            <h3 className="text-2xl font-bold text-white mb-2">Drop images here</h3>
+            <p className="text-gray-300 text-center">Release to add photos to your message</p>
           </div>
         )}
 
         {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 32,
-          paddingBottom: 24,
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: '14px',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 6px 20px rgba(124, 58, 237, 0.35)',
-                animation: !isDragging ? 'slideUp 0.5s ease-out 0.2s both' : 'none',
-              }}
-            >
-              <ImageIcon size={24} color="white" />
+        <div className="flex items-center justify-between mb-6 pb-5 border-b border-gray-800">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/50">
+              <ImageIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+              <h3 className="text-xl font-bold text-white leading-tight">
                 {uploading ? 'Processing Images' : isDragging ? 'Drop to Upload' : 'Add Images'}
               </h3>
               {!uploading && !isDragging && (
-                <p style={{ margin: 0, fontSize: 15, color: 'var(--muted)' }}>
-                  Upload photos or drag & drop here
-                </p>
+                <p className="text-sm text-gray-400 mt-0.5">Upload photos or drag & drop here</p>
               )}
             </div>
           </div>
           <button
             onClick={onClose}
             disabled={uploading}
-            style={{
-              background: uploading ? 'transparent' : 'var(--surface-1)',
-              border: uploading ? 'none' : '1px solid var(--border)',
-              cursor: uploading ? 'not-allowed' : 'pointer',
-              padding: 12,
-              borderRadius: '50%',
-              color: uploading ? 'var(--muted)' : 'var(--text)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 40,
-              height: 40,
-              transition: 'all 0.2s ease',
-              opacity: uploading ? 0.5 : 1,
-            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              uploading
+                ? 'bg-transparent text-gray-600 cursor-not-allowed'
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700'
+            }`}
           >
-            <X size={22} />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Processing Progress */}
         {(uploading || processedFiles > 0) && (
-          <div style={{
-            marginBottom: 24,
-            padding: 16,
-            background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05), rgba(236, 72, 153, 0.05))',
-            borderRadius: 16,
-            border: '1px solid rgba(124, 58, 237, 0.2)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
+          <div className="mb-6 p-4 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-2xl border border-purple-500/20">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
                 {compressing ? (
-                  <div
-                    style={{
-                      width: 16,
-                      height: 16,
-                      border: '2px solid rgba(255, 255, 255, 0.3)',
-                      borderTopColor: 'white',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                    }}
-                  />
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <CheckCircle size={16} color="white" />
+                  <CheckCircle className="w-4 h-4 text-white" />
                 )}
               </div>
-              <div style={{ flex: 1 }}>
-                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-white">
                   {compressing ? 'Optimizing images...' : 'Processing complete'}
                 </h4>
                 {uploadProgress && (
-                  <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+                  <p className="text-xs text-gray-400">
                     File {uploadProgress.current} of {uploadProgress.total}
                   </p>
                 )}
               </div>
             </div>
             {uploadProgress && (
-              <div style={{
-                width: '100%',
-                height: 6,
-                background: 'var(--surface-1)',
-                borderRadius: 3,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #7c3aed 0%, #ec4899 100%)',
-                  borderRadius: 3,
-                  transition: 'width 0.3s ease',
-                }} />
+              <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-600 to-pink-600 rounded-full transition-all duration-300"
+                  style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                />
               </div>
             )}
           </div>
@@ -488,14 +350,14 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
 
         {/* Upload Options */}
         {selectedFiles.length === 0 && (
-          <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+          <div className="grid grid-cols-2 gap-4 mb-6">
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
               multiple
               onChange={(e) => handleFileSelect(e.target.files)}
-              style={{ display: 'none' }}
+              className="hidden"
             />
             <input
               ref={cameraInputRef}
@@ -503,110 +365,36 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
               accept="image/jpeg,image/jpg,image/png,image/webp"
               capture="environment"
               onChange={(e) => handleFileSelect(e.target.files)}
-              style={{ display: 'none' }}
+              className="hidden"
             />
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="btn"
-              style={{
-                flex: 1,
-                padding: '28px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 14,
-                background: 'var(--surface-1)',
-                border: '2px solid var(--border)',
-                borderRadius: 20,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary)';
-                e.currentTarget.style.background = 'var(--surface-2)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(124, 58, 237, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.background = 'var(--surface-1)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
+              className="group p-6 flex flex-col items-center gap-3 bg-gray-800/50 hover:bg-gray-800 border-2 border-gray-700 hover:border-purple-500 rounded-2xl cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/20"
             >
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '16px',
-                  background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.1)',
-                }}
-              >
-                <Upload size={26} color="var(--primary)" />
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 group-hover:from-purple-500/20 group-hover:to-pink-500/20 flex items-center justify-center transition-all">
+                <Upload className="w-6 h-6 text-purple-400" />
               </div>
-              <span style={{ fontSize: 16, fontWeight: 600 }}>Gallery</span>
-              <span style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center' }}>
-                Choose from photos<br/>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>JPG, PNG, WebP up to 20MB</span>
+              <span className="text-base font-semibold text-white">Gallery</span>
+              <span className="text-xs text-gray-400 text-center leading-relaxed">
+                Choose from photos
+                <br />
+                <span className="text-[10px] opacity-70">JPG, PNG, WebP up to 20MB</span>
               </span>
             </button>
 
             <button
               onClick={() => cameraInputRef.current?.click()}
-              className="btn"
-              style={{
-                flex: 1,
-                padding: '28px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 14,
-                background: 'var(--surface-1)',
-                border: '2px solid var(--border)',
-                borderRadius: 20,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--primary)';
-                e.currentTarget.style.background = 'var(--surface-2)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(124, 58, 237, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.background = 'var(--surface-1)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
+              className="group p-6 flex flex-col items-center gap-3 bg-gray-800/50 hover:bg-gray-800 border-2 border-gray-700 hover:border-purple-500 rounded-2xl cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/20"
             >
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: '16px',
-                  background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.1)',
-                }}
-              >
-                <Camera size={26} color="var(--primary)" />
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 group-hover:from-purple-500/20 group-hover:to-pink-500/20 flex items-center justify-center transition-all">
+                <Camera className="w-6 h-6 text-purple-400" />
               </div>
-              <span style={{ fontSize: 16, fontWeight: 600 }}>Camera</span>
-              <span style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center' }}>
-                Take a photo<br/>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>High quality capture</span>
+              <span className="text-base font-semibold text-white">Camera</span>
+              <span className="text-xs text-gray-400 text-center leading-relaxed">
+                Take a photo
+                <br />
+                <span className="text-[10px] opacity-70">High quality capture</span>
               </span>
             </button>
           </div>
@@ -615,58 +403,22 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
         {/* Preview Grid */}
         {previews.length > 0 && (
           <>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                gap: 10,
-                marginBottom: 16,
-              }}
-            >
+            <div className="grid grid-cols-3 gap-3 mb-4">
               {previews.map((preview, index) => (
                 <div
                   key={index}
-                  style={{
-                    position: 'relative',
-                    paddingTop: '100%',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    border: '2px solid var(--primary)',
-                    boxShadow: '0 2px 8px rgba(124, 58, 237, 0.2)',
-                  }}
+                  className="relative aspect-square rounded-xl overflow-hidden border-2 border-purple-500/50 shadow-lg shadow-purple-500/20 group hover:border-purple-400 transition-all"
                 >
                   <img
                     src={preview}
                     alt={`Preview ${index + 1}`}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
                   <button
                     onClick={() => removeImage(index)}
-                    style={{
-                      position: 'absolute',
-                      top: 6,
-                      right: 6,
-                      width: 26,
-                      height: 26,
-                      borderRadius: '50%',
-                      background: 'rgba(0,0,0,0.8)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 0,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                    }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/80 hover:bg-black border border-white/20 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
                   >
-                    <X size={14} color="white" />
+                    <X className="w-3.5 h-3.5 text-white" />
                   </button>
                 </div>
               ))}
@@ -674,122 +426,52 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
 
             {/* Info / Error */}
             {error ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 16px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  borderRadius: 12,
-                  marginBottom: 16,
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: '#ef4444',
-                  }}
-                />
-                <p style={{ fontSize: 13, color: '#ef4444', margin: 0, fontWeight: 500 }}>
-                  {error}
-                </p>
+              <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 rounded-xl mb-4 border border-red-500/30">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <p className="text-xs text-red-400 font-medium">{error}</p>
               </div>
             ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 16px',
-                  background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.05), rgba(236, 72, 153, 0.05))',
-                  borderRadius: 12,
-                  marginBottom: 16,
-                  border: '1px solid rgba(124, 58, 237, 0.1)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                  }}
-                />
-                <p style={{ fontSize: 13, color: 'var(--text)', margin: 0, fontWeight: 500 }}>
+              <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-xl mb-4 border border-purple-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                <p className="text-xs text-gray-300 font-medium">
                   {selectedFiles.length} of {maxImages} images selected
-                  {selectedFiles.some(f => f.size > 5 * 1024 * 1024) && 
-                    ' • Large photos will be compressed'}
+                  {selectedFiles.some(f => f.size > 5 * 1024 * 1024) && ' • Large photos will be compressed'}
                 </p>
               </div>
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div className="flex gap-3">
               <button
                 onClick={() => {
                   setSelectedFiles([]);
                   setPreviews([]);
                   setError(null);
                 }}
-                className="btn"
                 disabled={uploading}
-                style={{
-                  flex: 1,
-                  padding: '12px 20px',
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 12,
-                  fontSize: 15,
-                  fontWeight: 600,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  opacity: uploading ? 0.5 : 1,
-                }}
+                className="flex-1 px-5 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Clear
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={uploading}
-                className="btn btnPrimary"
-                style={{
-                  flex: 2,
-                  padding: '12px 20px',
-                  background: uploading 
-                    ? 'var(--surface-2)' 
-                    : 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-                  color: uploading ? 'var(--text)' : 'white',
-                  border: 'none',
-                  fontWeight: 600,
-                  borderRadius: 12,
-                  fontSize: 15,
-                  boxShadow: uploading ? 'none' : '0 4px 12px rgba(124, 58, 237, 0.3)',
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
+                className={`flex-[2] px-5 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                  uploading
+                    ? 'bg-gray-800 text-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-500/30'
+                }`}
               >
                 {uploading ? (
                   <>
-                    <div 
-                      style={{
-                        width: 16,
-                        height: 16,
-                        border: '2px solid rgba(124, 58, 237, 0.3)',
-                        borderTopColor: 'var(--primary)',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
+                    <div className="w-4 h-4 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
                     {compressing ? 'Compressing...' : 'Uploading...'}
                   </>
                 ) : (
-                  'Add to Message'
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Add to Message
+                  </>
                 )}
               </button>
             </div>
@@ -797,138 +479,13 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
         )}
 
         {/* Help Text */}
-        <div
-          style={{
-            marginTop: 20,
-            padding: '12px 16px',
-            background: 'var(--surface-1)',
-            borderRadius: 12,
-            borderLeft: '3px solid var(--primary)',
-          }}
-        >
-          <p
-            style={{
-              fontSize: 12,
-              color: 'var(--muted)',
-              margin: 0,
-              lineHeight: 1.5,
-            }}
-          >
-            💡 <strong>Dash can analyze images</strong> to help with diagrams, math problems, homework, and more!
+        <div className="mt-5 px-4 py-3 bg-gray-800/50 rounded-xl border-l-3 border-l-purple-500">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            <Sparkles className="w-3.5 h-3.5 inline-block mr-1.5 text-purple-400" />
+            <strong className="text-gray-300">Dash can analyze images</strong> to help with diagrams, math problems, homework, and more!
           </p>
         </div>
       </div>
-      
-      {/* Enhanced animations */}
-      <style jsx>{`
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        @keyframes slideUp {
-          from {
-            transform: translateY(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-          50% {
-            opacity: 0.8;
-            transform: scale(1.05);
-          }
-        }
-
-        @keyframes float {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-        }
-
-        @keyframes shimmer {
-          0% {
-            background-position: -200% center;
-          }
-          100% {
-            background-position: 200% center;
-          }
-        }
-
-        .btn:disabled {
-          animation: pulse 2s ease-in-out infinite;
-        }
-
-        .btn:not(:disabled):active {
-          transform: scale(0.95);
-        }
-
-        /* Modern scrollbar */
-        ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: var(--surface-1);
-          border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, var(--primary), var(--muted));
-          border-radius: 4px;
-          transition: all 0.2s ease;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(135deg, var(--primary), var(--text));
-        }
-
-        /* Image hover effects */
-        .preview-image {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .preview-image:hover {
-          transform: scale(1.02);
-          box-shadow: 0 8px 25px rgba(124, 58, 237, 0.25);
-        }
-
-        /* Button hover enhancement */
-        .modern-button {
-          position: relative;
-          overflow: hidden;
-        }
-
-        .modern-button::before {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 0;
-          height: 0;
-          background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
-          transform: translate(-50%, -50%);
-          transition: width 0.6s ease, height 0.6s ease;
-        }
-
-        .modern-button:hover::before {
-          width: 300px;
-          height: 300px;
-        }
-      `}</style>
     </div>
   );
 }

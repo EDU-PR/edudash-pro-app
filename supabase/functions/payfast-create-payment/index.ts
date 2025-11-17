@@ -424,7 +424,7 @@ serve(async (req: Request) => {
         status: 'pending',
         provider: 'payfast',
         provider_payment_id: null, // Will be updated by webhook
-        tier: normalizedTier, // Normalized tier with hyphens
+        tier: tier, // Use tier directly (database enum value like parent_plus)
         billing_cycle: 'monthly',
         metadata: {
           item_name: payFastData.item_name,

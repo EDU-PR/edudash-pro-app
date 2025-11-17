@@ -65,24 +65,24 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
   if (quota.limit === -1 || quota.limit > 10000) return null;
 
   return (
-    <div className="px-4 py-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-b border-gray-700/50">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Zap className={`w-4 h-4 ${isLow ? 'text-orange-400' : 'text-purple-400'}`} />
-          <span className="text-sm font-medium text-gray-200">
-            {isExceeded ? 'Daily Quota Reached' : 'AI Usage Today'}
+    <div className="px-8 py-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-b border-gray-700/50">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <div className="flex items-center gap-2.5">
+            <Zap className={`w-4 h-4 ${isLow ? 'text-orange-400' : 'text-purple-400'}`} />
+            <span className="text-sm font-medium text-gray-200">
+              {isExceeded ? 'Daily Quota Reached' : 'AI Usage Today'}
+            </span>
+          </div>
+          <span className="text-xs text-gray-400 capitalize">
+            {quota.tier.replace(/_/g, ' ')} Plan
           </span>
         </div>
-        <span className="text-xs text-gray-400 capitalize">
-          {quota.tier.replace(/_/g, ' ')} Plan
-        </span>
-      </div>
 
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 h-2 bg-gray-700/50 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-300 ${
+              className={`absolute inset-y-0 left-0 transition-all duration-300 ease-out ${
                 isExceeded
                   ? 'bg-gradient-to-r from-red-500 to-red-600'
                   : isLow
@@ -92,28 +92,28 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
               style={{ width: `${percentage}%` }}
             />
           </div>
+          <span className={`text-xs font-mono tabular-nums ${isExceeded ? 'text-red-400' : 'text-gray-400'}`}>
+            {quota.used}/{quota.limit}
+          </span>
         </div>
-        <span className={`text-xs font-mono ${isExceeded ? 'text-red-400' : 'text-gray-400'}`}>
-          {quota.used}/{quota.limit}
-        </span>
+
+        {isExceeded && (
+          <div className="mt-2 flex items-start gap-2">
+            <TrendingUp className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-gray-300">
+              You've reached your daily limit. Upgrade for more messages or wait until tomorrow.
+            </p>
+          </div>
+        )}
+
+        {isLow && !isExceeded && (
+          <div className="mt-2">
+            <p className="text-xs text-orange-300">
+              ⚡ Running low on messages! Only {quota.limit - quota.used} left today.
+            </p>
+          </div>
+        )}
       </div>
-
-      {isExceeded && (
-        <div className="mt-2 flex items-start gap-2">
-          <TrendingUp className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-gray-300">
-            You've reached your daily limit. Upgrade for more messages or wait until tomorrow.
-          </p>
-        </div>
-      )}
-
-      {isLow && !isExceeded && (
-        <div className="mt-2">
-          <p className="text-xs text-orange-300">
-            ⚡ Running low on messages! Only {quota.limit - quota.used} left today.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

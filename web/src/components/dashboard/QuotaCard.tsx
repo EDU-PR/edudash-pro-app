@@ -201,11 +201,27 @@ export function QuotaCard({ userId }: QuotaCardProps) {
             backgroundColor: 'var(--bg-secondary)',
             borderRadius: 8,
             fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
           }}
         >
-          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-            💡 Need more? <a href="/dashboard/parent/subscription" className="link">Upgrade your plan</a> for higher limits and priority support.
+          <p style={{ margin: 0, color: 'var(--text-muted)', flex: 1 }}>
+            💡 Need more? Upgrade your plan for higher limits and priority support.
           </p>
+          <a 
+            href="/dashboard/parent/subscription" 
+            className="btn btn-primary"
+            style={{
+              fontSize: 12,
+              padding: '6px 16px',
+              whiteSpace: 'nowrap',
+              textDecoration: 'none',
+            }}
+          >
+            Upgrade
+          </a>
         </div>
       )}
 
