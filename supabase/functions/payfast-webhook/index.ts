@@ -357,6 +357,18 @@ serve(async (req: Request) => {
           .from('organizations')
           .update({ plan_tier: plan.tier })
           .eq('id', existingTx.school_id);
+        
+        // CRITICAL: Update user_ai_tiers for all school users
+        const { error: tierUpdateError } = await supabase
+          .from('user_ai_tiers')
+          .update({ tier: plan.tier })
+          .eq('organization_id', existingTx.school_id);
+        
+        if (tierUpdateError) {
+          console.error('Error updating user_ai_tiers for school:', tierUpdateError);
+        } else {
+          console.log('Updated user_ai_tiers for school users:', existingTx.school_id);
+        }
 
         // Send email notification (sandbox & production)
         try {
@@ -530,6 +542,18 @@ serve(async (req: Request) => {
           .from('organizations')
           .update({ plan_tier: plan.tier })
           .eq('id', userSchoolId);
+        
+        // CRITICAL: Update user_ai_tiers for the owner user
+        const { error: tierUpdateError } = await supabase
+          .from('user_ai_tiers')
+          .update({ tier: plan.tier })
+          .eq('user_id', ownerId);
+        
+        if (tierUpdateError) {
+          console.error('Error updating user_ai_tiers for user:', tierUpdateError);
+        } else {
+          console.log('Updated user_ai_tiers for user:', ownerId);
+        }
 
         // Send email notification for user subscription
         try {
