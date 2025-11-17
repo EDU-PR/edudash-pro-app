@@ -208,7 +208,17 @@ export function QuotaCard({ userId }: QuotaCardProps) {
           }}
         >
           <p style={{ margin: 0, color: 'var(--text-muted)', flex: 1 }}>
-            💡 Need more? Upgrade your plan for higher limits and priority support.
+            💡 Need more? <a 
+              href="/dashboard/parent/subscription" 
+              style={{ 
+                color: '#3b82f6', 
+                fontWeight: 600,
+                textDecoration: 'underline',
+                cursor: 'pointer'
+              }}
+            >
+              Upgrade your plan
+            </a> for higher limits and priority support.
           </p>
           <a 
             href="/dashboard/parent/subscription" 
@@ -218,7 +228,15 @@ export function QuotaCard({ userId }: QuotaCardProps) {
               padding: '6px 16px',
               whiteSpace: 'nowrap',
               textDecoration: 'none',
+              cursor: 'pointer',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
+              borderRadius: 6,
+              fontWeight: 500,
+              transition: 'opacity 0.2s',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
           >
             Upgrade
           </a>
