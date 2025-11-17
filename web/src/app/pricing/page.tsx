@@ -77,10 +77,64 @@ export default function PricingPage() {
     setProcessingPayment(planName);
 
     try {
+      // Get current session for auth token
+      console.log('[Pricing] Starting payment flow...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('[Pricing] Initial session check:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id,
+        hasAccessToken: !!session?.access_token,
+        tokenPreview: session?.access_token?.substring(0, 20),
+        sessionError: sessionError?.message,
+        expiresAt: session?.expires_at
+      });
+      
+      // If no session, try to refresh
+      if (!session || sessionError) {
+        console.log('[Pricing] No session found, attempting refresh...');
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        console.log('[Pricing] Refresh result:', {
+          hasRefreshedSession: !!refreshedSession,
+          refreshError: refreshError?.message
+        });
+        
+        if (refreshError || !refreshedSession) {
+          console.error('[Pricing] Session refresh failed:', refreshError);
+          alert('Your session has expired. Please sign in again.');
+          router.push('/sign-in?redirect=/pricing');
+          setProcessingPayment(null);
+          return;
+        }
+      }
+
+      // Get the latest session
+      const { data: { session: finalSession } } = await supabase.auth.getSession();
+      
+      console.log('[Pricing] Final session check:', {
+        hasFinalSession: !!finalSession,
+        hasAccessToken: !!finalSession?.access_token,
+        tokenLength: finalSession?.access_token?.length
+      });
+      
+      if (!finalSession?.access_token) {
+        console.error('[Pricing] No access token available');
+        alert('Please log in to continue');
+        router.push('/sign-in?redirect=/pricing');
+        setProcessingPayment(null);
+        return;
+      }
+
       // Call secure API endpoint to create payment
+      console.log('[Pricing] Calling create-payment API...');
       const response = await fetch('/api/payfast/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${finalSession.access_token}`
+        },
         body: JSON.stringify({
           user_id: userId,
           tier: tier,
@@ -539,6 +593,8 @@ export default function PricingPage() {
                           <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
                           Processing...
                         </>
+                      ) : !isLoggedIn ? (
+                        "Sign In to Subscribe"
                       ) : (
                         "Subscribe Now"
                       )}

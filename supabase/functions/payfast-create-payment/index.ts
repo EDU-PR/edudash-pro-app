@@ -1,10 +1,17 @@
 // Supabase Edge Function: payfast-create-payment
 // Secure server-side PayFast payment creation with signature generation
-// deno-lint-ignore-file no-explicit-any
 
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { createHash } from "https://deno.land/std@0.208.0/node/crypto.ts";
+
+// MD5 hash function using Web Crypto API
+async function md5Hash(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('MD5', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // PayFast configuration from environment
 const PAYFAST_MODE = Deno.env.get('PAYFAST_MODE') || 'sandbox';
@@ -38,7 +45,7 @@ interface PaymentRequest {
  * Generate MD5 signature for PayFast
  * CRITICAL: PayFast sandbox does NOT use passphrase - only production does
  */
-function generateSignature(data: Record<string, string>, isSandbox: boolean): string {
+async function generateSignature(data: Record<string, string>, isSandbox: boolean): Promise<string> {
   // Sort keys alphabetically (required by PayFast)
   const sortedKeys = Object.keys(data).sort();
   
@@ -59,10 +66,8 @@ function generateSignature(data: Record<string, string>, isSandbox: boolean): st
     paramString += `&passphrase=${encodeURIComponent(PAYFAST_PASSPHRASE.trim()).replace(/%20/g, '+')}`;
   }
   
-  // Generate MD5 hash using Deno's node-compatible crypto
-  const md5 = createHash('md5');
-  md5.update(paramString);
-  const signature = md5.digest('hex');
+  // Generate MD5 hash using Web Crypto API
+  const signature = await md5Hash(paramString);
   
   console.log('[PayFast Edge] Signature generated:', {
     mode: isSandbox ? 'sandbox' : 'production',

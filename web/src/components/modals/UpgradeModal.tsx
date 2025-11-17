@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Crown, Zap, Sparkles, CheckCircle, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export interface UpgradeModalProps {
   isOpen: boolean;
@@ -107,10 +108,20 @@ export function UpgradeModal({
         throw new Error('Invalid tier selected');
       }
 
+      // Get current session for auth token
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Please log in to continue');
+      }
+
       // Call secure API endpoint to create payment
       const response = await fetch('/api/payfast/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           user_id: userId,
           tier: tier,

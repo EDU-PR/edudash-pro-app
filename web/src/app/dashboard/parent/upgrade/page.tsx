@@ -126,10 +126,21 @@ export default function UpgradePage() {
         return;
       }
 
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Please sign in to continue');
+        router.push('/sign-in');
+        return;
+      }
+
       // Create PayFast payment
       const response = await fetch('/api/payfast/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           user_id: user.id,
           tier: tierId,

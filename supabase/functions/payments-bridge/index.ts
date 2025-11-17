@@ -5,7 +5,7 @@
 //  - /functions/v1/payments-bridge/cancel
 // Optional query params are preserved and forwarded to the app deep link.
 
-import { serve } from 'https://deno.fresh.land/std/http/server.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 function html(content: string, status = 200) {
   return new Response(content, {

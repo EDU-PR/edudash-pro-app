@@ -153,8 +153,8 @@ BEGIN
     LIMIT 1;
     
     IF FOUND AND org_subscription.is_trial THEN
-      -- Calculate days remaining
-      days_left := GREATEST(0, EXTRACT(DAY FROM org_subscription.trial_end_date - NOW())::INTEGER);
+      -- Calculate days remaining (full days, not just day component)
+      days_left := GREATEST(0, CEIL(EXTRACT(EPOCH FROM (org_subscription.trial_end_date - NOW())) / 86400)::INTEGER);
       
       RETURN json_build_object(
         'is_trial', true,
@@ -171,7 +171,7 @@ BEGIN
   IF user_profile.is_trial THEN
     -- Check if trial is still active
     IF user_profile.trial_end_date > NOW() THEN
-      days_left := GREATEST(0, EXTRACT(DAY FROM user_profile.trial_end_date - NOW())::INTEGER);
+      days_left := GREATEST(0, CEIL(EXTRACT(EPOCH FROM (user_profile.trial_end_date - NOW())) / 86400)::INTEGER);
       
       RETURN json_build_object(
         'is_trial', true,
