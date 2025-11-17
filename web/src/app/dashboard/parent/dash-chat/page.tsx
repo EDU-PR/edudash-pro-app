@@ -8,6 +8,7 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
+import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
 
 export default function DashChatPage() {
@@ -129,6 +130,9 @@ export default function DashChatPage() {
             </button>
           </div>
         </header>
+
+        {/* Quota Progress Bar */}
+        {userId && <QuotaProgress userId={userId} />}
 
         {/* Main Content - Takes remaining height */}
         <div className="flex flex-1 overflow-hidden min-h-0">

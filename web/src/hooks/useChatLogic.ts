@@ -452,8 +452,8 @@ function formatErrorMessage(error: any): string {
       }
     } else if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
       errorContent = `⏳ **Slow down there!**\n\nPlease wait a moment before sending another message.`;
-    } else if (errorMsg.includes('quota')) {
-      errorContent = `📊 **High demand right now**\n\nPlease try again in a few moments.`;
+    } else if (errorMsg.includes('quota') || errorMsg.includes('quota_exceeded')) {
+      errorContent = `📊 **Daily Quota Reached**\n\nYou've used all your AI messages for today. Your quota will reset tomorrow, or upgrade your plan for more messages!\n\n💡 *Tip: Check the quota bar at the top of the chat to track your usage.*`;
     } else if (errorMsg.includes('503') || errorMsg.includes('service unavailable') || errorMsg.includes('edge function')) {
       errorContent = '💤 **Taking a quick break** - Our AI assistant is temporarily unavailable. Please try again in a moment.';
     } else if (errorMsg.includes('timeout')) {
