@@ -419,6 +419,7 @@ serve(async (req: Request) => {
       .insert({
         id: paymentId,
         user_id: user_id,
+        subscription_plan_id: tier, // Required: use tier as plan identifier
         amount: amount,
         currency: 'ZAR',
         status: 'pending',
