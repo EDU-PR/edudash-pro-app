@@ -31,6 +31,7 @@ import {
   Database,
   Cpu,
   HardDrive,
+  Gift,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -528,11 +529,11 @@ export default function SuperAdminDashboard() {
                 <Zap className="w-6 h-6 text-blue-600" />
                 Quick Actions
               </h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ActionButton icon={Users} label="User Management" href="/admin/users" />
+                <ActionButton icon={Gift} label="Promotions & Pricing" href="/admin/promotions" />
                 <ActionButton icon={Zap} label="AI Configuration" href="/admin/ai-config" />
                 <ActionButton icon={Building2} label="CAPS Mapping" href="/admin/caps-mapping" />
-                <ActionButton icon={Settings} label="System Settings" href="/admin/settings" />
               </div>
             </div>
 

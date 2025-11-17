@@ -6,33 +6,39 @@ import { Settings, BookMarked, Activity, Users } from 'lucide-react';
 
 const adminTools = [
   {
+    title: 'User Management & Troubleshooting',
+    description: 'Search users, view payment history, tier status, and fix upgrade issues',
+    icon: Users,
+    href: '/admin/users',
+    color: 'bg-blue-500',
+  },
+  {
+    title: 'Promotions & Pricing',
+    description: 'Manage trial periods, promotional offers, and subscription pricing',
+    icon: Settings,
+    href: '/admin/promotions',
+    color: 'bg-purple-500',
+  },
+  {
     title: 'AI Provider Configuration',
     description: 'Configure AI providers (Claude/OpenAI) and models per scenario and user tier',
     icon: Settings,
     href: '/admin/ai-config',
-    color: 'bg-blue-500',
+    color: 'bg-green-500',
   },
   {
     title: 'CAPS Curriculum Mapping',
     description: 'Map CAPS topics to textbooks and chapters for exam generation',
     icon: BookMarked,
     href: '/admin/caps-mapping',
-    color: 'bg-green-500',
+    color: 'bg-orange-500',
   },
   {
     title: 'System Monitoring',
     description: 'View AI usage, costs, and system health metrics',
     icon: Activity,
     href: '/admin/monitoring',
-    color: 'bg-purple-500',
-    disabled: true,
-  },
-  {
-    title: 'User Management',
-    description: 'Manage users, organizations, and subscriptions',
-    icon: Users,
-    href: '/admin/users',
-    color: 'bg-orange-500',
+    color: 'bg-indigo-500',
     disabled: true,
   },
 ];

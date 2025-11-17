@@ -11,6 +11,20 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Transaction metadata type
+interface TransactionMetadata {
+  invoice_number?: string;
+  plan_name?: string;
+  price_paid?: number;
+  transaction_id?: string;
+  pf_payment_id?: string;
+  activated_by_payment?: boolean;
+  owner_user_id?: string;
+  created_by_payment?: boolean;
+  payment_id?: string;
+  [key: string]: unknown; // Allow other properties
+}
+
 // Helper function to compute MD5 hash
 async function md5Hash(data: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -18,6 +32,13 @@ async function md5Hash(data: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('MD5', dataBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Helper function for RFC1738 URL encoding (spaces as '+', uppercase percent-hex)
+function encodeRFC1738(v: string): string {
+  return encodeURIComponent(v)
+    .replace(/%20/g, '+')
+    .replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
 }
 
 // Helper function to validate ITN with PayFast
@@ -146,11 +167,6 @@ serve(async (req: Request) => {
         // - concatenate non-blank vars (excluding 'signature') in the order received
         // - URL encode values (RFC1738: spaces as '+', uppercase percent-hex)
         // - append &passphrase=...
-        function encodeRFC1738(v: string) {
-          return encodeURIComponent(v)
-            .replace(/%20/g, '+')
-            .replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
-        }
 
         const orderedPairs: string[] = [];
         // Maintain original POST order using URLSearchParams iteration
@@ -663,7 +679,7 @@ serve(async (req: Request) => {
       }
 
       // Handle invoice status update
-      const invoiceNumber = (existingTx.metadata as any)?.invoice_number;
+      const invoiceNumber = (existingTx.metadata as TransactionMetadata)?.invoice_number;
       if (invoiceNumber) {
         await supabase
           .from('billing_invoices')
@@ -679,7 +695,7 @@ serve(async (req: Request) => {
     // Handle failed/cancelled payments
     else if (newStatus === 'cancelled' || newStatus === 'failed') {
       if (existingTx.school_id) {
-        const invoiceNumber = (existingTx.metadata as any)?.invoice_number;
+        const invoiceNumber = (existingTx.metadata as TransactionMetadata)?.invoice_number;
         if (invoiceNumber) {
           await supabase
             .from('billing_invoices')
