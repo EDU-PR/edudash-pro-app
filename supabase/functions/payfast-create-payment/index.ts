@@ -205,6 +205,7 @@ const PAYFAST_MERCHANT_ID = Deno.env.get('PAYFAST_MERCHANT_ID') || '';
 const PAYFAST_MERCHANT_KEY = Deno.env.get('PAYFAST_MERCHANT_KEY') || '';
 const PAYFAST_PASSPHRASE = Deno.env.get('PAYFAST_PASSPHRASE') || '';
 const BASE_URL = Deno.env.get('BASE_URL') || 'https://edudashpro.org.za';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 
 // PayFast URLs
 const PAYFAST_URLS = {
@@ -372,7 +373,7 @@ serve(async (req: Request) => {
       merchant_key: PAYFAST_MERCHANT_KEY,
       return_url: `${BASE_URL}/dashboard/parent/subscription?payment=success`,
       cancel_url: `${BASE_URL}/dashboard/parent/subscription?payment=cancelled`,
-      notify_url: `${BASE_URL}/api/payfast/webhook`,
+      notify_url: `${SUPABASE_URL}/functions/v1/payfast-webhook`,
       name_first: firstName || email.split('@')[0],
       name_last: lastName || 'User',
       email_address: email,
