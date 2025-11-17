@@ -7,6 +7,7 @@ import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
+import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { ArrowLeft, Sparkles, Menu, X } from 'lucide-react';
 
 export default function TeacherDashChatPage() {
@@ -109,6 +110,9 @@ export default function TeacherDashChatPage() {
             </button>
           </div>
         </header>
+
+        {/* Quota Progress Bar */}
+        {userId && <QuotaProgress userId={userId} />}
 
         <div className="flex flex-1 overflow-hidden">
           <aside
