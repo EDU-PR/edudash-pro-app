@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, Trash2, Clock } from 'lucide-react';
+import { MessageSquare, Trash2, Clock, CheckSquare, Square } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 interface Conversation {
@@ -25,6 +25,8 @@ export function ConversationList({
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -77,6 +79,53 @@ export function ConversationList({
       }
     } catch (error) {
       console.error('Error deleting conversation:', error);
+    }
+  };
+
+  const toggleSelection = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(conversationId)) {
+        newSet.delete(conversationId);
+      } else {
+        newSet.add(conversationId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === conversations.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(conversations.map(c => c.conversation_id)));
+    }
+  };
+
+  const deleteBulk = async () => {
+    if (selectedIds.size === 0) return;
+    
+    if (!confirm(`Delete ${selectedIds.size} conversation(s)?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('ai_conversations')
+        .delete()
+        .in('conversation_id', Array.from(selectedIds));
+
+      if (error) throw error;
+
+      setConversations(conversations.filter(c => !selectedIds.has(c.conversation_id)));
+      
+      if (activeConversationId && selectedIds.has(activeConversationId)) {
+        onNewConversation();
+      }
+
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } catch (error) {
+      console.error('Error deleting conversations:', error);
     }
   };
 
@@ -144,28 +193,94 @@ export function ConversationList({
           background: 'var(--surface-1)',
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
-          Conversations
-        </h3>
-        <button
-          onClick={onNewConversation}
-          className="btn btnPrimary"
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            fontSize: 14,
-            fontWeight: 600,
-            background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-          }}
-        >
-          <MessageSquare size={16} />
-          New Chat
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+            Conversations
+          </h3>
+          {conversations.length > 0 && (
+            <button
+              onClick={() => {
+                setIsSelectionMode(!isSelectionMode);
+                setSelectedIds(new Set());
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: '4px 8px',
+                fontSize: 12,
+                color: 'var(--text)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {isSelectionMode ? 'Cancel' : 'Select'}
+            </button>
+          )}
+        </div>
+        
+        {isSelectionMode && selectedIds.size > 0 ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={deleteBulk}
+              className="btn"
+              style={{
+                flex: 1,
+                padding: '10px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                border: 'none',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <Trash2 size={16} />
+              Delete ({selectedIds.size})
+            </button>
+            <button
+              onClick={toggleSelectAll}
+              className="btn"
+              style={{
+                padding: '10px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              {selectedIds.size === conversations.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onNewConversation}
+            className="btn btnPrimary"
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              fontSize: 14,
+              fontWeight: 600,
+              background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            <MessageSquare size={16} />
+            New Chat
+          </button>
+        )}
       </div>
 
       {/* Conversations List */}
@@ -191,7 +306,13 @@ export function ConversationList({
           conversations.map((conv) => (
             <div
               key={conv.id}
-              onClick={() => onSelectConversation(conv.conversation_id)}
+              onClick={() => {
+                if (isSelectionMode) {
+                  toggleSelection(conv.conversation_id, { stopPropagation: () => {} } as React.MouseEvent);
+                } else {
+                  onSelectConversation(conv.conversation_id);
+                }
+              }}
               style={{
                 padding: '12px 20px',
                 borderBottom: '1px solid var(--border)',
@@ -200,6 +321,9 @@ export function ConversationList({
                   ? 'rgba(124, 58, 237, 0.1)'
                   : 'transparent',
                 transition: 'background 0.2s ease',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
               }}
               onMouseEnter={(e) => {
                 if (activeConversationId !== conv.conversation_id) {
@@ -212,41 +336,63 @@ export function ConversationList({
                 }
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                <h4
+              {isSelectionMode && (
+                <div
+                  onClick={(e) => toggleSelection(conv.conversation_id, e)}
                   style={{
-                    margin: 0,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                    paddingRight: 8,
-                  }}
-                >
-                  {conv.title}
-                </h4>
-                <button
-                  onClick={(e) => deleteConversation(conv.conversation_id, e)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 4,
-                    color: 'var(--muted)',
                     flexShrink: 0,
+                    marginTop: 2,
+                    cursor: 'pointer',
+                    color: selectedIds.has(conv.conversation_id) ? '#7c3aed' : 'var(--muted)',
                   }}
-                  title="Delete conversation"
                 >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)' }}>
-                <Clock size={12} />
-                <span>{formatDate(conv.updated_at)}</span>
-                <span>•</span>
-                <span>{conv.message_count} messages</span>
+                  {selectedIds.has(conv.conversation_id) ? (
+                    <CheckSquare size={20} />
+                  ) : (
+                    <Square size={20} />
+                  )}
+                </div>
+              )}
+              
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <h4
+                    style={{
+                      margin: 0,
+                      fontSize: 14,
+                      fontWeight: 500,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1,
+                      paddingRight: 8,
+                    }}
+                  >
+                    {conv.title}
+                  </h4>
+                  {!isSelectionMode && (
+                    <button
+                      onClick={(e) => deleteConversation(conv.conversation_id, e)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 4,
+                        color: 'var(--muted)',
+                        flexShrink: 0,
+                      }}
+                      title="Delete conversation"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)' }}>
+                  <Clock size={12} />
+                  <span>{formatDate(conv.updated_at)}</span>
+                  <span>•</span>
+                  <span>{conv.message_count} messages</span>
+                </div>
               </div>
             </div>
           ))

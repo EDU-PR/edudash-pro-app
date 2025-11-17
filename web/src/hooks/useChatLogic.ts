@@ -232,7 +232,16 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
           body: {
             scope: 'parent',
             service_type: 'dash_conversation',
-            payload,
+            payload: {
+              prompt: payload.prompt,
+              conversationHistory: payload.conversationHistory,
+              images: payload.images,
+              image_context: payload.image_context,
+              voice_data: payload.voice_data,
+            },
+            enable_tools: true,
+            prefer_openai: true,
+            stream: false,
             metadata: {
               role: 'parent',
               supports_images: true,
