@@ -138,19 +138,19 @@ export default function ParentSubscriptionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
-  const [userId, setUserId] = useState<string | null>(null);
+  const { userId, userName, hasOrganization, tenantSlug } = useParentDashboardData();
+  const { usage, refreshUsage } = useQuotaCheck(userId || undefined);
+  
   const [currentTier, setCurrentTier] = useState<string>('free');
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentAlert, setPaymentAlert] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
 
   // Use custom hook for tier updates
-  useTierUpdates(userId, (newTier) => {
+  useTierUpdates(userId || undefined, (newTier) => {
     console.log('[Subscription] Tier updated via realtime:', newTier);
     setCurrentTier(newTier);
   });
-
-  const { quotaStatus } = useQuotaCheck(userId);
 
   // Handle payment status from URL params
   useEffect(() => {
@@ -161,7 +161,10 @@ export default function ParentSubscriptionPage() {
         message: 'Payment successful! Your subscription is being activated. Please allow a few moments for the update.'
       });
       // Refresh tier data after successful payment
-      loadSubscriptionData();
+      if (userId) {
+        loadSubscriptionData();
+        refreshUsage();
+      }
       // Clear URL params after showing message
       const timer = setTimeout(() => {
         router.replace('/dashboard/parent/subscription');
@@ -178,18 +181,13 @@ export default function ParentSubscriptionPage() {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, userId]);
 
   useEffect(() => {
-    const initUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        console.log('[Subscription] User initialized:', user.id);
-        setUserId(user.id);
-        loadSubscriptionData();
-      }
-    };
-    initUser();
+    if (userId) {
+      loadSubscriptionData();
+      refreshUsage();
+    }
   }, [userId]);
 
   const loadSubscriptionData = async () => {
