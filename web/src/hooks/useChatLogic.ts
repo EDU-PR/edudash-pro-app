@@ -240,7 +240,6 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
               voice_data: payload.voice_data,
             },
             enable_tools: true,
-            prefer_openai: true,
             stream: false,
             metadata: {
               role: 'parent',

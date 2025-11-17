@@ -33,22 +33,49 @@ import { aiRequestQueue, isRateLimitError, getRetryAfter } from './utils/request
 import type { AIProxyRequest, ToolContext } from './types.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
+const ANTHROPIC_API_KEY_2 = Deno.env.get('ANTHROPIC_API_KEY_2')
 const ZAI_API_KEY = Deno.env.get('ZAI_API_KEY')
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+// Load balancer state for Anthropic keys
+let anthropicKeyIndex = 0
+
+/**
+ * Get next Anthropic API key using round-robin load balancing
+ */
+function getAnthropicApiKey(): { key: string; keyName: string } {
+  const keys = [
+    { key: ANTHROPIC_API_KEY, name: 'anthropic_1' },
+    { key: ANTHROPIC_API_KEY_2, name: 'anthropic_2' }
+  ].filter(k => k.key) // Only include keys that are set
+
+  if (keys.length === 0) {
+    throw new Error('No Anthropic API keys configured')
+  }
+
+  // Round-robin: cycle through available keys
+  const selected = keys[anthropicKeyIndex % keys.length]
+  anthropicKeyIndex++
+  
+  return { key: selected.key!, keyName: selected.name }
+}
+
 // Log startup configuration (once)
 console.log('[ai-proxy] Edge function starting up...')
 console.log('[ai-proxy] Configuration check:', {
-  hasAnthropicKey: !!ANTHROPIC_API_KEY,
+  hasAnthropicKey1: !!ANTHROPIC_API_KEY,
+  hasAnthropicKey2: !!ANTHROPIC_API_KEY_2,
   hasZaiKey: !!ZAI_API_KEY,
   hasOpenAIKey: !!OPENAI_API_KEY,
   hasSupabaseUrl: !!SUPABASE_URL,
   hasServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
-  anthropicKeyLength: ANTHROPIC_API_KEY?.length || 0,
+  anthropicKey1Length: ANTHROPIC_API_KEY?.length || 0,
+  anthropicKey2Length: ANTHROPIC_API_KEY_2?.length || 0,
   zaiKeyLength: ZAI_API_KEY?.length || 0,
-  openaiKeyLength: OPENAI_API_KEY?.length || 0
+  openaiKeyLength: OPENAI_API_KEY?.length || 0,
+  loadBalancing: `${[ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2].filter(k => k).length} Anthropic keys available`
 })
 
 serve(async (req: Request): Promise<Response> => {
@@ -80,10 +107,10 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Validate providers: allow OpenAI-only setups too
-    if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY) {
-      console.error(`[ai-proxy:${requestId}] CRITICAL: No AI providers configured (missing ANTHROPIC_API_KEY and OPENAI_API_KEY)`)
-      return createErrorResponse('configuration_error', 'AI service is not configured (no providers available)', 500)
+    // Validate that at least one Anthropic key is configured
+    if (!ANTHROPIC_API_KEY && !ANTHROPIC_API_KEY_2) {
+      console.error(`[ai-proxy:${requestId}] CRITICAL: No Anthropic API keys configured`)
+      return createErrorResponse('configuration_error', 'AI service is not configured (no Anthropic keys available)', 500)
     }
     
     console.log(`[ai-proxy:${requestId}] Starting request processing...`)
@@ -370,12 +397,13 @@ serve(async (req: Request): Promise<Response> => {
         });
       }
       
-      // Use Claude (default)
+      // Use Claude with load-balanced API key
       // Use request queue to prevent rate limiting from concurrent requests
-      console.log(`[ai-proxy:${requestId}] Enqueuing request to AI service (Claude). Queue status before:`, aiRequestQueue.getStatus());
+      const { key: anthropicKey, keyName } = getAnthropicApiKey();
+      console.log(`[ai-proxy:${requestId}] Using ${keyName}. Enqueuing request to Claude. Queue status before:`, aiRequestQueue.getStatus());
       
       const result = await aiRequestQueue.enqueue(() => callClaude({
-        apiKey: ANTHROPIC_API_KEY!,
+        apiKey: anthropicKey,
         model: model as any,
         prompt: redactedText,
         images: payload.images,
@@ -386,7 +414,7 @@ serve(async (req: Request): Promise<Response> => {
         maxTokens: hasImages ? 1536 : 4096
       }));
 
-      console.log(`[ai-proxy:${requestId}] Request completed. Queue status after:`, aiRequestQueue.getStatus());
+      console.log(`[ai-proxy:${requestId}] Request completed using ${keyName}. Queue status after:`, aiRequestQueue.getStatus());
 
       // Handle streaming
       if (stream && result.response) {
@@ -409,7 +437,7 @@ serve(async (req: Request): Promise<Response> => {
       // Handle tool use
       if (result.tool_use && result.tool_use.length > 0) {
         return handleToolExecution(result, toolContext, {
-          apiKey: ANTHROPIC_API_KEY!,
+          apiKey: anthropicKey,
           originalPrompt: redactedText,
           tier,
           hasImages,
@@ -440,7 +468,7 @@ serve(async (req: Request): Promise<Response> => {
         processingTimeMs: Date.now() - startTime,
         inputText: redactedText,
         outputText: result.content,
-        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount }
+        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount, api_key_used: keyName }
       })
 
       // Return response
