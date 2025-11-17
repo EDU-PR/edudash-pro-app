@@ -144,9 +144,14 @@ export default function SubscriptionPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Debug: Log tier changes
+  useEffect(() => {
+    console.log('[Subscription] currentTier state changed to:', currentTier);
+  }, [currentTier]);
+
   // Listen for real-time tier updates
   useTierUpdates(userId, (newTier) => {
-    console.log('[Subscription] Tier updated to:', newTier);
+    console.log('[Subscription] Tier updated via realtime to:', newTier);
     setCurrentTier(newTier);
     loadSubscriptionData();
     refreshUsage();
@@ -342,10 +347,13 @@ export default function SubscriptionPage() {
                   </ul>
                 </div>
 
-                {currentTier !== 'premium' && currentTier !== 'school' && (
+                {/* Only show upgrade button if not on highest tier */}
+                {currentTier !== 'parent_plus' && 
+                 currentTier !== 'teacher_pro' && 
+                 !['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(currentTier) && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'flex-end' }}>
                     <button
-                      onClick={() => handleUpgrade(currentTier === 'basic' ? 'premium' : 'basic')}
+                      onClick={() => router.push('/pricing')}
                       className="btn btnCyan"
                       style={{
                         padding: '12px 24px',
