@@ -17,17 +17,26 @@ const PAYFAST_MODE = (process.env.PAYFAST_MODE || 'sandbox').toLowerCase();
 
 function generateSignature(data: Record<string, any>, passPhrase: string = '') {
   let pfOutput = '';
-  for (let key in data) {
-    if (data.hasOwnProperty(key) && key !== 'signature') {
-      if (data[key] !== '') {
-        pfOutput += `${key}=${encodeURIComponent(data[key].toString().trim()).replace(/%20/g, '+')}&`;
-      }
+  
+  // CRITICAL: Sort keys alphabetically (required by PayFast)
+  const sortedKeys = Object.keys(data).sort();
+  
+  for (const key of sortedKeys) {
+    if (key !== 'signature' && data[key] !== '') {
+      pfOutput += `${key}=${encodeURIComponent(data[key].toString().trim()).replace(/%20/g, '+')}&`;
     }
   }
+  
   let getString = pfOutput.slice(0, -1);
   if (passPhrase !== '') {
     getString += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
   }
+  
+  console.log('[PayFast Webhook] Signature generation:', {
+    sortedKeys,
+    paramStringLength: getString.length,
+  });
+  
   return crypto.createHash('md5').update(getString).digest('hex');
 }
 
