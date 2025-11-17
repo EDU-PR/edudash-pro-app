@@ -280,18 +280,12 @@ serve(async (req: Request) => {
       console.log('Processing successful payment:', m_payment_id);
       
       // Extract custom data from PayFast
-      const planTierRaw = payload.custom_str1 || '';
+      const planTier = payload.custom_str1 || ''; // Already in database enum format (parent_plus)
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       const customData = payload.custom_str4 || '{}';
       
-      // Normalize tier name: convert underscores to hyphens for database enum compatibility
-      const planTier = planTierRaw.replace(/_/g, '-');
-      
-      console.log('[PayFast ITN] Tier normalization:', {
-        raw: planTierRaw,
-        normalized: planTier
-      });
+      console.log('[PayFast ITN] Using tier from custom_str1:', planTier);
       
       let billing = 'monthly';
       let seats = 1;

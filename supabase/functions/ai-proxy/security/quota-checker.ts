@@ -7,44 +7,6 @@
 
 import type { QuotaCheckResult } from '../types.ts'
 
-// Normalize tier strings from various sources to a canonical key used in defaultQuotas
-function normalizeTier(raw: string | undefined | null): string {
-  if (!raw) return 'free'
-  const t = String(raw)
-    .toLowerCase()
-    .trim()
-    // unify separators
-    .replace(/[-\s]+/g, '_')
-    // collapse multiple underscores
-    .replace(/_+/g, '_')
-    // remove leading/trailing underscores
-    .replace(/^_+|_+$/g, '')
-
-  // Map common aliases/synonyms
-  switch (t) {
-    case 'parent_plus':
-    case 'parent-plus':
-    case 'parentplus':
-    case 'parent_plus_plan':
-    case 'parent_plus_tier':
-    case 'parent_plus_package':
-      return 'parent_plus'
-    case 'basic':
-    case 'starter':
-    case 'starter_plan':
-      return 'basic'
-    case 'premium_plus':
-    case 'premiumplus':
-      return 'premium'
-    case 'free_trial':
-    case 'trial':
-      // Treat trials as premium by default unless caller overrides via effectiveTier
-      return 'premium'
-    default:
-      return t
-  }
-}
-
 /**
  * Check if user has quota remaining for the requested service
  */
@@ -80,7 +42,7 @@ export async function checkQuota(
     console.log('[Quota] Usage query result:', { count: usageData?.length || 0 })
     const used = usageData?.length || 0
 
-    // Default quotas by tier
+    // Default quotas by tier (keys MUST match database enum values exactly)
     const defaultQuotas: Record<string, Record<string, number>> = {
       free: {
         lesson_generation: 5,
@@ -93,12 +55,6 @@ export async function checkQuota(
         grading_assistance: 20,
         homework_help: 50,
         dash_conversation: 200
-      },
-      'parent-plus': {
-        lesson_generation: 100,
-        grading_assistance: 100,
-        homework_help: 100,
-        dash_conversation: 1000
       },
       parent_plus: {
         lesson_generation: 100,
@@ -122,12 +78,12 @@ export async function checkQuota(
         lesson_generation: -1, // unlimited
         grading_assistance: -1,
         homework_help: -1,
-        dash_conversation: -1
+        dash_conversation: 1000
       }
     }
 
     // Get subscription tier (use provided tier or fetch from user)
-  let tier = normalizeTier(effectiveTier) || 'free'
+    let tier = effectiveTier || 'free'
     
     // Only fetch if tier not provided
     if (!effectiveTier) {
@@ -139,7 +95,7 @@ export async function checkQuota(
         .maybeSingle()
       
       if (usageTierData?.current_tier) {
-        tier = normalizeTier(usageTierData.current_tier)
+        tier = usageTierData.current_tier
         console.log('[Quota] Tier from user_ai_usage.current_tier:', tier)
       }
       // PRIORITY 2: Check user_ai_tiers.tier (fallback)
@@ -151,7 +107,7 @@ export async function checkQuota(
           .maybeSingle()
         
         if (userTierData?.tier) {
-          tier = normalizeTier(userTierData.tier)
+          tier = userTierData.tier
           console.log('[Quota] Tier from user_ai_tiers.tier:', tier)
         }
         // PRIORITY 3: Check organization tier (last resort)
@@ -163,7 +119,7 @@ export async function checkQuota(
             .maybeSingle()
 
           if (orgData?.subscription_tier) {
-            tier = normalizeTier(orgData.subscription_tier)
+            tier = orgData.subscription_tier
             console.log('[Quota] Tier from preschools.subscription_tier:', tier)
           }
         }
@@ -175,10 +131,7 @@ export async function checkQuota(
     // Get quota limit for this tier and service
     const tierLimits = defaultQuotas[tier] || defaultQuotas.free
     if (!defaultQuotas[tier]) {
-      console.warn('[Quota] Unknown or unmapped tier encountered, falling back to free:', {
-        originalTier: effectiveTier,
-        resolvedTier: tier
-      })
+      console.warn('[Quota] Unknown tier, falling back to free:', tier)
     }
     const limit = tierLimits[serviceType] || 10
 
