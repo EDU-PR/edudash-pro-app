@@ -251,6 +251,23 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
         console.error('AI proxy error:', error, 'Response data:', data);
 
         // Handle specific error types
+        // 429 from Edge Function (quota exceeded)
+        const errAny: any = error as any;
+        const is429 = errAny?.status === 429 || String(errAny?.message || '').includes('429');
+        const isQuota = String(errAny?.message || '').toLowerCase().includes('quota');
+        if (is429 || isQuota) {
+          const quotaMessage: ChatMessage = {
+            id: `msg-${Date.now()}-quota429`,
+            role: 'assistant',
+            content: `📊 **Daily Quota Reached**\n\nYou've used all your AI messages for today. Your quota will reset tomorrow, or upgrade your plan for more messages!\n\n💡 *Tip: Check the quota bar at the top of the chat to track your usage.*`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, quotaMessage]);
+          onQuotaExceeded?.();
+          setIsLoading(false);
+          return;
+        }
+
         if (error?.message?.includes('daily_limit_exceeded')) {
           const dailyLimitMessage: ChatMessage = {
             id: `msg-${Date.now()}-daily-limit`,
