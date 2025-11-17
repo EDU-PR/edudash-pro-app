@@ -381,9 +381,10 @@ serve(async (req: Request) => {
       amount: amount.toFixed(2),
       item_name: itemName || `EduDash Pro ${tier} Subscription`,
       item_description: itemDescription || `Monthly subscription to EduDash Pro ${tier} plan`,
-      custom_str1: user_id,
-      custom_str2: tier,
-      custom_str3: 'monthly_subscription',
+      custom_str1: tier, // Plan tier for webhook processing
+      custom_str2: 'user', // Scope: 'user' or 'school'
+      custom_str3: user_id, // Owner user ID
+      custom_str4: JSON.stringify({ billing: 'monthly', seats: 1 }), // Additional data
     };
 
     // Add subscription details
