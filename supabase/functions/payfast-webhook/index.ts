@@ -280,12 +280,16 @@ serve(async (req: Request) => {
       console.log('Processing successful payment:', m_payment_id);
       
       // Extract custom data from PayFast
-      const planTier = payload.custom_str1 || ''; // Already in database enum format (parent_plus)
+      const planTier = payload.custom_str1 || ''; // Database enum format (parent_plus with underscores)
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       const customData = payload.custom_str4 || '{}';
       
-      console.log('[PayFast ITN] Using tier from custom_str1:', planTier);
+      console.log('[PayFast ITN] Received tier from custom_str1:', planTier);
+      
+      // Normalize tier for database lookup: parent_plus -> parent-plus
+      const normalizedTier = planTier.replace(/_/g, '-');
+      console.log('[PayFast ITN] Normalized tier for DB lookup:', normalizedTier);
       
       let billing = 'monthly';
       let seats = 1;
@@ -298,16 +302,16 @@ serve(async (req: Request) => {
         console.warn('Error parsing custom_str4:', e);
       }
 
-      // Get plan details
+      // Get plan details using normalized tier (with hyphens)
       const { data: plan } = await supabase
         .from('subscription_plans')
         .select('id, tier, name, max_teachers')
-        .eq('tier', planTier)
+        .eq('tier', normalizedTier)
         .eq('is_active', true)
         .maybeSingle();
 
       if (!plan) {
-        console.error('Plan not found:', planTier);
+        console.error('Plan not found for tier:', normalizedTier, '(original:', planTier, ')');
         return new Response("Plan not found", { status: 400, headers: corsHeaders });
       }
 
@@ -374,18 +378,20 @@ serve(async (req: Request) => {
           .eq('id', existingTx.school_id);
         
         // CRITICAL: Update user_ai_tiers for all school users
+        // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
         const { error: tierUpdateError } = await supabase
           .from('user_ai_tiers')
-          .update({ tier: plan.tier })
+          .update({ tier: planTier })
           .eq('organization_id', existingTx.school_id);
         
         if (tierUpdateError) {
           console.error('Error updating user_ai_tiers for school:', tierUpdateError);
         } else {
-          console.log('Updated user_ai_tiers for school users:', existingTx.school_id);
+          console.log('Updated user_ai_tiers for school users with tier:', planTier);
         }
         
         // CRITICAL: Also update user_ai_usage.current_tier for all school users (this is what the UI reads)
+        // Use original planTier (with underscores) for consistency
         // First get all user IDs for this school
         const { data: schoolUsers } = await supabase
           .from('user_ai_tiers')
@@ -396,13 +402,13 @@ serve(async (req: Request) => {
           const userIds = schoolUsers.map(u => u.user_id);
           const { error: usageUpdateError } = await supabase
             .from('user_ai_usage')
-            .update({ current_tier: plan.tier })
+            .update({ current_tier: planTier })
             .in('user_id', userIds);
           
           if (usageUpdateError) {
             console.error('Error updating user_ai_usage for school:', usageUpdateError);
           } else {
-            console.log('Updated user_ai_usage.current_tier for school users:', existingTx.school_id);
+            console.log('Updated user_ai_usage.current_tier for school users with tier:', planTier);
           }
         }
 
@@ -580,27 +586,29 @@ serve(async (req: Request) => {
           .eq('id', userSchoolId);
         
         // CRITICAL: Update user_ai_tiers for the owner user
+        // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
         const { error: tierUpdateError } = await supabase
           .from('user_ai_tiers')
-          .update({ tier: plan.tier })
+          .update({ tier: planTier })
           .eq('user_id', ownerId);
         
         if (tierUpdateError) {
           console.error('Error updating user_ai_tiers for user:', tierUpdateError);
         } else {
-          console.log('Updated user_ai_tiers for user:', ownerId);
+          console.log('Updated user_ai_tiers for user:', ownerId, 'with tier:', planTier);
         }
         
         // CRITICAL: Also update user_ai_usage.current_tier (this is what the UI reads)
+        // Use original planTier (with underscores) for consistency
         const { error: usageUpdateError } = await supabase
           .from('user_ai_usage')
-          .update({ current_tier: plan.tier })
+          .update({ current_tier: planTier })
           .eq('user_id', ownerId);
         
         if (usageUpdateError) {
           console.error('Error updating user_ai_usage for user:', usageUpdateError);
         } else {
-          console.log('Updated user_ai_usage.current_tier for user:', ownerId);
+          console.log('Updated user_ai_usage.current_tier for user:', ownerId, 'with tier:', planTier);
         }
 
         // Send email notification for user subscription
