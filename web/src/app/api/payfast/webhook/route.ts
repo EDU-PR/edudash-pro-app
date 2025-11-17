@@ -94,13 +94,15 @@ export async function POST(request: NextRequest) {
     if (payment_status === 'COMPLETE') {
       const supabaseAdmin = getSupabaseAdmin();
       
-      // Update user tier in user_ai_tiers table (FIXED: was using wrong table)
-      const tierUppercase = tier.toUpperCase(); // FREE, BASIC, PREMIUM, etc.
+      // Use tier as-is (already matches tier_name_aligned enum)
+      // Values: parent_starter, parent_plus, school_starter, school_premium, school_pro
+      
+      // Update user tier in user_ai_tiers table
       const { error: tierError } = await supabaseAdmin
         .from('user_ai_tiers')
         .upsert({
           user_id,
-          tier: tierUppercase,
+          tier: tier, // Keep original case from payment
           assigned_reason: `PayFast subscription payment ${data.pf_payment_id}`,
           is_active: true,
           metadata: {
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
           details: tierError.message 
         }, { status: 500 });
       } else {
-        console.log('[PayFast Webhook] Successfully updated user tier to:', tierUppercase);
+        console.log('[PayFast Webhook] Successfully updated user tier to:', tier);
       }
 
       // Also update current_tier in user_ai_usage for quota tracking
@@ -165,7 +167,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         message: 'Payment processed',
-        tier: tierUppercase,
+        tier: tier,
       });
     }
 

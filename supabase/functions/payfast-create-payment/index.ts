@@ -400,9 +400,29 @@ serve(async (req: Request) => {
     // Generate signature
     const signature = generateSignature(payFastData, isSandbox);
 
-    // Build payment URL
-    const params = new URLSearchParams({ ...payFastData, signature });
+    // Add signature to data
+    payFastData.signature = signature;
+
+    console.log('[PayFast Edge] Data being sent to PayFast:', {
+      amount: payFastData.amount,
+      recurring_amount: payFastData.recurring_amount,
+      merchant_id: payFastData.merchant_id,
+      item_name: payFastData.item_name,
+      signature: signature.substring(0, 10) + '...',
+      allKeys: Object.keys(payFastData).sort(),
+    });
+
+    // Build payment URL with properly encoded parameters
+    const params = new URLSearchParams();
+    Object.keys(payFastData).sort().forEach(key => {
+      if (payFastData[key] !== undefined && payFastData[key] !== null && payFastData[key] !== '') {
+        params.append(key, payFastData[key]);
+      }
+    });
+    
     const paymentUrl = `${payFastUrl}?${params.toString()}`;
+
+    console.log('[PayFast Edge] Payment URL preview:', paymentUrl.substring(0, 150) + '...');
 
     console.log('[PayFast Edge] Payment created:', {
       paymentId,
@@ -411,6 +431,7 @@ serve(async (req: Request) => {
       mode: isSandbox ? 'sandbox' : 'production',
       merchantId: PAYFAST_MERCHANT_ID,
       userId: user_id,
+      signaturePreview: signature.substring(0, 10),
     });
 
     return new Response(

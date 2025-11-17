@@ -59,7 +59,7 @@ export default function PricingPage() {
       return;
     }
 
-    // Map plan names to tiers
+    // Map plan names to tiers (must match tier_name_aligned enum in database)
     const tierMap: Record<string, 'parent_starter' | 'parent_plus' | 'school_starter' | 'school_premium' | 'school_pro'> = {
       'Parent Starter': 'parent_starter',
       'Parent Plus': 'parent_plus',

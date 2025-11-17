@@ -81,8 +81,8 @@ const TIER_INFO: Record<string, TierInfo> = {
     ],
     limits: { exams: 20, explanations: 20, chat: 50 },
   },
-  basic: {
-    name: 'basic',
+  parent_starter: {
+    name: 'parent_starter',
     displayName: 'Parent Starter',
     price: 49.50,
     color: '#3b82f6',
@@ -96,8 +96,8 @@ const TIER_INFO: Record<string, TierInfo> = {
     ],
     limits: { exams: 30, explanations: 30, chat: 100 },
   },
-  premium: {
-    name: 'premium',
+  parent_plus: {
+    name: 'parent_plus',
     displayName: 'Parent Plus',
     price: 99.50,
     color: '#8b5cf6',
@@ -164,6 +164,8 @@ export default function SubscriptionPage() {
 
     setLoading(true);
     try {
+      console.log('[Subscription] Loading data for user:', userId);
+      
       // Get current tier
       const { data: tierData, error: tierError } = await supabase
         .from('user_ai_tiers')
@@ -171,9 +173,14 @@ export default function SubscriptionPage() {
         .eq('user_id', userId)
         .single();
 
+      console.log('[Subscription] Tier query result:', { tierData, tierError });
+
       if (tierError) {
         console.error('[Subscription] Failed to fetch tier:', tierError);
+        // Default to free if no tier record exists
+        setCurrentTier('free');
       } else if (tierData) {
+        console.log('[Subscription] Setting tier to:', tierData.tier);
         setCurrentTier(tierData.tier || 'free');
       }
 
