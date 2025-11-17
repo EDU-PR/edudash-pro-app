@@ -13,6 +13,7 @@ function getSupabaseAdmin() {
 const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID || '';
 const PAYFAST_MERCHANT_KEY=REDACTED
 const PAYFAST_PASSPHRASE=REDACTED
+const PAYFAST_MODE = (process.env.PAYFAST_MODE || 'sandbox').toLowerCase();
 
 function generateSignature(data: Record<string, any>, passPhrase: string = '') {
   let pfOutput = '';
@@ -65,7 +66,9 @@ export async function POST(request: NextRequest) {
     }
     
     delete data.signature;
-    const calculatedSignature = generateSignature(data, PAYFAST_PASSPHRASE);
+    // Sandbox signatures must NOT include passphrase
+    const sigPassphrase = PAYFAST_MODE === 'production' ? PAYFAST_PASSPHRASE : '';
+    const calculatedSignature = generateSignature(data, sigPassphrase);
 
     if (receivedSignature !== calculatedSignature) {
       console.error('[PayFast Webhook] Invalid signature:', {
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user_id = data.custom_str1;
-    const tier = data.custom_str2;
+    const tier = data.custom_str2; // e.g. parent_starter, parent_plus, school_starter
     const payment_status = data.payment_status;
 
     console.log('[PayFast Webhook] Processing payment:', { user_id, tier, payment_status });
@@ -96,13 +99,28 @@ export async function POST(request: NextRequest) {
       
       // Use tier as-is (already matches tier_name_aligned enum)
       // Values: parent_starter, parent_plus, school_starter, school_premium, school_pro
+
+      // Map product tier -> capability tier classification used by AI gating system
+      const capabilityTierMap: Record<string, 'free' | 'starter' | 'premium' | 'enterprise'> = {
+        free: 'free',
+        parent_starter: 'starter',
+        parent_plus: 'premium',
+        school_starter: 'starter',
+        school_premium: 'premium',
+        school_pro: 'enterprise'
+      };
+
+      const capabilityTier = capabilityTierMap[tier] || 'free';
+      console.log('[PayFast Webhook] Tier normalization:', { originalTier: tier, capabilityTier });
       
       // Update user tier in user_ai_tiers table
       const { error: tierError } = await supabaseAdmin
         .from('user_ai_tiers')
         .upsert({
           user_id,
-          tier: tier, // Keep original case from payment
+          tier: tier, // Store product tier for display / billing alignment
+          // If the table has a separate capability column, include it (ignore error if column absent)
+          capability_tier: capabilityTier as any,
           assigned_reason: `PayFast subscription payment ${data.pf_payment_id}`,
           is_active: true,
           metadata: {
@@ -110,6 +128,7 @@ export async function POST(request: NextRequest) {
             pf_payment_id: data.pf_payment_id,
             amount: data.amount_gross,
             payment_date: new Date().toISOString(),
+            capability_tier: capabilityTier
           },
           updated_at: new Date().toISOString(),
         }, {
@@ -131,7 +150,7 @@ export async function POST(request: NextRequest) {
         .from('user_ai_usage')
         .upsert({
           user_id,
-          current_tier: tier.toLowerCase(), // free, basic, premium
+          current_tier: capabilityTier, // normalized tier for capability gating (free|starter|premium|enterprise)
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id'
@@ -140,6 +159,19 @@ export async function POST(request: NextRequest) {
       if (usageError) {
         console.error('[PayFast Webhook] Failed to update usage tier:', usageError);
         // Don't fail the webhook - tier update succeeded
+      }
+
+      // Disable trial for the user after successful subscription
+      try {
+        const { error: trialError } = await supabaseAdmin
+          .from('profiles')
+          .update({ is_trial: false })
+          .eq('id', user_id);
+        if (trialError) {
+          console.warn('[PayFast Webhook] Failed to disable trial flag:', trialError.message);
+        }
+      } catch (e) {
+        console.warn('[PayFast Webhook] Trial flag update exception:', e);
       }
 
       // Log the payment in subscriptions table (create if doesn't exist)
