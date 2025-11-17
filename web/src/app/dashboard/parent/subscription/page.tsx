@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
@@ -134,7 +134,7 @@ const TIER_INFO: Record<string, TierInfo> = {
   },
 };
 
-export default function ParentSubscriptionPage() {
+function SubscriptionPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -747,5 +747,26 @@ export default function ParentSubscriptionPage() {
         )}
       </div>
     </ParentShell>
+  );
+}
+
+export default function ParentSubscriptionPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'var(--background)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ margin: '0 auto 16px' }} />
+          <p style={{ color: 'var(--muted)' }}>Loading subscription...</p>
+        </div>
+      </div>
+    }>
+      <SubscriptionPageContent />
+    </Suspense>
   );
 }
