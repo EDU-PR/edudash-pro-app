@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#This is a bash script to deploy all Supabase Edge Functions for the EduDash Pro project.
 # Deploy All Edge Functions Script
 # Deploys all Supabase Edge Functions to production
 # WARP.md Compliance: Production deployment workflow
