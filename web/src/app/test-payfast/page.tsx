@@ -23,7 +23,7 @@ export default function TestPayFastSignature() {
     merchant_key: '46f0cd694581a',
     name_first: 'Olivia',
     name_last: 'Makunyane',
-    notify_url: 'http://localhost:3000/api/payfast/webhook',
+    notify_url: 'https://your-project.supabase.co/functions/v1/payfast-webhook', // Update with your Supabase URL
     recurring_amount: '199',
     return_url: 'http://localhost:3000/dashboard/parent/subscription/payment=success',
     subscription_type: '1',

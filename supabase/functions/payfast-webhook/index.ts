@@ -49,11 +49,37 @@ serve(async (req: Request) => {
   }
 
   try {
+    // IP Whitelist validation for PayFast
+    const PAYFAST_IPS = [
+      '197.97.145.144', '197.97.145.145', '197.97.145.146', '197.97.145.147',
+      '197.97.145.148', '197.97.145.149', '197.97.145.150', '197.97.145.151',
+      '197.97.145.152', '197.97.145.153', '197.97.145.154', '197.97.145.155',
+      '197.97.145.156', '197.97.145.157', '197.97.145.158', '197.97.145.159',
+      '41.74.179.194', // Sandbox IP
+    ];
+    
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('cf-connecting-ip') ||
+                     req.headers.get('x-real-ip') || '';
+    
+    const PAYFAST_MODE = (Deno.env.get("PAYFAST_MODE") || "sandbox").toLowerCase();
+    
+    // Skip IP validation in sandbox mode for testing
+    if (PAYFAST_MODE !== 'sandbox' && clientIp && !PAYFAST_IPS.includes(clientIp)) {
+      console.error('PayFast ITN from unauthorized IP:', clientIp);
+      return new Response("Unauthorized IP", { status: 403, headers: corsHeaders });
+    }
+    
+    console.log('PayFast ITN IP validation:', {
+      clientIp,
+      mode: PAYFAST_MODE,
+      validated: PAYFAST_MODE === 'sandbox' || PAYFAST_IPS.includes(clientIp)
+    });
+
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const PAYFAST_PASSPHRASE=REDACTED
     const PAYFAST_MERCHANT_ID = Deno.env.get("PAYFAST_MERCHANT_ID") || "";
-    const PAYFAST_MODE = (Deno.env.get("PAYFAST_MODE") || "sandbox").toLowerCase();
     
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { 
       auth: { persistSession: false } 
