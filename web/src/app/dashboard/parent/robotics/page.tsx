@@ -1,9 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bot, Code, Cpu, Zap, Play, CheckCircle, Lock, BookOpen } from 'lucide-react';
+import { Bot, Code, Cpu, Zap, Play, CheckCircle, Lock, BookOpen, UserPlus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+
+interface Child {
+  id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  grade_level: string;
+}
 
 interface RoboticsModule {
   id: string;
@@ -134,52 +142,125 @@ export default function RoboticsLessonsPage() {
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [userTier, setUserTier] = useState<string>('free');
+  const [children, setChildren] = useState<Child[]>([]);
+  const [selectedChild, setSelectedChild] = useState<string>('');
+  const [loadingChildren, setLoadingChildren] = useState(true);
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
-    loadUserTier();
+    loadUserData();
   }, []);
 
-  const loadUserTier = async () => {
+  const loadUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data } = await supabase
+    // Load user tier from user_ai_tiers table
+    const { data: tierData } = await supabase
       .from('user_ai_tiers')
-      .select('tier_name')
+      .select('current_tier')
       .eq('user_id', user.id)
       .single();
 
-    if (data) {
-      setUserTier(data.tier_name);
+    if (tierData) {
+      setUserTier(tierData.current_tier || 'free');
+    } else {
+      // Fallback to free if no tier record exists
+      setUserTier('free');
     }
+
+    // Load registered children
+    const { data: childrenData } = await supabase
+      .from('students')
+      .select('id, first_name, last_name, date_of_birth, grade_level')
+      .eq('parent_id', user.id)
+      .order('first_name');
+
+    if (childrenData && childrenData.length > 0) {
+      setChildren(childrenData);
+      setSelectedChild(childrenData[0].id); // Auto-select first child
+    }
+    
+    setLoadingChildren(false);
   };
 
-  const filteredModules = ROBOTICS_MODULES.filter(module => {
+  // Calculate age from date of birth
+  const getChildAge = (dateOfBirth: string): number => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Get age-appropriate modules based on selected child
+  const getAgeAppropriateModules = () => {
+    if (!selectedChild || children.length === 0) return ROBOTICS_MODULES;
+    
+    const child = children.find(c => c.id === selectedChild);
+    if (!child) return ROBOTICS_MODULES;
+
+    const age = getChildAge(child.date_of_birth);
+    
+    // Filter modules by age appropriateness
+    return ROBOTICS_MODULES.filter(module => {
+      const [minGrade, maxGrade] = module.grade_range.split('-');
+      
+      // R-3 = ages 3-6
+      if (minGrade === 'R' && age >= 3 && age <= 6) return true;
+      
+      // 4-6 = ages 9-11
+      if (minGrade === '4' && age >= 9 && age <= 11) return true;
+      
+      // 7-9 = ages 12-14
+      if (minGrade === '7' && age >= 12 && age <= 14) return true;
+      
+      // 10-12 = ages 15-17
+      if (minGrade === '10' && age >= 15 && age <= 17) return true;
+      
+      // 8-12 = ages 13-17
+      if (minGrade === '8' && age >= 13 && age <= 17) return true;
+      
+      return false;
+    });
+  };
+
+  const filteredModules = getAgeAppropriateModules().filter(module => {
     if (selectedGrade !== 'all' && !module.grade_range.includes(selectedGrade)) return false;
     if (selectedDifficulty !== 'all' && module.difficulty !== selectedDifficulty) return false;
     return true;
   });
 
   const canAccessModule = (module: RoboticsModule) => {
-    if (!module.is_premium) {
-      // Free modules still require at least parent_starter
-      return userTier !== 'free';
+    // Free tier users can't access any modules
+    if (userTier === 'free') {
+      return false;
     }
-    // Premium modules require parent_plus or higher
-    return userTier === 'parent_plus' || userTier?.startsWith('school_');
+    
+    if (!module.is_premium) {
+      // Non-premium modules are available to parent_starter and above
+      return userTier === 'parent_starter' || userTier === 'parent_plus' || userTier?.startsWith('school_') || userTier?.startsWith('teacher_');
+    }
+    
+    // Premium modules require parent_plus or school/teacher tiers
+    return userTier === 'parent_plus' || userTier?.startsWith('school_') || userTier?.startsWith('teacher_');
   };
 
   const getModuleLabel = (module: RoboticsModule) => {
     if (!module.is_premium) {
-      // Free modules
+      // Non-premium modules
       if (userTier === 'free') return 'STARTER+';
       return 'INCLUDED';
     }
     // Premium modules
-    if (userTier === 'parent_plus' || userTier?.startsWith('school_')) return 'INCLUDED';
-    return 'PREMIUM';
+    if (userTier === 'parent_plus' || userTier?.startsWith('school_') || userTier?.startsWith('teacher_')) {
+      return 'INCLUDED';
+    }
+    return 'PLUS+';
   };
 
   const handleModuleClick = (module: RoboticsModule) => {
@@ -258,6 +339,105 @@ export default function RoboticsLessonsPage() {
             No physical robots needed - all activities run in your browser!
           </p>
         </div>
+
+        {/* No Children Registered State */}
+        {!loadingChildren && children.length === 0 && (
+          <div style={{
+            background: 'var(--card)',
+            border: '2px dashed var(--border)',
+            borderRadius: '16px',
+            padding: '48px',
+            textAlign: 'center',
+            maxWidth: '600px',
+            margin: '0 auto',
+          }}>
+            <UserPlus size={64} color="#7c3aed" style={{ marginBottom: '24px' }} />
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: 700,
+              marginBottom: '12px',
+            }}>
+              Register Your Child First
+            </h2>
+            <p style={{
+              fontSize: '16px',
+              color: 'var(--muted)',
+              marginBottom: '24px',
+              lineHeight: 1.6,
+            }}>
+              To show age-appropriate robotics modules, please register your child first. 
+              We'll personalize the learning experience based on their age and grade level.
+            </p>
+            <button
+              onClick={() => router.push('/dashboard/parent/register-child')}
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+                color: 'white',
+                padding: '14px 32px',
+                borderRadius: '12px',
+                border: 'none',
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(124, 58, 237, 0.4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <UserPlus size={20} />
+              Register Your Child
+            </button>
+          </div>
+        )}
+
+        {/* Child Selector & Content */}
+        {!loadingChildren && children.length > 0 && (
+          <>
+            {/* Child Selector */}
+            <div style={{
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '24px',
+            }}>
+              <label style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                marginBottom: '8px',
+                display: 'block',
+              }}>
+                Select Child
+              </label>
+              <select
+                value={selectedChild}
+                onChange={(e) => setSelectedChild(e.target.value)}
+                style={{
+                  width: '100%',
+                  maxWidth: '400px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                }}
+              >
+                {children.map((child) => (
+                  <option key={child.id} value={child.id}>
+                    {child.first_name} {child.last_name} - Age {getChildAge(child.date_of_birth)} ({child.grade_level || 'No grade'})
+                  </option>
+                ))}
+              </select>
+              <p style={{
+                fontSize: '13px',
+                color: 'var(--muted)',
+                marginTop: '8px',
+              }}>
+                📚 Showing age-appropriate modules for {children.find(c => c.id === selectedChild)?.first_name}
+              </p>
+            </div>
 
         {/* Filters */}
         <div style={{
@@ -589,6 +769,8 @@ export default function RoboticsLessonsPage() {
             <Bot size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
             <p>No modules found. Try adjusting your filters.</p>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

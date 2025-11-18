@@ -406,11 +406,16 @@ export default function RegisterChildPage() {
                             style={{ width: '100%' }}
                           >
                             <option value="">Select a preschool...</option>
-                            {organizations.map((org) => (
-                              <option key={org.id} value={org.id}>
-                                {org.name}
-                              </option>
-                            ))}
+                            {organizations.map((org) => {
+                              const isCommunity = org.name.toLowerCase().includes('edudash pro community') || 
+                                                  org.name.toLowerCase().includes('community school') ||
+                                                  org.id === 'edudash-community';
+                              return (
+                                <option key={org.id} value={org.id}>
+                                  {org.name}{isCommunity ? ' (Default)' : ''}
+                                </option>
+                              );
+                            })}
                           </select>
                         )}
                         {errors.organization && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-1)' }}>{errors.organization}</p>}
