@@ -39,6 +39,7 @@ function getTierMeta(tier?: string): TierMeta {
 
 export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = false }: TierBadgeProps) {
   const [tier, setTier] = useState<string>('free');
+  const [isVirtualSchool, setIsVirtualSchool] = useState(false);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
   const router = useRouter();
@@ -65,6 +66,14 @@ export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = fals
           return;
         }
 
+        // Check if this is the EduDash Pro Community School
+        const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+        if (schoolId === COMMUNITY_SCHOOL_ID) {
+          setIsVirtualSchool(true);
+          setTier('enterprise'); // Has enterprise access but shows as virtual school
+          return;
+        }
+
         // Fetch plan info from preschools (more stable across schemas)
         // Try both subscription_plan and subscription_tier for compatibility
         const { data: school } = await supabase
@@ -86,7 +95,9 @@ export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = fals
     loadTier();
   }, [userId, preschoolId, supabase]);
 
-  const meta = getTierMeta(tier);
+  const meta = isVirtualSchool 
+    ? { label: 'Virtual School', color: '#8B5CF6', icon: Sparkles }
+    : getTierMeta(tier);
   const Icon = meta.icon;
 
   const sizeMap = {
@@ -96,7 +107,7 @@ export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = fals
   };
 
   const sizing = sizeMap[size];
-  const isPremium = tier !== 'free';
+  const isPremium = tier !== 'free' || isVirtualSchool;
 
   if (loading) {
     return (
@@ -150,7 +161,7 @@ export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = fals
         </span>
       </div>
 
-      {showUpgrade && tier === 'free' && (
+      {showUpgrade && tier === 'free' && !isVirtualSchool && (
         <button
           className="btn"
           style={{
