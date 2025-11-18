@@ -7,7 +7,8 @@ import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { X, GraduationCap, Target, Award, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function ExamPrepPage() {
-    const [guestMode, setGuestMode] = useState(true);
+  const [showAskAI, setShowAskAI] = useState(false);
+  const [guestMode, setGuestMode] = useState(true);
   const [aiPrompt, setAIPrompt] = useState('');
   const [aiDisplay, setAIDisplay] = useState('');
   const [aiLanguage, setAiLanguage] = useState<string>('en-ZA');

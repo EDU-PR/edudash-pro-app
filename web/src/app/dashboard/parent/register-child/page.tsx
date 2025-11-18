@@ -89,12 +89,12 @@ export default function RegisterChildPage() {
         if (communitySchool) {
           const filtered = schools.filter((s: { id: string; name: string; type: string }) => s.id !== communitySchool.id);
           setOrganizations([{ id: communitySchool.id, name: communitySchool.name, type: 'preschool' }, ...filtered]);
-          // Auto-select community school as default
-          if (!selectedOrgId) {
-            setSelectedOrgId(communitySchool.id);
-          }
+          // Auto-select community school as default (always set it)
+          setSelectedOrgId(communitySchool.id);
         } else {
-          setOrganizations(schools);
+          // If no community school found, create a virtual one as first option
+          setOrganizations([{ id: 'edudash-community', name: 'EduDash Pro Community School', type: 'preschool' }, ...schools]);
+          setSelectedOrgId('edudash-community');
         }
       } catch (err) {
         console.error('Failed to load organizations:', err);
