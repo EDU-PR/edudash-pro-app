@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
+import { AnimatedPromoBanner } from "@/components/landing/AnimatedPromoBanner";
 import 'katex/dist/katex.min.css';
 
 export default function Home() {
@@ -156,16 +157,7 @@ export default function Home() {
           <p className="heroLead">
             Engage every student, empower every teacher, and connect every parent with <strong style={{color: 'var(--cyan)'}}>AI-enhanced tools</strong> built for South Africa.
           </p>
-          <div style={{marginBottom: '24px', padding: '20px', background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(236, 72, 153, 0.15) 100%)', border: '2px solid #7c3aed', borderRadius: '16px', maxWidth: '650px', margin: '0 auto 24px', boxShadow: '0 8px 32px rgba(124, 58, 237, 0.3)'}}>
-            <div style={{fontSize: '32px', marginBottom: '8px'}}>🎉</div>
-            <div style={{fontWeight: 800, fontSize: '20px', marginBottom: '4px', color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Early Bird Special</div>
-            <div style={{fontWeight: 700, fontSize: '28px', marginBottom: '8px', background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'}}>50% OFF First 3 Months</div>
-            <p style={{fontSize: '14px', color: 'rgba(255, 255, 255, 0.9)', marginBottom: '16px', lineHeight: 1.5}}>🚀 Be among the first 500 schools to join EduDash Pro<br/>✨ Includes AI-powered lessons, robotics modules & unlimited Dash AI</p>
-            <div style={{display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap'}}>
-              <Link href="/sign-in" style={{display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)', color: 'white', borderRadius: '10px', fontSize: '15px', fontWeight: 700, textDecoration: 'none', boxShadow: '0 4px 14px rgba(124, 58, 237, 0.4)'}}>Claim 50% Off →</Link>
-              <Link href="/exam-prep" style={{display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', border: '2px solid #fbbf24', borderRadius: '10px', fontSize: '15px', fontWeight: 600, textDecoration: 'none'}}>📝 Free Exam Prep</Link>
-            </div>
-          </div>
+          <AnimatedPromoBanner />
           <div style={{marginBottom: '16px', display: 'inline-block', background: 'rgba(251, 191, 36, 0.15)', border: '2px solid #fbbf24', borderRadius: '12px', padding: '12px 24px'}}>
             <p style={{margin: 0, fontSize: '18px', fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em'}}>🎉 7-Day Free Trial • No Credit Card Required</p>
           </div>

@@ -76,7 +76,26 @@ export default function RegisterChildPage() {
           .order('name');
 
         if (error) throw error;
-        setOrganizations((data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' })));
+        
+        // Find EduDash Pro Community School or create default entry
+        const communitySchool = (data || []).find((p: any) => 
+          p.name.toLowerCase().includes('edudash pro community') || 
+          p.name.toLowerCase().includes('community school')
+        );
+        
+        const schools = (data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' }));
+        
+        // If community school exists, move it to top; otherwise add it as first option
+        if (communitySchool) {
+          const filtered = schools.filter((s: { id: string; name: string; type: string }) => s.id !== communitySchool.id);
+          setOrganizations([{ id: communitySchool.id, name: communitySchool.name, type: 'preschool' }, ...filtered]);
+          // Auto-select community school as default
+          if (!selectedOrgId) {
+            setSelectedOrgId(communitySchool.id);
+          }
+        } else {
+          setOrganizations(schools);
+        }
       } catch (err) {
         console.error('Failed to load organizations:', err);
       } finally {

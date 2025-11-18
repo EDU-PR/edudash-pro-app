@@ -101,7 +101,8 @@ const SUBJECTS_BY_PHASE = {
     // Core subjects
     'Mathematics',
     'Natural Sciences & Technology',
-    'Social Sciences',
+    'History',
+    'Geography',
     'Life Skills',
   ],
   
@@ -133,7 +134,8 @@ const SUBJECTS_BY_PHASE = {
     // Core subjects
     'Mathematics',
     'Natural Sciences',
-    'Social Sciences',
+    'History',
+    'Geography',
     'Technology',
     'Economic & Management Sciences',
     'Life Orientation',

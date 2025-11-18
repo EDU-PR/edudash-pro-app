@@ -19,6 +19,7 @@ interface RoboticsModule {
   learning_outcomes: string[];
   thumbnail_url?: string;
   is_premium: boolean;
+  requires_parent_plus?: boolean;
 }
 
 const ROBOTICS_MODULES: RoboticsModule[] = [
@@ -37,7 +38,7 @@ const ROBOTICS_MODULES: RoboticsModule[] = [
       'Create simple movement sequences',
       'Solve basic navigation puzzles'
     ],
-    is_premium: false
+    is_premium: false // Requires Parent Plus or School tier
   },
   {
     id: 'block-coding-4-6',
@@ -54,7 +55,7 @@ const ROBOTICS_MODULES: RoboticsModule[] = [
       'Apply if-then conditions',
       'Combine blocks to solve problems'
     ],
-    is_premium: false
+    is_premium: false // Requires Parent Plus or School tier
   },
   {
     id: 'sensors-7-9',
@@ -162,8 +163,23 @@ export default function RoboticsLessonsPage() {
   });
 
   const canAccessModule = (module: RoboticsModule) => {
-    if (!module.is_premium) return true;
-    return userTier !== 'free' && userTier !== 'parent_starter';
+    if (!module.is_premium) {
+      // Free modules still require at least parent_starter
+      return userTier !== 'free';
+    }
+    // Premium modules require parent_plus or higher
+    return userTier === 'parent_plus' || userTier?.startsWith('school_');
+  };
+
+  const getModuleLabel = (module: RoboticsModule) => {
+    if (!module.is_premium) {
+      // Free modules
+      if (userTier === 'free') return 'STARTER+';
+      return 'INCLUDED';
+    }
+    // Premium modules
+    if (userTier === 'parent_plus' || userTier?.startsWith('school_')) return 'INCLUDED';
+    return 'PREMIUM';
   };
 
   const handleModuleClick = (module: RoboticsModule) => {
@@ -385,10 +401,10 @@ export default function RoboticsLessonsPage() {
                         gap: '4px',
                       }}>
                         <Lock size={12} />
-                        PREMIUM
+                        {getModuleLabel(module)}
                       </div>
                     )}
-                    {module.caps_aligned && (
+                    {hasAccess && module.caps_aligned && (
                       <div style={{
                         background: '#10b981',
                         color: 'white',
