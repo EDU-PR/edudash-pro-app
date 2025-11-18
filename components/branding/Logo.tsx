@@ -108,7 +108,7 @@ export const Logo: React.FC<LogoProps> = ({
         accessibilityRole="image"
       >
         <Image 
-          source={require('@/assets/branding/png/icon-512.png')}
+          source={require('@/assets/icon.png')}
           style={{ width: config.icon, height: config.icon }}
           resizeMode="contain"
         />
@@ -165,11 +165,7 @@ export const Logo: React.FC<LogoProps> = ({
         accessibilityLabel={accessibilityLabel}
       >
         <Image 
-          source={
-            monochrome 
-              ? require('@/assets/branding/png/logo-monochrome-1024w.png')
-              : require('@/assets/branding/png/logo-horizontal-1024w.png')
-          }
+          source={require('@/assets/icon.png')}
           style={{ 
             width: config.icon * 3.2, 
             height: config.icon,
@@ -194,7 +190,7 @@ export const Logo: React.FC<LogoProps> = ({
         }
       >
         <Image 
-          source={require('@/assets/branding/png/icon-512.png')}
+          source={require('@/assets/icon.png')}
           style={{ 
             width: config.icon, 
             height: config.icon,

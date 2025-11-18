@@ -18,12 +18,8 @@ export const BrandGradients = {
 
 // Direct asset paths for cases where you need the raw images
 export const BrandAssets = {
-  icon: {
-    '1024': require('@/assets/branding/png/icon-1024.png'),
-    '512': require('@/assets/branding/png/icon-512.png'),
-    '192': require('@/assets/branding/png/icon-192.png'),
-  },
-  horizontal: require('@/assets/branding/png/logo-horizontal-1024w.png'),
-  full: require('@/assets/branding/png/logo-full-1024w.png'),
-  monochrome: require('@/assets/branding/png/logo-monochrome-1024w.png'),
+  icon: require('@/assets/icon.png'),
+  adaptiveIcon: require('@/assets/adaptive-icon.png'),
+  splashIcon: require('@/assets/splash-icon.png'),
+  notificationIcon: require('@/assets/notification-icon.png'),
 } as const;
