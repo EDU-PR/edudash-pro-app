@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { ParentShell } from '@/components/dashboard/parent/ParentShell';
+import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
 
-export default function DashChatPage() {
+export default function PrincipalDashChatPage() {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState<string>('');
@@ -62,7 +62,7 @@ export default function DashChatPage() {
   };
 
   return (
-    <ParentShell tenantSlug={slug} userEmail={email}>
+    <PrincipalShell tenantSlug={slug} userEmail={email}>
       {/* Full viewport height container - No scroll */}
       <div
         className="flex flex-col bg-gray-950 overflow-hidden relative"
@@ -106,9 +106,9 @@ export default function DashChatPage() {
                 <Sparkles size={22} color="white" aria-hidden="true" />
               </div>
               <div>
-                <h1 className="m-0 text-lg font-bold">Dash</h1>
+                <h1 className="m-0 text-lg font-bold">Dash AI Assistant</h1>
                 <p className="m-0 text-xs text-gray-400">
-                  AI Assistant • Multilingual • Context-aware
+                  Principal Dashboard • AI-Powered Support
                 </p>
               </div>
             </div>
@@ -212,8 +212,10 @@ export default function DashChatPage() {
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-2">
                     <Sparkles size={32} aria-hidden="true" />
                   </div>
-                  <h2 className="text-xl font-bold m-0">Start Your First Chat</h2>
-                  <p className="text-sm text-gray-400 m-0 mb-2">Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.</p>
+                  <h2 className="text-xl font-bold m-0">Welcome to Dash AI</h2>
+                  <p className="text-sm text-gray-400 m-0 mb-2">
+                    Ask about school management, curriculum planning, student analytics, or create AI-powered assessments.
+                  </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button
                       onClick={handleNewConversation}
@@ -248,6 +250,6 @@ export default function DashChatPage() {
           </main>
         </div>
       </div>
-    </ParentShell>
+    </PrincipalShell>
   );
 }

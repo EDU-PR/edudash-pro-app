@@ -89,7 +89,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         style={{
           width: 'auto',
           minWidth: '150px',
-          maxWidth: isUser ? '80%' : '92%',
+          maxWidth: isUser ? '80%' : '96%',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,

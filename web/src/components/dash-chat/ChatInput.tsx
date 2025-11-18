@@ -89,7 +89,7 @@ export function ChatInput({
   return (
     <div className="flex-shrink-0 border-t border-gray-800 bg-gray-950 z-20" style={{
       paddingTop: '12px',
-      paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
+      paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
       paddingLeft: 'max(1rem, env(safe-area-inset-left))',
       paddingRight: 'max(1rem, env(safe-area-inset-right))',
       backdropFilter: 'blur(12px)',
