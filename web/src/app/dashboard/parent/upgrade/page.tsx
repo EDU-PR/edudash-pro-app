@@ -44,6 +44,7 @@ export default function UpgradePage() {
       name: 'Starter',
       price: 99,
       icon: Zap,
+      color: '#10b981',
       features: [
         '30 AI-generated exams per month',
         '100 AI explanations',
@@ -60,6 +61,7 @@ export default function UpgradePage() {
       name: 'Plus',
       price: 199,
       icon: Crown,
+      color: '#7c3aed',
       popular: true,
       features: [
         '100 AI-generated exams per month',
