@@ -31,8 +31,8 @@ const CHALLENGES = [
     id: 1,
     title: 'First Steps',
     description: 'Move the robot forward 2 steps',
-    start: { x: 0, y: 0 },
-    goal: { x: 2, y: 0 },
+    start: { x: 0, y: 2 },
+    goal: { x: 2, y: 2 },
     stars: 1,
     hint: 'Press the Forward button twice!',
   },
@@ -40,8 +40,8 @@ const CHALLENGES = [
     id: 2,
     title: 'Turn Around',
     description: 'Turn right and move forward',
-    start: { x: 0, y: 0 },
-    goal: { x: 0, y: 1 },
+    start: { x: 2, y: 0 },
+    goal: { x: 2, y: 2 },
     stars: 2,
     hint: 'First turn right, then move forward',
   },
@@ -89,31 +89,7 @@ export default function MyFirstRobotPage() {
     setShowHint(false);
   }, [currentChallenge, challenge.start]);
 
-  useEffect(() => {
-    // Check if goal reached
-    if (position.x === challenge.goal.x && position.y === challenge.goal.y) {
-      setCompleted(true);
-      setStarsEarned(challenge.stars);
-      saveProgress();
-    }
-  }, [position, challenge.goal]);
-
-  const saveProgress = async () => {
-    if (!userId) return;
-
-    try {
-      await supabase.from('robotics_progress').upsert({
-        user_id: userId,
-        module_id: 'intro-robotics-r-3',
-        challenge_id: challenge.id,
-        stars_earned: challenge.stars,
-        completed: true,
-        completed_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error('Failed to save progress:', error);
-    }
-  };
+  // Remove client-side goal checking - server handles validation now
 
   const getDirectionAngle = (dir: Direction): number => {
     switch (dir) {
@@ -185,6 +161,7 @@ export default function MyFirstRobotPage() {
     let currentPos = { ...position };
     let currentDir = direction;
 
+    // Visual simulation for user feedback
     for (const command of commandQueue) {
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -205,6 +182,37 @@ export default function MyFirstRobotPage() {
 
       setPosition(currentPos);
       setDirection(currentDir);
+    }
+
+    // Server-side validation
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-robotics-challenge', {
+        body: {
+          module_id: 'intro-robotics-r-3',
+          challenge_id: challenge.id,
+          commands: commandQueue.map(cmd => ({
+            type: cmd.replace('-', '_') // Convert 'turn-left' to 'turn_left'
+          })),
+        },
+      });
+
+      if (error) {
+        console.error('Validation error:', error);
+        alert('Failed to validate solution. Please try again.');
+        setIsPlaying(false);
+        return;
+      }
+
+      if (data.success) {
+        setCompleted(true);
+        setStarsEarned(data.stars_earned);
+        alert(data.feedback);
+      } else {
+        alert(data.feedback || 'Try again!');
+      }
+    } catch (error) {
+      console.error('Challenge validation error:', error);
+      alert('Network error. Please check your connection.');
     }
 
     setIsPlaying(false);
@@ -308,18 +316,20 @@ export default function MyFirstRobotPage() {
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
           {/* Grid */}
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Robot Grid</h3>
             <div style={{
               display: 'grid',
               gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
-              gap: '4px',
+              gap: '8px',
               background: 'var(--surface)',
               padding: '16px',
               borderRadius: '12px',
               aspectRatio: '1',
+              maxWidth: '500px',
+              margin: '0 auto',
             }}>
               {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => {
                 const x = i % GRID_SIZE;
@@ -338,7 +348,7 @@ export default function MyFirstRobotPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '32px',
+                      fontSize: 'clamp(24px, 6vw, 32px)',
                       aspectRatio: '1',
                       position: 'relative',
                       transition: 'all 0.3s ease',
@@ -409,7 +419,7 @@ export default function MyFirstRobotPage() {
             <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>Commands</h3>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
               gap: '12px',
               marginBottom: '16px',
             }}>
@@ -424,9 +434,9 @@ export default function MyFirstRobotPage() {
                       background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
                       border: 'none',
                       borderRadius: '12px',
-                      padding: '16px',
+                      padding: '20px 16px',
                       color: 'white',
-                      fontSize: '14px',
+                      fontSize: '15px',
                       fontWeight: 600,
                       cursor: isPlaying || completed ? 'not-allowed' : 'pointer',
                       opacity: isPlaying || completed ? 0.5 : 1,
@@ -435,6 +445,9 @@ export default function MyFirstRobotPage() {
                       alignItems: 'center',
                       gap: '8px',
                       transition: 'all 0.2s',
+                      minHeight: '90px',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                     onMouseEnter={(e) => {
                       if (!isPlaying && !completed) {
@@ -445,7 +458,7 @@ export default function MyFirstRobotPage() {
                       e.currentTarget.style.transform = 'scale(1)';
                     }}
                   >
-                    <Icon size={24} />
+                    <Icon size={28} />
                     {command.label}
                   </button>
                 );
@@ -453,18 +466,18 @@ export default function MyFirstRobotPage() {
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <button
                 onClick={executeCommands}
                 disabled={commandQueue.length === 0 || isPlaying || completed}
                 style={{
-                  flex: 1,
+                  flex: '1 1 200px',
                   background: '#10b981',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '12px',
+                  padding: '16px 12px',
                   color: 'white',
-                  fontSize: '14px',
+                  fontSize: '16px',
                   fontWeight: 700,
                   cursor: commandQueue.length === 0 || isPlaying || completed ? 'not-allowed' : 'pointer',
                   opacity: commandQueue.length === 0 || isPlaying || completed ? 0.5 : 1,
@@ -472,28 +485,35 @@ export default function MyFirstRobotPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
+                  minHeight: '56px',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                <Play size={16} />
+                <Play size={20} />
                 {isPlaying ? 'Running...' : 'Run Code'}
               </button>
               <button
                 onClick={reset}
                 style={{
+                  flex: '0 1 auto',
                   background: 'var(--surface-2)',
                   border: '1px solid var(--border)',
                   borderRadius: '8px',
-                  padding: '12px',
+                  padding: '16px 20px',
                   color: 'var(--text)',
-                  fontSize: '14px',
+                  fontSize: '16px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  minHeight: '56px',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                <RotateCcw size={16} />
+                <RotateCcw size={20} />
                 Reset
               </button>
             </div>

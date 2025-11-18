@@ -184,10 +184,12 @@ export default function RoboticsLessonsPage() {
 
   const handleModuleClick = (module: RoboticsModule) => {
     if (!canAccessModule(module)) {
+      alert('🔒 This module requires a premium subscription. Upgrade to unlock all robotics lessons!');
       router.push('/dashboard/parent/upgrade');
       return;
     }
-    router.push(`/dashboard/parent/robotics/${module.id}`);
+    // Navigate to the module page
+    window.location.href = `/dashboard/parent/robotics/${module.id}`;
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -335,8 +337,8 @@ export default function RoboticsLessonsPage() {
         {/* Modules Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: '24px',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))',
+          gap: '16px',
         }}>
           {filteredModules.map(module => {
             const hasAccess = canAccessModule(module);

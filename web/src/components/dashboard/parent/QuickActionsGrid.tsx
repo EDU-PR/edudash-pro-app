@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { 
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
   Users, GraduationCap, Sparkles, Search, Settings, Home, Target,
-  Lightbulb, Award, Zap, MapPin, Library, FileCheck
+  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot
 } from 'lucide-react';
 
 interface QuickAction {
@@ -29,6 +29,7 @@ export function QuickActionsGrid({ usageType, hasOrganization }: QuickActionsGri
       { icon: Calendar, label: 'Calendar', href: '/dashboard/parent/calendar', color: '#06b6d4' },
       { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#10b981' },
       { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#3b82f6' },
+      { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
       { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#10b981' },
       { icon: DollarSign, label: 'Payments', href: '/dashboard/parent/payments', color: '#f59e0b' },
       { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
@@ -40,6 +41,7 @@ export function QuickActionsGrid({ usageType, hasOrganization }: QuickActionsGri
       return [
         { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
         { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
+        { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
         { icon: FileCheck, label: 'View My Exams', href: '/dashboard/parent/my-exams', color: '#10b981' },
         { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#06b6d4' },
         { icon: BookOpen, label: 'Lessons', href: '/dashboard/parent/lessons', color: '#10b981' },

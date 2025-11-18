@@ -7,7 +7,7 @@ const PROMO_MESSAGES = [
   {
     emoji: '🏫',
     headline: 'Early Bird Special',
-    subheadline: '50% OFF First 3 Months',
+    subheadline: '50% OFF First 6 Months',
     description: 'Be among the first 500 schools to join EduDash Pro',
     features: 'AI-powered lessons, robotics modules & unlimited Dash AI',
     cta: 'Claim School Discount',
@@ -17,7 +17,7 @@ const PROMO_MESSAGES = [
   {
     emoji: '👨‍👩‍👧‍👦',
     headline: 'Parents - Join the Movement',
-    subheadline: '50% OFF First 3 Months',
+    subheadline: '50% OFF First 6 Months',
     description: 'Be among the first 1000 parents to join EduDash Pro',
     features: 'Unlimited exam prep, AI tutoring & textbook library',
     cta: 'Start Free Trial',
@@ -27,7 +27,7 @@ const PROMO_MESSAGES = [
   {
     emoji: '👨‍🏫',
     headline: 'Teachers - Empower Your Classroom',
-    subheadline: '50% OFF First 3 Months',
+    subheadline: '50% OFF First 6 Months',
     description: 'Be among the first 1000 teachers to join EduDash Pro',
     features: 'Lesson planning, AI grading & progress tracking',
     cta: 'Get Started',
