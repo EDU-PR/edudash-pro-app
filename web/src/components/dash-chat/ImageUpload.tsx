@@ -264,11 +264,22 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
 
   return (
     <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-end justify-center z-[1000] p-0 animate-in fade-in duration-300"
-      onClick={onClose}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 'max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right))',
+      }}
     >
       <div
         className={`bg-gray-900/95 backdrop-blur-2xl rounded-t-[32px] p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-800 shadow-2xl shadow-purple-500/10 animate-in slide-in-from-bottom duration-500 ${

@@ -22,6 +22,8 @@ export default function PrincipalDashChatPage() {
   const [showExamBuilder, setShowExamBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
+  const [showHeader, setShowHeader] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -50,6 +52,35 @@ export default function PrincipalDashChatPage() {
   // Hydration flag
   useEffect(() => { setHydrated(true); }, []);
 
+  // Auto-hide header on scroll down, show on scroll up
+  useEffect(() => {
+    let ticking = false;
+    
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          
+          // Show header when scrolling up or at top
+          if (currentScrollY < lastScrollY || currentScrollY < 10) {
+            setShowHeader(true);
+          } 
+          // Hide header when scrolling down (after 50px)
+          else if (currentScrollY > lastScrollY && currentScrollY > 50) {
+            setShowHeader(false);
+          }
+          
+          setLastScrollY(currentScrollY);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
+
   const handleNewConversation = () => {
     const newId = `dash_conv_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     setActiveConversationId(newId);
@@ -77,14 +108,19 @@ export default function PrincipalDashChatPage() {
           paddingLeft: 'var(--sidebar-w, 0px)'
         }}
       >
-        {/* Header - Fixed below topnav, aligned with content */}
+        {/* Header - Auto-hiding on scroll */}
         <header className="flex-shrink-0 py-3 md:py-4 border-b border-gray-800/80 bg-gray-950/95 flex items-center justify-between gap-2 md:gap-3 z-20" style={{
-          marginTop: 'var(--topnav-h, 56px)',
+          position: 'fixed',
+          top: 'var(--topnav-h, 56px)',
+          left: 0,
+          right: 0,
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          transform: showHeader ? 'translateY(0)' : 'translateY(-100%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}>
           <div className="flex items-center gap-3">
             {/* Mobile/Tablet toggle button - Enhanced touch target */}
