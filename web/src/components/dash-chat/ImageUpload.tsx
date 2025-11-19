@@ -298,14 +298,6 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
         {/* Header */}
         <div className="px-6 pb-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white">
-                {uploading ? 'Processing...' : 'Add Images'}
-              </h3>
-              {!uploading && (
-                <p className="text-sm text-gray-400 mt-0.5">Upload photos or drag & drop</p>
-              )}
-            </div>
             <button
               onClick={onClose}
               disabled={uploading}
@@ -314,6 +306,15 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
             >
               <X className="w-5 h-5 text-gray-400" />
             </button>
+            <div className="flex-1 text-center">
+              <h3 className="text-lg font-bold text-white">
+                {uploading ? 'Processing...' : 'Add Images'}
+              </h3>
+              {!uploading && (
+                <p className="text-sm text-gray-400 mt-0.5">Upload photos or drag & drop</p>
+              )}
+            </div>
+            <div className="w-10" /> {/* Spacer for balance */}
           </div>
         </div>
 
