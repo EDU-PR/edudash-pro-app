@@ -87,13 +87,14 @@ export function ChatInput({
   const showStopButton = voiceState.isRecording;
 
   return (
-    <div className="flex-shrink-0 border-t border-gray-800 bg-gray-950 z-20" style={{
+    <div className="flex-shrink-0 border-t border-gray-800/80 bg-gray-950/95 z-20" style={{
       paddingTop: '12px',
       paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
       paddingLeft: 'max(1rem, env(safe-area-inset-left))',
       paddingRight: 'max(1rem, env(safe-area-inset-right))',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)'
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      boxShadow: '0 -1px 3px rgba(0,0,0,0.1)'
     }}>
       <div className="w-full max-w-4xl mx-auto flex gap-2 items-end">
         {/* Text Input Container */}

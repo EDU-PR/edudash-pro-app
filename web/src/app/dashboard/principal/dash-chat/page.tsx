@@ -78,36 +78,35 @@ export default function PrincipalDashChatPage() {
         }}
       >
         {/* Header - Fixed below topnav, aligned with content */}
-        <header className="flex-shrink-0 py-3 border-b border-gray-800 bg-gray-950 flex items-center justify-between gap-3 z-20" style={{
+        <header className="flex-shrink-0 py-3 md:py-4 border-b border-gray-800/80 bg-gray-950/95 flex items-center justify-between gap-2 md:gap-3 z-20" style={{
           marginTop: 'var(--topnav-h, 56px)',
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)'
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
         }}>
           <div className="flex items-center gap-3">
-            {/* Mobile/Tablet toggle button */}
+            {/* Mobile/Tablet toggle button - Enhanced touch target */}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               aria-label={showSidebar ? 'Close conversations' : 'Open conversations'}
               aria-expanded={showSidebar}
               aria-controls="conversations-sidebar"
-              className="inline-flex lg:hidden items-center bg-slate-900 hover:bg-slate-800 border border-gray-800 p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="inline-flex lg:hidden items-center justify-center bg-slate-900 hover:bg-slate-800 active:bg-slate-700 border border-gray-800 min-w-[44px] min-h-[44px] p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              {showSidebar ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+              {showSidebar ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
             </button>
 
-            <div className="flex items-center gap-3">
-              <div className={`
-                w-10 h-10
-                rounded-full bg-gradient-to-br from-purple-600 to-pink-500
-                flex items-center justify-center flex-shrink-0
-              `}>
-                <Sparkles size={22} color="white" aria-hidden="true" />
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/30">
+                <Sparkles size={20} className="md:hidden" color="white" aria-hidden="true" />
+                <Sparkles size={22} className="hidden md:block" color="white" aria-hidden="true" />
               </div>
-              <div>
-                <h1 className="m-0 text-lg font-bold">Dash AI Assistant</h1>
-                <p className="m-0 text-xs text-gray-400">
+              <div className="min-w-0 flex-1">
+                <h1 className="m-0 text-base md:text-lg font-bold bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text text-transparent">Dash AI Assistant</h1>
+                <p className="m-0 text-[11px] md:text-xs text-gray-400 truncate hidden sm:block">
                   Principal Dashboard • AI-Powered Support
                 </p>
               </div>
@@ -118,18 +117,20 @@ export default function PrincipalDashChatPage() {
             <button
               onClick={() => setShowExamBuilder(true)}
               aria-label="Create exam with AI"
-              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-purple-500/30"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              <FileText size={14} aria-hidden="true" />
-              <span className="hidden md:inline">Create Exam</span>
+              <FileText size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">Create Exam</span>
             </button>
             <button
               onClick={handleNewConversation}
               aria-label="Start new conversation"
-              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-purple-600/30"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              <Sparkles size={14} aria-hidden="true" />
-              <span className="hidden md:inline">New Chat</span>
+              <Sparkles size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">New Chat</span>
             </button>
           </div>
         </header>
@@ -207,28 +208,30 @@ export default function PrincipalDashChatPage() {
             )}
 
             {hydrated && !activeConversationId && (
-              <div className="flex flex-1 items-center justify-center overflow-hidden">
-                <div className="max-w-md w-full text-center flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-2">
-                    <Sparkles size={32} aria-hidden="true" />
+              <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
+                <div className="max-w-md w-full text-center flex flex-col items-center gap-4">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center mb-2 shadow-2xl shadow-purple-500/40 animate-pulse" style={{ animationDuration: '3s' }}>
+                    <Sparkles size={40} color="white" aria-hidden="true" />
                   </div>
-                  <h2 className="text-xl font-bold m-0">Welcome to Dash AI</h2>
-                  <p className="text-sm text-gray-400 m-0 mb-2">
+                  <h2 className="text-xl md:text-2xl font-bold m-0 bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text text-transparent">Welcome to Dash AI</h2>
+                  <p className="text-sm md:text-base text-gray-400 m-0 leading-relaxed px-4">
                     Ask about school management, curriculum planning, student analytics, or create AI-powered assessments.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center w-full mt-4">
                     <button
                       onClick={handleNewConversation}
-                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-purple-600/40"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <Sparkles size={16} aria-hidden="true" />
-                      New Chat
+                      <Sparkles size={18} aria-hidden="true" />
+                      Start Chatting
                     </button>
                     <button
                       onClick={() => setShowExamBuilder(true)}
-                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-purple-500/40"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <FileText size={16} aria-hidden="true" />
+                      <FileText size={18} aria-hidden="true" />
                       Create Exam
                     </button>
                   </div>
