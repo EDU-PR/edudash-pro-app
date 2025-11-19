@@ -38,7 +38,6 @@ export function ChatMessages({
 
   return (
     <div
-      ref={messagesContainerRef}
       className="flex-1 overflow-y-auto"
       style={{
         paddingTop: '1rem',

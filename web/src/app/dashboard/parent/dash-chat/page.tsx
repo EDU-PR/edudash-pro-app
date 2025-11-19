@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
@@ -16,7 +15,7 @@ export default function DashChatPage() {
   const supabase = createClient();
   const [email, setEmail] = useState<string>('');
   const [userId, setUserId] = useState<string>();
-  const { slug } = useTenantSlug(userId);
+  const [preschoolName, setPreschoolName] = useState<string>();
   const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
@@ -46,8 +45,19 @@ export default function DashChatPage() {
       }
       setEmail(session.user.email || '');
       setUserId(session.user.id);
+      
+      // Get preschool name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('preschool_id, preschools(name)')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profile?.preschools) {
+        setPreschoolName((profile.preschools as any).name);
+      }
     })();
-  }, [router, supabase.auth]);
+  }, [router, supabase]);
 
   // Hydration flag
   useEffect(() => { setHydrated(true); }, []);
@@ -93,7 +103,7 @@ export default function DashChatPage() {
   };
 
   return (
-          <ParentShell tenantSlug={slug} userEmail={email}>
+          <ParentShell userEmail={email} preschoolName={preschoolName}>
       {/* Full viewport height container - No scroll */}
       <div
         className="flex flex-col bg-gray-950 overflow-hidden relative"
