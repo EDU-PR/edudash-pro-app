@@ -264,29 +264,26 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 'max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right))',
-      }}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center z-[1000] animate-in fade-in duration-300"
+      onClick={onClose}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <div
-        className={`bg-gray-900/95 backdrop-blur-2xl rounded-t-[32px] p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-800 shadow-2xl shadow-purple-500/10 animate-in slide-in-from-bottom duration-500 ${
-          isDragging ? 'border-purple-500 border-2 shadow-purple-500/30' : ''
-        }`}
+        className={`bg-gray-900 rounded-t-3xl w-full max-w-2xl mx-auto shadow-2xl border-t-2 ${
+          isDragging ? 'border-purple-500' : 'border-gray-800'
+        } animate-in slide-in-from-bottom duration-300 ease-out`}
         onClick={(e) => e.stopPropagation()}
+        style={{
+          maxHeight: '85vh',
+          paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))',
+        }}
       >
+        {/* Handle Bar */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-12 h-1 bg-gray-700 rounded-full" />
+        </div>
         {/* Drag Overlay */}
         {isDragging && (
           <div className="absolute inset-0 bg-purple-500/10 backdrop-blur-md rounded-t-[32px] flex flex-col items-center justify-center z-10 border-2 border-dashed border-purple-500 animate-pulse">
@@ -299,31 +296,25 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 pb-5 border-b border-gray-800">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/50">
-              <ImageIcon className="w-6 h-6 text-white" />
-            </div>
+        <div className="px-6 pb-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold text-white leading-tight">
-                {uploading ? 'Processing Images' : isDragging ? 'Drop to Upload' : 'Add Images'}
+              <h3 className="text-lg font-bold text-white">
+                {uploading ? 'Processing...' : 'Add Images'}
               </h3>
-              {!uploading && !isDragging && (
-                <p className="text-sm text-gray-400 mt-0.5">Upload photos or drag & drop here</p>
+              {!uploading && (
+                <p className="text-sm text-gray-400 mt-0.5">Upload photos or drag & drop</p>
               )}
             </div>
+            <button
+              onClick={onClose}
+              disabled={uploading}
+              className="w-10 h-10 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center transition-all disabled:opacity-50"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5 text-gray-400" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            disabled={uploading}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-              uploading
-                ? 'bg-transparent text-gray-600 cursor-not-allowed'
-                : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700'
-            }`}
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Processing Progress */}
@@ -359,57 +350,55 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
           </div>
         )}
 
-        {/* Upload Options */}
-        {selectedFiles.length === 0 && (
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
-              multiple
-              onChange={(e) => handleFileSelect(e.target.files)}
-              className="hidden"
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              capture="environment"
-              onChange={(e) => handleFileSelect(e.target.files)}
-              className="hidden"
-            />
+        {/* Content Area */}
+        <div className="px-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 180px)' }}>
+          {/* Upload Options */}
+          {selectedFiles.length === 0 && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+                multiple
+                onChange={(e) => handleFileSelect(e.target.files)}
+                className="hidden"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                capture="environment"
+                onChange={(e) => handleFileSelect(e.target.files)}
+                className="hidden"
+              />
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="group p-6 flex flex-col items-center gap-3 bg-gray-800/50 hover:bg-gray-800 border-2 border-gray-700 hover:border-purple-500 rounded-2xl cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/20"
-            >
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 group-hover:from-purple-500/20 group-hover:to-pink-500/20 flex items-center justify-center transition-all">
-                <Upload className="w-6 h-6 text-purple-400" />
-              </div>
-              <span className="text-base font-semibold text-white">Gallery</span>
-              <span className="text-xs text-gray-400 text-center leading-relaxed">
-                Choose from photos
-                <br />
-                <span className="text-[10px] opacity-70">JPG, PNG, WebP up to 20MB</span>
-              </span>
-            </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center justify-center gap-3 p-6 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-2xl transition-all min-h-[140px]"
+              >
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-purple-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-white">Gallery</p>
+                  <p className="text-xs text-gray-400 mt-1">Choose photos</p>
+                </div>
+              </button>
 
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              className="group p-6 flex flex-col items-center gap-3 bg-gray-800/50 hover:bg-gray-800 border-2 border-gray-700 hover:border-purple-500 rounded-2xl cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/20"
-            >
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 group-hover:from-purple-500/20 group-hover:to-pink-500/20 flex items-center justify-center transition-all">
-                <Camera className="w-6 h-6 text-purple-400" />
-              </div>
-              <span className="text-base font-semibold text-white">Camera</span>
-              <span className="text-xs text-gray-400 text-center leading-relaxed">
-                Take a photo
-                <br />
-                <span className="text-[10px] opacity-70">High quality capture</span>
-              </span>
-            </button>
-          </div>
-        )}
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex flex-col items-center justify-center gap-3 p-6 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-2xl transition-all min-h-[140px]"
+              >
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <Camera className="w-6 h-6 text-purple-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-white">Camera</p>
+                  <p className="text-xs text-gray-400 mt-1">Take photo</p>
+                </div>
+              </button>
+            </div>
+          )}
 
         {/* Preview Grid */}
         {previews.length > 0 && (
@@ -489,12 +478,12 @@ export function ImageUpload({ onSelect, onClose, maxImages = 3 }: ImageUploadPro
           </>
         )}
 
-        {/* Help Text */}
-        <div className="mt-5 px-4 py-3 bg-gray-800/50 rounded-xl border-l-3 border-l-purple-500">
-          <p className="text-xs text-gray-400 leading-relaxed">
-            <Sparkles className="w-3.5 h-3.5 inline-block mr-1.5 text-purple-400" />
-            <strong className="text-gray-300">Dash can analyze images</strong> to help with diagrams, math problems, homework, and more!
-          </p>
+          {/* Help Text */}
+          <div className="mt-4 p-3 bg-purple-500/5 rounded-xl border border-purple-500/20">
+            <p className="text-xs text-gray-400">
+              💡 <span className="text-gray-300">Dash can analyze images</span> for homework help, diagrams, and more
+            </p>
+          </div>
         </div>
       </div>
     </div>
