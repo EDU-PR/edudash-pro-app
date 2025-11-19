@@ -1,0 +1,523 @@
+'use client';
+
+import { useState } from 'react';
+import { Calendar, Sparkles, X, Download, Plus, Trash2 } from 'lucide-react';
+import { exportTextToPDF } from '@/lib/utils/pdf-export';
+
+interface CalendarBuilderLauncherProps {
+  /** Optional: Callback when user closes the launcher */
+  onClose?: () => void;
+}
+
+interface Term {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface Holiday {
+  name: string;
+  date: string;
+}
+
+interface Event {
+  name: string;
+  date: string;
+  type: 'assessment' | 'event' | 'meeting' | 'other';
+}
+
+/**
+ * Calendar Builder for Principals and Admins
+ * Creates academic calendars, term planners, and event schedules
+ */
+export function CalendarBuilderLauncher({ onClose }: CalendarBuilderLauncherProps) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [schoolName, setSchoolName] = useState('');
+  const [terms, setTerms] = useState<Term[]>([
+    { name: 'Term 1', startDate: '', endDate: '' },
+    { name: 'Term 2', startDate: '', endDate: '' },
+    { name: 'Term 3', startDate: '', endDate: '' },
+    { name: 'Term 4', startDate: '', endDate: '' },
+  ]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+
+  const addHoliday = () => {
+    setHolidays([...holidays, { name: '', date: '' }]);
+  };
+
+  const removeHoliday = (index: number) => {
+    setHolidays(holidays.filter((_, i) => i !== index));
+  };
+
+  const updateHoliday = (index: number, field: keyof Holiday, value: string) => {
+    const updated = [...holidays];
+    updated[index][field] = value;
+    setHolidays(updated);
+  };
+
+  const addEvent = () => {
+    setEvents([...events, { name: '', date: '', type: 'event' }]);
+  };
+
+  const removeEvent = (index: number) => {
+    setEvents(events.filter((_, i) => i !== index));
+  };
+
+  const updateEvent = (index: number, field: keyof Event, value: string) => {
+    const updated = [...events];
+    updated[index][field] = value as any;
+    setEvents(updated);
+  };
+
+  const updateTerm = (index: number, field: keyof Term, value: string) => {
+    const updated = [...terms];
+    updated[index][field] = value;
+    setTerms(updated);
+  };
+
+  const generateCalendar = () => {
+    let calendar = `# ${schoolName || 'School'} Academic Calendar ${year}\n\n`;
+    calendar += `## Term Dates\n\n`;
+    
+    terms.forEach((term) => {
+      if (term.startDate && term.endDate) {
+        calendar += `### ${term.name}\n`;
+        calendar += `- **Start:** ${new Date(term.startDate).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+        calendar += `- **End:** ${new Date(term.endDate).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+      }
+    });
+
+    if (holidays.length > 0) {
+      calendar += `## Public Holidays & School Breaks\n\n`;
+      holidays
+        .filter(h => h.name && h.date)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .forEach((holiday) => {
+          calendar += `- **${holiday.name}** - ${new Date(holiday.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+        });
+      calendar += '\n';
+    }
+
+    if (events.length > 0) {
+      const assessments = events.filter(e => e.type === 'assessment' && e.name && e.date);
+      const meetings = events.filter(e => e.type === 'meeting' && e.name && e.date);
+      const otherEvents = events.filter(e => (e.type === 'event' || e.type === 'other') && e.name && e.date);
+
+      if (assessments.length > 0) {
+        calendar += `## Assessment Dates\n\n`;
+        assessments
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .forEach((event) => {
+            calendar += `- **${event.name}** - ${new Date(event.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+          });
+        calendar += '\n';
+      }
+
+      if (meetings.length > 0) {
+        calendar += `## Staff Meetings & Events\n\n`;
+        meetings
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .forEach((event) => {
+            calendar += `- **${event.name}** - ${new Date(event.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+          });
+        calendar += '\n';
+      }
+
+      if (otherEvents.length > 0) {
+        calendar += `## Other Events\n\n`;
+        otherEvents
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .forEach((event) => {
+            calendar += `- **${event.name}** - ${new Date(event.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+          });
+        calendar += '\n';
+      }
+    }
+
+    calendar += `\n---\n\n*Generated by EduDash Pro Calendar Builder*\n`;
+    
+    return calendar;
+  };
+
+  const handleDownload = () => {
+    const calendar = generateCalendar();
+    exportTextToPDF(calendar, `${schoolName || 'School'}_Calendar_${year}`);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.8)',
+      zIndex: 9999,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+      backdropFilter: 'blur(8px)',
+    }}>
+      <div style={{
+        background: 'var(--surface)',
+        borderRadius: '16px',
+        maxWidth: '900px',
+        width: '100%',
+        maxHeight: '90vh',
+        overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '24px 32px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1))',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Calendar size={20} color="white" />
+            </div>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Academic Calendar Builder</h2>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              borderRadius: '8px',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+          >
+            <X size={24} color="var(--muted)" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: '32px',
+        }}>
+          {/* Basic Info */}
+          <div style={{ marginBottom: '32px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Basic Information</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 500, marginBottom: '8px', fontSize: '14px' }}>
+                  School Name
+                </label>
+                <input
+                  type="text"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  placeholder="Enter school name"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '14px',
+                    color: 'var(--text)',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 500, marginBottom: '8px', fontSize: '14px' }}>
+                  Academic Year
+                </label>
+                <input
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(parseInt(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '14px',
+                    color: 'var(--text)',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Terms */}
+          <div style={{ marginBottom: '32px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Term Dates</h3>
+            {terms.map((term, index) => (
+              <div key={index} style={{ marginBottom: '16px', padding: '16px', background: 'var(--surface-2)', borderRadius: '8px' }}>
+                <div style={{ fontWeight: 600, marginBottom: '12px' }}>{term.name}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'var(--muted)' }}>
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={term.startDate}
+                      onChange={(e) => updateTerm(index, 'startDate', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        fontSize: '13px',
+                        color: 'var(--text)',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: 'var(--muted)' }}>
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={term.endDate}
+                      onChange={(e) => updateTerm(index, 'endDate', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        fontSize: '13px',
+                        color: 'var(--text)',
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Holidays */}
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Holidays & Breaks</h3>
+              <button
+                onClick={addHoliday}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Plus size={16} />
+                Add Holiday
+              </button>
+            </div>
+            {holidays.map((holiday, index) => (
+              <div key={index} style={{ marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Holiday name"
+                  value={holiday.name}
+                  onChange={(e) => updateHoliday(index, 'name', e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                  }}
+                />
+                <input
+                  type="date"
+                  value={holiday.date}
+                  onChange={(e) => updateHoliday(index, 'date', e.target.value)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                  }}
+                />
+                <button
+                  onClick={() => removeHoliday(index)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Events */}
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>Events & Assessments</h3>
+              <button
+                onClick={addEvent}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Plus size={16} />
+                Add Event
+              </button>
+            </div>
+            {events.map((event, index) => (
+              <div key={index} style={{ marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Event name"
+                  value={event.name}
+                  onChange={(e) => updateEvent(index, 'name', e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                  }}
+                />
+                <select
+                  value={event.type}
+                  onChange={(e) => updateEvent(index, 'type', e.target.value)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <option value="event">Event</option>
+                  <option value="assessment">Assessment</option>
+                  <option value="meeting">Meeting</option>
+                  <option value="other">Other</option>
+                </select>
+                <input
+                  type="date"
+                  value={event.date}
+                  onChange={(e) => updateEvent(index, 'date', e.target.value)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    fontSize: '13px',
+                    color: 'var(--text)',
+                  }}
+                />
+                <button
+                  onClick={() => removeEvent(index)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '24px 32px',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '12px',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '12px 24px',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text)',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!schoolName}
+            style={{
+              padding: '12px 24px',
+              borderRadius: '8px',
+              border: 'none',
+              background: schoolName ? 'linear-gradient(135deg, #7c3aed, #ec4899)' : 'var(--muted)',
+              color: 'white',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: schoolName ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <Download size={16} />
+            Download PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

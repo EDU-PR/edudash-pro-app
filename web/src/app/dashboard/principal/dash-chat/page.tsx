@@ -7,8 +7,9 @@ import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell'
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
+import { CalendarBuilderLauncher } from '@/components/dash-chat/CalendarBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
-import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
+import { ArrowLeft, Sparkles, Menu, X, FileText, Calendar } from 'lucide-react';
 
 export default function PrincipalDashChatPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function PrincipalDashChatPage() {
   const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
+  const [showCalendarBuilder, setShowCalendarBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
   const [showHeader, setShowHeader] = useState(true);
@@ -30,11 +32,12 @@ export default function PrincipalDashChatPage() {
       if (e.key === 'Escape') {
         if (showSidebar) setShowSidebar(false);
         if (showExamBuilder) setShowExamBuilder(false);
+        if (showCalendarBuilder) setShowCalendarBuilder(false);
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [showSidebar, showExamBuilder]);
+  }, [showSidebar, showExamBuilder, showCalendarBuilder]);
 
   useEffect(() => {
     (async () => {
@@ -176,6 +179,15 @@ export default function PrincipalDashChatPage() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowCalendarBuilder(true)}
+              aria-label="Create calendar"
+              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 active:scale-95 text-white border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-blue-500/30"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
+            >
+              <Calendar size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">Calendar</span>
+            </button>
+            <button
               onClick={() => setShowExamBuilder(true)}
               aria-label="Create exam with AI"
               className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-purple-500/30"
@@ -288,6 +300,14 @@ export default function PrincipalDashChatPage() {
                       Start Chatting
                     </button>
                     <button
+                      onClick={() => setShowCalendarBuilder(true)}
+                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-blue-500/40"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
+                    >
+                      <Calendar size={18} aria-hidden="true" />
+                      Create Calendar
+                    </button>
+                    <button
                       onClick={() => setShowExamBuilder(true)}
                       className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-purple-500/40"
                       style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -297,6 +317,18 @@ export default function PrincipalDashChatPage() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+            
+            {/* Calendar Builder Modal */}
+            {hydrated && showCalendarBuilder && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Calendar builder"
+                className="absolute inset-0 z-[100]"
+              >
+                <CalendarBuilderLauncher onClose={() => setShowCalendarBuilder(false)} />
               </div>
             )}
             
