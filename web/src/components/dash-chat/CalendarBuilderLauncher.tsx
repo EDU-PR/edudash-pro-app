@@ -41,6 +41,7 @@ export function CalendarBuilderLauncher({ onClose }: CalendarBuilderLauncherProp
   ]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
 
   const addHoliday = () => {
     setHolidays([...holidays, { name: '', date: '' }]);
@@ -144,6 +145,153 @@ export function CalendarBuilderLauncher({ onClose }: CalendarBuilderLauncherProp
     const calendar = generateCalendar();
     exportTextToPDF(calendar, `${schoolName || 'School'}_Calendar_${year}`);
   };
+
+  // Preview Modal
+  if (showPreview) {
+    const previewContent = generateCalendar();
+    
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.8)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        backdropFilter: 'blur(8px)',
+      }}>
+        <div style={{
+          background: 'var(--surface)',
+          borderRadius: '16px',
+          maxWidth: '800px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{
+            padding: '24px 32px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1))',
+          }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Calendar Preview</h2>
+            <button
+              onClick={() => setShowPreview(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '8px',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              <X size={24} color="var(--muted)" />
+            </button>
+          </div>
+
+          <div style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: '32px',
+            background: 'white',
+            color: '#1f2937',
+          }}>
+            <div style={{ 
+              maxWidth: '650px', 
+              margin: '0 auto',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+            }}>
+              {previewContent.split('\n').map((line, index) => {
+                if (line.startsWith('# ')) {
+                  return <h1 key={index} style={{ fontSize: '28px', fontWeight: 700, marginBottom: '24px', color: '#7c3aed' }}>{line.substring(2)}</h1>;
+                } else if (line.startsWith('## ')) {
+                  return <h2 key={index} style={{ fontSize: '22px', fontWeight: 600, marginTop: '32px', marginBottom: '16px', color: '#6b21a8', borderBottom: '2px solid #e9d5ff', paddingBottom: '8px' }}>{line.substring(3)}</h2>;
+                } else if (line.startsWith('### ')) {
+                  return <h3 key={index} style={{ fontSize: '18px', fontWeight: 600, marginTop: '20px', marginBottom: '12px', color: '#7c3aed' }}>{line.substring(4)}</h3>;
+                } else if (line.startsWith('- **')) {
+                  const parts = line.substring(2).split('**');
+                  return (
+                    <div key={index} style={{ marginBottom: '8px', marginLeft: '16px', display: 'flex', gap: '8px' }}>
+                      <span style={{ color: '#6b21a8', fontWeight: 600 }}>•</span>
+                      <div>
+                        <strong style={{ color: '#6b21a8' }}>{parts[1]}</strong>
+                        {parts[2]}
+                      </div>
+                    </div>
+                  );
+                } else if (line.startsWith('---')) {
+                  return <hr key={index} style={{ margin: '24px 0', border: 'none', borderTop: '1px solid #e5e7eb' }} />;
+                } else if (line.trim() === '') {
+                  return <div key={index} style={{ height: '8px' }} />;
+                } else if (line.startsWith('*')) {
+                  return <p key={index} style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic', marginTop: '24px' }}>{line.substring(1)}</p>;
+                } else {
+                  return <p key={index} style={{ marginBottom: '8px', lineHeight: 1.6 }}>{line}</p>;
+                }
+              })}
+            </div>
+          </div>
+
+          <div style={{
+            padding: '24px 32px',
+            borderTop: '1px solid var(--border)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '12px',
+            background: 'var(--surface-2)',
+          }}>
+            <button
+              onClick={() => setShowPreview(false)}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Back to Editor
+            </button>
+            <button
+              onClick={handleDownload}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Download size={16} />
+              Download PDF
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -478,7 +626,7 @@ export function CalendarBuilderLauncher({ onClose }: CalendarBuilderLauncherProp
           padding: '24px 32px',
           borderTop: '1px solid var(--border)',
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           gap: '12px',
         }}>
           <button
@@ -496,26 +644,48 @@ export function CalendarBuilderLauncher({ onClose }: CalendarBuilderLauncherProp
           >
             Cancel
           </button>
-          <button
-            onClick={handleDownload}
-            disabled={!schoolName}
-            style={{
-              padding: '12px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              background: schoolName ? 'linear-gradient(135deg, #7c3aed, #ec4899)' : 'var(--muted)',
-              color: 'white',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: schoolName ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Download size={16} />
-            Download PDF
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowPreview(true)}
+              disabled={!schoolName}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: '1px solid var(--primary)',
+                background: 'transparent',
+                color: schoolName ? 'var(--primary)' : 'var(--muted)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: schoolName ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Sparkles size={16} />
+              Preview
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={!schoolName}
+              style={{
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                background: schoolName ? 'linear-gradient(135deg, #7c3aed, #ec4899)' : 'var(--muted)',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: schoolName ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Download size={16} />
+              Download PDF
+            </button>
+          </div>
         </div>
       </div>
     </div>

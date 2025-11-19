@@ -27,6 +27,7 @@ import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApp
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { CalendarBuilderLauncher } from '@/components/dash-chat/CalendarBuilderLauncher';
 
 interface PrincipalMetrics {
   totalStudents: number;
@@ -57,6 +58,7 @@ export default function PrincipalDashboard() {
   });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [dashAIFullscreen, setDashAIFullscreen] = useState(false);
+  const [showCalendarBuilder, setShowCalendarBuilder] = useState(false);
 
   // Fetch user profile with preschool data
   const { profile, loading: profileLoading } = useUserProfile(userId);
@@ -358,7 +360,15 @@ export default function PrincipalDashboard() {
             <MessageCircle className="icon20" />
             <span>Send Announcement</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/settings')}>
+          <button 
+            className="qa" 
+            onClick={() => setShowCalendarBuilder(true)}
+            style={{
+              background: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)',
+              color: 'white',
+              border: 'none',
+            }}
+          >
             <Calendar className="icon20" />
             <span>School Calendar</span>
           </button>
@@ -393,6 +403,11 @@ export default function PrincipalDashboard() {
         </div>
       </div>
       </PrincipalShell>
+      
+      {/* Calendar Builder Modal */}
+      {showCalendarBuilder && (
+        <CalendarBuilderLauncher onClose={() => setShowCalendarBuilder(false)} />
+      )}
       
       {/* Mobile Fullscreen Dash AI Modal */}
       {dashAIFullscreen && (
