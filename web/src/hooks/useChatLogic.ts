@@ -408,12 +408,16 @@ function formatAssistantContent(txt: string): string {
 // Helper: Detect exam request
 function detectExamRequest(text: string): boolean {
   const examKeywords = [
-    'exam', 'test', 'practice', 'assessment', 'questions',
-    'quiz', 'worksheet', 'revision', 'prepare', 'study'
+    'exam', 'test', 'assessment', 'questions',
+    'quiz', 'worksheet', 'revision'
   ];
   
   const lowerText = text.toLowerCase();
-  return examKeywords.some(keyword => lowerText.includes(keyword));
+  // Use word boundaries to avoid false positives (e.g., "plan" shouldn't match "prepare")
+  return examKeywords.some(keyword => {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+    return regex.test(lowerText);
+  });
 }
 
 // Helper: Extract exam context

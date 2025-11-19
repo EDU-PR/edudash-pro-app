@@ -66,10 +66,11 @@ export default function DashChatPage() {
   useEffect(() => {
     let ticking = false;
     
-    const handleScroll = () => {
+    const handleScroll = (e: Event) => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          const currentScrollY = window.scrollY;
+          const target = e.target as HTMLElement;
+          const currentScrollY = target.scrollTop;
           
           // Show header when scrolling up or at top
           if (currentScrollY < lastScrollY || currentScrollY < 10) {
@@ -87,8 +88,22 @@ export default function DashChatPage() {
       }
     };
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    // Wait for ChatMessages component to mount, then attach scroll listener
+    const interval = setInterval(() => {
+      const messagesContainer = document.querySelector('.flex-1.overflow-y-auto');
+      if (messagesContainer) {
+        messagesContainer.addEventListener('scroll', handleScroll, { passive: true });
+        clearInterval(interval);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(interval);
+      const messagesContainer = document.querySelector('.flex-1.overflow-y-auto');
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('scroll', handleScroll);
+      }
+    };
   }, [lastScrollY]);
 
   const handleNewConversation = () => {

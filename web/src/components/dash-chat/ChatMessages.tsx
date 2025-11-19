@@ -30,6 +30,7 @@ export function ChatMessages({
   examContext,
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -40,7 +41,7 @@ export function ChatMessages({
     <div
       className="flex-1 overflow-y-auto"
       style={{
-        paddingTop: '1rem',
+        paddingTop: '100px',
         paddingBottom: '1rem',
         paddingLeft: 'max(1rem, env(safe-area-inset-left))',
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
