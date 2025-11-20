@@ -113,21 +113,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
             )}
             
             {preschoolName ? (
-              <div className="chip" style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6,
-                maxWidth: '280px',
-                overflow: 'hidden'
-              }}>
-                <span style={{ fontSize: 16, flexShrink: 0 }}>🎓</span>
-                <span style={{ 
-                  fontWeight: 600, 
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontSize: 14
-                }}>{preschoolName.replace('EduDash Pro ', '')}</span>
+              <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 16 }}>🎓</span>
+                <span style={{ fontWeight: 600 }}>{preschoolName}</span>
               </div>
             ) : (
               <div className="chip">{tenantSlug || 'EduDash Pro'}</div>

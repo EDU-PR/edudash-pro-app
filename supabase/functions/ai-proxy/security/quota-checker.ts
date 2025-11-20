@@ -21,32 +21,22 @@ export async function checkQuota(
   try {
     console.log('[Quota] Checking quota:', { userId, organizationId, serviceType })
 
-    // BYPASS 1: EduDash Pro Community School has unlimited access (platform demo school)
+    // BYPASS: Platform organizations have unlimited access
     const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001'
-    if (organizationId === COMMUNITY_SCHOOL_ID) {
-      console.log('[Quota] ✅ Community School user - UNLIMITED ACCESS')
-      return {
-        allowed: true,
-        quotaInfo: {
-          used: 0,
-          limit: -1,
-          remaining: -1,
-          tier: 'community_unlimited',
-        },
-      }
-    }
-
-    // BYPASS 2: EduDash Pro Main School (platform admin school) has unlimited access
+    const EDUDASH_PRO_ORG_ID = '00000000-0000-0000-0000-000000000002'
     const EDUDASH_PRO_SCHOOL_ID = '00000000-0000-0000-0000-000000000003'
-    if (organizationId === EDUDASH_PRO_SCHOOL_ID) {
-      console.log('[Quota] ✅ EduDash Pro Main School (platform admin) - UNLIMITED ACCESS')
+    
+    if (organizationId === COMMUNITY_SCHOOL_ID || 
+        organizationId === EDUDASH_PRO_ORG_ID ||
+        organizationId === EDUDASH_PRO_SCHOOL_ID) {
+      console.log('[Quota] ✅ Platform organization/school - UNLIMITED ACCESS')
       return {
         allowed: true,
         quotaInfo: {
           used: 0,
           limit: -1,
           remaining: -1,
-          tier: 'platform_admin_unlimited',
+          tier: 'platform_unlimited',
         },
       }
     }

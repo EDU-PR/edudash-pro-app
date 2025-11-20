@@ -3,28 +3,25 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
-import { CalendarBuilderLauncher } from '@/components/dash-chat/CalendarBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
-import { ArrowLeft, Sparkles, Menu, X, FileText, Calendar } from 'lucide-react';
+import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
 
 export default function PrincipalDashChatPage() {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState<string>('');
   const [userId, setUserId] = useState<string>();
-  const [preschoolName, setPreschoolName] = useState<string>();
+  const { slug } = useTenantSlug(userId);
   const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
-  const [showCalendarBuilder, setShowCalendarBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
-  const [showHeader, setShowHeader] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -32,12 +29,11 @@ export default function PrincipalDashChatPage() {
       if (e.key === 'Escape') {
         if (showSidebar) setShowSidebar(false);
         if (showExamBuilder) setShowExamBuilder(false);
-        if (showCalendarBuilder) setShowCalendarBuilder(false);
       }
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [showSidebar, showExamBuilder, showCalendarBuilder]);
+  }, [showSidebar, showExamBuilder]);
 
   useEffect(() => {
     (async () => {
@@ -48,66 +44,11 @@ export default function PrincipalDashChatPage() {
       }
       setEmail(session.user.email || '');
       setUserId(session.user.id);
-      
-      // Get preschool name
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('preschool_id, preschools(name)')
-        .eq('id', session.user.id)
-        .single();
-      
-      if (profile?.preschools) {
-        setPreschoolName((profile.preschools as any).name);
-      }
     })();
-  }, [router, supabase]);
+  }, [router, supabase.auth]);
 
   // Hydration flag
   useEffect(() => { setHydrated(true); }, []);
-
-  // Auto-hide header on scroll down, show on scroll up
-  useEffect(() => {
-    let ticking = false;
-    
-    const handleScroll = (e: Event) => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const target = e.target as HTMLElement;
-          const currentScrollY = target.scrollTop;
-          
-          // Show header when scrolling up or at top
-          if (currentScrollY < lastScrollY || currentScrollY < 10) {
-            setShowHeader(true);
-          } 
-          // Hide header when scrolling down (after 50px)
-          else if (currentScrollY > lastScrollY && currentScrollY > 50) {
-            setShowHeader(false);
-          }
-          
-          setLastScrollY(currentScrollY);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    // Wait for ChatMessages component to mount, then attach scroll listener
-    const interval = setInterval(() => {
-      const messagesContainer = document.querySelector('.flex-1.overflow-y-auto');
-      if (messagesContainer) {
-        messagesContainer.addEventListener('scroll', handleScroll, { passive: true });
-        clearInterval(interval);
-      }
-    }, 100);
-
-    return () => {
-      clearInterval(interval);
-      const messagesContainer = document.querySelector('.flex-1.overflow-y-auto');
-      if (messagesContainer) {
-        messagesContainer.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [lastScrollY]);
 
   const handleNewConversation = () => {
     const newId = `dash_conv_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -121,7 +62,7 @@ export default function PrincipalDashChatPage() {
   };
 
   return (
-    <PrincipalShell userEmail={email} preschoolName={preschoolName}>
+    <PrincipalShell tenantSlug={slug} userEmail={email}>
       {/* Full viewport height container - No scroll */}
       <div
         className="flex flex-col bg-gray-950 overflow-hidden relative"
@@ -136,41 +77,37 @@ export default function PrincipalDashChatPage() {
           paddingLeft: 'var(--sidebar-w, 0px)'
         }}
       >
-        {/* Header - Auto-hiding on scroll */}
-        <header className="flex-shrink-0 py-3 md:py-4 border-b border-gray-800/80 bg-gray-950/95 flex items-center justify-between gap-2 md:gap-3 z-20" style={{
-          position: 'fixed',
-          top: 'var(--topnav-h, 56px)',
-          left: 0,
-          right: 0,
+        {/* Header - Fixed below topnav, aligned with content */}
+        <header className="flex-shrink-0 py-3 border-b border-gray-800 bg-gray-950 flex items-center justify-between gap-3 z-20" style={{
+          marginTop: 'var(--topnav-h, 56px)',
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-          transform: showHeader ? 'translateY(0)' : 'translateY(-100%)',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)'
         }}>
           <div className="flex items-center gap-3">
-            {/* Mobile/Tablet toggle button - Enhanced touch target */}
+            {/* Mobile/Tablet toggle button */}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               aria-label={showSidebar ? 'Close conversations' : 'Open conversations'}
               aria-expanded={showSidebar}
               aria-controls="conversations-sidebar"
-              className="inline-flex lg:hidden items-center justify-center bg-slate-900 hover:bg-slate-800 active:bg-slate-700 border border-gray-800 min-w-[44px] min-h-[44px] p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
-              style={{ WebkitTapHighlightColor: 'transparent' }}
+              className="inline-flex lg:hidden items-center bg-slate-900 hover:bg-slate-800 border border-gray-800 p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
-              {showSidebar ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+              {showSidebar ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
             </button>
 
-            <div className="flex items-center gap-2 md:gap-3 min-w-0">
-              <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-500/30">
-                <Sparkles size={20} className="md:hidden" color="white" aria-hidden="true" />
-                <Sparkles size={22} className="hidden md:block" color="white" aria-hidden="true" />
+            <div className="flex items-center gap-3">
+              <div className={`
+                w-10 h-10
+                rounded-full bg-gradient-to-br from-purple-600 to-pink-500
+                flex items-center justify-center flex-shrink-0
+              `}>
+                <Sparkles size={22} color="white" aria-hidden="true" />
               </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="m-0 text-base md:text-lg font-bold bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text text-transparent">Dash AI Assistant</h1>
-                <p className="m-0 text-[11px] md:text-xs text-gray-400 truncate hidden sm:block">
+              <div>
+                <h1 className="m-0 text-lg font-bold">Dash AI Assistant</h1>
+                <p className="m-0 text-xs text-gray-400">
                   Principal Dashboard • AI-Powered Support
                 </p>
               </div>
@@ -179,31 +116,20 @@ export default function PrincipalDashChatPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowCalendarBuilder(true)}
-              aria-label="Create calendar"
-              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 active:scale-95 text-white border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-blue-500/30"
-              style={{ WebkitTapHighlightColor: 'transparent' }}
-            >
-              <Calendar size={16} aria-hidden="true" />
-              <span className="hidden sm:inline">Calendar</span>
-            </button>
-            <button
               onClick={() => setShowExamBuilder(true)}
               aria-label="Create exam with AI"
-              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white border-0 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-purple-500/30"
-              style={{ WebkitTapHighlightColor: 'transparent' }}
+              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
-              <FileText size={16} aria-hidden="true" />
-              <span className="hidden sm:inline">Create Exam</span>
+              <FileText size={14} aria-hidden="true" />
+              <span className="hidden md:inline">Create Exam</span>
             </button>
             <button
               onClick={handleNewConversation}
               aria-label="Start new conversation"
-              className="min-h-[44px] px-3 md:px-4 py-2 text-[13px] md:text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-lg shadow-purple-600/30"
-              style={{ WebkitTapHighlightColor: 'transparent' }}
+              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
-              <Sparkles size={16} aria-hidden="true" />
-              <span className="hidden sm:inline">New Chat</span>
+              <Sparkles size={14} aria-hidden="true" />
+              <span className="hidden md:inline">New Chat</span>
             </button>
           </div>
         </header>
@@ -281,54 +207,32 @@ export default function PrincipalDashChatPage() {
             )}
 
             {hydrated && !activeConversationId && (
-              <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
-                <div className="max-w-md w-full text-center flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center mb-2 shadow-2xl shadow-purple-500/40 animate-pulse" style={{ animationDuration: '3s' }}>
-                    <Sparkles size={40} color="white" aria-hidden="true" />
+              <div className="flex flex-1 items-center justify-center overflow-hidden">
+                <div className="max-w-md w-full text-center flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-2">
+                    <Sparkles size={32} aria-hidden="true" />
                   </div>
-                  <h2 className="text-xl md:text-2xl font-bold m-0 bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text text-transparent">Welcome to Dash AI</h2>
-                  <p className="text-sm md:text-base text-gray-400 m-0 leading-relaxed px-4">
+                  <h2 className="text-xl font-bold m-0">Welcome to Dash AI</h2>
+                  <p className="text-sm text-gray-400 m-0 mb-2">
                     Ask about school management, curriculum planning, student analytics, or create AI-powered assessments.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center w-full mt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button
                       onClick={handleNewConversation}
-                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-purple-600/40"
-                      style={{ WebkitTapHighlightColor: 'transparent' }}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
                     >
-                      <Sparkles size={18} aria-hidden="true" />
-                      Start Chatting
-                    </button>
-                    <button
-                      onClick={() => setShowCalendarBuilder(true)}
-                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-blue-500/40"
-                      style={{ WebkitTapHighlightColor: 'transparent' }}
-                    >
-                      <Calendar size={18} aria-hidden="true" />
-                      Create Calendar
+                      <Sparkles size={16} aria-hidden="true" />
+                      New Chat
                     </button>
                     <button
                       onClick={() => setShowExamBuilder(true)}
-                      className="min-h-[48px] px-6 py-3 text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 active:scale-95 text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950 shadow-xl shadow-purple-500/40"
-                      style={{ WebkitTapHighlightColor: 'transparent' }}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
                     >
-                      <FileText size={18} aria-hidden="true" />
+                      <FileText size={16} aria-hidden="true" />
                       Create Exam
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Calendar Builder Modal */}
-            {hydrated && showCalendarBuilder && (
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-label="Calendar builder"
-                className="absolute inset-0 z-[100]"
-              >
-                <CalendarBuilderLauncher onClose={() => setShowCalendarBuilder(false)} />
               </div>
             )}
             
