@@ -108,7 +108,7 @@ export function UpgradeModal({
         throw new Error('Invalid tier selected');
       }
 
-      // Get current session for auth token
+      // Call Supabase Edge Function to create payment
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {

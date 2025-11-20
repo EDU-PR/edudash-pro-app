@@ -4,6 +4,54 @@
 
 We've migrated PayFast payment integration from **client-side** to **server-side** for enhanced security. This prevents exposure of merchant credentials and ensures payment data cannot be tampered with.
 
+## API Route Migration
+
+### Old Payment Flow (DEPRECATED)
+```typescript
+// ❌ DO NOT USE - API route has been removed
+const response = await fetch('/api/payfast/create-payment', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session.access_token}`
+  },
+  body: JSON.stringify(paymentData)
+});
+```
+
+### New Payment Flow (USE THIS)
+```typescript
+// ✅ Use Supabase Edge Function
+import { createClient } from '@/lib/supabase/client';
+
+const supabase = createClient();
+const { data, error } = await supabase.functions.invoke('payfast-create-payment', {
+  body: {
+    user_id: userId,
+    tier: tier,
+    amount: price,
+    email: userEmail,
+    firstName: firstName,
+    lastName: lastName,
+    itemName: planName,
+    itemDescription: description,
+    subscriptionType: '1', // Subscription
+    frequency: '3', // Monthly
+    cycles: '0', // Until cancelled
+  }
+});
+
+if (error) throw error;
+```
+
+### Why This Change?
+
+- **Security**: Credentials stored only in Edge Function secrets (not in Vercel)
+- **Consistency**: All PayFast operations use Edge Functions
+- **Simplicity**: No PayFast credentials needed in Vercel environment
+- **Scalability**: Edge Functions deployed globally via Supabase
+- **Authentication**: Supabase client automatically handles auth headers
+
 ## What Changed?
 
 ### Before (❌ Insecure)
