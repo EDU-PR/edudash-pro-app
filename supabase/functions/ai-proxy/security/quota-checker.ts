@@ -5,13 +5,14 @@
  * Checks BEFORE calling AI to prevent overage charges.
  */
 
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import type { QuotaCheckResult } from '../types.ts'
 
 /**
  * Check if user has quota remaining for the requested service
  */
 export async function checkQuota(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   organizationId: string | null,
   serviceType: string,
@@ -19,6 +20,26 @@ export async function checkQuota(
 ): Promise<QuotaCheckResult> {
   try {
     console.log('[Quota] Checking quota:', { userId, organizationId, serviceType })
+
+    // BYPASS: Platform organizations have unlimited access
+    const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001'
+    const EDUDASH_PRO_ORG_ID = '00000000-0000-0000-0000-000000000002'
+    const EDUDASH_PRO_SCHOOL_ID = '00000000-0000-0000-0000-000000000003'
+    
+    if (organizationId === COMMUNITY_SCHOOL_ID || 
+        organizationId === EDUDASH_PRO_ORG_ID ||
+        organizationId === EDUDASH_PRO_SCHOOL_ID) {
+      console.log('[Quota] ✅ Platform organization/school - UNLIMITED ACCESS')
+      return {
+        allowed: true,
+        quotaInfo: {
+          used: 0,
+          limit: -1,
+          remaining: -1,
+          tier: 'platform_unlimited',
+        },
+      }
+    }
 
     // Get user's current usage for this month
     const startOfMonth = new Date()
@@ -42,7 +63,7 @@ export async function checkQuota(
     console.log('[Quota] Usage query result:', { count: usageData?.length || 0 })
     const used = usageData?.length || 0
 
-    // Default quotas by tier
+    // Default quotas by tier (keys MUST match database enum values exactly)
     const defaultQuotas: Record<string, Record<string, number>> = {
       free: {
         lesson_generation: 5,
@@ -55,6 +76,12 @@ export async function checkQuota(
         grading_assistance: 20,
         homework_help: 50,
         dash_conversation: 200
+      },
+      parent_plus: {
+        lesson_generation: 100,
+        grading_assistance: 100,
+        homework_help: 100,
+        dash_conversation: 1000
       },
       premium: {
         lesson_generation: 100,
@@ -72,30 +99,61 @@ export async function checkQuota(
         lesson_generation: -1, // unlimited
         grading_assistance: -1,
         homework_help: -1,
-        dash_conversation: -1
+        dash_conversation: 1000
       }
     }
 
-    // Get subscription tier (use provided tier or fetch from org)
+    // Get subscription tier (use provided tier or fetch from user)
     let tier = effectiveTier || 'free'
     
-    // Only fetch from org if tier not provided
-    if (!effectiveTier && organizationId) {
-      const { data: orgData } = await supabaseAdmin
-        .from('preschools')
-        .select('subscription_tier')
-        .eq('id', organizationId)
-        .single()
+    // Only fetch if tier not provided
+    if (!effectiveTier) {
+      // PRIORITY 1: Check user_ai_usage.current_tier (most accurate, updated by payment webhook)
+      const { data: usageTierData } = await supabaseAdmin
+        .from('user_ai_usage')
+        .select('current_tier')
+        .eq('user_id', userId)
+        .maybeSingle()
+      
+      if (usageTierData?.current_tier) {
+        tier = usageTierData.current_tier
+        console.log('[Quota] Tier from user_ai_usage.current_tier:', tier)
+      }
+      // PRIORITY 2: Check user_ai_tiers.tier (fallback)
+      else {
+        const { data: userTierData } = await supabaseAdmin
+          .from('user_ai_tiers')
+          .select('tier')
+          .eq('user_id', userId)
+          .maybeSingle()
+        
+        if (userTierData?.tier) {
+          tier = userTierData.tier
+          console.log('[Quota] Tier from user_ai_tiers.tier:', tier)
+        }
+        // PRIORITY 3: Check organization tier (last resort)
+        else if (organizationId) {
+          const { data: orgData } = await supabaseAdmin
+            .from('preschools')
+            .select('subscription_tier')
+            .eq('id', organizationId)
+            .maybeSingle()
 
-      if (orgData?.subscription_tier) {
-        tier = orgData.subscription_tier.toLowerCase()
+          if (orgData?.subscription_tier) {
+            tier = orgData.subscription_tier
+            console.log('[Quota] Tier from preschools.subscription_tier:', tier)
+          }
+        }
       }
     }
     
-    console.log('[Quota] Using tier:', tier, effectiveTier ? '(provided)' : '(from org or default)')
+    console.log('[Quota] Final tier:', tier, effectiveTier ? '(provided)' : '(from database)')
 
     // Get quota limit for this tier and service
     const tierLimits = defaultQuotas[tier] || defaultQuotas.free
+    if (!defaultQuotas[tier]) {
+      console.warn('[Quota] Unknown tier, falling back to free:', tier)
+    }
     const limit = tierLimits[serviceType] || 10
 
     // -1 means unlimited (enterprise tier)
@@ -137,7 +195,7 @@ export async function checkQuota(
  * Log AI usage to database
  */
 export async function logUsage(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   params: {
     userId: string
     organizationId: string | null
@@ -151,7 +209,7 @@ export async function logUsage(
     inputText?: string
     outputText?: string
     errorMessage?: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }
 ): Promise<void> {
   try {
@@ -186,7 +244,7 @@ export async function logUsage(
  * Get usage statistics for a user
  */
 export async function getUsageStats(
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   serviceType?: string,
   startDate?: Date,
@@ -226,11 +284,17 @@ export async function getUsageStats(
     }
   }
 
+  type UsageLogRow = {
+    status: string
+    tokens_used?: number
+    estimated_cost?: number
+  }
+
   return {
     totalCalls: data.length,
-    successfulCalls: data.filter((d: any) => d.status === 'success').length,
-    failedCalls: data.filter((d: any) => d.status === 'error').length,
-    totalTokens: data.reduce((sum: number, d: any) => sum + (d.tokens_used || 0), 0),
-    totalCost: data.reduce((sum: number, d: any) => sum + (d.estimated_cost || 0), 0),
+    successfulCalls: data.filter((d: UsageLogRow) => d.status === 'success').length,
+    failedCalls: data.filter((d: UsageLogRow) => d.status === 'error').length,
+    totalTokens: data.reduce((sum: number, d: UsageLogRow) => sum + (d.tokens_used || 0), 0),
+    totalCost: data.reduce((sum: number, d: UsageLogRow) => sum + (d.estimated_cost || 0), 0),
   }
 }

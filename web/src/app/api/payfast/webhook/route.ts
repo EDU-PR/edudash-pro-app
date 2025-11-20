@@ -15,7 +15,7 @@ const PAYFAST_MERCHANT_KEY=REDACTED
 const PAYFAST_PASSPHRASE=REDACTED
 const PAYFAST_MODE = (process.env.PAYFAST_MODE || 'sandbox').toLowerCase();
 
-function generateSignature(data: Record<string, any>, passPhrase: string = '') {
+function generateSignature(data: Record<string, string>, passPhrase: string = '') {
   let pfOutput = '';
   
   // CRITICAL: Sort keys alphabetically (required by PayFast)
@@ -46,12 +46,12 @@ export async function POST(request: NextRequest) {
   try {
     // Parse form data from PayFast
     const formData = await request.formData();
-    const data: Record<string, any> = {};
+    const data: Record<string, string> = {};
     
     formData.forEach((value, key) => {
       data[key] = value.toString();
     });
-
+    
     console.log('[PayFast Webhook] Received data:', {
       payment_id: data.m_payment_id,
       pf_payment_id: data.pf_payment_id,
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user_id = data.custom_str1;
-    const tier = data.custom_str2; // e.g. parent_starter, parent_plus, school_starter
+    const tier = data.custom_str2;
     const payment_status = data.payment_status;
 
     console.log('[PayFast Webhook] Processing payment:', { user_id, tier, payment_status });
@@ -106,10 +106,7 @@ export async function POST(request: NextRequest) {
     if (payment_status === 'COMPLETE') {
       const supabaseAdmin = getSupabaseAdmin();
       
-      // Use tier as-is (already matches tier_name_aligned enum)
-      // Values: parent_starter, parent_plus, school_starter, school_premium, school_pro
-
-      // Map product tier -> capability tier classification used by AI gating system
+      // Map product tier -> capability tier classification
       const capabilityTierMap: Record<string, 'free' | 'starter' | 'premium' | 'enterprise'> = {
         free: 'free',
         parent_starter: 'starter',
@@ -127,9 +124,7 @@ export async function POST(request: NextRequest) {
         .from('user_ai_tiers')
         .upsert({
           user_id,
-          tier: tier, // Store product tier for display / billing alignment
-          // If the table has a separate capability column, include it (ignore error if column absent)
-          capability_tier: capabilityTier as any,
+          tier: tier,
           assigned_reason: `PayFast subscription payment ${data.pf_payment_id}`,
           is_active: true,
           metadata: {
@@ -159,7 +154,7 @@ export async function POST(request: NextRequest) {
         .from('user_ai_usage')
         .upsert({
           user_id,
-          current_tier: capabilityTier, // normalized tier for capability gating (free|starter|premium|enterprise)
+          current_tier: tier,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id'
@@ -167,7 +162,6 @@ export async function POST(request: NextRequest) {
 
       if (usageError) {
         console.error('[PayFast Webhook] Failed to update usage tier:', usageError);
-        // Don't fail the webhook - tier update succeeded
       }
 
       // Disable trial for the user after successful subscription
@@ -183,7 +177,7 @@ export async function POST(request: NextRequest) {
         console.warn('[PayFast Webhook] Trial flag update exception:', e);
       }
 
-      // Log the payment in subscriptions table (create if doesn't exist)
+      // Log the payment in subscriptions table
       const { error: subError } = await supabaseAdmin
         .from('subscriptions')
         .insert({
@@ -198,9 +192,8 @@ export async function POST(request: NextRequest) {
           metadata: data,
         });
 
-      if (subError && subError.code !== '42P01') { // Ignore table doesn't exist error
+      if (subError && subError.code !== '42P01') {
         console.error('[PayFast Webhook] Failed to log subscription:', subError);
-        // Don't fail the webhook - main tier update succeeded
       }
 
       const duration = Date.now() - startTime;
@@ -229,9 +222,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error('[PayFast Webhook] Error after ${duration}ms:', error);
+    console.error(`[PayFast Webhook] Error after ${duration}ms:`, error);
     
-    // Log error details
     if (error instanceof Error) {
       console.error('[PayFast Webhook] Error details:', {
         message: error.message,
@@ -247,4 +239,16 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Handle OPTIONS for CORS
+export async function OPTIONS() {
+  return new NextResponse('ok', {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }

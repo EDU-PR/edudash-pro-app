@@ -130,7 +130,7 @@ export function EduDashProLoader({
   const containerStyle = variant === 'splash' ? styles.splashContainer : 
                         fullScreen ? styles.fullScreenContainer : styles.inlineContainer;
 
-  const iconSource = require('@/assets/branding/png/icon-512.png');
+  const iconSource = require('@/assets/icon.png');
 
   return (
     <Animated.View 

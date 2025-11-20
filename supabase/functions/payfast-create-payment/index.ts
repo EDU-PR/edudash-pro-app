@@ -205,6 +205,7 @@ const PAYFAST_MERCHANT_ID = Deno.env.get('PAYFAST_MERCHANT_ID') || '';
 const PAYFAST_MERCHANT_KEY=REDACTED
 const PAYFAST_PASSPHRASE=REDACTED
 const BASE_URL = Deno.env.get('BASE_URL') || 'https://edudashpro.org.za';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 
 // PayFast URLs
 const PAYFAST_URLS = {
@@ -363,6 +364,9 @@ serve(async (req: Request) => {
     const isSandbox = PAYFAST_MODE === 'sandbox';
     const payFastUrl = isSandbox ? PAYFAST_URLS.sandbox : PAYFAST_URLS.production;
 
+    // No normalization - use database enum value (parent_plus, not parent-plus)
+    console.log('[PayFast Create] Using tier:', tier);
+    
     // Create unique payment reference
     const paymentId = `SUB_${tier.toUpperCase()}_${user_id.slice(0, 8)}_${Date.now()}`;
 
@@ -370,9 +374,9 @@ serve(async (req: Request) => {
     const payFastData: Record<string, string> = {
       merchant_id: PAYFAST_MERCHANT_ID,
       merchant_key: PAYFAST_MERCHANT_KEY,
-      return_url: `${BASE_URL}/dashboard/parent/subscription?payment=success`,
-      cancel_url: `${BASE_URL}/dashboard/parent/subscription?payment=cancelled`,
-      notify_url: `${BASE_URL}/api/payfast/webhook`,
+      return_url: `${BASE_URL}/dashboard/parent?payment=success`,
+      cancel_url: `${BASE_URL}/dashboard/parent?payment=cancelled`,
+      notify_url: `${SUPABASE_URL}/functions/v1/payfast-webhook`,
       name_first: firstName || email.split('@')[0],
       name_last: lastName || 'User',
       email_address: email,
@@ -380,9 +384,10 @@ serve(async (req: Request) => {
       amount: amount.toFixed(2),
       item_name: itemName || `EduDash Pro ${tier} Subscription`,
       item_description: itemDescription || `Monthly subscription to EduDash Pro ${tier} plan`,
-      custom_str1: user_id,
-      custom_str2: tier,
-      custom_str3: 'monthly_subscription',
+      custom_str1: tier, // Plan tier for webhook (database enum value: parent_plus)
+      custom_str2: 'user', // Scope: 'user' or 'school'
+      custom_str3: user_id, // Owner user ID
+      custom_str4: JSON.stringify({ billing: 'monthly', seats: 1 }), // Additional data
     };
 
     // Add subscription details
@@ -402,6 +407,42 @@ serve(async (req: Request) => {
 
     // Add signature to data
     payFastData.signature = signature;
+
+    // Create payment transaction record in database
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey!, {
+      auth: { persistSession: false }
+    });
+
+    const { error: txError } = await supabaseAdmin
+      .from('payment_transactions')
+      .insert({
+        id: paymentId,
+        user_id: user_id,
+        subscription_plan_id: tier, // Required: use tier as plan identifier
+        amount: amount,
+        currency: 'ZAR',
+        status: 'pending',
+        provider: 'payfast',
+        provider_payment_id: null, // Will be updated by webhook
+        tier: tier, // Use tier directly (database enum value like parent_plus)
+        billing_cycle: 'monthly',
+        metadata: {
+          item_name: payFastData.item_name,
+          item_description: payFastData.item_description,
+          merchant_id: PAYFAST_MERCHANT_ID,
+        },
+      });
+
+    if (txError) {
+      console.error('[PayFast Edge] Failed to create transaction record:', txError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create payment record' }), 
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    console.log('[PayFast Edge] Payment transaction created:', paymentId);
 
     console.log('[PayFast Edge] Data being sent to PayFast:', {
       amount: payFastData.amount,

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
@@ -134,28 +134,54 @@ const TIER_INFO: Record<string, TierInfo> = {
   },
 };
 
-export default function SubscriptionPage() {
+function SubscriptionPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const { userId, userName, hasOrganization, tenantSlug } = useParentDashboardData();
-  const { usage, refreshUsage } = useQuotaCheck(userId);
-
+  const { usage, refreshUsage } = useQuotaCheck(userId || undefined);
+  
   const [currentTier, setCurrentTier] = useState<string>('free');
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paymentAlert, setPaymentAlert] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
 
-  // Debug: Log tier changes
-  useEffect(() => {
-    console.log('[Subscription] currentTier state changed to:', currentTier);
-  }, [currentTier]);
-
-  // Listen for real-time tier updates
-  useTierUpdates(userId, (newTier) => {
-    console.log('[Subscription] Tier updated via realtime to:', newTier);
+  // Use custom hook for tier updates
+  useTierUpdates(userId || undefined, (newTier) => {
+    console.log('[Subscription] Tier updated via realtime:', newTier);
     setCurrentTier(newTier);
-    loadSubscriptionData();
-    refreshUsage();
   });
+
+  // Handle payment status from URL params
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+    if (paymentStatus === 'success') {
+      setPaymentAlert({
+        type: 'success',
+        message: 'Payment successful! Your subscription is being activated. Please allow a few moments for the update.'
+      });
+      // Refresh tier data after successful payment
+      if (userId) {
+        loadSubscriptionData();
+        refreshUsage();
+      }
+      // Clear URL params after showing message
+      const timer = setTimeout(() => {
+        router.replace('/dashboard/parent/subscription');
+      }, 100);
+      return () => clearTimeout(timer);
+    } else if (paymentStatus === 'cancelled') {
+      setPaymentAlert({
+        type: 'error',
+        message: 'Payment was cancelled. Your subscription has not been changed.'
+      });
+      // Clear URL params
+      const timer = setTimeout(() => {
+        router.replace('/dashboard/parent/subscription');
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, router, userId]);
 
   useEffect(() => {
     if (userId) {
@@ -224,6 +250,66 @@ export default function SubscriptionPage() {
       tenantSlug={tenantSlug}
     >
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+        {/* PAYMENT STATUS ALERT */}
+        {paymentAlert && (
+          <div style={{
+            background: paymentAlert.type === 'success' 
+              ? 'linear-gradient(135deg, rgb(34, 197, 94) 0%, rgb(22, 163, 74) 100%)'
+              : paymentAlert.type === 'error'
+              ? 'linear-gradient(135deg, rgb(239, 68, 68) 0%, rgb(220, 38, 38) 100%)'
+              : 'linear-gradient(135deg, rgb(59, 130, 246) 0%, rgb(37, 99, 235) 100%)',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            marginBottom: '24px',
+            border: '2px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: paymentAlert.type === 'success'
+              ? '0 4px 20px rgba(34, 197, 94, 0.4)'
+              : paymentAlert.type === 'error'
+              ? '0 4px 20px rgba(239, 68, 68, 0.4)'
+              : '0 4px 20px rgba(59, 130, 246, 0.4)',
+            animation: 'slideDown 0.3s ease-out'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '12px',
+                padding: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {paymentAlert.type === 'success' ? (
+                  <CheckCircle size={24} color="white" />
+                ) : paymentAlert.type === 'error' ? (
+                  <XCircle size={24} color="white" />
+                ) : (
+                  <AlertCircle size={24} color="white" />
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ color: 'white', fontSize: '16px', fontWeight: 600, margin: 0 }}>
+                  {paymentAlert.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setPaymentAlert(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 500
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* PROMO ALERT */}
         {(currentTier === 'free' || currentTier === 'trial') && (
           <div style={{ 
@@ -586,7 +672,15 @@ export default function SubscriptionPage() {
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                 {Object.values(TIER_INFO)
-                  .filter((tier) => tier.name !== currentTier && tier.name !== 'school')
+                  .filter((tier) => {
+                    // Don't show current tier
+                    if (tier.name === currentTier) return false;
+                    // Don't show school plan (not for parents)
+                    if (tier.name === 'school') return false;
+                    // Don't show trial if user already has a paid plan or is on free
+                    if (tier.name === 'trial' && currentTier !== 'free') return false;
+                    return true;
+                  })
                   .map((tier) => {
                     const Icon = tier.icon;
                     const isCurrent = tier.name === currentTier;
@@ -661,5 +755,26 @@ export default function SubscriptionPage() {
         )}
       </div>
     </ParentShell>
+  );
+}
+
+export default function ParentSubscriptionPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'var(--background)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ margin: '0 auto 16px' }} />
+          <p style={{ color: 'var(--muted)' }}>Loading subscription...</p>
+        </div>
+      </div>
+    }>
+      <SubscriptionPageContent />
+    </Suspense>
   );
 }

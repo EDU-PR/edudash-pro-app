@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 // PayFast ITN Webhook Handler
 // Purpose: Accept PayFast ITN (server-to-server) callbacks, verify signature,
 // process payments, and activate subscriptions
@@ -11,6 +10,20 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Transaction metadata type
+interface TransactionMetadata {
+  invoice_number?: string;
+  plan_name?: string;
+  price_paid?: number;
+  transaction_id?: string;
+  pf_payment_id?: string;
+  activated_by_payment?: boolean;
+  owner_user_id?: string;
+  created_by_payment?: boolean;
+  payment_id?: string;
+  [key: string]: unknown; // Allow other properties
+}
+
 // Helper function to compute MD5 hash
 async function md5Hash(data: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -18,6 +31,13 @@ async function md5Hash(data: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('MD5', dataBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Helper function for RFC1738 URL encoding (spaces as '+', uppercase percent-hex)
+function encodeRFC1738(v: string): string {
+  return encodeURIComponent(v)
+    .replace(/%20/g, '+')
+    .replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
 }
 
 // Helper function to validate ITN with PayFast
@@ -48,12 +68,47 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Only accept POST requests from PayFast
+  if (req.method !== "POST") {
+    console.error(`PayFast webhook received invalid method: ${req.method}`);
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { 
+      status: 405, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
+  }
+
   try {
+    // IP Whitelist validation for PayFast
+    const PAYFAST_IPS = [
+      '197.97.145.144', '197.97.145.145', '197.97.145.146', '197.97.145.147',
+      '197.97.145.148', '197.97.145.149', '197.97.145.150', '197.97.145.151',
+      '197.97.145.152', '197.97.145.153', '197.97.145.154', '197.97.145.155',
+      '197.97.145.156', '197.97.145.157', '197.97.145.158', '197.97.145.159',
+      '41.74.179.194', // Sandbox IP
+    ];
+    
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     req.headers.get('cf-connecting-ip') ||
+                     req.headers.get('x-real-ip') || '';
+    
+    const PAYFAST_MODE = (Deno.env.get("PAYFAST_MODE") || "sandbox").toLowerCase();
+    
+    // Skip IP validation in sandbox mode for testing
+    if (PAYFAST_MODE !== 'sandbox' && clientIp && !PAYFAST_IPS.includes(clientIp)) {
+      console.error('PayFast ITN from unauthorized IP:', clientIp);
+      return new Response("Unauthorized IP", { status: 403, headers: corsHeaders });
+    }
+    
+    console.log('PayFast ITN IP validation:', {
+      clientIp,
+      mode: PAYFAST_MODE,
+      validated: PAYFAST_MODE === 'sandbox' || PAYFAST_IPS.includes(clientIp)
+    });
+
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const PAYFAST_PASSPHRASE=REDACTED
     const PAYFAST_MERCHANT_ID = Deno.env.get("PAYFAST_MERCHANT_ID") || "";
-    const PAYFAST_MODE = (Deno.env.get("PAYFAST_MODE") || "sandbox").toLowerCase();
     
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { 
       auth: { persistSession: false } 
@@ -61,6 +116,9 @@ serve(async (req: Request) => {
 
     // PayFast sends application/x-www-form-urlencoded
     const rawBody = await req.text();
+    
+    console.log('[PayFast ITN] Raw body received:', rawBody.substring(0, 200));
+    
     const params = new URLSearchParams(rawBody);
 
     // Extract key parameters
@@ -77,15 +135,16 @@ serve(async (req: Request) => {
       payment_status,
       amount_gross,
       signature,
-      ...otherFields
+      ..._otherFields
     } = payload;
 
-    console.log('PayFast ITN received:', {
+    console.log('[PayFast ITN] Parsed payload:', {
       merchant_id,
       m_payment_id,
       pf_payment_id,
       payment_status,
-      amount_gross
+      amount_gross,
+      has_signature: !!signature
     });
 
     // Basic validation
@@ -107,11 +166,6 @@ serve(async (req: Request) => {
         // - concatenate non-blank vars (excluding 'signature') in the order received
         // - URL encode values (RFC1738: spaces as '+', uppercase percent-hex)
         // - append &passphrase=...
-        function encodeRFC1738(v: string) {
-          return encodeURIComponent(v)
-            .replace(/%20/g, '+')
-            .replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
-        }
 
         const orderedPairs: string[] = [];
         // Maintain original POST order using URLSearchParams iteration
@@ -162,7 +216,7 @@ serve(async (req: Request) => {
       ip_address: req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || null,
       is_valid: signatureValid && isValidWithPayFast,
       processing_notes: `Signature: ${signatureValid ? 'Valid' : 'Invalid'}, PayFast: ${isValidWithPayFast ? 'Valid' : 'Invalid'}`,
-      related_payment_id: m_payment_id,
+      // related_payment_id removed - m_payment_id is the transaction ID
     });
 
     if (logError) {
@@ -241,10 +295,12 @@ serve(async (req: Request) => {
       console.log('Processing successful payment:', m_payment_id);
       
       // Extract custom data from PayFast
-      const planTier = payload.custom_str1 || '';
+      const planTier = payload.custom_str1 || ''; // Database enum format (parent_plus, parent_starter, etc)
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       const customData = payload.custom_str4 || '{}';
+      
+      console.log('[PayFast ITN] Received tier from custom_str1:', planTier);
       
       let billing = 'monthly';
       let seats = 1;
@@ -257,7 +313,7 @@ serve(async (req: Request) => {
         console.warn('Error parsing custom_str4:', e);
       }
 
-      // Get plan details
+      // Get plan details - now using same tier format everywhere (underscores)
       const { data: plan } = await supabase
         .from('subscription_plans')
         .select('id, tier, name, max_teachers')
@@ -266,7 +322,7 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       if (!plan) {
-        console.error('Plan not found:', planTier);
+        console.error('Plan not found for tier:', planTier);
         return new Response("Plan not found", { status: 400, headers: corsHeaders });
       }
 
@@ -331,6 +387,41 @@ serve(async (req: Request) => {
           .from('organizations')
           .update({ plan_tier: plan.tier })
           .eq('id', existingTx.school_id);
+        
+        // CRITICAL: Update user_ai_tiers for all school users
+        // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
+        const { error: tierUpdateError } = await supabase
+          .from('user_ai_tiers')
+          .update({ tier: planTier })
+          .eq('organization_id', existingTx.school_id);
+        
+        if (tierUpdateError) {
+          console.error('Error updating user_ai_tiers for school:', tierUpdateError);
+        } else {
+          console.log('Updated user_ai_tiers for school users with tier:', planTier);
+        }
+        
+        // CRITICAL: Also update user_ai_usage.current_tier for all school users (this is what the UI reads)
+        // Use original planTier (with underscores) for consistency
+        // First get all user IDs for this school
+        const { data: schoolUsers } = await supabase
+          .from('user_ai_tiers')
+          .select('user_id')
+          .eq('organization_id', existingTx.school_id);
+        
+        if (schoolUsers && schoolUsers.length > 0) {
+          const userIds = schoolUsers.map(u => u.user_id);
+          const { error: usageUpdateError } = await supabase
+            .from('user_ai_usage')
+            .update({ current_tier: planTier })
+            .in('user_id', userIds);
+          
+          if (usageUpdateError) {
+            console.error('Error updating user_ai_usage for school:', usageUpdateError);
+          } else {
+            console.log('Updated user_ai_usage.current_tier for school users with tier:', planTier);
+          }
+        }
 
         // Send email notification (sandbox & production)
         try {
@@ -504,6 +595,32 @@ serve(async (req: Request) => {
           .from('organizations')
           .update({ plan_tier: plan.tier })
           .eq('id', userSchoolId);
+        
+        // CRITICAL: Update user_ai_tiers for the owner user
+        // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
+        const { error: tierUpdateError } = await supabase
+          .from('user_ai_tiers')
+          .update({ tier: planTier })
+          .eq('user_id', ownerId);
+        
+        if (tierUpdateError) {
+          console.error('Error updating user_ai_tiers for user:', tierUpdateError);
+        } else {
+          console.log('Updated user_ai_tiers for user:', ownerId, 'with tier:', planTier);
+        }
+        
+        // CRITICAL: Also update user_ai_usage.current_tier (this is what the UI reads)
+        // Use original planTier (with underscores) for consistency
+        const { error: usageUpdateError } = await supabase
+          .from('user_ai_usage')
+          .update({ current_tier: planTier })
+          .eq('user_id', ownerId);
+        
+        if (usageUpdateError) {
+          console.error('Error updating user_ai_usage for user:', usageUpdateError);
+        } else {
+          console.log('Updated user_ai_usage.current_tier for user:', ownerId, 'with tier:', planTier);
+        }
 
         // Send email notification for user subscription
         try {
@@ -561,7 +678,7 @@ serve(async (req: Request) => {
       }
 
       // Handle invoice status update
-      const invoiceNumber = (existingTx.metadata as any)?.invoice_number;
+      const invoiceNumber = (existingTx.metadata as TransactionMetadata)?.invoice_number;
       if (invoiceNumber) {
         await supabase
           .from('billing_invoices')
@@ -577,7 +694,7 @@ serve(async (req: Request) => {
     // Handle failed/cancelled payments
     else if (newStatus === 'cancelled' || newStatus === 'failed') {
       if (existingTx.school_id) {
-        const invoiceNumber = (existingTx.metadata as any)?.invoice_number;
+        const invoiceNumber = (existingTx.metadata as TransactionMetadata)?.invoice_number;
         if (invoiceNumber) {
           await supabase
             .from('billing_invoices')

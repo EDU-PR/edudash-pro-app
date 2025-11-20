@@ -110,6 +110,12 @@ export function UpgradeModal({
 
       // Call Supabase Edge Function to create payment
       const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Please log in to continue');
+      }
+
+      // Call Supabase Edge Function to create payment
       const { data, error } = await supabase.functions.invoke('payfast-create-payment', {
         body: {
           user_id: userId,

@@ -30,6 +30,7 @@ export function ChatMessages({
   examContext,
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -37,14 +38,16 @@ export function ChatMessages({
   }, [messages, isTyping]);
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-950 [&::-webkit-scrollbar]:hidden" style={{
-      scrollBehavior: 'smooth',
-      scrollbarWidth: 'none',
-      msOverflowStyle: 'none',
-      WebkitOverflowScrolling: 'touch',
-      paddingTop: '1rem',
-      paddingBottom: '1rem'
-    }}>
+    <div
+      className="flex-1 overflow-y-auto"
+      style={{
+        paddingTop: '100px',
+        paddingBottom: '1rem',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+        scrollBehavior: 'smooth',
+      }}
+    >
       <div className="w-full max-w-4xl mx-auto px-4" style={{
         display: 'flex',
         flexDirection: 'column',

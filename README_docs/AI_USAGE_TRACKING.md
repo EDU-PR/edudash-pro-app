@@ -177,8 +177,10 @@ NEXT_PUBLIC_PAYFAST_URL=https://sandbox.payfast.co.za/eng/process
 
 2. Configure PayFast webhooks to point to:
 ```
-https://your-domain.com/api/payfast/webhook
+https://[your-project-id].supabase.co/functions/v1/payfast-webhook
 ```
+
+**DO NOT** use the Next.js API route - it has been removed for security.
 
 ### Payment Flow
 

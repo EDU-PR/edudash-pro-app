@@ -44,7 +44,8 @@ export default function DashboardPage() {
           router.replace('/dashboard/principal');
           break;
         case 'superadmin':
-          router.replace('/dashboard/superadmin');
+        case 'super_admin':
+          router.replace('/dashboard/admin');
           break;
         default:
           router.replace('/dashboard/parent'); // Default to parent dashboard

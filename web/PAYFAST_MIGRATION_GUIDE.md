@@ -171,14 +171,19 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=REDACTED
 
-# PayFast (Server-side only)
-PAYFAST_MODE=production
-PAYFAST_MERCHANT_ID=your_production_merchant_id
-PAYFAST_MERCHANT_KEY=REDACTED
-PAYFAST_PASSPHRASE=REDACTED
-
 # Base URL
 NEXT_PUBLIC_BASE_URL=https://edudashpro.org.za
+```
+
+**IMPORTANT:** PayFast credentials are NO LONGER stored in Vercel.
+They are stored in Supabase Edge Function secrets:
+
+```bash
+# Configure in Supabase Dashboard → Edge Functions → Secrets
+supabase secrets set PAYFAST_MODE=production
+supabase secrets set PAYFAST_MERCHANT_ID=your_production_merchant_id
+supabase secrets set PAYFAST_MERCHANT_KEY=REDACTED
+supabase secrets set PAYFAST_PASSPHRASE=REDACTED
 ```
 
 ## PayFast Sandbox vs Production

@@ -19,7 +19,6 @@ import { redactPII } from './security/pii-redactor.ts'
 // AI Client
 import { selectModelForTier } from './ai-client/model-selector.ts'
 import { callClaude } from './ai-client/anthropic-client.ts'
-import { callOpenAI } from './ai-client/openai-client.ts'
 
 // Tools
 import { getToolsForRole } from './tools/tool-registry.ts'
@@ -30,25 +29,49 @@ import { createStreamingResponse } from './utils/streaming-handler.ts'
 import { handleToolExecution } from './utils/tool-handler.ts'
 import { aiRequestQueue, isRateLimitError, getRetryAfter } from './utils/request-queue.ts'
 
-import type { AIProxyRequest, ToolContext } from './types.ts'
+import type { AIProxyRequest, ToolContext, SubscriptionTier } from './types.ts'
 
 const ANTHROPIC_API_KEY=REDACTED
+const ANTHROPIC_API_KEY_2 = Deno.env.get('ANTHROPIC_API_KEY_2')
 const ZAI_API_KEY = Deno.env.get('ZAI_API_KEY')
-const OPENAI_API_KEY=REDACTED
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
+
+// Load balancer state for Anthropic keys
+let anthropicKeyIndex = 0
+
+/**
+ * Get next Anthropic API key using round-robin load balancing
+ */
+function getAnthropicApiKey(): { key: string; keyName: string } {
+  const keys = [
+    { key: ANTHROPIC_API_KEY, name: 'anthropic_1' },
+    { key: ANTHROPIC_API_KEY_2, name: 'anthropic_2' }
+  ].filter(k => k.key) // Only include keys that are set
+
+  if (keys.length === 0) {
+    throw new Error('No Anthropic API keys configured')
+  }
+
+  // Round-robin: cycle through available keys
+  const selected = keys[anthropicKeyIndex % keys.length]
+  anthropicKeyIndex++
+  
+  return { key: selected.key!, keyName: selected.name }
+}
 
 // Log startup configuration (once)
 console.log('[ai-proxy] Edge function starting up...')
 console.log('[ai-proxy] Configuration check:', {
-  hasAnthropicKey: !!ANTHROPIC_API_KEY,
+  hasAnthropicKey1: !!ANTHROPIC_API_KEY,
+  hasAnthropicKey2: !!ANTHROPIC_API_KEY_2,
   hasZaiKey: !!ZAI_API_KEY,
-  hasOpenAIKey: !!OPENAI_API_KEY,
   hasSupabaseUrl: !!SUPABASE_URL,
   hasServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
-  anthropicKeyLength: ANTHROPIC_API_KEY?.length || 0,
+  anthropicKey1Length: ANTHROPIC_API_KEY?.length || 0,
+  anthropicKey2Length: ANTHROPIC_API_KEY_2?.length || 0,
   zaiKeyLength: ZAI_API_KEY?.length || 0,
-  openaiKeyLength: OPENAI_API_KEY?.length || 0
+  loadBalancing: `${[ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2].filter(k => k).length} Anthropic keys available`
 })
 
 serve(async (req: Request): Promise<Response> => {
@@ -80,10 +103,10 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Validate providers: allow OpenAI-only setups too
-    if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY) {
-      console.error(`[ai-proxy:${requestId}] CRITICAL: No AI providers configured (missing ANTHROPIC_API_KEY and OPENAI_API_KEY)`)
-      return createErrorResponse('configuration_error', 'AI service is not configured (no providers available)', 500)
+    // Validate that at least one Anthropic key is configured
+    if (!ANTHROPIC_API_KEY && !ANTHROPIC_API_KEY_2) {
+      console.error(`[ai-proxy:${requestId}] CRITICAL: No Anthropic API keys configured`)
+      return createErrorResponse('configuration_error', 'AI service is not configured (no Anthropic keys available)', 500)
     }
     
     console.log(`[ai-proxy:${requestId}] Starting request processing...`)
@@ -104,7 +127,7 @@ serve(async (req: Request): Promise<Response> => {
       return createErrorResponse('invalid_json', 'Invalid JSON in request body', 400)
     }
     
-    const { scope, payload, metadata = {}, stream = false, enable_tools = false, tool_choice, prefer_openai = false } = body
+    const { scope, payload, metadata = {}, stream = false, enable_tools = false, tool_choice } = body
     
     const VALID_TYPES = ['lesson_generation', 'homework_help', 'grading_assistance', 'general', 'dash_conversation', 'conversation']
     const service_type = body.service_type && VALID_TYPES.includes(body.service_type as string) 
@@ -145,7 +168,7 @@ serve(async (req: Request): Promise<Response> => {
     const organizationId = profile?.organization_id || profile?.preschool_id || null
     
     // Determine effective tier (handle both org-level and user-level trials)
-    let tier = (profile?.subscription_tier?.toLowerCase() || 'free') as any
+    let tier: string = 'free' // Default to free if no tier found
     
     try {
       // Check user-level trial (new system - for independent users)
@@ -159,7 +182,7 @@ serve(async (req: Request): Promise<Response> => {
           tier = 'free'
         } else {
           // Active user trial - grant premium access
-          const trialTier = (profile?.trial_plan_tier?.toLowerCase() || 'premium') as any
+          const trialTier = profile?.trial_plan_tier?.toLowerCase() || 'premium'
           console.log(`[ai-proxy:${requestId}] Active user trial until ${profile.trial_end_date}, tier: ${trialTier}`)
           tier = trialTier
         }
@@ -176,23 +199,23 @@ serve(async (req: Request): Promise<Response> => {
         } else {
           // Active org trial - use the tier from profile
           console.log(`[ai-proxy:${requestId}] Active org trial until ${profile.trial_ends_at}`)
+          tier = profile?.subscription_tier || 'premium'
         }
       }
     } catch (tierError) {
       console.error(`[ai-proxy:${requestId}] Error determining tier:`, tierError)
-      // Fallback to free tier on error
       tier = 'free'
     }
     
-    console.log(`[ai-proxy:${requestId}] Effective tier: ${tier}`)
+    console.log(`[ai-proxy:${requestId}] Effective tier from trials/profile:`, tier)
     
     const role = profile?.role || metadata.role || scope
     const hasOrganization = !!organizationId
     const isGuest = !user.email_confirmed_at
     const startTime = Date.now()
 
-    // Check quota (pass tier for trial users)
-    console.log(`[ai-proxy:${requestId}] Checking quota for user ${user.id}, service: ${service_type}, tier: ${tier}`)
+    // Check quota (tier will be fetched from user_ai_usage if not provided)
+    console.log(`[ai-proxy:${requestId}] Checking quota for user ${user.id}, service: ${service_type}, tier: ${tier || '(auto-detect)'}`)
     const quota = await checkQuota(supabase, user.id, organizationId, service_type, tier)
     console.log(`[ai-proxy:${requestId}] Quota check result:`, { allowed: quota.allowed, quotaInfo: quota.quotaInfo, error: quota.error })
     if (!quota.allowed) {
@@ -213,14 +236,10 @@ serve(async (req: Request): Promise<Response> => {
     const hasImages = !!(payload.images && payload.images.length > 0)
     console.log(`[ai-proxy:${requestId}] Model selection:`, { service_type, tier, hasImages })
     
-    let configuredProvider: string
-    let model: string
+    // Use model selector to determine appropriate Claude model
+    const model = selectModelForTier(tier as SubscriptionTier, hasImages)
     
-    // Temporarily use hardcoded logic (database config disabled due to permissions)
-    model = selectModelForTier(tier, hasImages)
-    configuredProvider = prefer_openai ? 'openai' : 'claude'
-    
-    console.log(`[ai-proxy:${requestId}] Final provider/model:`, { provider: configuredProvider, model, hasImages })
+    console.log(`[ai-proxy:${requestId}] Final provider/model:`, { provider: 'claude', model, hasImages })
 
     // Load tools if enabled
     const tools = enable_tools ? getToolsForRole(role, tier) : undefined
@@ -242,144 +261,21 @@ serve(async (req: Request): Promise<Response> => {
       isGuest
     }
 
+    // Track which Anthropic key is used (needed for error handling)
+    let anthropicKeyName = 'unknown';
+    let anthropicKey = '';
+
     try {
-      // Determine which AI provider to use (prefer_openai overrides config)
-      const useOpenAI = prefer_openai 
-        ? (prefer_openai && OPENAI_API_KEY)
-        : (configuredProvider === 'openai' && OPENAI_API_KEY);
-      
-      if (useOpenAI) {
-        console.log(`[ai-proxy:${requestId}] Using OpenAI as primary provider (prefer_openai=true)`);
-
-        // Map Claude model to OpenAI model (use gpt-4o for tool-calling reliability, gpt-4o-mini for chat)
-        // Use gpt-4o when tools are explicitly requested for better tool-calling reliability
-        const needsReliableToolCalling = tool_choice && tool_choice.type === 'tool';
-        const openaiModel = needsReliableToolCalling ? 'gpt-4o' : (hasImages ? 'gpt-4o-mini' : 'gpt-4o-mini');
-
-        console.log(`[ai-proxy:${requestId}] OpenAI model selection:`, {
-          model: openaiModel,
-          reason: needsReliableToolCalling ? 'forced tool call' : 'standard',
-          hasImages,
-          hasToolChoice: !!tool_choice
-        });
-
-        // For general chat, disable complex server tools to avoid schema incompatibilities with OpenAI
-        const toolsForOpenAI = service_type === 'dash_conversation' ? undefined : tools;
-
-        // Log tool availability
-        if (toolsForOpenAI) {
-          console.log(`[ai-proxy:${requestId}] Providing ${toolsForOpenAI.length} tools to OpenAI:`, toolsForOpenAI.map(t => t.name));
-        } else {
-          console.log(`[ai-proxy:${requestId}] No tools provided to OpenAI (service_type: ${service_type})`);
-        }
-
-        const result = await callOpenAI({
-          apiKey: OPENAI_API_KEY,
-          model: openaiModel as any,
-          prompt: redactedText,
-          images: payload.images,
-          conversationHistory: payload.conversationHistory,
-          tools: toolsForOpenAI,
-          tool_choice
-        });
-        
-        console.log(`[ai-proxy:${requestId}] OpenAI request succeeded`, {
-          hasToolCalls: !!(result.tool_calls && result.tool_calls.length > 0),
-          toolCallCount: result.tool_calls?.length || 0,
-          hasContent: !!result.content,
-          contentLength: result.content?.length || 0
-        });
-
-        // Check if tool was forced but not used
-        if (tool_choice && tool_choice.type === 'tool' && (!result.tool_calls || result.tool_calls.length === 0)) {
-          console.error(`[ai-proxy:${requestId}] CRITICAL: Tool '${tool_choice.name}' was forced but OpenAI did not call it`);
-          console.error(`[ai-proxy:${requestId}] OpenAI response:`, {
-            content: result.content?.substring(0, 500),
-            model: result.model,
-            tokensIn: result.tokensIn,
-            tokensOut: result.tokensOut
-          });
-
-          // Return a clear error to the client
-          return createErrorResponse(
-            'tool_not_called',
-            `AI did not use the required tool '${tool_choice.name}'. The AI may be experiencing issues with structured outputs. Please try again.`,
-            500
-          );
-        }
-
-        // Handle tool calls if present
-        if (result.tool_calls && result.tool_calls.length > 0) {
-          console.log(`[ai-proxy:${requestId}] OpenAI returned ${result.tool_calls.length} tool calls`);
-          
-          // Convert OpenAI tool_calls to Claude format for tool handler
-          const tool_use = result.tool_calls.map((tc: any) => ({
-            id: tc.id,
-            name: tc.name,
-            input: tc.arguments
-          }));
-          
-          // Create aiResult compatible with handleToolExecution
-          const aiResult = {
-            content: result.content,
-            tool_use,
-            tokensIn: result.tokensIn,
-            tokensOut: result.tokensOut,
-            cost: result.cost,
-            model: result.model
-          };
-          
-          return handleToolExecution(aiResult, toolContext, {
-            apiKey: OPENAI_API_KEY,
-            originalPrompt: redactedText,
-            tier,
-            hasImages,
-            images: payload.images,
-            availableTools: tools,
-            provider: 'openai'
-          }, {
-            supabaseAdmin: supabase,
-            userId: user.id,
-            organizationId,
-            serviceType: service_type,
-            metadata: { ...metadata, provider: 'openai' },
-            scope,
-            redactionCount,
-            startTime
-          });
-        }
-        
-        // Log usage
-        await logUsage(supabase, {
-          userId: user.id,
-          organizationId,
-          serviceType: service_type,
-          model: result.model,
-          status: 'success',
-          tokensIn: result.tokensIn,
-          tokensOut: result.tokensOut,
-          cost: result.cost,
-          processingTimeMs: Date.now() - startTime,
-          inputText: redactedText,
-          outputText: result.content,
-          metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount, provider: 'openai' }
-        });
-        
-        // Return response
-        return createSuccessResponse({
-          content: result.content,
-          usage: { tokens_in: result.tokensIn, tokens_out: result.tokensOut, cost: result.cost },
-          provider: 'openai'
-        });
-      }
-      
-      // Use Claude (default)
+      // Use Claude with load-balanced API key
       // Use request queue to prevent rate limiting from concurrent requests
-      console.log(`[ai-proxy:${requestId}] Enqueuing request to AI service (Claude). Queue status before:`, aiRequestQueue.getStatus());
+      const apiKeySelection = getAnthropicApiKey();
+      anthropicKey = apiKeySelection.key;
+      anthropicKeyName = apiKeySelection.keyName;
+      console.log(`[ai-proxy:${requestId}] Using ${anthropicKeyName}. Enqueuing request to Claude. Queue status before:`, aiRequestQueue.getStatus());
       
       const result = await aiRequestQueue.enqueue(() => callClaude({
-        apiKey: ANTHROPIC_API_KEY!,
-        model: model as any,
+        apiKey: anthropicKey,
+        model,
         prompt: redactedText,
         images: payload.images,
         conversationHistory: payload.conversationHistory, // Pass conversation history
@@ -389,7 +285,7 @@ serve(async (req: Request): Promise<Response> => {
         maxTokens: hasImages ? 1536 : 4096
       }));
 
-      console.log(`[ai-proxy:${requestId}] Request completed. Queue status after:`, aiRequestQueue.getStatus());
+      console.log(`[ai-proxy:${requestId}] Request completed using ${anthropicKeyName}. Queue status after:`, aiRequestQueue.getStatus());
 
       // Handle streaming
       if (stream && result.response) {
@@ -412,7 +308,7 @@ serve(async (req: Request): Promise<Response> => {
       // Handle tool use
       if (result.tool_use && result.tool_use.length > 0) {
         return handleToolExecution(result, toolContext, {
-          apiKey: ANTHROPIC_API_KEY!,
+          apiKey: anthropicKey,
           originalPrompt: redactedText,
           tier,
           hasImages,
@@ -443,7 +339,7 @@ serve(async (req: Request): Promise<Response> => {
         processingTimeMs: Date.now() - startTime,
         inputText: redactedText,
         outputText: result.content,
-        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount }
+        metadata: { ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0, redaction_count: redactionCount, api_key_used: anthropicKeyName }
       })
 
       // Return response
@@ -480,7 +376,7 @@ serve(async (req: Request): Promise<Response> => {
         metadata: { ...metadata, scope, error: (aiError as Error).message, error_stack: (aiError as Error).stack, redaction_count: redactionCount }
       })
 
-      // Handle rate limit and quota errors - try OpenAI fallback if available
+      // Handle rate limit and quota errors - try alternate Anthropic key if available
       const errorMessage = (aiError as Error).message || '';
       const isQuotaError = errorMessage.includes('usage limits') || errorMessage.includes('quota');
       const isRateLimit = isRateLimitError(aiError);
@@ -490,37 +386,41 @@ serve(async (req: Request): Promise<Response> => {
         const retrySeconds = Math.ceil(retryMs / 1000);
         
         if (isQuotaError) {
-          console.warn(`[ai-proxy:${requestId}] Claude quota exceeded. Attempting OpenAI fallback...`);
+          console.warn(`[ai-proxy:${requestId}] Claude quota exceeded for ${anthropicKeyName}.`);
         } else {
-          console.warn(`[ai-proxy:${requestId}] Rate limit hit. Retry after ${retrySeconds}s`);
+          console.warn(`[ai-proxy:${requestId}] Rate limit hit on ${anthropicKeyName}. Retry after ${retrySeconds}s`);
           console.warn(`[ai-proxy:${requestId}] Queue status:`, aiRequestQueue.getStatus());
         }
         
-        // Try OpenAI as fallback if configured
-        if (OPENAI_API_KEY && !stream && !tools) {
-          console.log(`[ai-proxy:${requestId}] Attempting OpenAI fallback...`);
+        // Try alternate Anthropic key if we have 2 keys configured
+        const hasAlternateKey = ANTHROPIC_API_KEY && ANTHROPIC_API_KEY_2;
+        if (hasAlternateKey && !stream && !tools) {
+          console.log(`[ai-proxy:${requestId}] Attempting retry with alternate Anthropic key...`);
           
           try {
-            // Map Claude model to OpenAI model
-            const openaiModel = model.includes('haiku') ? 'gpt-3.5-turbo' : 
-                               hasImages ? 'gpt-4-turbo' : 'gpt-4';
+            // Get the OTHER Anthropic key (not the one that just failed)
+            const { key: alternateKey, keyName: alternateKeyName } = getAnthropicApiKey();
+            console.log(`[ai-proxy:${requestId}] Retrying with ${alternateKeyName}`);
             
-            const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY,
-              model: openaiModel as any,
+            const fallbackResult = await callClaude({
+              apiKey: alternateKey,
+              model,
               prompt: redactedText,
               images: payload.images,
-              conversationHistory: payload.conversationHistory
+              conversationHistory: payload.conversationHistory,
+              stream: false,
+              tools: undefined, // Disable tools on retry to simplify
+              maxTokens: hasImages ? 1536 : 4096
             });
             
-            console.log(`[ai-proxy:${requestId}] OpenAI fallback succeeded`);
+            console.log(`[ai-proxy:${requestId}] Retry with ${alternateKeyName} succeeded`);
             
             // Log usage with fallback indicator
             await logUsage(supabase, {
               userId: user.id,
               organizationId,
               serviceType: service_type,
-              model: `${fallbackResult.model} (fallback)`,
+              model: `${fallbackResult.model} (retry)`,
               status: 'success',
               tokensIn: fallbackResult.tokensIn,
               tokensOut: fallbackResult.tokensOut,
@@ -535,148 +435,37 @@ serve(async (req: Request): Promise<Response> => {
                 has_images: hasImages, 
                 image_count: payload.images?.length || 0, 
                 redaction_count: redactionCount,
-                fallback_provider: 'openai',
+                retry_key: alternateKeyName,
+                original_key: anthropicKeyName,
                 original_error: isQuotaError ? 'anthropic_quota_exceeded' : 'anthropic_rate_limit'
               }
             });
             
-            // Return fallback response
+            // Return retry response
             return createSuccessResponse({
               content: fallbackResult.content,
               usage: { 
                 tokens_in: fallbackResult.tokensIn, 
                 tokens_out: fallbackResult.tokensOut, 
                 cost: fallbackResult.cost 
-              },
-              fallback: true,
-              fallback_provider: 'openai',
-              fallback_reason: isQuotaError ? 'quota_exceeded' : 'rate_limit'
+              }
             });
             
           } catch (fallbackError) {
-            console.error(`[ai-proxy:${requestId}] OpenAI fallback also failed:`, fallbackError);
+            console.error(`[ai-proxy:${requestId}] Alternate key retry also failed:`, fallbackError);
             // Continue to return rate limit error below
           }
         } else {
-          if (!OPENAI_API_KEY) {
-            console.log(`[ai-proxy:${requestId}] No OpenAI fallback available (API key not configured)`);
+          if (!hasAlternateKey) {
+            console.log(`[ai-proxy:${requestId}] No alternate Anthropic key available for retry`);
           } else if (stream) {
-            console.log(`[ai-proxy:${requestId}] OpenAI fallback not available for streaming requests`);
-          }
-        }
-
-        // Special case: tools were requested. Try OpenAI fallback by generating a compatible JSON exam
-        if (OPENAI_API_KEY && tools && !stream) {
-          try {
-            console.log(`[ai-proxy:${requestId}] Attempting OpenAI fallback for tool-calling request...`)
-
-            // Choose OpenAI model (text-only generation)
-            const openaiModel = hasImages ? 'gpt-4-turbo' : 'gpt-4'
-
-            // Build strict JSON output instruction so client can parse it as tool_result
-            const gradeHint = (metadata as any)?.grade || 'Grade'
-            const subjectHint = (metadata as any)?.subject || 'General'
-            const strictInstruction = [
-              `You must output ONLY a single JSON object with this exact shape:`,
-              '{',
-              '  "title": string,',
-              '  "grade": string,',
-              '  "subject": string,',
-              '  "instructions": string[],',
-              '  "sections": [ {',
-              '    "title": string,',
-              '    "questions": [ {',
-              '      "id": string,',
-              '      "number": string | number,',
-              '      "text": string,',
-              '      "type": "multiple_choice" | "short_answer" | "essay" | "numeric",',
-              '      "marks": number,',
-              '      "options"?: string[],',
-              '      "correctAnswer"?: string',
-              '    } ]',
-              '  } ],',
-              '  "totalMarks": number,',
-              '  "hasMemo": false',
-              '}',
-              '',
-              `Constraints:`,
-              `- Grade: ${gradeHint}`,
-              `- Subject: ${subjectHint}`,
-              `- The sum of all question marks MUST equal the specified totalMarks.`,
-              `- Provide at least 20 questions for Grade 4 and above.`,
-              `- No references to external images/diagrams.`,
-              `- Return ONLY JSON (no Markdown, no prose).`
-            ].join('\n')
-
-            const promptForOpenAI = `${redactedText}\n\n${strictInstruction}`
-
-            const fallbackResult = await callOpenAI({
-              apiKey: OPENAI_API_KEY,
-              model: openaiModel as any,
-              prompt: promptForOpenAI,
-              images: payload.images,
-              conversationHistory: payload.conversationHistory
-            })
-
-            // Try to parse JSON
-            let examObj: any = null
-            try {
-              examObj = JSON.parse(fallbackResult.content)
-            } catch {
-              const match = fallbackResult.content.match(/\{[\s\S]*\}$/)
-              if (match) {
-                try { examObj = JSON.parse(match[0]) } catch {}
-              }
-            }
-
-            if (examObj && examObj.sections) {
-              console.log(`[ai-proxy:${requestId}] OpenAI tool-fallback produced JSON exam; returning as tool_results`)
-
-              // Log usage with fallback indicator
-              await logUsage(supabase, {
-                userId: user.id,
-                organizationId,
-                serviceType: service_type,
-                model: `${fallbackResult.model} (fallback)`,
-                status: 'success',
-                tokensIn: fallbackResult.tokensIn,
-                tokensOut: fallbackResult.tokensOut,
-                cost: fallbackResult.cost,
-                processingTimeMs: Date.now() - startTime,
-                inputText: redactedText,
-                outputText: '[tool_result: openai_fallback] ',
-                metadata: { 
-                  ...metadata, scope, tier, has_images: hasImages, image_count: payload.images?.length || 0,
-                  redaction_count: redactionCount, fallback_provider: 'openai', original_error: 'anthropic_rate_limit',
-                }
-              })
-
-              // Wrap as a synthetic tool_result so existing clients can parse it
-              const toolResults = [
-                {
-                  type: 'tool_result',
-                  tool_use_id: 'openai_fallback_generate_caps_exam',
-                  content: JSON.stringify({ success: true, data: examObj })
-                }
-              ]
-
-              return createSuccessResponse({
-                content: '',
-                tool_results: toolResults,
-                usage: { tokens_in: fallbackResult.tokensIn, tokens_out: fallbackResult.tokensOut, cost: fallbackResult.cost },
-                fallback: true,
-                fallback_provider: 'openai'
-              })
-            }
-
-            console.warn(`[ai-proxy:${requestId}] OpenAI tool-fallback returned non-JSON or invalid schema`)
-          } catch (fallbackToolError) {
-            console.error(`[ai-proxy:${requestId}] OpenAI tool-fallback failed:`, fallbackToolError)
-            // fall through to return 429 below
+            console.log(`[ai-proxy:${requestId}] Retry not available for streaming requests`);
+          } else if (tools) {
+            console.log(`[ai-proxy:${requestId}] Retry not available for tool-calling requests`);
           }
         }
         
-        // Return rate limit error if fallback didn't work
+        // Return rate limit error if retry didn't work
         return new Response(JSON.stringify({
           success: false,
           error: { 

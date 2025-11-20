@@ -21,6 +21,7 @@ import {
   Activity,
   Search,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
@@ -340,6 +341,10 @@ export default function PrincipalDashboard() {
           <button className="qa" onClick={() => router.push('/dashboard/principal/teachers')}>
             <School className="icon20" />
             <span>Manage Teachers</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/dash-chat')} style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)', color: 'white', border: 'none' }}>
+            <Sparkles className="icon20" />
+            <span>Chat with Dash AI</span>
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/financials')}>
             <DollarSign className="icon20" />

@@ -88,6 +88,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   }
 
   const isUnlimited = ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isHighestTier = ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
 
   const quotaItems = [
     {
@@ -193,7 +194,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
         })}
       </div>
 
-      {!isUnlimited && (
+      {!isUnlimited && !isHighestTier && (
         <div 
           style={{
             marginTop: 'var(--space-4)',
@@ -201,11 +202,45 @@ export function QuotaCard({ userId }: QuotaCardProps) {
             backgroundColor: 'var(--bg-secondary)',
             borderRadius: 8,
             fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-3)',
           }}
         >
-          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-            💡 Need more? <a href="/dashboard/parent/subscription" className="link">Upgrade your plan</a> for higher limits and priority support.
+          <p style={{ margin: 0, color: 'var(--text-muted)', flex: 1 }}>
+            💡 Need more? <a 
+              href="/dashboard/parent/subscription" 
+              style={{ 
+                color: '#3b82f6', 
+                fontWeight: 600,
+                textDecoration: 'underline',
+                cursor: 'pointer'
+              }}
+            >
+              Upgrade your plan
+            </a> for higher limits and priority support.
           </p>
+          <a 
+            href="/dashboard/parent/subscription" 
+            className="btn btn-primary"
+            style={{
+              fontSize: 12,
+              padding: '6px 16px',
+              whiteSpace: 'nowrap',
+              textDecoration: 'none',
+              cursor: 'pointer',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
+              borderRadius: 6,
+              fontWeight: 500,
+              transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            Upgrade
+          </a>
         </div>
       )}
 

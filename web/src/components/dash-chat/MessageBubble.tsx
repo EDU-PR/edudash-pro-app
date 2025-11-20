@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { useEffect, useState } from 'react';
 import type { ChatMessage } from './types';
 import { exportTextToPDF } from '@/lib/utils/pdf-export';
+import { CodeBlock } from './CodeBlock';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -88,7 +89,7 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
         style={{
           width: 'auto',
           minWidth: '150px',
-          maxWidth: isUser ? '75%' : '85%',
+          maxWidth: isUser ? '80%' : '96%',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
@@ -183,7 +184,23 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
             <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{message.content}</p>
           ) : (
             <div className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code(props) {
+                    const { node, inline, className, children, ...rest } = props as any;
+                    return (
+                      <CodeBlock 
+                        inline={inline}
+                        className={className}
+                        {...rest}
+                      >
+                        {String(children).replace(/\n$/, '')}
+                      </CodeBlock>
+                    );
+                  }
+                }}
+              >
                 {message.content}
               </ReactMarkdown>
             </div>

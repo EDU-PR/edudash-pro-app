@@ -38,12 +38,11 @@ export default function UpgradePage() {
     getUser();
   }, [supabase]);
 
-  const tiers: PricingTier[] = [
+  const tiers = [
     {
-      id: 'basic',
-      name: 'Basic',
+      id: 'parent_starter',
+      name: 'Starter',
       price: 99,
-      period: 'month',
       icon: Zap,
       color: '#10b981',
       features: [
@@ -54,18 +53,13 @@ export default function UpgradePage() {
         'All subjects and grades',
         'PDF export',
         'Email support',
+        'Interactive robotics (2 free modules)',
       ],
-      limits: {
-        exams: 30,
-        explanations: 100,
-        chat: 200,
-      },
     },
     {
-      id: 'premium',
-      name: 'Premium',
-      price: 299,
-      period: 'month',
+      id: 'parent_plus',
+      name: 'Plus',
+      price: 199,
       icon: Crown,
       color: '#7c3aed',
       popular: true,
@@ -76,52 +70,27 @@ export default function UpgradePage() {
         'Priority AI processing',
         'Advanced analytics',
         'Personalized learning paths',
-        'All Basic features',
+        'All robotics modules unlocked',
+        'All 37 DBE textbooks',
+        'AI diagram generation',
         'Priority email support',
       ],
-      limits: {
-        exams: 100,
-        explanations: 500,
-        chat: 1000,
-      },
     },
-    {
-      id: 'school',
-      name: 'School',
-      price: 0,
-      period: 'contact us',
-      icon: Building,
-      color: '#06b6d4',
-      features: [
-        'Unlimited AI generations',
-        'Unlimited explanations',
-        'Unlimited chat messages',
-        'Multi-user management',
-        'Custom branding',
-        'API access',
-        'Dedicated account manager',
-        '24/7 priority support',
-      ],
-      limits: {
-        exams: 999999,
-        explanations: 999999,
-        chat: 999999,
-      },
-    },
-  ];
-
-  const handleUpgrade = async (tierId: string, price: number) => {
-    if (tierId === 'school') {
-      window.location.href = 'mailto:support@edudashpro.org.za?subject=School License Inquiry';
-      return;
-    }
-
+  ];  const handleUpgrade = async (tierId: string, price: number) => {
     setLoading(true);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         alert('Please sign in to upgrade');
+        router.push('/sign-in');
+        return;
+      }
+
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('Please sign in to continue');
         router.push('/sign-in');
         return;
       }
@@ -137,7 +106,7 @@ export default function UpgradePage() {
       });
 
       if (error || !data) {
-        alert(`Payment error: ${error?.message || data?.error || 'Failed to create payment'}`);
+        alert(`Payment error: ${error?.message || data?.error || 'Unknown error'}`);
         return;
       }
 
@@ -259,10 +228,25 @@ export default function UpgradePage() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
-                        R{tier.price}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+                        <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
+                          R{tier.id === 'parent_starter' ? '49.50' : '99.50'}
+                        </div>
+                        <div style={{ 
+                          fontSize: 20, 
+                          fontWeight: 500, 
+                          color: 'var(--muted)', 
+                          textDecoration: 'line-through' 
+                        }}>
+                          R{tier.price}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 14, color: 'var(--muted)' }}>per {tier.period}</div>
+                      <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 'var(--space-1)' }}>
+                        per month · <span style={{ color: '#10b981', fontWeight: 600 }}>50% OFF</span> for 6 months
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                        Early Bird Special - Ends Dec 31, 2025
+                      </div>
                     </>
                   )}
                 </div>
@@ -284,7 +268,11 @@ export default function UpgradePage() {
 
                 <button
                   className="btn"
-                  onClick={() => handleUpgrade(tier.id, tier.price)}
+                  onClick={() => {
+                    // Use promotional price for early bird period
+                    const promoPrice = tier.id === 'parent_starter' ? 49.50 : 99.50;
+                    handleUpgrade(tier.id, promoPrice);
+                  }}
                   disabled={loading || isCurrentTier}
                   style={{
                     width: '100%',
@@ -295,7 +283,7 @@ export default function UpgradePage() {
                   }}
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
-                  {isCurrentTier ? 'Current Plan' : tier.id === 'school' ? 'Contact Sales' : 'Upgrade Now'}
+                  {isCurrentTier ? 'Current Plan' : 'Upgrade Now'}
                 </button>
               </div>
             );

@@ -35,8 +35,14 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         setLoading(true);
         console.log('👶 [ChildRegistrationWidget] Loading requests for preschool:', preschoolId);
         
-        // Fetch pending child registration requests
-        const { data, error } = await supabase
+        // Check if this is a platform school (Community or Main)
+        const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+        const MAIN_SCHOOL_ID = '00000000-0000-0000-0000-000000000003';
+        const isPlatformSchool = preschoolId === COMMUNITY_SCHOOL_ID || preschoolId === MAIN_SCHOOL_ID;
+        
+        // Platform schools (admin) see ALL platform registrations
+        // Regular schools only see their own
+        let query = supabase
           .from('child_registration_requests')
           .select(`
             id,
@@ -48,10 +54,20 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
             created_at,
             preschool_id
           `)
-          .eq('preschool_id', preschoolId)
-          .eq('status', 'pending')
+          .eq('status', 'pending');
+        
+        if (isPlatformSchool) {
+          // Admin sees requests for BOTH Community School and Main School
+          query = query.in('preschool_id', [COMMUNITY_SCHOOL_ID, MAIN_SCHOOL_ID]);
+          console.log('👶 [ChildRegistrationWidget] Platform admin - showing all platform requests');
+        } else {
+          // Regular schools only see their own requests
+          query = query.eq('preschool_id', preschoolId);
+        }
+        
+        const { data, error } = await query
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(10); // Increased limit for platform admins
 
         if (error) {
           console.error('❌ [ChildRegistrationWidget] Error fetching requests:', error);

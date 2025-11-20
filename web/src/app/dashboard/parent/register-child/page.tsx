@@ -30,6 +30,9 @@ export default function RegisterChildPage() {
   const [emergencyRelation, setEmergencyRelation] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [gradeLevel, setGradeLevel] = useState('');
+  const [schoolNotListed, setSchoolNotListed] = useState(false);
+  const [manualSchoolName, setManualSchoolName] = useState('');
 
   // Organizations/schools
   const [organizations, setOrganizations] = useState<Array<{ id: string; name: string; type: string }>>([]);
@@ -73,7 +76,28 @@ export default function RegisterChildPage() {
           .order('name');
 
         if (error) throw error;
-        setOrganizations((data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' })));
+        
+        // Find EduDash Pro Community School or create default entry
+        const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+        const communitySchool = (data || []).find((p: any) => 
+          p.id === COMMUNITY_SCHOOL_ID ||
+          p.name.toLowerCase().includes('edudash pro community') || 
+          p.name.toLowerCase().includes('community school')
+        );
+        
+        const schools = (data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' }));
+        
+        // If community school exists, move it to top; otherwise add it as first option
+        if (communitySchool) {
+          const filtered = schools.filter((s: { id: string; name: string; type: string }) => s.id !== communitySchool.id);
+          setOrganizations([{ id: communitySchool.id, name: `${communitySchool.name} (Default)`, type: 'preschool' }, ...filtered]);
+          // Auto-select community school as default (always set it)
+          setSelectedOrgId(communitySchool.id);
+        } else {
+          // If no community school found, create a virtual one as first option
+          setOrganizations([{ id: COMMUNITY_SCHOOL_ID, name: 'EduDash Pro Community School (Default)', type: 'preschool' }, ...schools]);
+          setSelectedOrgId(COMMUNITY_SCHOOL_ID);
+        }
       } catch (err) {
         console.error('Failed to load organizations:', err);
       } finally {
@@ -94,12 +118,22 @@ export default function RegisterChildPage() {
     } else {
       const dob = new Date(dateOfBirth);
       const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      if (age < 2 || age > 7) {
-        newErrors.dateOfBirth = 'Child must be between 2 and 7 years old for preschool';
+      if (age < 2 || age > 18) {
+        newErrors.dateOfBirth = 'Child must be between 2 and 18 years old';
       }
     }
     if (!gender) newErrors.gender = 'Please select gender';
-    if (!selectedOrgId) newErrors.organization = 'Please select a school';
+    
+    // Validate school selection OR manual entry
+    if (schoolNotListed) {
+      if (!manualSchoolName.trim()) {
+        newErrors.manualSchool = 'Please enter your child\'s school name';
+      }
+    } else {
+      if (!selectedOrgId) {
+        newErrors.organization = 'Please select a school or choose "My child\'s school is not listed"';
+      }
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -117,8 +151,13 @@ export default function RegisterChildPage() {
       return;
     }
 
-    if (!selectedOrgId) {
+    if (!schoolNotListed && !selectedOrgId) {
       alert('Please select a school before submitting.');
+      return;
+    }
+    
+    if (schoolNotListed && !manualSchoolName.trim()) {
+      alert('Please enter your child\'s school name.');
       return;
     }
 
@@ -129,18 +168,27 @@ export default function RegisterChildPage() {
       // Normalize names: trim and collapse inner spaces
       const normalizedFirst = firstName.trim().replace(/\s+/g, ' ');
       const normalizedLast = lastName.trim().replace(/\s+/g, ' ');
-      const selectedOrgName = organizations.find(o => o.id === selectedOrgId)?.name || 'this school';
+      const selectedOrgName = schoolNotListed 
+        ? manualSchoolName.trim() 
+        : (organizations.find(o => o.id === selectedOrgId)?.name || 'this school');
 
       console.log('[RegisterChild] Checking for duplicate pending requests...');
       
-      const { data: existingRequests, error: checkError } = await supabase
+      // Build duplicate check query
+      let duplicateQuery = supabase
         .from('child_registration_requests')
         .select('id')
         .eq('parent_id', userId)
-        .eq('preschool_id', selectedOrgId)
         .eq('status', 'pending')
         .ilike('child_first_name', normalizedFirst)
         .ilike('child_last_name', normalizedLast);
+      
+      // Add preschool_id filter only if a school is selected from the list
+      if (!schoolNotListed && selectedOrgId) {
+        duplicateQuery = duplicateQuery.eq('preschool_id', selectedOrgId);
+      }
+      
+      const { data: existingRequests, error: checkError } = await duplicateQuery;
 
       if (checkError) {
         // Log error but continue - DB uniqueness constraint is our fallback
@@ -156,7 +204,9 @@ export default function RegisterChildPage() {
       console.log('[RegisterChild] Using auth user ID directly (profiles-first architecture):', userId);
 
       const relationshipNote = emergencyRelation ? `[EmergencyRelationship: ${emergencyRelation.trim()}]` : '';
-      const combinedNotes = (relationshipNote + (notes ? ` ${notes}` : '')).trim();
+      const gradeNote = gradeLevel ? `[Grade: ${gradeLevel.trim()}]` : '';
+      const schoolNote = schoolNotListed ? `[School: ${manualSchoolName.trim()}]` : '';
+      const combinedNotes = ([relationshipNote, gradeNote, schoolNote].filter(Boolean).join(' ') + (notes ? ` ${notes}` : '')).trim();
 
       const payload = {
         child_first_name: normalizedFirst,
@@ -170,14 +220,14 @@ export default function RegisterChildPage() {
         emergency_contact_phone: emergencyContactPhone || null,
         notes: combinedNotes || null,
         parent_id: userId, // Use auth.uid() directly (references profiles.id)
-        preschool_id: selectedOrgId,
+        preschool_id: schoolNotListed ? null : selectedOrgId, // Null if school not in system
         status: 'pending',
       };
 
       console.log('[RegisterChild] Submitting payload:', { ...payload, parent_id: userId });
 
-      // Update parent's preschool_id if not set
-      if (!preschoolId && selectedOrgId) {
+      // Update parent's preschool_id if not set AND school is from our list (not manual entry)
+      if (!preschoolId && !schoolNotListed && selectedOrgId) {
         console.log('✅ Setting parent preschool_id to:', selectedOrgId);
         const { error: updateError } = await supabase
           .from('profiles')
@@ -201,7 +251,11 @@ export default function RegisterChildPage() {
         throw error;
       }
 
-      alert('✅ Registration request submitted!\n\n🕒 The school will review your request.\n\nYou\'ll be notified once it\'s approved.');
+      const successMessage = schoolNotListed
+        ? `✅ Child information saved!\n\n📝 Your child has been added to your profile.\n\n💡 Since ${manualSchoolName} is not yet registered on EduDash Pro, you can track your child's progress independently using our AI-powered features.`
+        : `✅ Registration request submitted!\n\n🕒 ${selectedOrgName} will review your request.\n\nYou'll be notified once it's approved.`;
+      
+      alert(successMessage);
       router.push('/dashboard/parent');
     } catch (err) {
       console.error('Registration error:', err);
@@ -280,7 +334,7 @@ export default function RegisterChildPage() {
                       />
                       <Calendar style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5 }} className="icon16" />
                     </div>
-                    <p className="muted" style={{ fontSize: 11, marginTop: 'var(--space-1)' }}>Child must be between 2 and 7 years old</p>
+                    <p className="muted" style={{ fontSize: 11, marginTop: 'var(--space-1)' }}>Child must be between 2 and 18 years old</p>
                     {errors.dateOfBirth && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-1)' }}>{errors.dateOfBirth}</p>}
                   </div>
 
@@ -304,26 +358,108 @@ export default function RegisterChildPage() {
 
                   <div>
                     <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Select School *</label>
-                    {loadingOrgs ? (
-                      <div className="formInput" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Loader2 className="icon16" style={{ animation: 'spin 1s linear infinite' }} />
+                    
+                    {/* Checkbox for school not listed */}
+                    <div style={{ marginBottom: 'var(--space-3)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={schoolNotListed}
+                          onChange={(e) => {
+                            setSchoolNotListed(e.target.checked);
+                            if (e.target.checked) {
+                              setSelectedOrgId('');
+                            } else {
+                              setManualSchoolName('');
+                            }
+                          }}
+                          style={{ width: 18, height: 18, cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: 14 }}>My child&apos;s school is not listed (K-12 schools)</span>
+                      </label>
+                    </div>
+                    
+                    {schoolNotListed ? (
+                      <div>
+                        <input
+                          type="text"
+                          value={manualSchoolName}
+                          onChange={(e) => setManualSchoolName(e.target.value)}
+                          className="formInput"
+                          style={{ width: '100%' }}
+                          placeholder="Enter your child's school name (e.g., Hoërskool Waterkloof)"
+                        />
+                        <p className="muted" style={{ fontSize: 11, marginTop: 'var(--space-1)' }}>
+                          💡 Enter the full name of your child&apos;s primary or high school
+                        </p>
+                        {errors.manualSchool && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-1)' }}>{errors.manualSchool}</p>}
                       </div>
                     ) : (
-                      <select
-                        value={selectedOrgId}
-                        onChange={(e) => setSelectedOrgId(e.target.value)}
-                        className="formInput"
-                        style={{ width: '100%' }}
-                      >
-                        <option value="">Select a school...</option>
-                        {organizations.map((org) => (
-                          <option key={org.id} value={org.id}>
-                            {org.name}
-                          </option>
-                        ))}
-                      </select>
+                      <>
+                        {loadingOrgs ? (
+                          <div className="formInput" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Loader2 className="icon16" style={{ animation: 'spin 1s linear infinite' }} />
+                          </div>
+                        ) : (
+                          <select
+                            value={selectedOrgId}
+                            onChange={(e) => setSelectedOrgId(e.target.value)}
+                            className="formInput"
+                            style={{ width: '100%' }}
+                          >
+                            <option value="">Select a preschool...</option>
+                            {organizations.map((org) => {
+                              const isCommunity = org.name.toLowerCase().includes('edudash pro community') || 
+                                                  org.name.toLowerCase().includes('community school') ||
+                                                  org.id === 'edudash-community';
+                              return (
+                                <option key={org.id} value={org.id}>
+                                  {org.name}{isCommunity ? ' (Default)' : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        )}
+                        {errors.organization && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-1)' }}>{errors.organization}</p>}
+                      </>
                     )}
-                    {errors.organization && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 'var(--space-1)' }}>{errors.organization}</p>}
+                  </div>
+
+                  {/* Grade/Class Level */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Grade/Class (Optional)</label>
+                    <select
+                      value={gradeLevel}
+                      onChange={(e) => setGradeLevel(e.target.value)}
+                      className="formInput"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">Select grade level...</option>
+                      <optgroup label="Preschool">
+                        <option value="Playgroup">Playgroup (2-3 years)</option>
+                        <option value="Pre-Primary">Pre-Primary (3-4 years)</option>
+                        <option value="Grade R">Grade R (5-6 years)</option>
+                      </optgroup>
+                      <optgroup label="Primary School">
+                        <option value="Grade 1">Grade 1</option>
+                        <option value="Grade 2">Grade 2</option>
+                        <option value="Grade 3">Grade 3</option>
+                        <option value="Grade 4">Grade 4</option>
+                        <option value="Grade 5">Grade 5</option>
+                        <option value="Grade 6">Grade 6</option>
+                        <option value="Grade 7">Grade 7</option>
+                      </optgroup>
+                      <optgroup label="High School">
+                        <option value="Grade 8">Grade 8</option>
+                        <option value="Grade 9">Grade 9</option>
+                        <option value="Grade 10">Grade 10</option>
+                        <option value="Grade 11">Grade 11</option>
+                        <option value="Grade 12">Grade 12</option>
+                      </optgroup>
+                    </select>
+                    <p className="muted" style={{ fontSize: 11, marginTop: 'var(--space-1)' }}>
+                      📚 Select your child&apos;s current grade level
+                    </p>
                   </div>
                 </div>
               </div>

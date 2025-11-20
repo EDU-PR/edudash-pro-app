@@ -343,15 +343,17 @@ export async function callOpenAI(
   const content = message?.content || '';
   
   // Extract tool calls if present
-  let tool_calls: Array<{ id: string; name: string; arguments: any }> | undefined;
+  let tool_calls: Array<{ id: string; name: string; arguments: unknown }> | undefined;
   if (message?.tool_calls && message.tool_calls.length > 0) {
-    tool_calls = message.tool_calls.map((tc: any) => ({
+    tool_calls = message.tool_calls.map((tc: { id: string; function: { name: string; arguments: string } }) => ({
       id: tc.id,
       name: tc.function.name,
       arguments: JSON.parse(tc.function.arguments)
     }));
     
-    console.log('[openai-client] Tool calls detected:', tool_calls.map(tc => tc.name));
+    if (tool_calls) {
+      console.log('[openai-client] Tool calls detected:', tool_calls.map(tc => tc.name));
+    }
   }
 
   return {

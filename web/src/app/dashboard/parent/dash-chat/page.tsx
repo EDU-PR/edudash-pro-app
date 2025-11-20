@@ -8,6 +8,7 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
+import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
 
 export default function DashChatPage() {
@@ -20,6 +21,7 @@ export default function DashChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -63,13 +65,15 @@ export default function DashChatPage() {
     <ParentShell tenantSlug={slug} userEmail={email}>
       {/* Full viewport height container - No scroll */}
       <div
-        className="h-screen flex flex-col bg-gray-950 overflow-hidden relative"
+        className="flex flex-col bg-gray-950 overflow-hidden relative"
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
+          height: '100dvh',
+          maxHeight: '100dvh',
           paddingLeft: 'var(--sidebar-w, 0px)'
         }}
       >
@@ -129,6 +133,9 @@ export default function DashChatPage() {
             </button>
           </div>
         </header>
+
+        {/* Quota Progress Bar */}
+        {userId && <QuotaProgress userId={userId} refreshTrigger={quotaRefreshTrigger} />}
 
         {/* Main Content - Takes remaining height */}
         <div className="flex flex-1 overflow-hidden min-h-0">
@@ -195,6 +202,7 @@ export default function DashChatPage() {
                 conversationId={activeConversationId}
                 onNewConversation={handleNewConversation}
                 userId={userId}
+                onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
               />
             )}
 
