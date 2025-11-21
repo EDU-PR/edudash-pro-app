@@ -40,7 +40,7 @@ export const PendingRegistrationRequests: React.FC = () => {
       if (!userData?.id) return [];
 
       const { data, error } = await supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .select('*')
         .eq('parent_id', userData.id)
         .eq('preschool_id', userData.preschool_id!)
@@ -60,7 +60,7 @@ export const PendingRegistrationRequests: React.FC = () => {
     mutationFn: async (requestId: string) => {
       const supabase = assertSupabase();
       const { error } = await supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .update({ status: 'withdrawn' })
         .eq('id', requestId);
       

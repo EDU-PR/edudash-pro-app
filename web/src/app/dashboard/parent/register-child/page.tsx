@@ -176,7 +176,7 @@ export default function RegisterChildPage() {
       
       // Build duplicate check query
       let duplicateQuery = supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .select('id')
         .eq('parent_id', userId)
         .eq('status', 'pending')
@@ -241,7 +241,7 @@ export default function RegisterChildPage() {
         }
       }
 
-      const { error } = await supabase.from('child_registration_requests').insert(payload);
+      const { error } = await supabase.from('registration_requests').insert(payload);
 
       if (error) {
         if (error.code === '23505' || error.message?.includes('duplicate')) {

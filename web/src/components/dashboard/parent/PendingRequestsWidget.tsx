@@ -56,7 +56,7 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
 
         // Fetch pending child registration requests
         const { data: registrationRequests, error: regError } = await supabase
-          .from('child_registration_requests')
+          .from('registration_requests')
           .select('id, child_first_name, child_last_name, created_at, preschool_id, preschools(name)')
           .eq('parent_id', userId)
           .eq('status', 'pending')

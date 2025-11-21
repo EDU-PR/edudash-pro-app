@@ -43,7 +43,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         // Platform schools (admin) see ALL platform registrations
         // Regular schools only see their own
         let query = supabase
-          .from('child_registration_requests')
+          .from('registration_requests')
           .select(`
             id,
             parent_id,
@@ -150,7 +150,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
 
       // 2. Update this registration request status to approved
       const { error: updateError } = await supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .update({
           status: 'approved',
         })
@@ -160,7 +160,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
 
       // 3. Auto-reject any other pending requests for the same child
       await supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .update({
           status: 'rejected',
         })
@@ -194,7 +194,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
 
     try {
       const { error } = await supabase
-        .from('child_registration_requests')
+        .from('registration_requests')
         .update({
           status: 'rejected',
           // Note: Add rejected_by, rejected_at, rejection_reason columns if they exist

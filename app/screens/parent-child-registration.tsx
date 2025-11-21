@@ -177,7 +177,7 @@ export default function ParentChildRegistrationScreen() {
         status: 'pending',
       } as const;
 
-      const { error } = await assertSupabase().from('child_registration_requests').insert(payload as any);
+      const { error } = await assertSupabase().from('registration_requests').insert(payload as any);
       if (error) {
         // Check for duplicate/conflict error (409 Conflict or unique constraint violation)
         if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique') || error.message?.includes('409')) {
