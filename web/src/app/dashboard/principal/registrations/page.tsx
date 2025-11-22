@@ -26,6 +26,7 @@ interface Registration {
   id: string;
   organization_id: string;
   organization_name?: string;
+  edusite_id?: string; // EduSitePro source ID
   // Guardian info
   guardian_name: string;
   guardian_email: string;
@@ -214,8 +215,8 @@ export default function PrincipalRegistrationsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Update in LOCAL database
-      const { error } = await supabase
+      // Step 1: Update in EduDashPro database
+      const { error: updateError } = await supabase
         .from('registration_requests')
         .update({
           status: 'approved',
@@ -224,15 +225,49 @@ export default function PrincipalRegistrationsPage() {
         })
         .eq('id', registration.id);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      // Trigger sync to create student record via Edge Function
-      await supabase.functions.invoke('sync-registration-to-edudash', {
-        body: { registration_id: registration.id },
-      });
+      // Step 2 & 3: Only sync to EduSitePro if this registration came from there
+      if (registration.edusite_id) {
+        console.log('[Approve] Syncing to EduSitePro, ID:', registration.edusite_id);
+        
+        // Sync approval back to EduSitePro
+        const { error: syncError } = await supabase.functions.invoke('sync-approval-to-edusite', {
+          body: { 
+            record: {
+              id: registration.edusite_id,
+              status: 'approved',
+              reviewed_date: new Date().toISOString(),
+            },
+            old_record: { status: 'pending' }
+          },
+        });
+        
+        if (syncError) {
+          console.error('Failed to sync approval to EduSitePro:', syncError);
+          alert('Approved locally but failed to sync to marketing site.');
+        }
+
+        // Create full student/parent account from EduSitePro data
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const { error: createError } = await supabase.functions.invoke('sync-registration-to-edudash', {
+          body: { registration_id: registration.edusite_id },
+        });
+        
+        if (createError) {
+          console.error('Failed to create student account:', createError);
+          alert('Registration approved but student account creation failed. Please create manually or contact admin.');
+        } else {
+          alert('Registration approved! Student account created and parent notified.');
+        }
+      } else {
+        // This registration was created directly in EduDashPro (no edusite_id)
+        console.log('[Approve] Local registration, skipping EduSitePro sync');
+        alert('Registration approved! This was a local registration.');
+      }
 
       await fetchRegistrations();
-      alert('Registration approved successfully!');
     } catch (error) {
       console.error('Error approving registration:', error);
       alert('Failed to approve registration. Please try again.');

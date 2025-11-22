@@ -37,9 +37,8 @@ Deno.serve(async (req) => {
         .update({
           status: record.status,
           reviewed_date: record.reviewed_date || new Date().toISOString(),
-          reviewed_by: record.reviewed_by,
+          // Skip reviewed_by - it's a UUID in EduSitePro but text in EduDashPro
           rejection_reason: record.rejection_reason,
-          internal_notes: record.internal_notes,
           
           // Document verification status
           student_birth_certificate_url: record.student_birth_certificate_url,

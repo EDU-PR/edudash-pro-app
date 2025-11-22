@@ -2,8 +2,7 @@
 // Syncs approved registrations from EduSitePro to EduDashPro database
 // Creates student, parent, and class assignments automatically
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,7 +26,7 @@ interface RegistrationData {
   status: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -47,27 +46,38 @@ serve(async (req) => {
 
     // Connect to EduSitePro database
     const edusiteproUrl = Deno.env.get('EDUSITE_SUPABASE_URL') || 'https://bppuzibjlxgfwrujzfsz.supabase.co';
-    const edusiteproKey = Deno.env.get('EDUSITE_SUPABASE_SERVICE_ROLE_KEY');
+    const edusiteproKey = Deno.env.get('EDUSITE_SERVICE_ROLE_KEY');
 
     if (!edusiteproKey) {
-      throw new Error('EDUSITE_SUPABASE_SERVICE_ROLE_KEY not configured');
+      throw new Error('EDUSITE_SERVICE_ROLE_KEY not configured');
     }
 
     const edusiteproClient = createClient(edusiteproUrl, edusiteproKey);
 
-    // Fetch registration from EduSitePro
+    // Fetch registration from EduSitePro (don't check status - we just approved it)
     const { data: registration, error: regError } = await edusiteproClient
       .from('registration_requests')
       .select('*')
       .eq('id', registration_id)
-      .eq('status', 'approved')
-      .single();
+      .maybeSingle();
 
-    if (regError || !registration) {
-      throw new Error(`Registration not found or not approved: ${regError?.message}`);
+    if (regError) {
+      throw new Error(`Error fetching registration: ${regError.message}`);
+    }
+    
+    if (!registration) {
+      console.log('[sync-registration] Registration not found in EduSitePro - may have been deleted:', registration_id);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Registration not found in source database',
+          message: 'This registration may have been deleted from EduSitePro. Please create student account manually.',
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log('[sync-registration] Fetched registration:', registration.student_first_name, registration.student_last_name);
+    console.log('[sync-registration] Fetched registration:', registration.student_first_name, registration.student_last_name, 'Status:', registration.status);
 
     // Connect to EduDashPro database
     const edudashUrl = Deno.env.get('SUPABASE_URL')!;
@@ -85,17 +95,17 @@ serve(async (req) => {
     // Check if parent already exists by email
     const { data: existingParent } = await edudashClient
       .from('profiles')
-      .select('id, user_id')
+      .select('id, auth_user_id')
       .eq('email', registration.guardian_email)
       .eq('role', 'parent')
-      .single();
+      .maybeSingle();
 
     let parentUserId: string;
     let parentProfileId: string;
 
     if (existingParent) {
       console.log('[sync-registration] Parent already exists:', existingParent.id);
-      parentUserId = existingParent.user_id;
+      parentUserId = existingParent.auth_user_id;
       parentProfileId = existingParent.id;
     } else {
       // Create new parent user account
@@ -119,18 +129,23 @@ serve(async (req) => {
 
       console.log('[sync-registration] Created parent user:', parentUserId);
 
+      // Split guardian name into first and last name
+      const nameParts = registration.guardian_name.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
       // Create parent profile
       const { data: newProfile, error: profileError } = await edudashClient
         .from('profiles')
         .insert({
-          user_id: parentUserId,
+          auth_user_id: parentUserId,
           email: registration.guardian_email,
-          full_name: registration.guardian_name,
+          first_name: firstName,
+          last_name: lastName,
           phone: registration.guardian_phone,
           role: 'parent',
           preschool_id: preschoolId,
           address: registration.guardian_address,
-          onboarding_completed: false,
         })
         .select()
         .single();
@@ -178,8 +193,10 @@ serve(async (req) => {
         gender: registration.student_gender,
         preschool_id: preschoolId,
         parent_id: parentProfileId,
-        enrollment_status: 'active',
-        enrollment_date: new Date().toISOString(),
+        guardian_id: parentProfileId,
+        status: 'active',
+        is_active: true,
+        enrollment_date: new Date().toISOString().split('T')[0], // date only
       })
       .select()
       .single();
@@ -197,14 +214,17 @@ serve(async (req) => {
       .select('id')
       .eq('preschool_id', preschoolId)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (defaultClass) {
       await edudashClient
-        .from('class_students')
+        .from('class_assignments')
         .insert({
           class_id: defaultClass.id,
           student_id: newStudent.id,
+          assigned_date: new Date().toISOString().split('T')[0],
+          start_date: new Date().toISOString().split('T')[0],
+          status: 'active',
         });
 
       console.log('[sync-registration] Assigned student to class:', defaultClass.id);
