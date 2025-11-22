@@ -48,46 +48,59 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
-    });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Check if this is a service role request (system-generated email)
+    const authHeader = req.headers.get('Authorization') || '';
+    const isServiceRole = authHeader.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'INVALID');
     
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    let orgId = null;
+    let isSystemEmail = false;
 
-    // Get user profile and organization
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, organization_id, preschool_id, role')
-      .eq('id', user.id)
-      .single();
+    if (isServiceRole) {
+      // Service role bypass for system emails (welcome emails, etc.)
+      isSystemEmail = true;
+      console.log('[send-email] Service role request - system email');
+    } else {
+      // Regular user authentication
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
 
-    if (!profile) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Profile not found' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-    const orgId = profile.organization_id || profile.preschool_id;
+      // Get user profile and organization
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, organization_id, preschool_id, role')
+        .eq('id', user.id)
+        .single();
 
-    // Only principals, admins, and superadmins can send emails
-    const allowedRoles = ['principal', 'principal_admin', 'superadmin', 'teacher'];
-    if (!allowedRoles.includes(profile.role)) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Insufficient permissions. Only principals and teachers can send emails.' 
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (!profile) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Profile not found' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      orgId = profile.organization_id || profile.preschool_id;
+
+      // Only principals, admins, and superadmins can send emails
+      const allowedRoles = ['principal', 'principal_admin', 'superadmin', 'teacher'];
+      if (!allowedRoles.includes(profile.role)) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Insufficient permissions. Only principals and teachers can send emails.' 
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Parse request body
@@ -112,29 +125,32 @@ serve(async (req) => {
       );
     }
 
-    // Check rate limit
-    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { count: emailsSentThisHour } = await supabase
-      .from('email_logs')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .gte('created_at', hourAgo);
+    // Check rate limit (skip for system emails)
+    if (!isSystemEmail && orgId) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { count: emailsSentThisHour } = await supabase
+        .from('email_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .gte('created_at', hourAgo);
 
-    const used = emailsSentThisHour || 0;
-    
-    if (used >= RATE_LIMIT_PER_HOUR) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Rate limit exceeded',
-          rate_limit: {
-            used,
-            limit: RATE_LIMIT_PER_HOUR,
-            remaining: 0
-          }
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const used = emailsSentThisHour || 0;
+      
+      if (used >= RATE_LIMIT_PER_HOUR) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Rate limit exceeded',
+            rate_limit: {
+              used,
+              limit: RATE_LIMIT_PER_HOUR,
+              remaining: 0
+            }
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // In development/testing, log but don't actually send

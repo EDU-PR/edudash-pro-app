@@ -6,6 +6,13 @@ import { Settings, BookMarked, Activity, Users } from 'lucide-react';
 
 const adminTools = [
   {
+    title: 'Registration Management',
+    description: 'Review and approve student registrations from all schools in real-time',
+    icon: Users,
+    href: '/admin/registrations',
+    color: 'bg-red-500',
+  },
+  {
     title: 'User Management & Troubleshooting',
     description: 'Search users, view payment history, tier status, and fix upgrade issues',
     icon: Users,

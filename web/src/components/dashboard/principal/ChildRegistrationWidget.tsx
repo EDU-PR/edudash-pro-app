@@ -46,23 +46,24 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
           .from('registration_requests')
           .select(`
             id,
-            parent_id,
-            child_first_name,
-            child_last_name,
-            child_birth_date,
-            child_gender,
+            guardian_email,
+            guardian_name,
+            student_first_name,
+            student_last_name,
+            student_dob,
+            student_gender,
             created_at,
-            preschool_id
+            organization_id
           `)
           .eq('status', 'pending');
         
         if (isPlatformSchool) {
           // Admin sees requests for BOTH Community School and Main School
-          query = query.in('preschool_id', [COMMUNITY_SCHOOL_ID, MAIN_SCHOOL_ID]);
+          query = query.in('organization_id', [COMMUNITY_SCHOOL_ID, MAIN_SCHOOL_ID]);
           console.log('👶 [ChildRegistrationWidget] Platform admin - showing all platform requests');
         } else {
           // Regular schools only see their own requests
-          query = query.eq('preschool_id', preschoolId);
+          query = query.eq('organization_id', preschoolId);
         }
         
         const { data, error } = await query
@@ -70,38 +71,30 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
           .limit(10); // Increased limit for platform admins
 
         if (error) {
+          // If table doesn't exist (code 42P01) or column doesn't exist (code 42703), silently skip
+          // This is expected - registration_requests is in EduSitePro, not EduDashPro
+          if (error.code === '42P01' || error.code === '42703' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+            console.log('ℹ️ [ChildRegistrationWidget] registration_requests table/columns not found in EduDashPro - skipping (this is normal)');
+            setRequests([]);
+            setLoading(false);
+            return;
+          }
           console.error('❌ [ChildRegistrationWidget] Error fetching requests:', error);
           throw error;
         }
 
         console.log('✅ [ChildRegistrationWidget] Found requests:', data?.length || 0);
 
-        // Get parent details
-        const parentIds = data?.map((r: any) => r.parent_id) || [];
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, email, first_name, last_name')
-          .in('id', parentIds);
-
-        const profileMap = new Map<string, { email: string; name: string }>(
-          profiles?.map((p: any) => [
-            p.id,
-            {
-              email: p.email || 'No email',
-              name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent'
-            }
-          ])
-        );
-
+        // Format the data to match the old interface
         const mapped: ChildRegistration[] = (data || []).map((r: any) => ({
           id: r.id,
-          parent_id: r.parent_id,
-          parent_email: profileMap.get(r.parent_id)?.email || 'No email',
-          parent_name: profileMap.get(r.parent_id)?.name || 'Parent',
-          child_first_name: r.child_first_name,
-          child_last_name: r.child_last_name,
-          child_birth_date: r.child_birth_date,
-          child_gender: r.child_gender,
+          parent_id: r.guardian_email, // Use email as identifier since we don't have parent_id yet
+          parent_email: r.guardian_email,
+          parent_name: r.guardian_name,
+          child_first_name: r.student_first_name,
+          child_last_name: r.student_last_name,
+          child_birth_date: r.student_dob,
+          child_gender: r.student_gender,
           requested_date: new Date(r.created_at).toLocaleDateString('en-ZA', {
             day: '2-digit',
             month: 'short',
@@ -127,57 +120,32 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
       const request = requests.find(r => r.id === requestId);
       if (!request) throw new Error('Request not found');
 
-      // 1. Create student record
-      const { data: newStudent, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          first_name: request.child_first_name,
-          last_name: request.child_last_name,
-          date_of_birth: request.child_birth_date,
-          gender: request.child_gender,
-          preschool_id: preschoolId,
-          parent_id: request.parent_id, // Link to parent's profile.id
-          is_active: true,
-          status: 'active',
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
+      // This registration came from EduSitePro website - we need to call the sync Edge Function
+      // to create the parent account and student record
+      const { data, error } = await supabase.functions.invoke('sync-registration-to-edudash', {
+        body: { registration_id: requestId },
+      });
 
-      if (studentError) throw studentError;
+      if (error) throw error;
 
-      console.log('✅ Student created:', newStudent);
+      console.log('✅ Registration synced:', data);
 
-      // 2. Update this registration request status to approved
+      // Update local status
       const { error: updateError } = await supabase
         .from('registration_requests')
         .update({
           status: 'approved',
+          reviewed_by: userId,
+          reviewed_at: new Date().toISOString(),
         })
         .eq('id', requestId);
 
       if (updateError) throw updateError;
 
-      // 3. Auto-reject any other pending requests for the same child
-      await supabase
-        .from('registration_requests')
-        .update({
-          status: 'rejected',
-        })
-        .eq('parent_id', request.parent_id)
-        .eq('child_first_name', request.child_first_name)
-        .eq('child_last_name', request.child_last_name)
-        .eq('status', 'pending')
-        .neq('id', requestId);
-
-      // Remove from list (including duplicates)
-      setRequests(prev => prev.filter(r => 
-        !(r.parent_id === request.parent_id && 
-          r.child_first_name === request.child_first_name && 
-          r.child_last_name === request.child_last_name)
-      ));
+      // Remove from list
+      setRequests(prev => prev.filter(r => r.id !== requestId));
       
-      alert(`✅ ${childFirstName} ${childLastName} has been enrolled!\n\nThe student is now active and linked to their parent.`);
+      alert(`✅ ${childFirstName} ${childLastName} has been enrolled!\n\nA parent account has been created and the student is now active.`);
     } catch (error: any) {
       console.error('❌ Approval error:', error);
       alert(`❌ Error: ${error.message || 'Failed to approve registration'}`);
@@ -197,7 +165,8 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         .from('registration_requests')
         .update({
           status: 'rejected',
-          // Note: Add rejected_by, rejected_at, rejection_reason columns if they exist
+          reviewed_by: userId,
+          reviewed_at: new Date().toISOString(),
         })
         .eq('id', requestId);
 
