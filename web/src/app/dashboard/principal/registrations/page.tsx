@@ -255,7 +255,7 @@ export default function PrincipalRegistrationsPage() {
       }
 
       console.log('✅ Sync result:', data);
-      alert(`Sync complete! ${data.synced || 0} new, ${data.deleted || 0} removed`);
+      alert(`Sync complete! ${data.synced || 0} new, ${data.updated || 0} updated, ${data.deleted || 0} removed`);
       
       // Refresh the list
       await fetchRegistrations();

@@ -40,18 +40,45 @@ serve(async (req) => {
 
     console.log(`📥 Found ${edusiteRegistrations?.length || 0} registrations in EduSitePro`)
 
-    // Get existing synced IDs from EduDashPro
+    // Get existing synced records from EduDashPro (with their full data)
     const { data: existingRegistrations } = await edudashClient
       .from('registration_requests')
-      .select('edusite_id')
+      .select('id, edusite_id, status, reviewed_by, reviewed_at, rejection_reason, proof_of_payment_url')
       .not('edusite_id', 'is', null)
 
-    const existingIds = new Set(existingRegistrations?.map(r => r.edusite_id) || [])
-    console.log(`📊 Already synced: ${existingIds.size} registrations`)
+    const existingMap = new Map(existingRegistrations?.map(r => [r.edusite_id, r]) || [])
+    console.log(`📊 Already synced: ${existingMap.size} registrations`)
 
-    // Filter new registrations
-    const newRegistrations = edusiteRegistrations?.filter(r => !existingIds.has(r.id)) || []
-    console.log(`➕ New registrations to sync: ${newRegistrations.length}`)
+    // Separate registrations into: new (insert), existing (update), and unchanged
+    const newRegistrations: any[] = []
+    const registrationsToUpdate: any[] = []
+    
+    edusiteRegistrations?.forEach(edusiteReg => {
+      const existing = existingMap.get(edusiteReg.id)
+      
+      if (!existing) {
+        // New registration - needs to be inserted
+        newRegistrations.push(edusiteReg)
+      } else {
+        // Existing registration - check if it needs updating
+        const needsUpdate = 
+          existing.status !== edusiteReg.status ||
+          existing.reviewed_by !== edusiteReg.reviewed_by ||
+          existing.reviewed_at !== edusiteReg.reviewed_at ||
+          existing.rejection_reason !== edusiteReg.rejection_reason ||
+          existing.proof_of_payment_url !== edusiteReg.proof_of_payment_url
+        
+        if (needsUpdate) {
+          registrationsToUpdate.push({
+            edudash_id: existing.id,
+            edusite_data: edusiteReg
+          })
+        }
+      }
+    })
+
+    console.log(`➕ New registrations to insert: ${newRegistrations.length}`)
+    console.log(`🔄 Existing registrations to update: ${registrationsToUpdate.length}`)
 
     // Transform and insert new registrations (only if there are any)
     let insertedCount = 0
@@ -98,7 +125,36 @@ serve(async (req) => {
     }
 
     insertedCount = newRegistrations.length
-    console.log(`✅ Successfully synced ${insertedCount} registrations`)
+    console.log(`✅ Successfully synced ${insertedCount} new registrations`)
+    }
+
+    // Update existing registrations that have changed
+    let updatedCount = 0
+    if (registrationsToUpdate.length > 0) {
+      console.log(`🔄 Updating ${registrationsToUpdate.length} changed registrations...`)
+      
+      for (const { edudash_id, edusite_data } of registrationsToUpdate) {
+        const { error: updateError } = await edudashClient
+          .from('registration_requests')
+          .update({
+            status: edusite_data.status,
+            reviewed_by: edusite_data.reviewed_by,
+            reviewed_at: edusite_data.reviewed_at,
+            rejection_reason: edusite_data.rejection_reason,
+            proof_of_payment_url: edusite_data.proof_of_payment_url,
+            registration_fee_paid: edusite_data.registration_fee_paid,
+            payment_method: edusite_data.payment_method,
+            synced_at: new Date().toISOString(),
+          })
+          .eq('id', edudash_id)
+
+        if (updateError) {
+          console.error(`⚠️ Error updating record ${edudash_id}:`, updateError)
+        } else {
+          updatedCount++
+        }
+      }
+      console.log(`✅ Successfully updated ${updatedCount} registrations`)
     }
 
     // Handle deletions: Remove ALL records from EduDashPro that no longer exist in EduSitePro
@@ -148,8 +204,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Synced ${insertedCount} registrations, deleted ${deletedCount} removed records`,
+        message: `Synced ${insertedCount} new, updated ${updatedCount}, deleted ${deletedCount} records`,
         synced: insertedCount,
+        updated: updatedCount,
         deleted: deletedCount,
         total_in_edusite: edusiteRegistrations?.length || 0,
         total_in_edudash_before: allEdudashRecords?.length || 0
