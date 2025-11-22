@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Bell, X, CheckCircle2, Clock } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 
 interface Notification {
   id: string;
@@ -15,7 +15,7 @@ interface Notification {
 }
 
 export default function RegistrationNotifications() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
