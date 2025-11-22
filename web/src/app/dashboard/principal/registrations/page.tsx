@@ -384,7 +384,7 @@ export default function PrincipalRegistrationsPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table / Cards */}
         <div className="reg-table-container">
           {loading ? (
             <div className="text-center py-12">
@@ -395,51 +395,116 @@ export default function PrincipalRegistrationsPage() {
               No registrations found
             </div>
           ) : (
-            <div className="reg-table-wrapper">
-              <table className="reg-table">
-                <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Student</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Parent</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Fee</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Payment</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRegistrations.map((reg) => (
-                    <tr
-                      key={reg.id}
-                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
-                    >
-                      <td className="py-3 px-4">
-                        <div>
-                          <div className="text-sm font-medium text-white">
+            <>
+              {/* Desktop Table */}
+              <div className="reg-table-wrapper desktop-only">
+                <table className="reg-table">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Student</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Parent</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Fee</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Payment</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
+                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRegistrations.map((reg) => (
+                      <tr
+                        key={reg.id}
+                        className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+                      >
+                        <td className="py-3 px-4">
+                          <div>
+                            <div className="text-sm font-medium text-white">
+                              {reg.student_first_name} {reg.student_last_name?.toUpperCase()}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              DOB: {new Date(reg.student_dob).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div>
+                            <div className="text-sm font-medium text-white">{reg.guardian_name}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{reg.guardian_email}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm font-medium text-white">R150</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                            <span className="text-red-400 font-medium">No Payment</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                            reg.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                            reg.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                            'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {reg.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-gray-400">
+                          {new Date(reg.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => router.push(`/dashboard/principal/registrations/${reg.id}`)}
+                              className="text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors"
+                            >
+                              View
+                            </button>
+                            {reg.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(reg)}
+                                  disabled={processing === reg.id}
+                                  className="text-green-400 hover:text-green-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleReject(reg)}
+                                  disabled={processing === reg.id}
+                                  className="text-red-400 hover:text-red-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="mobile-only reg-cards">
+                {filteredRegistrations.map((reg) => (
+                  <div
+                    key={reg.id}
+                    className="reg-card"
+                    onClick={() => router.push(`/dashboard/principal/registrations/${reg.id}`)}
+                  >
+                    <div className="reg-card-header">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <h3 className="reg-card-student">
                             {reg.student_first_name} {reg.student_last_name?.toUpperCase()}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            DOB: {new Date(reg.student_dob).toLocaleDateString()}
-                          </div>
+                          </h3>
+                          <p className="reg-card-meta">
+                            <Baby size={12} className="inline" /> {new Date(reg.student_dob).toLocaleDateString()}
+                          </p>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div>
-                          <div className="text-sm font-medium text-white">{reg.guardian_name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{reg.guardian_email}</div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-medium text-white">R150</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1.5 text-xs">
-                          <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                          <span className="text-red-400 font-medium">No Payment</span>
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
                         <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
                           reg.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
                           reg.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
@@ -447,43 +512,71 @@ export default function PrincipalRegistrationsPage() {
                         }`}>
                           {reg.status}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-400">
-                        {new Date(reg.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
-                            onClick={() => router.push(`/dashboard/principal/registrations/${reg.id}`)}
-                            className="text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors"
-                          >
-                            View
-                          </button>
-                          {reg.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(reg)}
-                                disabled={processing === reg.id}
-                                className="text-green-400 hover:text-green-300 text-xs font-medium disabled:opacity-50 transition-colors"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => handleReject(reg)}
-                                disabled={processing === reg.id}
-                                className="text-red-400 hover:text-red-300 text-xs font-medium disabled:opacity-50 transition-colors"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
+                      </div>
+                    </div>
+
+                    <div className="reg-card-body">
+                      <div className="reg-card-info">
+                        <User size={14} className="text-gray-500" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">{reg.guardian_name}</div>
+                          <div className="text-xs text-gray-500">{reg.guardian_email}</div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+
+                      <div className="reg-card-info">
+                        <DollarSign size={14} className="text-gray-500" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-white">R150</div>
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                            <span className="text-red-400">No Payment</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="reg-card-info">
+                        <Calendar size={14} className="text-gray-500" />
+                        <span className="text-sm text-gray-400">
+                          {new Date(reg.created_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {reg.status === 'pending' && (
+                      <div className="reg-card-actions">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprove(reg);
+                          }}
+                          disabled={processing === reg.id}
+                          className="reg-card-btn reg-card-btn-approve"
+                        >
+                          <CheckCircle2 size={16} />
+                          Approve
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReject(reg);
+                          }}
+                          disabled={processing === reg.id}
+                          className="reg-card-btn reg-card-btn-reject"
+                        >
+                          <XCircle size={16} />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -614,6 +707,140 @@ export default function PrincipalRegistrationsPage() {
         }
         .reg-table td {
           padding: 12px 16px;
+        }
+
+        /* Mobile Cards */
+        .reg-cards {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .reg-card {
+          background: #1f2937;
+          border: 1px solid #374151;
+          border-radius: 12px;
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .reg-card:active {
+          transform: scale(0.98);
+        }
+        .reg-card-header {
+          padding: 16px;
+          border-bottom: 1px solid #374151;
+        }
+        .reg-card-student {
+          font-size: 16px;
+          font-weight: 600;
+          color: #fff;
+          margin: 0 0 4px 0;
+        }
+        .reg-card-meta {
+          font-size: 12px;
+          color: #9ca3af;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .reg-card-body {
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .reg-card-info {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+        }
+        .reg-card-actions {
+          padding: 12px 16px;
+          border-top: 1px solid #374151;
+          display: flex;
+          gap: 8px;
+        }
+        .reg-card-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          border: 1px solid;
+          transition: all 0.2s;
+          cursor: pointer;
+        }
+        .reg-card-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .reg-card-btn-approve {
+          background: rgba(34, 197, 94, 0.1);
+          border-color: rgba(34, 197, 94, 0.2);
+          color: #4ade80;
+        }
+        .reg-card-btn-approve:active:not(:disabled) {
+          background: rgba(34, 197, 94, 0.2);
+        }
+        .reg-card-btn-reject {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: rgba(239, 68, 68, 0.2);
+          color: #f87171;
+        }
+        .reg-card-btn-reject:active:not(:disabled) {
+          background: rgba(239, 68, 68, 0.2);
+        }
+
+        /* Responsive */
+        .mobile-only {
+          display: none;
+        }
+        .desktop-only {
+          display: block;
+        }
+
+        @media (max-width: 768px) {
+          .mobile-only {
+            display: flex;
+          }
+          .desktop-only {
+            display: none;
+          }
+          .reg-header {
+            padding: 16px;
+          }
+          .reg-stats {
+            padding: 12px 16px;
+          }
+          .reg-stats-inner {
+            flex-wrap: wrap;
+            gap: 12px;
+          }
+          .reg-filters {
+            padding: 0 16px;
+          }
+          .reg-filters-inner {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .reg-filter-btn {
+            white-space: nowrap;
+            padding: 12px 12px;
+            font-size: 12px;
+          }
+          .reg-table-container {
+            padding: 12px 16px;
+          }
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </PrincipalShell>
