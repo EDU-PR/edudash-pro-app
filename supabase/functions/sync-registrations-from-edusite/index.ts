@@ -43,7 +43,7 @@ serve(async (req) => {
     // Get existing synced records from EduDashPro (with their full data)
     const { data: existingRegistrations } = await edudashClient
       .from('registration_requests')
-      .select('id, edusite_id, status, reviewed_by, reviewed_at, rejection_reason, proof_of_payment_url, registration_fee_paid, payment_method, guardian_id_document_url, student_birth_certificate_url, student_clinic_card_url')
+      .select('id, edusite_id, status, reviewed_by, reviewed_date, rejection_reason, proof_of_payment_url, registration_fee_paid, payment_method, guardian_id_document_url, student_birth_certificate_url, student_clinic_card_url')
       .not('edusite_id', 'is', null)
 
     const existingMap = new Map(existingRegistrations?.map(r => [r.edusite_id, r]) || [])
@@ -64,7 +64,7 @@ serve(async (req) => {
         const needsUpdate = 
           existing.status !== edusiteReg.status ||
           existing.reviewed_by !== edusiteReg.reviewed_by ||
-          existing.reviewed_at !== edusiteReg.reviewed_at ||
+          existing.reviewed_date !== edusiteReg.reviewed_date ||
           existing.rejection_reason !== edusiteReg.rejection_reason ||
           existing.proof_of_payment_url !== edusiteReg.proof_of_payment_url ||
           existing.registration_fee_paid !== edusiteReg.registration_fee_paid ||
@@ -113,7 +113,7 @@ serve(async (req) => {
       discount_amount: reg.discount_amount || 0,
       status: reg.status || 'pending',
       reviewed_by: reg.reviewed_by,
-      reviewed_at: reg.reviewed_at,
+      reviewed_date: reg.reviewed_date,
       rejection_reason: reg.rejection_reason,
       synced_from_edusite: true,
       synced_at: new Date().toISOString(),
@@ -144,7 +144,7 @@ serve(async (req) => {
           .update({
             status: edusite_data.status,
             reviewed_by: edusite_data.reviewed_by,
-            reviewed_at: edusite_data.reviewed_at,
+            reviewed_date: edusite_data.reviewed_date,
             rejection_reason: edusite_data.rejection_reason,
             proof_of_payment_url: edusite_data.proof_of_payment_url,
             registration_fee_paid: edusite_data.proof_of_payment_url ? true : edusite_data.registration_fee_paid,
