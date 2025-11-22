@@ -465,8 +465,9 @@ export default function PrincipalRegistrationsPage() {
                               <>
                                 <button
                                   onClick={() => handleApprove(reg)}
-                                  disabled={processing === reg.id}
-                                  className="text-green-400 hover:text-green-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                                  disabled={processing === reg.id || !reg.proof_of_payment_url}
+                                  className="text-green-400 hover:text-green-300 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  title={!reg.proof_of_payment_url ? "Waiting for proof of payment" : "Approve registration"}
                                 >
                                   Approve
                                 </button>
@@ -548,30 +549,38 @@ export default function PrincipalRegistrationsPage() {
                     </div>
 
                     {reg.status === 'pending' && (
-                      <div className="reg-card-actions">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApprove(reg);
-                          }}
-                          disabled={processing === reg.id}
-                          className="reg-card-btn reg-card-btn-approve"
-                        >
-                          <CheckCircle2 size={16} />
-                          Approve
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReject(reg);
-                          }}
-                          disabled={processing === reg.id}
-                          className="reg-card-btn reg-card-btn-reject"
-                        >
-                          <XCircle size={16} />
-                          Reject
-                        </button>
-                      </div>
+                      <>
+                        {!reg.proof_of_payment_url && (
+                          <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 rounded">
+                            <Clock className="w-3 h-3" />
+                            Waiting for proof of payment
+                          </div>
+                        )}
+                        <div className="reg-card-actions">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApprove(reg);
+                            }}
+                            disabled={processing === reg.id || !reg.proof_of_payment_url}
+                            className="reg-card-btn reg-card-btn-approve disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <CheckCircle2 size={16} />
+                            Approve
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReject(reg);
+                            }}
+                            disabled={processing === reg.id}
+                            className="reg-card-btn reg-card-btn-reject"
+                          >
+                            <XCircle size={16} />
+                            Reject
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 ))}

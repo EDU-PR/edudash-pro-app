@@ -43,7 +43,7 @@ serve(async (req) => {
     // Get existing synced records from EduDashPro (with their full data)
     const { data: existingRegistrations } = await edudashClient
       .from('registration_requests')
-      .select('id, edusite_id, status, reviewed_by, reviewed_at, rejection_reason, proof_of_payment_url')
+      .select('id, edusite_id, status, reviewed_by, reviewed_at, rejection_reason, proof_of_payment_url, registration_fee_paid, payment_method, guardian_id_document_url, student_birth_certificate_url, student_clinic_card_url')
       .not('edusite_id', 'is', null)
 
     const existingMap = new Map(existingRegistrations?.map(r => [r.edusite_id, r]) || [])
@@ -66,7 +66,12 @@ serve(async (req) => {
           existing.reviewed_by !== edusiteReg.reviewed_by ||
           existing.reviewed_at !== edusiteReg.reviewed_at ||
           existing.rejection_reason !== edusiteReg.rejection_reason ||
-          existing.proof_of_payment_url !== edusiteReg.proof_of_payment_url
+          existing.proof_of_payment_url !== edusiteReg.proof_of_payment_url ||
+          existing.registration_fee_paid !== edusiteReg.registration_fee_paid ||
+          existing.payment_method !== edusiteReg.payment_method ||
+          existing.guardian_id_document_url !== edusiteReg.guardian_id_document_url ||
+          existing.student_birth_certificate_url !== edusiteReg.student_birth_certificate_url ||
+          existing.student_clinic_card_url !== edusiteReg.student_clinic_card_url
         
         if (needsUpdate) {
           registrationsToUpdate.push({
@@ -144,6 +149,9 @@ serve(async (req) => {
             proof_of_payment_url: edusite_data.proof_of_payment_url,
             registration_fee_paid: edusite_data.registration_fee_paid,
             payment_method: edusite_data.payment_method,
+            guardian_id_document_url: edusite_data.guardian_id_document_url,
+            student_birth_certificate_url: edusite_data.student_birth_certificate_url,
+            student_clinic_card_url: edusite_data.student_clinic_card_url,
             synced_at: new Date().toISOString(),
           })
           .eq('id', edudash_id)
