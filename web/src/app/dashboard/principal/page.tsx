@@ -39,6 +39,14 @@ interface PrincipalMetrics {
   upcomingEvents: number;
 }
 
+interface RecentActivity {
+  id: string;
+  type: 'registration' | 'student' | 'system';
+  title: string;
+  description: string;
+  timestamp: string;
+}
+
 export default function PrincipalDashboard() {
   const router = useRouter();
   const supabase = createClient();
@@ -57,6 +65,7 @@ export default function PrincipalDashboard() {
   });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [dashAIFullscreen, setDashAIFullscreen] = useState(false);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
 
   // Fetch user profile with preschool data
   const { profile, loading: profileLoading } = useUserProfile(userId);
@@ -143,6 +152,76 @@ export default function PrincipalDashboard() {
     loadMetrics();
   }, [preschoolId, supabase]);
 
+  // Load recent activities
+  useEffect(() => {
+    if (!preschoolId) return;
+
+    const loadActivities = async () => {
+      try {
+        const activities: RecentActivity[] = [];
+
+        // Get recent registrations
+        const { data: registrations } = await supabase
+          .from('registration_requests')
+          .select('id, student_name, status, created_at, reviewed_date')
+          .eq('preschool_id', preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (registrations) {
+          registrations.forEach(reg => {
+            if (reg.reviewed_date) {
+              activities.push({
+                id: `reg-reviewed-${reg.id}`,
+                type: 'registration',
+                title: reg.status === 'approved' ? 'Registration Approved' : 'Registration Updated',
+                description: `${reg.student_name} - ${reg.status}`,
+                timestamp: reg.reviewed_date,
+              });
+            } else {
+              activities.push({
+                id: `reg-new-${reg.id}`,
+                type: 'registration',
+                title: 'New Registration',
+                description: `${reg.student_name} - pending review`,
+                timestamp: reg.created_at,
+              });
+            }
+          });
+        }
+
+        // Get recently enrolled students
+        const { data: students } = await supabase
+          .from('students')
+          .select('id, first_name, last_name, enrollment_date')
+          .eq('preschool_id', preschoolId)
+          .not('enrollment_date', 'is', null)
+          .order('enrollment_date', { ascending: false })
+          .limit(2);
+
+        if (students) {
+          students.forEach(student => {
+            activities.push({
+              id: `student-${student.id}`,
+              type: 'student',
+              title: 'Student Enrolled',
+              description: `${student.first_name} ${student.last_name}`,
+              timestamp: student.enrollment_date,
+            });
+          });
+        }
+
+        // Sort by timestamp and take top 5
+        activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setRecentActivities(activities.slice(0, 5));
+      } catch (error) {
+        console.error('Error loading activities:', error);
+      }
+    };
+
+    loadActivities();
+  }, [preschoolId, supabase]);
+
   const loading = authLoading || profileLoading || metricsLoading;
 
   if (loading) {
@@ -198,15 +277,40 @@ export default function PrincipalDashboard() {
           <Activity size={18} style={{ color: 'var(--primary)' }} />
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Recent Activity</h3>
         </div>
-        <ul style={{ display: 'grid', gap: 12 }}>
-          <li style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-            <Clock size={14} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <div style={{ fontWeight: 500 }}>System Update</div>
-              <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>All systems operational</div>
-            </div>
-          </li>
-        </ul>
+        {recentActivities.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+            <Clock size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+            <p style={{ fontSize: 14 }}>No recent activity</p>
+          </div>
+        ) : (
+          <ul style={{ display: 'grid', gap: 12 }}>
+            {recentActivities.map((activity) => (
+              <li key={activity.id} style={{ display: 'flex', gap: 12, fontSize: 13 }}>
+                {activity.type === 'registration' ? (
+                  <FileText size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: 2 }} />
+                ) : activity.type === 'student' ? (
+                  <UserPlus size={14} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <Clock size={14} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 2 }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>{activity.title}</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>
+                    {activity.description}
+                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>
+                    {new Date(activity.timestamp).toLocaleString('en-ZA', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Ask Dash AI Assistant - Wrapped in div with data-dash-ai for mobile detection */}

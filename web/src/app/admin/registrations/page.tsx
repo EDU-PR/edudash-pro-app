@@ -232,6 +232,8 @@ export default function RegistrationsAdminPage() {
           status: 'approved',
           reviewed_by: reviewerEmail,
           reviewed_date: new Date().toISOString(),
+          registration_fee_paid: true,
+          payment_method: registration.proof_of_payment_url ? 'bank_transfer' : 'cash',
         })
         .eq('id', registration.id);
 

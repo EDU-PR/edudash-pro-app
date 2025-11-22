@@ -9,6 +9,58 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Email template for parent approval
+function generateParentApprovalEmail(data: {
+  guardianName: string;
+  studentName: string;
+  email: string;
+  schoolName: string;
+  resetPasswordUrl: string;
+  pwaUrl: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f5f5f5">
+<div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 20px;text-align:center">
+<h1 style="margin:0;color:white;font-size:28px">🎉 Registration Approved!</h1>
+<p style="margin:10px 0 0;color:rgba(255,255,255,0.95);font-size:16px">Welcome to EduDash Pro</p>
+</div>
+<div style="max-width:600px;margin:0 auto;background:white">
+<div style="padding:30px 20px">
+<p style="margin:0 0 20px;font-size:16px;color:#333">Dear ${data.guardianName},</p>
+<p style="margin:0 0 20px;font-size:15px;color:#555;line-height:1.6">Great news! <strong>${data.studentName}'s</strong> registration at <strong>${data.schoolName}</strong> has been approved! We've created your parent account.</p>
+<div style="background:#f8f9fa;border-left:4px solid #667eea;padding:20px;margin:20px 0">
+<p style="margin:0 0 10px;font-size:14px;color:#666;font-weight:600">YOUR ACCOUNT</p>
+<p style="margin:0;font-size:15px"><strong>Email:</strong> ${data.email}</p>
+</div>
+<div style="text-align:center;margin:30px 0">
+<a href="${data.resetPasswordUrl}" style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:16px 40px;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px">Set Your Password</a>
+</div>
+<div style="background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);border-radius:12px;padding:25px;margin:30px 0;text-align:center">
+<h2 style="margin:0 0 15px;color:white;font-size:22px">📱 Install Our Mobile App</h2>
+<p style="margin:0 0 20px;color:rgba(255,255,255,0.95);font-size:15px">Get the best experience with our mobile app!</p>
+<a href="${data.pwaUrl}" style="display:inline-block;background:white;color:#f5576c;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:600">Install App Now</a>
+</div>
+<div style="margin:30px 0">
+<h3 style="margin:0 0 15px;font-size:18px">What's Next?</h3>
+<ol style="margin:0;padding-left:20px;color:#555;font-size:15px;line-height:1.8">
+<li>Click "Set Your Password" above</li>
+<li>Create a secure password</li>
+<li>Log in and explore your dashboard</li>
+<li>Install the app for quick mobile access</li>
+</ol>
+</div>
+</div>
+<div style="background:#f8f9fa;padding:20px;text-align:center;border-top:1px solid #e5e7eb">
+<p style="margin:0;font-size:14px;color:#666">Best regards,<br><strong>The EduDash Pro Team</strong></p>
+</div>
+</div>
+</body>
+</html>`.trim();
+}
+
 interface RegistrationData {
   id: string;
   organization_id: string;
@@ -158,21 +210,21 @@ Deno.serve(async (req) => {
 
       console.log('[sync-registration] Created parent profile:', parentProfileId);
 
-      // Send welcome email with password reset link
+      // Send welcome email with password reset link and PWA install instructions
+      const approvalEmail = generateParentApprovalEmail({
+        guardianName: registration.guardian_name,
+        studentName: `${registration.student_first_name} ${registration.student_last_name}`,
+        email: registration.guardian_email,
+        schoolName: 'Young Eagles Preschool', // TODO: Get from organization
+        resetPasswordUrl: `${edudashUrl}/reset-password?email=${encodeURIComponent(registration.guardian_email)}`,
+        pwaUrl: 'https://edudashpro.org.za',
+      });
+
       await edudashClient.functions.invoke('send-email', {
         body: {
           to: registration.guardian_email,
-          subject: 'Welcome to EduDash Pro - Set Your Password',
-          body: `
-            <h1>Welcome to EduDash Pro!</h1>
-            <p>Dear ${registration.guardian_name},</p>
-            <p>Your child's registration has been approved! We've created an account for you.</p>
-            <p><strong>Email:</strong> ${registration.guardian_email}</p>
-            <p>Please click the link below to set your password and access your dashboard:</p>
-            <p><a href="${edudashUrl}/reset-password?email=${encodeURIComponent(registration.guardian_email)}">Set Your Password</a></p>
-            <p>If you have any questions, please contact your school.</p>
-            <p>Best regards,<br>EduDash Pro Team</p>
-          `,
+          subject: '🎉 Registration Approved - Your EduDash Pro Account is Ready!',
+          body: approvalEmail,
           is_html: true,
           confirmed: true,
         },
