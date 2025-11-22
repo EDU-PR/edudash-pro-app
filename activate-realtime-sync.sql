@@ -46,7 +46,7 @@ BEGIN
      (NEW.proof_of_payment_url IS DISTINCT FROM OLD.proof_of_payment_url) OR
      (NEW.registration_fee_paid IS DISTINCT FROM OLD.registration_fee_paid) OR
      (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by) OR
-     (NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at) OR
+     (NEW.reviewed_date IS DISTINCT FROM OLD.reviewed_date) OR
      (NEW.rejection_reason IS DISTINCT FROM OLD.rejection_reason) THEN
     
     -- Trigger bulk sync (it handles updates efficiently)
