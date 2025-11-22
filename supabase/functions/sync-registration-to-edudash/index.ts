@@ -181,31 +181,51 @@ Deno.serve(async (req) => {
       console.log('[sync-registration] Sent welcome email to parent');
     }
 
-    // Step 2: Create student profile
-    console.log('[sync-registration] Creating student profile...');
+    // Step 2: Create student profile (check for existing first)
+    console.log('[sync-registration] Checking for existing student...');
 
-    const { data: newStudent, error: studentError } = await edudashClient
+    // Check if student already exists (by name, DOB, and parent)
+    const { data: existingStudent } = await edudashClient
       .from('students')
-      .insert({
-        first_name: registration.student_first_name,
-        last_name: registration.student_last_name,
-        date_of_birth: registration.student_dob,
-        gender: registration.student_gender,
-        preschool_id: preschoolId,
-        parent_id: parentProfileId,
-        guardian_id: parentProfileId,
-        status: 'active',
-        is_active: true,
-        enrollment_date: new Date().toISOString().split('T')[0], // date only
-      })
-      .select()
-      .single();
+      .select('id')
+      .eq('first_name', registration.student_first_name)
+      .eq('last_name', registration.student_last_name)
+      .eq('date_of_birth', registration.student_dob)
+      .eq('parent_id', parentProfileId)
+      .maybeSingle();
 
-    if (studentError || !newStudent) {
-      throw new Error(`Failed to create student: ${studentError?.message}`);
+    let newStudent;
+
+    if (existingStudent) {
+      console.log('[sync-registration] Student already exists:', existingStudent.id);
+      newStudent = existingStudent;
+    } else {
+      console.log('[sync-registration] Creating new student profile...');
+
+      const { data: createdStudent, error: studentError } = await edudashClient
+        .from('students')
+        .insert({
+          first_name: registration.student_first_name,
+          last_name: registration.student_last_name,
+          date_of_birth: registration.student_dob,
+          gender: registration.student_gender,
+          preschool_id: preschoolId,
+          parent_id: parentProfileId,
+          guardian_id: parentProfileId,
+          status: 'active',
+          is_active: true,
+          enrollment_date: new Date().toISOString().split('T')[0], // date only
+        })
+        .select()
+        .single();
+
+      if (studentError || !createdStudent) {
+        throw new Error(`Failed to create student: ${studentError?.message}`);
+      }
+
+      newStudent = createdStudent;
+      console.log('[sync-registration] Created student:', newStudent.id);
     }
-
-    console.log('[sync-registration] Created student:', newStudent.id);
 
     // Step 3: Assign student to default class (if available)
     // This could be based on age group or grade level
