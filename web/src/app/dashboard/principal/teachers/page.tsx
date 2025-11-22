@@ -93,7 +93,7 @@ export default function TeachersPage() {
 
   if (loading) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId} hideRightSidebar={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading teachers...</p>
         </div>
@@ -102,7 +102,7 @@ export default function TeachersPage() {
   }
 
   return (
-    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
+    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId} hideRightSidebar={true}>
       <div className="section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1 className="h1">Teachers</h1>

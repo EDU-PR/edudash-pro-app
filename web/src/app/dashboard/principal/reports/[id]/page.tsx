@@ -134,7 +134,7 @@ export default function ReportDetailPage() {
 
   if (loading) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId} hideRightSidebar={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading report...</p>
         </div>
@@ -144,7 +144,7 @@ export default function ReportDetailPage() {
 
   if (!report) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId} hideRightSidebar={true}>
         <div className="section">
           <div className="card" style={{ textAlign: 'center', padding: 40 }}>
             <FileText size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
@@ -173,7 +173,7 @@ export default function ReportDetailPage() {
                       report.approval_status === 'rejected' ? '#ef4444' : '#667eea';
 
   return (
-    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
+    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId} hideRightSidebar={true}>
       <div className="section">
         <div style={{ marginBottom: 24 }}>
           <button className="btn btnSecondary" onClick={() => router.push('/dashboard/principal/reports')}>

@@ -33,6 +33,7 @@ interface PrincipalShellProps {
   unreadCount?: number;
   children: React.ReactNode;
   rightSidebar?: React.ReactNode;
+  hideRightSidebar?: boolean; // Hide right sidebar on specific pages
   onOpenDashAI?: () => void; // Callback for opening Dash AI fullscreen on mobile
 }
 
@@ -45,6 +46,7 @@ export function PrincipalShell({
   unreadCount = 0, 
   children,
   rightSidebar,
+  hideRightSidebar = false,
   onOpenDashAI 
 }: PrincipalShellProps) {
   const router = useRouter();
@@ -118,7 +120,7 @@ export function PrincipalShell({
             )}
           </div>
           <div className="rightGroup" style={{ marginLeft: 'auto' }}>
-            {rightSidebar && (
+            {rightSidebar && !hideRightSidebar && (
               <button 
                 className="iconBtn" 
                 aria-label="Activity" 
@@ -145,7 +147,7 @@ export function PrincipalShell({
         </div>
       </header>
 
-      <div className="frame">
+      <div className={`frame ${hideRightSidebar ? 'frame-no-right' : ''}`}>
         <aside className="sidenav sticky" aria-label="Sidebar">
           <div className="sidenavCol">
             <nav className="nav">
@@ -180,7 +182,7 @@ export function PrincipalShell({
           {children}
         </main>
 
-        {rightSidebar && (
+        {rightSidebar && !hideRightSidebar && (
           <aside className="right sticky" aria-label="Activity">
             {rightSidebar}
           </aside>
@@ -274,7 +276,7 @@ export function PrincipalShell({
       )}
 
       {/* Mobile Widgets Drawer (Right Sidebar) */}
-      {rightSidebar && mobileWidgetsOpen && (
+      {rightSidebar && !hideRightSidebar && mobileWidgetsOpen && (
         <>
           <div 
             style={{
@@ -342,6 +344,21 @@ export function PrincipalShell({
       )}
 
       <style jsx>{`
+        /* Adjust grid layout when right sidebar is hidden */
+        .frame-no-right {
+          grid-template-columns: 1fr !important;
+        }
+        @media (min-width: 1024px) {
+          .frame-no-right {
+            grid-template-columns: 260px minmax(0, 1fr) !important;
+          }
+        }
+        @media (min-width: 1440px) {
+          .frame-no-right {
+            grid-template-columns: 280px minmax(0, 1fr) !important;
+          }
+        }
+
         @media (max-width: 1023px) {
           /* Show mobile navigation button */
           .mobile-nav-btn {

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
+import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
   XCircle,
@@ -16,8 +18,8 @@ import {
   Search,
   Download,
   RefreshCw,
+  DollarSign,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 
 interface Registration {
@@ -41,6 +43,7 @@ interface Registration {
   documents_uploaded: boolean;
   documents_deadline?: string;
   // Payment info
+  payment_reference?: string;
   registration_fee_amount?: number;
   registration_fee_paid: boolean;
   payment_method?: string;
@@ -57,7 +60,12 @@ interface Registration {
 
 export default function PrincipalRegistrationsPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
+  
+  const [userId, setUserId] = useState<string>();
+  const { profile } = useUserProfile(userId);
+  const preschoolId = profile?.preschoolId;
+  const organizationId = profile?.organizationId;
   
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [filteredRegistrations, setFilteredRegistrations] = useState<Registration[]>([]);
@@ -65,10 +73,23 @@ export default function PrincipalRegistrationsPage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
-  const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [newRegistrationsCount, setNewRegistrationsCount] = useState(0);
+  const [lastCheckedCount, setLastCheckedCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [preschoolId, setPreschoolId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Initialize auth
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/sign-in');
+        return;
+      }
+      setUserId(session.user.id);
+    };
+    initAuth();
+  }, [router, supabase]);
 
   // Notification sound
   const playNotificationSound = () => {
@@ -79,80 +100,58 @@ export default function PrincipalRegistrationsPage() {
     }
   };
 
-  // Fetch registrations from EduSitePro database
+  // Fetch registrations from LOCAL EduDashPro database (same as ChildRegistrationWidget)
   const fetchRegistrations = async () => {
+    if (!organizationId && !preschoolId) {
+      console.log('⏳ [Registrations] Waiting for organizationId or preschoolId...');
+      return;
+    }
+
     try {
       setLoading(true);
       
-      // Get current user's preschool
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        console.error('Auth error:', authError);
-        setLoading(false);
-        return;
-      }
+      const orgId = organizationId || preschoolId;
+      console.log('📍 [Registrations] Fetching for organization:', orgId);
 
-      // Get user's preschool_id
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('preschool_id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile?.preschool_id) {
-        console.error('No preschool found for user:', profileError);
-        setLoading(false);
-        return;
-      }
-
-      setPreschoolId(profile.preschool_id);
-      console.log('📍 [Registrations] Fetching for preschool:', profile.preschool_id);
-
-      // Connect to EduSitePro database
-      const edusiteproUrl = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co';
-      const edusiteproKey = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY;
-
-      if (!edusiteproKey) {
-        console.error('❌ Missing NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY');
-        setLoading(false);
-        return;
-      }
-
-      console.log('🔗 [Registrations] Connecting to:', edusiteproUrl);
-
-      const { createClient } = await import('@supabase/supabase-js');
-      const edusiteproClient = createClient(edusiteproUrl, edusiteproKey);
-
-      // Fetch registrations for this preschool only
-      const { data, error } = await edusiteproClient
+      // Query LOCAL database (same as ChildRegistrationWidget does)
+      const { data, error } = await supabase
         .from('registration_requests')
-        .select('*, organizations(name)')
-        .eq('organization_id', profile.preschool_id)
+        .select('*')
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching registrations:', error);
+        // If table doesn't exist, show empty state
+        if (error.code === '42P01' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          console.log('ℹ️ [Registrations] registration_requests table not found - data needs to sync from EduSitePro');
+          setRegistrations([]);
+          setFilteredRegistrations([]);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       console.log('✅ [Registrations] Found:', data?.length || 0, 'registrations');
 
-      const formattedData = data?.map((reg: any) => ({
-        ...reg,
-        organization_name: reg.organizations?.name,
-      })) || [];
-
-      setRegistrations(formattedData);
-      setFilteredRegistrations(formattedData);
+      setRegistrations(data || []);
+      setFilteredRegistrations(data || []);
 
       // Count new pending registrations
-      const newPending = formattedData.filter((r: Registration) => r.status === 'pending').length;
-      if (newPending > newRegistrationsCount) {
+      const newPending = (data || []).filter((r: Registration) => r.status === 'pending').length;
+      // Only notify if there's an actual increase from last check (not initial load)
+      if (lastCheckedCount > 0 && newPending > lastCheckedCount) {
+        const newCount = newPending - lastCheckedCount;
         playNotificationSound();
         if (Notification.permission === 'granted') {
           new Notification('New Registration!', {
-            body: `${newPending - newRegistrationsCount} new registration(s) pending approval`,
+            body: `${newCount} new registration(s) pending approval`,
             icon: '/icon-192.png',
           });
         }
       }
+      setLastCheckedCount(newPending);
       setNewRegistrationsCount(newPending);
 
     } catch (error) {
@@ -171,14 +170,16 @@ export default function PrincipalRegistrationsPage() {
 
   // Initial fetch and set up real-time updates
   useEffect(() => {
+    if (!organizationId && !preschoolId) return;
+    
     fetchRegistrations();
     
-    // Poll every 30 seconds for new registrations
-    const interval = setInterval(fetchRegistrations, 30000);
+    // Poll every 5 minutes for new registrations
+    const interval = setInterval(fetchRegistrations, 300000);
     
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [organizationId, preschoolId]);
 
   // Filter registrations
   useEffect(() => {
@@ -213,13 +214,8 @@ export default function PrincipalRegistrationsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      const edusiteproUrl = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co';
-      const edusiteproKey = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY;
-
-      const { createClient } = await import('@supabase/supabase-js');
-      const edusiteproClient = createClient(edusiteproUrl, edusiteproKey!);
-
-      const { error } = await edusiteproClient
+      // Update in LOCAL database
+      const { error } = await supabase
         .from('registration_requests')
         .update({
           status: 'approved',
@@ -230,8 +226,8 @@ export default function PrincipalRegistrationsPage() {
 
       if (error) throw error;
 
-      // Trigger sync to EduDashPro via Edge Function
-      await edusiteproClient.functions.invoke('sync-registration-to-edudash', {
+      // Trigger sync to create student record via Edge Function
+      await supabase.functions.invoke('sync-registration-to-edudash', {
         body: { registration_id: registration.id },
       });
 
@@ -245,6 +241,32 @@ export default function PrincipalRegistrationsPage() {
     }
   };
 
+  // Manual sync from EduSitePro
+  const handleManualSync = async () => {
+    setSyncing(true);
+    try {
+      console.log('🔄 Triggering manual sync from EduSitePro...');
+      const { data, error } = await supabase.functions.invoke('sync-registrations-from-edusite');
+      
+      if (error) {
+        console.error('❌ Sync error:', error);
+        alert('Failed to sync registrations. Check console for details.');
+        return;
+      }
+
+      console.log('✅ Sync result:', data);
+      alert(`Sync complete! ${data.synced || 0} new, ${data.deleted || 0} removed`);
+      
+      // Refresh the list
+      await fetchRegistrations();
+    } catch (error) {
+      console.error('💥 Sync failed:', error);
+      alert('Sync failed. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Reject registration
   const handleReject = async (registration: Registration) => {
     const reason = prompt(`Enter reason for rejecting ${registration.student_first_name} ${registration.student_last_name}'s registration:`);
@@ -254,13 +276,8 @@ export default function PrincipalRegistrationsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      const edusiteproUrl = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co';
-      const edusiteproKey = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY;
-
-      const { createClient } = await import('@supabase/supabase-js');
-      const edusiteproClient = createClient(edusiteproUrl, edusiteproKey!);
-
-      const { error } = await edusiteproClient
+      // Update in LOCAL database
+      const { error } = await supabase
         .from('registration_requests')
         .update({
           status: 'rejected',
@@ -283,261 +300,322 @@ export default function PrincipalRegistrationsPage() {
   };
 
   return (
-    <PrincipalShell>
-      <div className="p-6">
+    <PrincipalShell hideRightSidebar={true}>
+      {/* Full-width page - override content padding */}
+      <div className="registrations-page">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              <FileText className="w-8 h-8 text-blue-600" />
-              Student Registrations
-            </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
-              Review and approve new student registrations
-            </p>
-          </div>
-          
-          <div className="mt-4 md:mt-0 flex items-center gap-4">
+        <div className="reg-header">
+          <div className="reg-header-inner">
+            <div>
+              <h1 className="reg-title">Registrations</h1>
+              <p className="reg-subtitle">
+                Review and approve registration requests from parents
+              </p>
+            </div>
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`p-2 rounded-lg ${soundEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}
-              title="Toggle notification sound"
+              onClick={handleManualSync}
+              disabled={syncing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                background: syncing ? '#374151' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                opacity: syncing ? 0.6 : 1,
+                transition: 'all 0.2s'
+              }}
             >
-              <Bell className="w-5 h-5" />
-            </button>
-            <button
-              onClick={fetchRegistrations}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+              {syncing ? 'Syncing...' : 'Sync from EduSite'}
             </button>
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'Pending', count: registrations.filter(r => r.status === 'pending').length, color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-            { label: 'Approved', count: registrations.filter(r => r.status === 'approved').length, color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-            { label: 'Rejected', count: registrations.filter(r => r.status === 'rejected').length, color: 'bg-red-100 text-red-700', icon: XCircle },
-            { label: 'Total', count: registrations.length, color: 'bg-blue-100 text-blue-700', icon: FileText },
-          ].map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} className="bg-white dark:bg-gray-800 rounded-xl shadow p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{stat.label}</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.count}</p>
-                  </div>
-                  <div className={`p-2 rounded-lg ${stat.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* Stats Row */}
+        <div className="reg-stats">
+          <div className="reg-stats-inner">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <span className="text-gray-300">
+                <span className="font-semibold">{registrations.length}</span> Total
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+              <span className="text-gray-300">
+                <span className="font-semibold">{registrations.filter(r => r.status === 'pending').length}</span> Pending
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span className="text-gray-300">
+                <span className="font-semibold">{registrations.filter(r => r.status === 'approved').length}</span> Approved
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <span className="text-gray-300">
+                <span className="font-semibold">{registrations.filter(r => r.status === 'rejected').length}</span> Rejected
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name, email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-
-            {/* Export */}
-            <button
-              onClick={() => alert('Export functionality coming soon')}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-            >
-              <Download className="w-5 h-5" />
-              Export CSV
-            </button>
+        <div className="reg-filters">
+          <div className="reg-filters-inner">
+            {['all', 'pending', 'approved', 'rejected'].map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setStatusFilter(filter as any)}
+                className={`reg-filter-btn ${
+                  statusFilter === filter ? 'reg-filter-btn-active' : ''
+                }`}
+              >
+                {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Registrations List */}
-        <div className="space-y-4">
+        {/* Table */}
+        <div className="reg-table-container">
           {loading ? (
             <div className="text-center py-12">
-              <RefreshCw className="w-12 h-12 animate-spin mx-auto text-blue-600" />
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading registrations...</p>
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
             </div>
           ) : filteredRegistrations.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-12 text-center">
-              <FileText className="w-16 h-16 mx-auto text-gray-400" />
-              <p className="mt-4 text-gray-600 dark:text-gray-400">No registrations found</p>
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              No registrations found
             </div>
           ) : (
-            filteredRegistrations.map((reg) => (
-              <div
-                key={reg.id}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition-all"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                          {reg.student_first_name} {reg.student_last_name}
-                        </h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          reg.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          reg.status === 'approved' ? 'bg-green-100 text-green-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {reg.status.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {reg.status === 'pending' && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleApprove(reg)}
-                          disabled={processing === reg.id}
-                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-5 h-5" />
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleReject(reg)}
-                          disabled={processing === reg.id}
-                          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                        >
-                          <XCircle className="w-5 h-5" />
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <User className="w-4 h-4" />
-                      <span><strong>Guardian:</strong> {reg.guardian_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Mail className="w-4 h-4" />
-                      <span>{reg.guardian_email}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Phone className="w-4 h-4" />
-                      <span>{reg.guardian_phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Baby className="w-4 h-4" />
-                      <span><strong>DOB:</strong> {new Date(reg.student_dob).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <Calendar className="w-4 h-4" />
-                      <span><strong>Registered:</strong> {new Date(reg.created_at).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <FileText className="w-4 h-4" />
-                      <span><strong>Documents:</strong> {reg.documents_uploaded ? '✓ Uploaded' : '✗ Pending'}</span>
-                    </div>
-                  </div>
-
-                  {/* Payment Info */}
-                  {reg.registration_fee_amount && (
-                    <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <div className="flex items-center justify-between">
+            <div className="reg-table-wrapper">
+              <table className="reg-table">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Student</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Parent</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Fee</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Payment</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRegistrations.map((reg) => (
+                    <tr
+                      key={reg.id}
+                      className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+                    >
+                      <td className="py-3 px-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                            Registration Fee: R{reg.registration_fee_amount.toFixed(2)}
-                          </p>
-                          {reg.campaign_applied && (
-                            <p className="text-xs text-green-600 dark:text-green-400">
-                              Discount: {reg.campaign_applied} (-R{reg.discount_amount?.toFixed(2) || '0.00'})
-                            </p>
+                          <div className="text-sm font-medium text-white">
+                            {reg.student_first_name} {reg.student_last_name?.toUpperCase()}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            DOB: {new Date(reg.student_dob).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <div className="text-sm font-medium text-white">{reg.guardian_name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{reg.guardian_email}</div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm font-medium text-white">R150</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                          <span className="text-red-400 font-medium">No Payment</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
+                          reg.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                          reg.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                          'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}>
+                          {reg.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-gray-400">
+                        {new Date(reg.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => router.push(`/dashboard/principal/registrations/${reg.id}`)}
+                            className="text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors"
+                          >
+                            View
+                          </button>
+                          {reg.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(reg)}
+                                disabled={processing === reg.id}
+                                className="text-green-400 hover:text-green-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleReject(reg)}
+                                disabled={processing === reg.id}
+                                className="text-red-400 hover:text-red-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                              >
+                                Reject
+                              </button>
+                            </>
                           )}
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          reg.registration_fee_paid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {reg.registration_fee_paid ? 'PAID' : 'PENDING'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Rejection Reason */}
-                  {reg.status === 'rejected' && reg.rejection_reason && (
-                    <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                      <p className="text-sm font-semibold text-red-700 dark:text-red-400">
-                        Rejection Reason:
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                        {reg.rejection_reason}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* View Details Button */}
-                  <button
-                    onClick={() => setSelectedRegistration(reg)}
-                    className="mt-4 text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                  >
-                    View Full Details →
-                  </button>
-                </div>
-              </div>
-            ))
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-
-        {/* Detail Modal */}
-        {selectedRegistration && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Registration Details
-                  </h2>
-                  <button
-                    onClick={() => setSelectedRegistration(null)}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <XCircle className="w-6 h-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <pre className="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs">
-                    {JSON.stringify(selectedRegistration, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+
+      <style jsx global>{`
+        /* Override content padding for full-width layout */
+        .registrations-page {
+          margin: calc(var(--space-3) * -1) calc(var(--space-2) * -1);
+          min-height: calc(100vh - var(--topbar-h));
+          background: #111827;
+        }
+        @media(min-width:640px) {
+          .registrations-page {
+            margin: calc(var(--space-4) * -1) calc(var(--space-3) * -1);
+          }
+        }
+        @media(min-width:768px) {
+          .registrations-page {
+            margin: calc(var(--space-3) * -1) calc(var(--space-4) * -1);
+          }
+        }
+        
+        /* Header */
+        .reg-header {
+          border-bottom: 1px solid #374151;
+          padding: 20px 24px;
+        }
+        .reg-header-inner {
+          max-width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        .reg-title {
+          font-size: 20px;
+          font-weight: 600;
+          color: #fff;
+          margin: 0;
+        }
+        .reg-subtitle {
+          font-size: 13px;
+          color: #9ca3af;
+          margin: 4px 0 0 0;
+        }
+        
+        /* Stats */
+        .reg-stats {
+          background: #1f2937;
+          border-bottom: 1px solid #374151;
+          padding: 12px 24px;
+        }
+        .reg-stats-inner {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          font-size: 13px;
+        }
+        
+        /* Filters */
+        .reg-filters {
+          border-bottom: 1px solid #374151;
+          padding: 0 24px;
+        }
+        .reg-filters-inner {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .reg-filter-btn {
+          padding: 12px 16px;
+          font-size: 13px;
+          font-weight: 500;
+          border-bottom: 2px solid transparent;
+          transition: all 0.2s;
+          cursor: pointer;
+          background: none;
+          border-top: none;
+          border-left: none;
+          border-right: none;
+        }
+        .reg-filter-btn-active {
+          border-bottom-color: #f97316;
+          color: #fb923c;
+        }
+        .reg-filter-btn:not(.reg-filter-btn-active) {
+          color: #9ca3af;
+        }
+        .reg-filter-btn:not(.reg-filter-btn-active):hover {
+          color: #e5e7eb;
+        }
+        
+        /* Table Container */
+        .reg-table-container {
+          padding: 16px 24px;
+          width: 100%;
+        }
+        .reg-table-wrapper {
+          overflow-x: auto;
+          width: 100%;
+        }
+        .reg-table {
+          width: 100%;
+          min-width: 100%;
+          border-collapse: collapse;
+        }
+        .reg-table thead tr {
+          border-bottom: 1px solid #374151;
+        }
+        .reg-table th {
+          text-align: left;
+          padding: 12px 16px;
+          font-size: 11px;
+          font-weight: 500;
+          color: #9ca3af;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .reg-table th:last-child {
+          text-align: right;
+        }
+        .reg-table tbody tr {
+          border-bottom: 1px solid #1f2937;
+          transition: background-color 0.15s;
+        }
+        .reg-table tbody tr:hover {
+          background-color: rgba(31, 41, 55, 0.5);
+        }
+        .reg-table td {
+          padding: 12px 16px;
+        }
+      `}</style>
     </PrincipalShell>
   );
 }

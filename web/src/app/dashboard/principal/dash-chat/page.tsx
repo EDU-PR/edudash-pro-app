@@ -62,7 +62,7 @@ export default function PrincipalDashChatPage() {
   };
 
   return (
-    <PrincipalShell tenantSlug={slug} userEmail={email}>
+    <PrincipalShell tenantSlug={slug} userEmail={email} hideRightSidebar={true}>
       {/* Full viewport height container - No scroll */}
       <div
         className="flex flex-col bg-gray-950 overflow-hidden relative"

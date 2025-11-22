@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading settings...</p>
         </div>
@@ -90,7 +90,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
       <div className="section">
         <h1 className="h1">Settings</h1>
 

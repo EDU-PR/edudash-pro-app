@@ -33,7 +33,7 @@ export default function FinancialsPage() {
 
   if (loading) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading financials...</p>
         </div>
@@ -42,7 +42,7 @@ export default function FinancialsPage() {
   }
 
   return (
-    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
       <div className="section">
         <h1 className="h1">Financial Dashboard</h1>
 

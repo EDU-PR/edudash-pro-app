@@ -200,7 +200,7 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+      <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading reports...</p>
         </div>
@@ -347,7 +347,7 @@ export default function ReportsPage() {
   };
 
   return (
-    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId}>
+    <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
       <div className="section">
         <h1 className="h1">Reports</h1>
 
