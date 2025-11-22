@@ -70,7 +70,6 @@ export default function RegistrationsAdminPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [organizationFilter, setOrganizationFilter] = useState<string>('all');
   const [organizations, setOrganizations] = useState<{id: string, name: string}[]>([]);
-  const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [newRegistrationsCount, setNewRegistrationsCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
@@ -238,10 +237,8 @@ export default function RegistrationsAdminPage() {
 
       if (error) throw error;
 
-      // Trigger sync to EduDashPro via Edge Function
-      await edusiteproClient.functions.invoke('sync-registration-to-edudash', {
-        body: { registration_id: registration.id },
-      });
+      // Sync will happen automatically via pg_cron (every 5 minutes)
+      // Or admin can manually trigger sync from EduDashPro principal dashboard
 
       await fetchRegistrations();
       alert('Registration approved successfully!');
@@ -456,20 +453,22 @@ export default function RegistrationsAdminPage() {
                 <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">No registrations found</p>
               </div>
             ) : (
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Student</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Parent</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">School</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fee</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <>
+                {/* Desktop Table View */}
+                <table className="w-full hidden md:table">
+                  <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Student</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Parent</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">School</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fee</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Payment</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {
 filteredRegistrations.map((reg) => (
                     <tr key={reg.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -545,9 +544,9 @@ filteredRegistrations.map((reg) => (
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleApprove(reg)}
-                              disabled={processing === reg.id}
-                              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-                              title="Approve"
+                              disabled={processing === reg.id || !reg.proof_of_payment_url}
+                              className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title={!reg.proof_of_payment_url ? "Waiting for proof of payment" : "Approve"}
                             >
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
@@ -562,10 +561,10 @@ filteredRegistrations.map((reg) => (
                           </div>
                         ) : (
                           <button
-                            onClick={() => setSelectedRegistration(reg)}
-                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm"
+                            onClick={() => router.push(`/admin/registrations/${reg.id}`)}
+                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
                           >
-                            View
+                            View Details
                           </button>
                         )}
                       </td>
@@ -574,37 +573,90 @@ filteredRegistrations.map((reg) => (
                 }
                 </tbody>
               </table>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-4 p-4">
+                {filteredRegistrations.map((reg) => (
+                  <div
+                    key={reg.id}
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                          {reg.student_first_name} {reg.student_last_name}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{reg.guardian_name}</p>
+                      </div>
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        reg.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        reg.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {reg.status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 mb-4 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">School:</span>
+                        <span className="text-gray-900 dark:text-white">{reg.organization_name || 'Unknown'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Fee:</span>
+                        <span className="text-gray-900 dark:text-white">R{reg.registration_fee_amount || 300}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Payment:</span>
+                        <span className={reg.registration_fee_paid ? 'text-green-600' : 'text-red-600'}>
+                          {reg.registration_fee_paid ? 'Paid' : 'Unpaid'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Date:</span>
+                        <span className="text-gray-900 dark:text-white">
+                          {new Date(reg.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {!reg.proof_of_payment_url && reg.status === 'pending' && (
+                        <div className="flex items-center gap-1 text-xs text-amber-600">
+                          <Clock className="w-3 h-3" />
+                          Waiting for proof of payment
+                        </div>
+                      )}
+                    </div>
+
+                    {reg.status === 'pending' ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => router.push(`/admin/registrations/${reg.id}`)}
+                          className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                        >
+                          View & Approve
+                        </button>
+                        <button
+                          onClick={() => handleReject(reg)}
+                          disabled={processing === reg.id}
+                          className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => router.push(`/admin/registrations/${reg.id}`)}
+                        className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                      >
+                        View Details
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              </>
             )}
           </div>
         </div>
-
-        {/* Detail Modal */}
-        {selectedRegistration && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Registration Details
-                  </h2>
-                  <button
-                    onClick={() => setSelectedRegistration(null)}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <XCircle className="w-6 h-6" />
-                  </button>
-                </div>
-
-                {/* Full registration details would go here */}
-                <div className="space-y-4">
-                  <pre className="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs">
-                    {JSON.stringify(selectedRegistration, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
