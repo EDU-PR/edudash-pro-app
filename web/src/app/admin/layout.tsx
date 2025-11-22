@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { Settings, BookMarked, LogOut, Loader2 } from 'lucide-react';
+import { Settings, BookMarked, LogOut, Loader2, FileText } from 'lucide-react';
+import RegistrationNotifications from '@/components/admin/RegistrationNotifications';
 
 export default function AdminLayout({
   children,
@@ -124,6 +125,13 @@ export default function AdminLayout({
               {/* Navigation Links */}
               <div className="hidden md:flex items-center gap-4">
                 <Link
+                  href="/admin/registrations"
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  <span>Registrations</span>
+                </Link>
+                <Link
                   href="/admin/ai-config"
                   className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
@@ -140,8 +148,9 @@ export default function AdminLayout({
               </div>
             </div>
 
-            {/* Sign Out Button */}
-            <div className="flex items-center">
+            {/* Right Side - Notifications & Sign Out */}
+            <div className="flex items-center gap-4">
+              <RegistrationNotifications />
               <button
                 onClick={handleSignOut}
                 className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
