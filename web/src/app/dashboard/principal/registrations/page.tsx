@@ -54,7 +54,7 @@ interface Registration {
   // Status
   status: 'pending' | 'approved' | 'rejected';
   reviewed_by?: string;
-  reviewed_at?: string;
+  reviewed_date?: string;
   rejection_reason?: string;
   created_at: string;
 }
@@ -221,7 +221,7 @@ export default function PrincipalRegistrationsPage() {
         .update({
           status: 'approved',
           reviewed_by: user?.email,
-          reviewed_at: new Date().toISOString(),
+          reviewed_date: new Date().toISOString(),
         })
         .eq('id', registration.id);
 
@@ -317,7 +317,7 @@ export default function PrincipalRegistrationsPage() {
         .update({
           status: 'rejected',
           reviewed_by: user?.email,
-          reviewed_at: new Date().toISOString(),
+          reviewed_date: new Date().toISOString(),
           rejection_reason: reason,
         })
         .eq('id', registration.id);
