@@ -191,22 +191,32 @@ export default function RegistrationDetailPage() {
 
     setProcessing(true);
     try {
-      const response = await fetch('/api/registrations/verify-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          registrationId: registration.id,
-          verified: verify
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || `Failed to ${action} payment`);
+      // Update directly using client (RLS will handle permissions)
+      const updateData: any = {
+        payment_verified: verify,
+        payment_date: verify ? new Date().toISOString() : null,
+      };
+      
+      if (verify) {
+        updateData.registration_fee_paid = true;
       }
 
-      alert(result.message || `Payment ${verify ? 'verified' : 'verification removed'}!`);
+      const { error } = await supabase
+        .from('registration_requests')
+        .update(updateData)
+        .eq('id', registration.id);
+
+      if (error) throw error;
+
+      // Also update students table if exists
+      await supabase
+        .from('students')
+        .update(updateData)
+        .eq('organization_id', registration.organization_id)
+        .ilike('first_name', registration.student_first_name)
+        .ilike('last_name', registration.student_last_name);
+
+      alert(`Payment ${verify ? 'verified' : 'verification removed'}!`);
       await fetchRegistration();
     } catch (error: any) {
       console.error(`Error ${action}ing payment:`, error);

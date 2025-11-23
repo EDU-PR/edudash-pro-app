@@ -13,12 +13,6 @@ export async function POST(req: NextRequest) {
         },
       }
     );
-    
-    // Check authentication
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const { studentId, reason } = await req.json();
 
