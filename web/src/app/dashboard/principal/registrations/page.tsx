@@ -333,7 +333,7 @@ export default function PrincipalRegistrationsPage() {
       await supabase
         .from('students')
         .update(updateData)
-        .eq('organization_id', registration.organization_id)
+        .eq('preschool_id', registration.organization_id)
         .ilike('first_name', registration.student_first_name)
         .ilike('last_name', registration.student_last_name);
 
