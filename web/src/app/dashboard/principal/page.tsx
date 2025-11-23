@@ -186,7 +186,7 @@ export default function PrincipalDashboard() {
           .limit(3);
 
         if (registrations) {
-          registrations.forEach(reg => {
+          registrations.forEach((reg: any) => {
             const studentName = `${reg.student_first_name} ${reg.student_last_name}`;
             if (reg.reviewed_date) {
               activities.push({
@@ -218,7 +218,7 @@ export default function PrincipalDashboard() {
           .limit(2);
 
         if (students) {
-          students.forEach(student => {
+          students.forEach((student: any) => {
             activities.push({
               id: `student-${student.id}`,
               type: 'student',

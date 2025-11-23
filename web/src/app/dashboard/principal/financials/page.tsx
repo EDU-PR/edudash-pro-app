@@ -78,11 +78,11 @@ export default function FinancialsPage() {
         }
 
         if (registrations) {
-          const paid = registrations.filter((r) => r.registration_fee_paid);
-          const pending = registrations.filter((r) => !r.registration_fee_paid && r.registration_fee_amount);
+          const paid = registrations.filter((r: any) => r.registration_fee_paid);
+          const pending = registrations.filter((r: any) => !r.registration_fee_paid && r.registration_fee_amount);
 
-          const totalRevenue = paid.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
-          const pendingAmount = pending.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
+          const totalRevenue = paid.reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
+          const pendingAmount = pending.reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
 
           setMetrics({
             totalRevenue,
