@@ -446,6 +446,10 @@ Deno.serve(async (req) => {
           status: 'active',
           is_active: true,
           enrollment_date: new Date().toISOString().split('T')[0], // date only
+          registration_fee_amount: registration.registration_fee_amount,
+          registration_fee_paid: registration.registration_fee_paid || false,
+          payment_verified: registration.payment_verified || false,
+          payment_date: registration.payment_date,
         })
         .select()
         .single();

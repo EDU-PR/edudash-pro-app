@@ -132,20 +132,30 @@ export default function PrincipalDashboard() {
           .select('*', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId);
 
-        // Fetch financial data from registration_requests
+        // Fetch financial data from registration_requests table (synced from EduSitePro)
+        // Use payment_verified to count only verified payments for revenue
         const { data: registrations } = await supabase
           .from('registration_requests')
-          .select('registration_fee_amount, registration_fee_paid, status')
+          .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
           .eq('organization_id', preschoolId);
 
         let revenue = 0;
         let pendingPayments = 0;
 
         if (registrations) {
-          const paid = registrations.filter((r: any) => r.registration_fee_paid && r.status !== 'rejected');
-          const pending = registrations.filter((r: any) => !r.registration_fee_paid && r.registration_fee_amount && r.status !== 'rejected');
+          // Only count verified payments from approved registrations
+          const paidAndVerified = registrations.filter((r: any) => 
+            r.payment_verified && r.status === 'approved'
+          );
           
-          revenue = paid.reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
+          // Pending = approved but not verified, or have amount but not paid
+          const pending = registrations.filter((r: any) => 
+            !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
+          );
+          
+          revenue = paidAndVerified.reduce((sum: number, r: any) => 
+            sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
+          );
           pendingPayments = pending.length;
         }
 
@@ -177,54 +187,24 @@ export default function PrincipalDashboard() {
       try {
         const activities: RecentActivity[] = [];
 
-        // Get recent registrations
-        const { data: registrations } = await supabase
-          .from('registration_requests')
-          .select('id, student_first_name, student_last_name, status, created_at, reviewed_date')
-          .eq('organization_id', preschoolId)
-          .order('created_at', { ascending: false })
-          .limit(3);
-
-        if (registrations) {
-          registrations.forEach((reg: any) => {
-            const studentName = `${reg.student_first_name} ${reg.student_last_name}`;
-            if (reg.reviewed_date) {
-              activities.push({
-                id: `reg-reviewed-${reg.id}`,
-                type: 'registration',
-                title: reg.status === 'approved' ? 'Registration Approved' : 'Registration Updated',
-                description: `${studentName} - ${reg.status}`,
-                timestamp: reg.reviewed_date,
-              });
-            } else {
-              activities.push({
-                id: `reg-new-${reg.id}`,
-                type: 'registration',
-                title: 'New Registration',
-                description: `${studentName} - pending review`,
-                timestamp: reg.created_at,
-              });
-            }
-          });
-        }
-
-        // Get recently enrolled students
+        // Get recently enrolled students (registration_requests table is in EduSitePro, not EduDashPro)
+        // Once approved, students are synced to students table
         const { data: students } = await supabase
           .from('students')
-          .select('id, first_name, last_name, enrollment_date')
+          .select('id, first_name, last_name, enrollment_date, created_at, status')
           .eq('preschool_id', preschoolId)
-          .not('enrollment_date', 'is', null)
-          .order('enrollment_date', { ascending: false })
-          .limit(2);
+          .order('created_at', { ascending: false })
+          .limit(5);
 
         if (students) {
           students.forEach((student: any) => {
+            const timestamp = student.enrollment_date || student.created_at;
             activities.push({
               id: `student-${student.id}`,
               type: 'student',
-              title: 'Student Enrolled',
+              title: student.status === 'active' ? 'Student Enrolled' : 'Student Added',
               description: `${student.first_name} ${student.last_name}`,
-              timestamp: student.enrollment_date,
+              timestamp,
             });
           });
         }
