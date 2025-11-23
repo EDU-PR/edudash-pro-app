@@ -30,27 +30,27 @@ export function PWAInstallPrompt() {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       
-      // Show prompt after small delay to not overwhelm user
+      // Show prompt immediately for better visibility
       setTimeout(() => {
         setShowPrompt(true);
-      }, 3000);
+      }, 1000);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // For iOS, show manual install instructions after delay if not installed
+    // For iOS, show manual install instructions immediately if not installed
     if (iOS && !isInstalled) {
       setTimeout(() => {
         setShowPrompt(true);
-      }, 5000);
+      }, 2000);
     }
 
-    // Android fallback: if no event after 8s and not installed, show instructions
+    // Android fallback: if no event after 4s and not installed, show instructions
     const androidFallbackTimer = setTimeout(() => {
       if (!iOS && !isInstalled && !deferredPrompt) {
         setShowPrompt(true);
       }
-    }, 8000);
+    }, 4000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -78,12 +78,23 @@ export function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    // Set a flag to not show again for this session
-    sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+    // Store dismissed state only for 1 hour instead of entire session
+    if (typeof window !== 'undefined') {
+      const expiryTime = Date.now() + (60 * 60 * 1000); // 1 hour
+      sessionStorage.setItem('pwa-prompt-dismissed', expiryTime.toString());
+    }
   };
 
-  // Don't show if already installed or user dismissed
-  if (isStandalone || !showPrompt || sessionStorage.getItem('pwa-prompt-dismissed')) {
+  // Don't show if already installed or user dismissed recently
+  const getDismissedTime = () => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('pwa-prompt-dismissed');
+  };
+  
+  const dismissedTime = getDismissedTime();
+  const isDismissed = dismissedTime && Date.now() < parseInt(dismissedTime);
+  
+  if (isStandalone || !showPrompt || isDismissed) {
     return null;
   }
 

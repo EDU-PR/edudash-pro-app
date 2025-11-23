@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
 import { AnimatedPromoBanner } from "@/components/landing/AnimatedPromoBanner";
+import { PWAInstallButton } from "@/components/PWAInstallButton";
 import 'katex/dist/katex.min.css';
 
 export default function Home() {
@@ -84,6 +85,7 @@ export default function Home() {
             <Link href="/exam-prep" style={{background: 'none', border: 0, color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.2s'}}>📝 Exam Prep</Link>
             <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Pricing</button>
             <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>FAQ</button>
+            <PWAInstallButton />
             <Link href="/sign-in" style={{color: '#00f5ff', textDecoration: 'none', fontSize: '14px', fontWeight: 600}}>Sign In</Link>
             <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '14px', padding: '8px 18px', borderRadius: '8px'}}>Get Started</Link>
           </nav>
@@ -99,6 +101,7 @@ export default function Home() {
               <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Pricing</button>
               <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>FAQ</button>
               <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '16px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <PWAInstallButton />
                 <Link href="/sign-in" style={{color: '#00f5ff', textDecoration: 'none', fontSize: '16px', fontWeight: 600, padding: '12px', textAlign: 'center', border: '1px solid #00f5ff', borderRadius: '8px'}}>Sign In</Link>
                 <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '16px', padding: '12px', borderRadius: '8px', textAlign: 'center', display: 'block'}}>Get Started</Link>
               </div>
