@@ -154,54 +154,68 @@ Deno.serve(async (req) => {
     // Step 1: Create or find parent account
     console.log('[sync-registration] Creating/finding parent account...');
     
-    // Check if parent already exists by email
+    // Normalize email to lowercase for consistency
+    const normalizedEmail = registration.guardian_email.toLowerCase().trim();
+    
+    // Check if parent already exists by email (case-insensitive)
     const { data: existingParent } = await edudashClient
       .from('profiles')
       .select('id, auth_user_id')
-      .eq('email', registration.guardian_email)
+      .ilike('email', normalizedEmail)
       .eq('role', 'parent')
       .maybeSingle();
 
     let parentUserId: string;
     let parentProfileId: string;
+    let tempPassword: string | null = null;
 
     if (existingParent) {
-      console.log('[sync-registration] Parent already exists:', existingParent.id);
+      console.log('[sync-registration] Parent profile already exists:', existingParent.id);
       parentUserId = existingParent.auth_user_id;
       parentProfileId = existingParent.id;
     } else {
-      // Create new parent user account
-      const tempPassword = crypto.randomUUID(); // Generate secure random password
+      // Check if auth user exists but no profile (orphaned user)
+      const { data: authUsers } = await edudashClient.auth.admin.listUsers();
+      const existingAuthUser = authUsers?.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
       
-      const { data: newUser, error: createUserError } = await edudashClient.auth.admin.createUser({
-        email: registration.guardian_email,
-        password: tempPassword,
-        email_confirm: true, // Auto-confirm email
-        user_metadata: {
-          full_name: registration.guardian_name,
-          phone: registration.guardian_phone,
-        },
-      });
+      if (existingAuthUser) {
+        console.log('[sync-registration] Found orphaned auth user, will create profile:', existingAuthUser.id);
+        parentUserId = existingAuthUser.id;
+        // Don't generate password - user already exists
+      } else {
+        // Create new parent user account
+        tempPassword = crypto.randomUUID(); // Generate secure random password
+        
+        const { data: newUser, error: createUserError } = await edudashClient.auth.admin.createUser({
+          email: normalizedEmail,
+          password: tempPassword,
+          email_confirm: true, // Auto-confirm email
+          user_metadata: {
+            full_name: registration.guardian_name,
+            phone: registration.guardian_phone,
+          },
+        });
 
-      if (createUserError || !newUser.user) {
-        throw new Error(`Failed to create parent user: ${createUserError?.message}`);
+        if (createUserError || !newUser.user) {
+          throw new Error(`Failed to create parent user: ${createUserError?.message}`);
+        }
+
+        parentUserId = newUser.user.id;
+
+        console.log('[sync-registration] Created parent user:', parentUserId);
       }
-
-      parentUserId = newUser.user.id;
-
-      console.log('[sync-registration] Created parent user:', parentUserId);
 
       // Split guardian name into first and last name
       const nameParts = registration.guardian_name.split(' ');
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      // Create parent profile
+      // Create parent profile (using normalized email)
       const { data: newProfile, error: profileError } = await edudashClient
         .from('profiles')
         .insert({
           auth_user_id: parentUserId,
-          email: registration.guardian_email,
+          email: normalizedEmail,
           first_name: firstName,
           last_name: lastName,
           phone: registration.guardian_phone,
@@ -220,13 +234,29 @@ Deno.serve(async (req) => {
 
       console.log('[sync-registration] Created parent profile:', parentProfileId);
 
-      // Send welcome email with password reset link and PWA install instructions
+      // Trigger password reset email instead of sending temporary password
+      const { error: resetError } = await edudashClient.auth.admin.generateLink({
+        type: 'recovery',
+        email: registration.guardian_email,
+        options: {
+          redirectTo: 'https://edudashpro.org.za/reset-password',
+        },
+      });
+
+      if (resetError) {
+        console.error('[sync-registration] Error generating password reset link:', resetError);
+        // Don't fail the whole process if email fails
+      } else {
+        console.log('[sync-registration] Password reset email sent to parent');
+      }
+
+      // Send welcome email with app install instructions
       const approvalEmail = generateParentApprovalEmail({
         guardianName: registration.guardian_name,
         studentName: `${registration.student_first_name} ${registration.student_last_name}`,
         email: registration.guardian_email,
         schoolName: schoolName,
-        resetPasswordUrl: `${edudashUrl}/reset-password?email=${encodeURIComponent(registration.guardian_email)}`,
+        resetPasswordUrl: 'https://edudashpro.org.za/reset-password',
         pwaUrl: 'https://edudashpro.org.za',
       });
 
