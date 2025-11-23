@@ -55,21 +55,40 @@ export async function middleware(request: NextRequest) {
   )
 
   // Handle password reset flow
-  // If URL contains token_hash or type=recovery, redirect to reset-password page
   const { searchParams, pathname } = new URL(request.url)
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type')
+  const error = searchParams.get('error')
+  const errorDescription = searchParams.get('error_description')
 
-  // Password reset link clicked
-  if (tokenHash && type === 'recovery') {
-    // Keep all query params and redirect to reset-password
+  // Password reset link clicked - redirect to reset-password page
+  if (tokenHash && type === 'recovery' && pathname !== '/reset-password') {
     const redirectUrl = new URL('/reset-password', request.url)
     redirectUrl.search = searchParams.toString()
     return NextResponse.redirect(redirectUrl)
   }
 
+  // Handle auth errors
+  if (error && pathname === '/') {
+    const redirectUrl = new URL('/sign-in', request.url)
+    redirectUrl.searchParams.set('error', error)
+    if (errorDescription) {
+      redirectUrl.searchParams.set('error_description', errorDescription)
+    }
+    return NextResponse.redirect(redirectUrl)
+  }
+
   // Refresh session if it exists
-  await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  // If user has a recovery session and is on homepage, redirect to reset-password
+  if (session && pathname === '/' && !tokenHash) {
+    const { data: { user } } = await supabase.auth.getUser()
+    // Check if this is a recovery session (user needs to set password)
+    if (user && user.aud === 'authenticated' && user.recovery_sent_at) {
+      return NextResponse.redirect(new URL('/reset-password', request.url))
+    }
+  }
 
   return response
 }
