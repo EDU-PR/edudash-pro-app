@@ -193,7 +193,80 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
 
   useEffect(() => {
     loadChildrenData();
-  }, [loadChildrenData]);
+
+    // Set up real-time subscription for student changes
+    if (!userId) return;
+
+    const supabase = createClient();
+    
+    // Subscribe to student deletions and updates
+    const channel = supabase
+      .channel('student-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'students',
+          filter: `parent_id=eq.${userId}`,
+        },
+        (payload) => {
+          console.log('[useChildrenData] Student change detected:', payload);
+          
+          if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as any)?.id;
+            console.log('[useChildrenData] Student deleted:', deletedId);
+            
+            // If the deleted student was active, clear the selection
+            if (deletedId === activeChildId) {
+              setActiveChildIdState(null);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('edudash_active_child_id');
+              }
+            }
+            
+            // Reload children list
+            loadChildrenData();
+          } else if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            // Reload on updates/inserts as well
+            loadChildrenData();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'students',
+          filter: `guardian_id=eq.${userId}`,
+        },
+        (payload) => {
+          console.log('[useChildrenData] Student change detected (guardian):', payload);
+          
+          if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as any)?.id;
+            console.log('[useChildrenData] Student deleted (guardian):', deletedId);
+            
+            if (deletedId === activeChildId) {
+              setActiveChildIdState(null);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('edudash_active_child_id');
+              }
+            }
+            
+            loadChildrenData();
+          } else if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            loadChildrenData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadChildrenData, userId, activeChildId]);
 
   return {
     children,

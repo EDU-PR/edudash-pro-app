@@ -250,40 +250,185 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
     setProcessing(true);
     try {
       // First, find the student ID from the approved registration
+      // Use ILIKE with wildcards to handle trailing/leading spaces in DB
+      const trimmedFirstName = registration.student_first_name?.trim() || '';
+      const trimmedLastName = registration.student_last_name?.trim() || '';
+      
+      // Query with ILIKE pattern using wildcards to match with any whitespace
       const { data: students, error: findError } = await supabase
         .from('students')
-        .select('id, parent_user_id')
+        .select('id, first_name, last_name')
         .eq('preschool_id', registration.organization_id)
-        .ilike('first_name', registration.student_first_name)
-        .ilike('last_name', registration.student_last_name);
+        .ilike('first_name', `${trimmedFirstName}%`)
+        .ilike('last_name', `${trimmedLastName}%`);
 
-      if (findError || !students || students.length === 0) {
+      if (findError) {
+        console.error('Student lookup error:', findError);
+        throw new Error(`Database error: ${findError.message}`);
+      }
+
+      if (!students || students.length === 0) {
+        console.error('No student found matching:', {
+          preschool_id: registration.organization_id,
+          first_name: trimmedFirstName,
+          last_name: trimmedLastName
+        });
         throw new Error('Student not found in database. They may not have been approved yet.');
       }
 
       const studentId = students[0].id;
+      const studentName = `${students[0].first_name.trim()} ${students[0].last_name.trim()}`;
 
-      // Call delete API
-      const response = await fetch('/api/students/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, reason }),
-      });
+      console.log('[Delete Student] Found student:', studentId, studentName);
 
-      const result = await response.json();
+      // Get guardian info before deletion
+      const { data: guardianRelation } = await supabase
+        .from('student_guardians')
+        .select('guardian_id, profiles!inner(email, full_name)')
+        .eq('student_id', studentId)
+        .eq('primary_contact', true)
+        .single();
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to delete student');
-      }
+      const parentEmail = guardianRelation?.profiles?.email;
+      const guardianId = guardianRelation?.guardian_id;
+      const parentName = guardianRelation?.profiles?.full_name || 'Parent';
 
-      alert(`✅ ${result.message}\n\nParent email: ${result.parentEmail}\nAccount deleted: ${result.accountDeleted ? 'Yes' : 'No (has other students)'}`);
-      
-      // Delete the registration request too
-      await supabase
+      // Delete ALL registration requests for this student/parent combo
+      // This allows parent to re-register if needed
+      // NOTE: Trial records are preserved in trial_usage_log to prevent duplicate trials
+      const { error: regDeleteError } = await supabase
         .from('registration_requests')
         .delete()
-        .eq('id', registration.id);
+        .eq('organization_id', registration.organization_id)
+        .eq('guardian_email', parentEmail || registration.guardian_email);
 
+      if (regDeleteError) {
+        console.error('Error deleting registration requests:', regDeleteError);
+      } else {
+        console.log('✅ Registration requests deleted for parent:', parentEmail);
+        console.log('ℹ️ Trial records preserved in trial_usage_log (no duplicate trials allowed)');
+      }
+
+      // Delete student record (cascades will handle related records)
+      const { error: deleteError } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+
+      if (deleteError) {
+        console.error('Error deleting student:', deleteError);
+        throw new Error('Failed to delete student from database');
+      }
+
+      console.log('✅ Student deleted successfully');
+
+      // Check if parent has other students
+      let hasOtherStudents = false;
+      if (guardianId) {
+        const { data: otherStudents } = await supabase
+          .from('student_guardians')
+          .select('student_id, students!inner(id, preschool_id)')
+          .eq('guardian_id', guardianId)
+          .eq('students.preschool_id', registration.organization_id);
+
+        hasOtherStudents = otherStudents && otherStudents.length > 0;
+      }
+
+      // Create in-app notification for the parent
+      if (guardianId) {
+        try {
+          const schoolName = registration.organization_name || 'the school';
+          const notificationTitle = hasOtherStudents 
+            ? `Student Removed: ${studentName}`
+            : 'Account Closed';
+          const notificationMessage = hasOtherStudents
+            ? `${studentName} has been removed from ${schoolName}.${reason ? ` Reason: ${reason}` : ''} You still have other students enrolled.`
+            : `${studentName} has been removed from ${schoolName} and your account has been closed.${reason ? ` Reason: ${reason}` : ''} You can rejoin by registering again.`;
+
+          const { error: notifError } = await supabase
+            .from('notifications')
+            .insert({
+              user_id: guardianId,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: 'warning',
+              preschool_id: registration.organization_id,
+              metadata: {
+                student_name: studentName,
+                deletion_reason: reason,
+                has_other_students: hasOtherStudents,
+                deleted_at: new Date().toISOString(),
+              },
+            });
+
+          if (notifError) {
+            console.error('Error creating notification:', notifError);
+          } else {
+            console.log('✅ In-app notification created for parent');
+          }
+
+          // Also send push notification to device
+          try {
+            await supabase
+              .from('push_notifications')
+              .insert({
+                recipient_user_id: guardianId,
+                title: notificationTitle,
+                body: notificationMessage,
+                notification_type: hasOtherStudents ? 'student_removed' : 'account_closed',
+                preschool_id: registration.organization_id,
+                status: 'sent',
+                data: {
+                  type: 'student_deletion',
+                  student_name: studentName,
+                  deletion_reason: reason,
+                  has_other_students: hasOtherStudents,
+                  action: 'view_notifications',
+                },
+              });
+            console.log('✅ Push notification queued for delivery');
+          } catch (pushError) {
+            console.error('Error sending push notification (non-critical):', pushError);
+          }
+        } catch (notifError) {
+          console.error('Error creating notification (non-critical):', notifError);
+        }
+      }
+
+      // Send email notification to parent
+      if (parentEmail) {
+        try {
+          const parentName = guardianRelation?.profiles?.full_name || 'Parent';
+          const schoolName = registration.organization_name || 'the school';
+          
+          const emailSubject = hasOtherStudents 
+            ? `Student Removed from ${schoolName} - ${studentName}`
+            : `Account Closed - ${schoolName}`;
+          
+          const emailMessage = hasOtherStudents
+            ? `Dear ${parentName},\n\nWe are writing to inform you that ${studentName} has been removed from ${schoolName}.\n\n${reason ? `Reason: ${reason}\n\n` : ''}You still have other students enrolled at this school.\n\nIf you have any questions, please contact the school administration.\n\nBest regards,\n${schoolName}\nEduDash Pro Team`
+            : `Dear ${parentName},\n\nWe are writing to inform you that ${studentName} has been removed from ${schoolName}, and your account with this school has been closed.\n\n${reason ? `Reason: ${reason}\n\n` : ''}You can re-register at any time by visiting our registration page. Your previous registration has been cleared to allow you to register again if needed.\n\nTo rejoin:\n1. Visit the school's registration page\n2. Complete the registration form\n3. Upload required documents\n4. Wait for approval\n\nFor other options, you can:\n• Join another school\n• Use the "EduDash Pro Community" for free learning resources\n\nIf you have any questions, please contact support@edudashpro.org.za\n\nBest regards,\n${schoolName}\nEduDash Pro Team`;
+
+          const { error: emailError } = await supabase.functions.invoke('send-email', {
+            body: {
+              to: parentEmail,
+              subject: emailSubject,
+              message: emailMessage,
+            },
+          });
+
+          if (emailError) {
+            console.error('Email notification failed:', emailError);
+          } else {
+            console.log('✅ Email notification sent to:', parentEmail);
+          }
+        } catch (emailError) {
+          console.error('Error sending email (non-critical):', emailError);
+        }
+      }
+
+      alert(`✅ Student deleted successfully!\n\nStudent: ${studentName}\nParent: ${parentEmail || 'Unknown'}\n${parentEmail ? '📧 Email sent\n🔔 In-app notification created\n✅ Registration cleared (parent can re-register)' : 'No notifications sent (no parent email)'}\nOther students: ${hasOtherStudents ? 'Yes' : 'No'}`);
+      
       router.push('/dashboard/principal/registrations');
     } catch (error: any) {
       console.error('Error deleting student:', error);

@@ -36,6 +36,55 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const avatarLetter = useMemo(() => (userEmail?.[0] || 'U').toUpperCase(), [userEmail]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [hasOrganization, setHasOrganization] = useState(hasOrganizationProp || false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Get user ID
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchNotificationCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+      
+      setNotificationCount(count || 0);
+    };
+
+    fetchNotificationCount();
+
+    // Subscribe to real-time notification changes
+    const channel = supabase
+      .channel('notification-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          fetchNotificationCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, supabase]);
 
   // Auto-detect if user has organization (if not explicitly provided)
   useEffect(() => {
@@ -121,7 +170,38 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
               <div className="chip">{tenantSlug || 'EduDash Pro'}</div>
             )}
           </div>
-          <div className="rightGroup" style={{ marginLeft: 'auto' }}>
+          <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Notification Bell */}
+            <button
+              className="iconBtn"
+              aria-label="Notifications"
+              onClick={() => router.push('/dashboard/parent/notifications')}
+              style={{ position: 'relative' }}
+            >
+              <Bell className="icon20" />
+              {notificationCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    backgroundColor: 'var(--danger)',
+                    color: 'white',
+                    borderRadius: '50%',
+                    minWidth: 18,
+                    height: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: '0 4px',
+                  }}
+                >
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
+            </button>
             <div className="avatar">{avatarLetter}</div>
           </div>
         </div>
