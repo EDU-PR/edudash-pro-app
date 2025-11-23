@@ -323,7 +323,7 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
             </div>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {registration.status === 'approved' && registration.registration_fee_paid && !registration.payment_verified && (
+              {registration.status === 'approved' && registration.proof_of_payment_url && !registration.payment_verified && (
                 <button
                   onClick={() => handleVerifyPayment(true)}
                   disabled={processing}

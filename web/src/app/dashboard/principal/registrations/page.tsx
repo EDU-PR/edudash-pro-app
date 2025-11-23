@@ -544,7 +544,7 @@ export default function PrincipalRegistrationsPage() {
                             >
                               View
                             </button>
-                            {reg.status === 'approved' && reg.registration_fee_paid && !reg.payment_verified && (
+                            {reg.status === 'approved' && reg.proof_of_payment_url && !reg.payment_verified && (
                               <button
                                 onClick={() => handleVerifyPayment(reg, true)}
                                 disabled={processing === reg.id}
@@ -664,7 +664,7 @@ export default function PrincipalRegistrationsPage() {
                       </div>
                     </div>
 
-                    {reg.status === 'approved' && reg.registration_fee_paid && !reg.payment_verified && (
+                    {reg.status === 'approved' && reg.proof_of_payment_url && !reg.payment_verified && (
                       <div className="reg-card-actions">
                         <button
                           onClick={(e) => {
