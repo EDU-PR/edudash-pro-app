@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { ArrowLeft, Calendar, User, Mail, Phone, MapPin, Users, FileText, Clock } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Mail, Phone, MapPin, Users, FileText, Clock, KeyRound } from 'lucide-react';
 
 interface StudentDetail {
   id: string;
@@ -41,6 +41,7 @@ export default function StudentDetailPage() {
   const [userId, setUserId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<StudentDetail | null>(null);
+  const [sendingPasswordReset, setSendingPasswordReset] = useState(false);
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -109,6 +110,33 @@ export default function StudentDetailPage() {
 
     loadStudent();
   }, [preschoolId, studentId, supabase]);
+
+  const handleSendPasswordReset = async () => {
+    if (!student?.profiles?.email) {
+      alert('No parent email found for this student');
+      return;
+    }
+
+    if (!confirm(`Send password reset email to ${student.profiles.email}?`)) {
+      return;
+    }
+
+    setSendingPasswordReset(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(student.profiles.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      alert(`✅ Password reset email sent to ${student.profiles.email}!\n\nThe parent will receive an email with instructions to set their password.`);
+    } catch (error: any) {
+      console.error('Error sending password reset:', error);
+      alert(`Failed to send password reset email: ${error.message}`);
+    } finally {
+      setSendingPasswordReset(false);
+    }
+  };
 
   const calculateAge = (dateOfBirth: string | null) => {
     if (!dateOfBirth) return 'Unknown';
@@ -256,9 +284,28 @@ export default function StudentDetailPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Email</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Mail size={16} style={{ color: 'var(--muted)' }} />
-                    {student.profiles.email}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Mail size={16} style={{ color: 'var(--muted)' }} />
+                      {student.profiles.email}
+                    </div>
+                    <button
+                      onClick={handleSendPasswordReset}
+                      disabled={sendingPasswordReset}
+                      className="btn btnSecondary"
+                      style={{ 
+                        fontSize: 12,
+                        padding: '6px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Send password reset email to parent"
+                    >
+                      <KeyRound size={14} />
+                      {sendingPasswordReset ? 'Sending...' : 'Send Password Reset'}
+                    </button>
                   </div>
                 </div>
                 {student.profiles.phone && (
