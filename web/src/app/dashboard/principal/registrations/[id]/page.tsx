@@ -101,7 +101,7 @@ export default function RegistrationDetailPage() {
         .update({
           status: 'approved',
           reviewed_by: user?.email,
-          reviewed_at: new Date().toISOString(),
+          reviewed_date: new Date().toISOString(),
         })
         .eq('id', registration.id);
 
@@ -137,7 +137,7 @@ export default function RegistrationDetailPage() {
         .update({
           status: 'rejected',
           reviewed_by: user?.email,
-          reviewed_at: new Date().toISOString(),
+          reviewed_date: new Date().toISOString(),
           rejection_reason: reason,
         })
         .eq('id', registration.id);

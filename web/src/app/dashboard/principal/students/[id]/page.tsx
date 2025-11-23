@@ -328,10 +328,7 @@ export default function StudentDetailPage() {
           <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <button 
               className="btn btnSecondary"
-              onClick={() => {
-                // TODO: Implement edit student
-                alert('Edit student functionality coming soon');
-              }}
+              onClick={() => router.push(`/dashboard/principal/students/${student.id}/edit`)}
             >
               Edit Student
             </button>

@@ -132,12 +132,29 @@ export default function PrincipalDashboard() {
           .select('*', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId);
 
+        // Fetch financial data from registration_requests
+        const { data: registrations } = await supabase
+          .from('registration_requests')
+          .select('registration_fee_amount, registration_fee_paid')
+          .eq('preschool_id', preschoolId);
+
+        let revenue = 0;
+        let pendingPayments = 0;
+
+        if (registrations) {
+          const paid = registrations.filter(r => r.registration_fee_paid);
+          const pending = registrations.filter(r => !r.registration_fee_paid && r.registration_fee_amount);
+          
+          revenue = paid.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
+          pendingPayments = pending.length;
+        }
+
         setMetrics({
           totalStudents: studentCount || 0,
           totalTeachers: teacherCount || 0,
           totalClasses: classCount || 0,
-          revenue: 0, // TODO: Implement financial tracking
-          pendingPayments: 0,
+          revenue,
+          pendingPayments,
           activeEnrollments: studentCount || 0,
           staffAttendance: teacherCount || 0,
           upcomingEvents: 0,
