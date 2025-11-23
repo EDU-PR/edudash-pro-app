@@ -48,8 +48,12 @@ export async function POST(req: NextRequest) {
       .single();
 
     const parentUserId = guardianRelation?.guardian_id;
-    const parentEmail = guardianRelation?.profiles?.email;
-    const parentName = guardianRelation?.profiles?.full_name;
+    const parentEmail = Array.isArray(guardianRelation?.profiles) 
+      ? guardianRelation?.profiles[0]?.email 
+      : (guardianRelation?.profiles as any)?.email;
+    const parentName = Array.isArray(guardianRelation?.profiles)
+      ? guardianRelation?.profiles[0]?.full_name
+      : (guardianRelation?.profiles as any)?.full_name;
 
     console.log('[Delete Student] Student:', studentName, '| Parent:', parentEmail);
 

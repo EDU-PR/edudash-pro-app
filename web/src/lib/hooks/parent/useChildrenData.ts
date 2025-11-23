@@ -210,7 +210,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
           table: 'students',
           filter: `parent_id=eq.${userId}`,
         },
-        (payload) => {
+        (payload: any) => {
           console.log('[useChildrenData] Student change detected:', payload);
           
           if (payload.eventType === 'DELETE') {
@@ -241,7 +241,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
           table: 'students',
           filter: `guardian_id=eq.${userId}`,
         },
-        (payload) => {
+        (payload: any) => {
           console.log('[useChildrenData] Student change detected (guardian):', payload);
           
           if (payload.eventType === 'DELETE') {
