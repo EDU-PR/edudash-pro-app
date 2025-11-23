@@ -60,12 +60,36 @@ export async function middleware(request: NextRequest) {
   const type = searchParams.get('type')
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
+  const accessToken = searchParams.get('access_token')
+  const refreshToken = searchParams.get('refresh_token')
+
+  // Console log for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Middleware Debug]', {
+      pathname,
+      tokenHash: !!tokenHash,
+      type,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+    })
+  }
 
   // Password reset link clicked - redirect to reset-password page
-  if (tokenHash && type === 'recovery' && pathname !== '/reset-password') {
-    const redirectUrl = new URL('/reset-password', request.url)
-    redirectUrl.search = searchParams.toString()
-    return NextResponse.redirect(redirectUrl)
+  // This handles both token_hash and access_token flows
+  if (pathname !== '/reset-password') {
+    // Case 1: Token hash flow (email link with token_hash)
+    if (tokenHash && type === 'recovery') {
+      const redirectUrl = new URL('/reset-password', request.url)
+      redirectUrl.search = searchParams.toString()
+      return NextResponse.redirect(redirectUrl)
+    }
+    
+    // Case 2: Access token flow (after Supabase processes the token)
+    if (accessToken && refreshToken && type === 'recovery') {
+      const redirectUrl = new URL('/reset-password', request.url)
+      redirectUrl.search = searchParams.toString()
+      return NextResponse.redirect(redirectUrl)
+    }
   }
 
   // Handle auth errors
@@ -82,7 +106,7 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   
   // If user has a recovery session and is on homepage, redirect to reset-password
-  if (session && pathname === '/' && !tokenHash) {
+  if (session && pathname === '/' && !tokenHash && !accessToken) {
     const { data: { user } } = await supabase.auth.getUser()
     // Check if this is a recovery session (user needs to set password)
     if (user && user.aud === 'authenticated' && user.recovery_sent_at) {
