@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Get student details before deletion
     const { data: student, error: studentError } = await supabase
       .from('students')
-      .select('*, profiles!inner(email, full_name)')
+      .select('id, first_name, last_name, preschool_id')
       .eq('id', studentId)
       .single();
 
@@ -37,10 +37,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
-    const parentEmail = student.profiles?.email;
-    const parentName = student.profiles?.full_name;
     const studentName = `${student.first_name} ${student.last_name}`;
-    const parentUserId = student.parent_user_id;
+
+    // Get parent/guardian info from student_guardians table
+    const { data: guardianRelation, error: guardianError } = await supabase
+      .from('student_guardians')
+      .select('guardian_id, profiles!inner(email, full_name)')
+      .eq('student_id', studentId)
+      .eq('primary_contact', true)
+      .single();
+
+    const parentUserId = guardianRelation?.guardian_id;
+    const parentEmail = guardianRelation?.profiles?.email;
+    const parentName = guardianRelation?.profiles?.full_name;
 
     console.log('[Delete Student] Student:', studentName, '| Parent:', parentEmail);
 
@@ -57,12 +66,12 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ Student record deleted');
 
-    // Step 2: Check if parent has other students in the organization
+    // Step 2: Check if parent has other students in this preschool
     const { data: otherStudents, error: checkError } = await supabase
-      .from('students')
-      .select('id')
-      .eq('parent_user_id', parentUserId)
-      .eq('organization_id', student.organization_id);
+      .from('student_guardians')
+      .select('student_id, students!inner(id, preschool_id)')
+      .eq('guardian_id', parentUserId)
+      .eq('students.preschool_id', student.preschool_id);
 
     if (checkError) {
       console.error('Error checking other students:', checkError);
