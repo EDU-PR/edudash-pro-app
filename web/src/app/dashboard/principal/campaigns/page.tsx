@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -66,14 +66,12 @@ export default function CampaignsPage() {
     checkUser();
   }, [supabase, router]);
 
-  useEffect(() => {
-    if (profile?.organizationId) {
-      fetchCampaigns();
+  // Fetch campaigns when profile loads
+  const fetchCampaigns = useCallback(async () => {
+    if (!profile?.organizationId) {
+      setLoading(false);
+      return;
     }
-  }, [profile?.organizationId]);
-
-  const fetchCampaigns = async () => {
-    if (!profile?.organizationId) return;
 
     setLoading(true);
     try {
@@ -91,7 +89,13 @@ export default function CampaignsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile?.organizationId, supabase]);
+
+  useEffect(() => {
+    if (profile?.organizationId) {
+      fetchCampaigns();
+    }
+  }, [profile?.organizationId, fetchCampaigns]);
 
   const handleCreateCampaign = async () => {
     if (!profile?.organizationId) {
@@ -195,16 +199,38 @@ export default function CampaignsPage() {
     }
   };
 
-  if (profileLoading || loading) {
+  if (!userId || profileLoading || loading) {
     return (
       <PrincipalShell
-        tenantSlug={tenantSlug}
+        tenantSlug={tenantSlug || ''}
         preschoolName={profile?.preschoolId ? 'Loading...' : undefined}
         preschoolId={profile?.preschoolId}
         hideRightSidebar={true}
       >
         <div className="flex items-center justify-center min-h-[400px]">
-          <p className="text-slate-400">Loading campaigns...</p>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+            <p className="text-slate-400">Loading campaigns...</p>
+          </div>
+        </div>
+      </PrincipalShell>
+    );
+  }
+
+  if (!profile?.organizationId) {
+    return (
+      <PrincipalShell
+        tenantSlug={tenantSlug || ''}
+        preschoolName={profile?.preschoolId ? 'Your School' : undefined}
+        preschoolId={profile?.preschoolId}
+        hideRightSidebar={true}
+      >
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
+            <p className="text-slate-300 text-lg mb-2">No Organization Linked</p>
+            <p className="text-slate-400">You must be linked to an organization to manage campaigns.</p>
+          </div>
         </div>
       </PrincipalShell>
     );
