@@ -472,10 +472,15 @@ export default function PrincipalRegistrationsPage() {
                           <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 200}</div>
                         </td>
                         <td className="py-3 px-4">
-                          {reg.registration_fee_paid && reg.status !== 'rejected' ? (
+                          {reg.payment_verified && reg.status !== 'rejected' ? (
                             <span className="inline-flex items-center gap-1.5 text-xs">
                               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                              <span className="text-green-400 font-medium">Paid</span>
+                              <span className="text-green-400 font-medium">Verified</span>
+                            </span>
+                          ) : reg.registration_fee_paid && reg.status !== 'rejected' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                              <span className="text-yellow-400 font-medium">Paid (Pending)</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 text-xs">
@@ -572,10 +577,15 @@ export default function PrincipalRegistrationsPage() {
                         <DollarSign size={14} className="text-gray-500" />
                         <div className="flex-1">
                           <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 200}</div>
-                          {reg.registration_fee_paid && reg.status !== 'rejected' ? (
+                          {reg.payment_verified && reg.status !== 'rejected' ? (
                             <div className="flex items-center gap-1.5 text-xs">
                               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                              <span className="text-green-400">Paid</span>
+                              <span className="text-green-400">Verified</span>
+                            </div>
+                          ) : reg.registration_fee_paid && reg.status !== 'rejected' ? (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></div>
+                              <span className="text-yellow-400">Paid (Pending)</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5 text-xs">
