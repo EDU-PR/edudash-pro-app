@@ -48,6 +48,7 @@ interface Registration {
   payment_reference?: string;
   registration_fee_amount?: number;
   registration_fee_paid: boolean;
+  payment_verified?: boolean;
   payment_method?: string;
   proof_of_payment_url?: string;
   campaign_applied?: string;
