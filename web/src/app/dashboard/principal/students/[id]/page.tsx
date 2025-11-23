@@ -64,7 +64,10 @@ export default function StudentDetailPage() {
 
   // Load student details
   useEffect(() => {
-    if (!preschoolId || !studentId) return;
+    if (!preschoolId || !studentId) {
+      console.log('Waiting for preschoolId or studentId...', { preschoolId, studentId });
+      return;
+    }
 
     const loadStudent = async () => {
       setLoading(true);
@@ -91,12 +94,14 @@ export default function StudentDetailPage() {
 
         if (error) {
           console.error('Error loading student:', error);
+          setStudent(null);
           return;
         }
 
         setStudent(data);
       } catch (error) {
         console.error('Error loading student:', error);
+        setStudent(null);
       } finally {
         setLoading(false);
       }

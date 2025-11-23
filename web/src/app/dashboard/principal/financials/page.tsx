@@ -17,7 +17,8 @@ interface FinancialMetrics {
 
 interface Payment {
   id: string;
-  student_name: string;
+  student_first_name: string;
+  student_last_name: string;
   registration_fee_amount: number;
   registration_fee_paid: boolean;
   payment_date: string | null;
@@ -55,7 +56,10 @@ export default function FinancialsPage() {
   }, [router, supabase]);
 
   useEffect(() => {
-    if (!preschoolId) return;
+    if (!preschoolId) {
+      console.log('Waiting for preschoolId...');
+      return;
+    }
 
     const loadFinancials = async () => {
       setLoading(true);
@@ -63,12 +67,13 @@ export default function FinancialsPage() {
         // Load all registration requests
         const { data: registrations, error } = await supabase
           .from('registration_requests')
-          .select('id, student_name, registration_fee_amount, registration_fee_paid, payment_date, created_at')
+          .select('id, student_first_name, student_last_name, registration_fee_amount, registration_fee_paid, payment_date, created_at')
           .eq('preschool_id', preschoolId)
           .order('created_at', { ascending: false });
 
         if (error) {
           console.error('Error loading financials:', error);
+          setLoading(false);
           return;
         }
 
@@ -186,7 +191,7 @@ export default function FinancialsPage() {
                   {payments.map((payment) => (
                     <tr key={payment.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: 12 }}>
-                        <div style={{ fontWeight: 500 }}>{payment.student_name}</div>
+                        <div style={{ fontWeight: 500 }}>{payment.student_first_name} {payment.student_last_name}</div>
                       </td>
                       <td style={{ padding: 12 }}>
                         <div style={{ fontWeight: 600 }}>

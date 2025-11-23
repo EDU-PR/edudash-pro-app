@@ -180,19 +180,20 @@ export default function PrincipalDashboard() {
         // Get recent registrations
         const { data: registrations } = await supabase
           .from('registration_requests')
-          .select('id, student_name, status, created_at, reviewed_date')
+          .select('id, student_first_name, student_last_name, status, created_at, reviewed_date')
           .eq('preschool_id', preschoolId)
           .order('created_at', { ascending: false })
           .limit(3);
 
         if (registrations) {
           registrations.forEach(reg => {
+            const studentName = `${reg.student_first_name} ${reg.student_last_name}`;
             if (reg.reviewed_date) {
               activities.push({
                 id: `reg-reviewed-${reg.id}`,
                 type: 'registration',
                 title: reg.status === 'approved' ? 'Registration Approved' : 'Registration Updated',
-                description: `${reg.student_name} - ${reg.status}`,
+                description: `${studentName} - ${reg.status}`,
                 timestamp: reg.reviewed_date,
               });
             } else {
@@ -200,7 +201,7 @@ export default function PrincipalDashboard() {
                 id: `reg-new-${reg.id}`,
                 type: 'registration',
                 title: 'New Registration',
-                description: `${reg.student_name} - pending review`,
+                description: `${studentName} - pending review`,
                 timestamp: reg.created_at,
               });
             }

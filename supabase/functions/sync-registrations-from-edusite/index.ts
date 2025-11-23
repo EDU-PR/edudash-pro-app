@@ -165,49 +165,9 @@ serve(async (req) => {
       console.log(`✅ Successfully updated ${updatedCount} registrations`)
     }
 
-    // Handle deletions: Remove ALL records from EduDashPro that no longer exist in EduSitePro
-    // Build set of EduSite IDs that currently exist
-    const edusiteIds = new Set(edusiteRegistrations?.map(r => r.id) || [])
-    
-    // Get ALL records from EduDashPro (both synced and non-synced) for comparison
-    const { data: allEdudashRecords } = await edudashClient
-      .from('registration_requests')
-      .select('id, edusite_id, organization_id')
-
-    console.log(`📊 EduDashPro has ${allEdudashRecords?.length || 0} total records`)
-    console.log(`📊 EduSitePro has ${edusiteIds.size} records`)
-
-    // Delete records that either:
-    // 1. Have edusite_id set but it no longer exists in EduSitePro
-    // 2. Have the same organization_id but no matching record in EduSitePro
-    const recordsToDelete = allEdudashRecords?.filter(dashRecord => {
-      // If it has edusite_id, check if that ID still exists in EduSitePro
-      if (dashRecord.edusite_id) {
-        return !edusiteIds.has(dashRecord.edusite_id)
-      }
-      // For records without edusite_id, we'll keep them (they might be created directly in EduDash)
-      return false
-    }) || []
-    
-    let deletedCount = 0
-    if (recordsToDelete.length > 0) {
-      console.log(`🗑️ Deleting ${recordsToDelete.length} records that no longer exist in EduSitePro`)
-      console.log(`🗑️ IDs to delete:`, recordsToDelete.map(r => r.id))
-      
-      const { error: deleteError } = await edudashClient
-        .from('registration_requests')
-        .delete()
-        .in('id', recordsToDelete.map(r => r.id))
-
-      if (deleteError) {
-        console.error('⚠️ Error deleting records:', deleteError)
-      } else {
-        deletedCount = recordsToDelete.length
-        console.log(`✅ Deleted ${deletedCount} records`)
-      }
-    } else {
-      console.log(`ℹ️ No records to delete - databases are in sync`)
-    }
+    // Note: We keep all registration records as permanent history
+    // No deletion needed - registrations stay in both databases
+    const deletedCount = 0;
 
     return new Response(
       JSON.stringify({ 
