@@ -135,15 +135,15 @@ export default function PrincipalDashboard() {
         // Fetch financial data from registration_requests
         const { data: registrations } = await supabase
           .from('registration_requests')
-          .select('registration_fee_amount, registration_fee_paid')
+          .select('registration_fee_amount, registration_fee_paid, status')
           .eq('organization_id', preschoolId);
 
         let revenue = 0;
         let pendingPayments = 0;
 
         if (registrations) {
-          const paid = registrations.filter((r: any) => r.registration_fee_paid);
-          const pending = registrations.filter((r: any) => !r.registration_fee_paid && r.registration_fee_amount);
+          const paid = registrations.filter((r: any) => r.registration_fee_paid && r.status !== 'rejected');
+          const pending = registrations.filter((r: any) => !r.registration_fee_paid && r.registration_fee_amount && r.status !== 'rejected');
           
           revenue = paid.reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
           pendingPayments = pending.length;
@@ -433,7 +433,7 @@ export default function PrincipalDashboard() {
             <div className="metricValue" style={{ color: '#10b981' }}>
               R{metrics.revenue.toLocaleString()}
             </div>
-            <div className="metricLabel">Monthly Revenue</div>
+            <div className="metricLabel">Registration Fees Collected</div>
           </div>
           <div className="card tile">
             <div className="metricValue" style={{ color: '#f59e0b' }}>

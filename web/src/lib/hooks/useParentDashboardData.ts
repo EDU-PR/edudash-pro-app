@@ -68,27 +68,31 @@ export function useParentDashboardData() {
       if (!userId) return;
       
       try {
-        const { data, error } = await supabase.rpc('get_my_trial_status');
+        // Fetch trial info directly from profile
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('is_trial, trial_ends_at, trial_plan_tier')
+          .eq('id', userId)
+          .single();
         
         if (error) {
-          // Silent fail - RPC might not exist in some environments
+          console.error('[useParentDashboardData] Failed to fetch trial status:', error);
           return;
         }
         
-        // Start with RPC value
-        let status: TrialStatus | null = data as any;
+        let status: TrialStatus | null = null;
         
-        // Fallback: derive from profile flags (user-level trial)
-        if ((!status || status.is_trial === false) && profile?.is_trial && profile.trial_end_date) {
-          const trialEnd = new Date(profile.trial_end_date);
+        // Derive from profile flags (user-level trial)
+        if (profileData?.is_trial && profileData.trial_ends_at) {
+          const trialEnd = new Date(profileData.trial_ends_at);
           const now = new Date();
           if (trialEnd > now) {
             const days_remaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
             status = {
               is_trial: true,
               days_remaining,
-              plan_tier: 'premium',
-              plan_name: 'Premium',
+              plan_tier: profileData.trial_plan_tier || 'parent_plus',
+              plan_name: 'Parent Plus',
             };
           }
         }

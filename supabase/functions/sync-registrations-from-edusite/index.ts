@@ -68,6 +68,7 @@ serve(async (req) => {
           existing.rejection_reason !== edusiteReg.rejection_reason ||
           existing.proof_of_payment_url !== edusiteReg.proof_of_payment_url ||
           existing.registration_fee_paid !== edusiteReg.registration_fee_paid ||
+          existing.payment_verified !== edusiteReg.payment_verified ||
           existing.payment_method !== edusiteReg.payment_method ||
           existing.guardian_id_document_url !== edusiteReg.guardian_id_document_url ||
           existing.student_birth_certificate_url !== edusiteReg.student_birth_certificate_url ||
@@ -89,8 +90,8 @@ serve(async (req) => {
     let insertedCount = 0
     if (newRegistrations.length > 0) {
       const registrationsToInsert = newRegistrations.map(reg => ({
-      id: crypto.randomUUID(), // New UUID for EduDashPro
-      edusite_id: reg.id, // Store original EduSitePro ID
+      id: reg.id, // Use the same ID from EduSitePro to keep databases in sync
+      edusite_id: reg.id, // Store original EduSitePro ID (same as id for tracking)
       organization_id: reg.organization_id,
       guardian_name: reg.guardian_name,
       guardian_email: reg.guardian_email,
@@ -106,7 +107,9 @@ serve(async (req) => {
       documents_uploaded: reg.documents_uploaded || false,
       documents_deadline: reg.documents_deadline,
       registration_fee_amount: reg.registration_fee_amount,
-      registration_fee_paid: reg.proof_of_payment_url ? true : (reg.registration_fee_paid || false),
+      registration_fee_paid: reg.registration_fee_paid || false,
+      payment_verified: reg.payment_verified || false,
+      payment_date: reg.payment_date,
       payment_method: reg.payment_method,
       proof_of_payment_url: reg.proof_of_payment_url,
       campaign_applied: reg.campaign_applied,
@@ -147,7 +150,9 @@ serve(async (req) => {
             reviewed_date: edusite_data.reviewed_date,
             rejection_reason: edusite_data.rejection_reason,
             proof_of_payment_url: edusite_data.proof_of_payment_url,
-            registration_fee_paid: edusite_data.proof_of_payment_url ? true : edusite_data.registration_fee_paid,
+            registration_fee_paid: edusite_data.registration_fee_paid,
+            payment_verified: edusite_data.payment_verified,
+            payment_date: edusite_data.payment_date,
             payment_method: edusite_data.payment_method,
             guardian_id_document_url: edusite_data.guardian_id_document_url,
             student_birth_certificate_url: edusite_data.student_birth_certificate_url,

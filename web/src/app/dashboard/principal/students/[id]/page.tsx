@@ -99,6 +99,9 @@ export default function StudentDetailPage() {
           return;
         }
 
+        console.log('[Student Page] Loaded student data:', data);
+        console.log('[Student Page] Has profiles?', !!data?.profiles);
+        console.log('[Student Page] Profile data:', data?.profiles);
         setStudent(data);
       } catch (error) {
         console.error('Error loading student:', error);
@@ -124,7 +127,7 @@ export default function StudentDetailPage() {
     setSendingPasswordReset(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(student.profiles.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: 'https://edudashpro.org.za/reset-password',
       });
 
       if (error) throw error;

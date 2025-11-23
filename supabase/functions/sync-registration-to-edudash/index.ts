@@ -17,7 +17,21 @@ function generateParentApprovalEmail(data: {
   schoolName: string;
   resetPasswordUrl: string;
   pwaUrl: string;
+  tempPassword: string; // Always required for new parent accounts
 }): string {
+  // Temp password section - always shown for approved registrations
+  const tempPasswordSection = `
+<div style="background:#d4edda;border:2px solid #28a745;border-radius:8px;padding:25px;margin:25px 0">
+<p style="margin:0 0 15px;font-size:16px;color:#155724;font-weight:700;text-align:center">🔑 YOUR LOGIN CREDENTIALS</p>
+<div style="background:#fff;border-radius:6px;padding:15px;margin:10px 0">
+<p style="margin:0 0 10px;font-size:15px;color:#155724"><strong>Email:</strong> <span style="color:#0066cc">${data.email}</span></p>
+<p style="margin:0;font-size:15px;color:#155724"><strong>Temporary Password:</strong></p>
+<code style="display:block;background:#f8f9fa;padding:12px;border-radius:4px;font-family:monospace;font-size:16px;color:#d63031;margin-top:8px;border:1px dashed #28a745;text-align:center;letter-spacing:1px">${data.tempPassword}</code>
+</div>
+<p style="margin:15px 0 0;font-size:13px;color:#155724;text-align:center">💡 You can login immediately with these credentials, then change your password to something memorable.</p>
+</div>
+  `;
+
   return `
 <!DOCTYPE html>
 <html>
@@ -30,11 +44,16 @@ function generateParentApprovalEmail(data: {
 <div style="max-width:600px;margin:0 auto;background:white">
 <div style="padding:30px 20px">
 <p style="margin:0 0 20px;font-size:16px;color:#333">Dear ${data.guardianName},</p>
-<p style="margin:0 0 20px;font-size:15px;color:#555;line-height:1.6">Great news! <strong>${data.studentName}'s</strong> registration at <strong>${data.schoolName}</strong> has been approved! We've created your parent account.</p>
+<p style="margin:0 0 20px;font-size:15px;color:#555;line-height:1.6">Great news! <strong>${data.studentName}'s</strong> registration at <strong>${data.schoolName}</strong> has been approved! We've created your parent account with a <strong>7-day Premium trial</strong>.</p>
+<div style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);border-radius:10px;padding:20px;margin:20px 0;text-align:center">
+<p style="margin:0;font-size:18px;color:white;font-weight:700">🎁 7-Day Premium Trial Activated!</p>
+<p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.95)">Full access to all premium features at no cost</p>
+</div>
 <div style="background:#f8f9fa;border-left:4px solid #667eea;padding:20px;margin:20px 0">
 <p style="margin:0 0 10px;font-size:14px;color:#666;font-weight:600">YOUR ACCOUNT</p>
 <p style="margin:0;font-size:15px"><strong>Email:</strong> ${data.email}</p>
 </div>
+${tempPasswordSection}
 <div style="text-align:center;margin:30px 0">
 <a href="${data.resetPasswordUrl}" style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:16px 40px;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px">Set Your Password</a>
 </div>
@@ -46,10 +65,10 @@ function generateParentApprovalEmail(data: {
 <div style="margin:30px 0">
 <h3 style="margin:0 0 15px;font-size:18px">What's Next?</h3>
 <ol style="margin:0;padding-left:20px;color:#555;font-size:15px;line-height:1.8">
-<li>Click "Set Your Password" above</li>
-<li>Create a secure password</li>
-<li>Log in and explore your dashboard</li>
-<li>Install the app for quick mobile access</li>
+<li><strong>Login Now:</strong> Use the temporary credentials above to access your account at <a href="https://edudashpro.org.za/login" style="color:#667eea">edudashpro.org.za/login</a></li>
+<li><strong>Change Password:</strong> Click "Set Your Password" button or update it in your profile settings</li>
+<li><strong>Install Mobile App:</strong> Get the app for easy access on your phone</li>
+<li><strong>Explore Dashboard:</strong> View your child's progress, attendance, and communicate with teachers</li>
 </ol>
 </div>
 </div>
@@ -106,35 +125,54 @@ Deno.serve(async (req) => {
 
     const edusiteproClient = createClient(edusiteproUrl, edusiteproKey);
 
-    // Fetch registration from EduSitePro (don't check status - we just approved it)
-    const { data: registration, error: regError } = await edusiteproClient
+    // Connect to EduDashPro database FIRST
+    const edudashUrl = Deno.env.get('SUPABASE_URL')!;
+    const edudashKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const edudashClient = createClient(edudashUrl, edudashKey);
+
+    // Try to fetch registration from local EduDashPro database first
+    const { data: localRegistration, error: localRegError } = await edudashClient
       .from('registration_requests')
       .select('*')
       .eq('id', registration_id)
       .maybeSingle();
 
-    if (regError) {
-      throw new Error(`Error fetching registration: ${regError.message}`);
+    if (localRegError) {
+      throw new Error(`Error fetching local registration: ${localRegError.message}`);
     }
-    
+
+    let registration: any = localRegistration;
+
+    // If not found locally, try EduSitePro (backwards compatibility)
     if (!registration) {
-      console.log('[sync-registration] Registration not found in EduSitePro - may have been deleted:', registration_id);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Registration not found in source database',
-          message: 'This registration may have been deleted from EduSitePro. Please create student account manually.',
-        }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log('[sync-registration] Not found locally, checking EduSitePro...');
+      
+      const { data: edusiteReg, error: regError } = await edusiteproClient
+        .from('registration_requests')
+        .select('*')
+        .eq('id', registration_id)
+        .maybeSingle();
+
+      if (regError) {
+        throw new Error(`Error fetching registration: ${regError.message}`);
+      }
+      
+      if (!edusiteReg) {
+        console.log('[sync-registration] Registration not found in either database:', registration_id);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Registration not found',
+            message: 'Registration not found in any database.',
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      registration = edusiteReg;
     }
 
     console.log('[sync-registration] Fetched registration:', registration.student_first_name, registration.student_last_name, 'Status:', registration.status);
-
-    // Connect to EduDashPro database
-    const edudashUrl = Deno.env.get('SUPABASE_URL')!;
-    const edudashKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const edudashClient = createClient(edudashUrl, edudashKey);
 
     // Map organization_id from EduSitePro to preschool_id in EduDashPro
     // This assumes the organization_id exists in both databases
@@ -171,20 +209,36 @@ Deno.serve(async (req) => {
 
     if (existingParent) {
       console.log('[sync-registration] Parent profile already exists:', existingParent.id);
-      parentUserId = existingParent.auth_user_id;
+      parentUserId = existingParent.auth_user_id || existingParent.id;
       parentProfileId = existingParent.id;
+      
+      // If auth_user_id is null, update the profile with proper auth_user_id
+      if (!existingParent.auth_user_id) {
+        console.log('[sync-registration] Fixing orphaned profile - updating auth_user_id');
+        await edudashClient
+          .from('profiles')
+          .update({ auth_user_id: existingParent.id })
+          .eq('id', existingParent.id);
+      }
+      
+      // Skip email sending for existing parents - they already have login credentials
     } else {
       // Check if auth user exists but no profile (orphaned user)
       const { data: authUsers } = await edudashClient.auth.admin.listUsers();
       const existingAuthUser = authUsers?.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
       
+      // Always generate temp password for new accounts (whether auth user exists or not)
+      tempPassword = crypto.randomUUID(); // Generate secure random password
+      
       if (existingAuthUser) {
         console.log('[sync-registration] Found orphaned auth user, will create profile:', existingAuthUser.id);
         parentUserId = existingAuthUser.id;
-        // Don't generate password - user already exists
+        // Update password for orphaned user
+        await edudashClient.auth.admin.updateUserById(existingAuthUser.id, {
+          password: tempPassword,
+        });
       } else {
         // Create new parent user account
-        tempPassword = crypto.randomUUID(); // Generate secure random password
         
         const { data: newUser, error: createUserError } = await edudashClient.auth.admin.createUser({
           email: normalizedEmail,
@@ -206,14 +260,21 @@ Deno.serve(async (req) => {
       }
 
       // Split guardian name into first and last name
+      // If guardian name is incomplete, use student's last name as fallback
       const nameParts = registration.guardian_name.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = nameParts[0] || 'Parent';
+      let lastName = nameParts.slice(1).join(' ');
+      
+      // If no last name provided, use student's last name as fallback
+      if (!lastName && registration.student_last_name) {
+        lastName = registration.student_last_name;
+      }
 
-      // Create parent profile (using normalized email)
+      // Create parent profile - id must match auth_user_id due to FK constraint
       const { data: newProfile, error: profileError } = await edudashClient
         .from('profiles')
         .insert({
+          id: parentUserId, // FK constraint: profiles.id -> auth.users.id
           auth_user_id: parentUserId,
           email: normalizedEmail,
           first_name: firstName,
@@ -233,11 +294,74 @@ Deno.serve(async (req) => {
       parentProfileId = newProfile.id;
 
       console.log('[sync-registration] Created parent profile:', parentProfileId);
+      
+      // Activate 7-day Parent Plus trial for new parent
+      console.log('[sync-registration] Activating 7-day Parent Plus trial...');
+      try {
+        const trialEndDate = new Date();
+        trialEndDate.setDate(trialEndDate.getDate() + 7);
+        
+        const { error: trialError } = await edudashClient
+          .from('profiles')
+          .update({
+            is_trial: true,
+            trial_ends_at: trialEndDate.toISOString(),
+            trial_plan_tier: 'parent_plus',
+            trial_started_at: new Date().toISOString(),
+            trial_granted_at: new Date().toISOString(),
+            seat_status: 'active',
+            subscription_tier: 'parent_plus'
+          })
+          .eq('id', parentUserId);
+        
+        if (trialError) {
+          console.error('[sync-registration] Failed to activate trial:', trialError);
+        } else {
+          console.log('[sync-registration] ✅ 7-day Parent Plus trial activated');
+        }
+        
+        // Create user_ai_tiers record for AI quota tracking
+        const { error: aiTierError } = await edudashClient
+          .from('user_ai_tiers')
+          .insert({
+            user_id: parentUserId,
+            tier: 'parent_plus',
+            assigned_reason: '7-day trial - parent_plus tier',
+            is_active: true,
+            expires_at: trialEndDate.toISOString()
+          });
+        
+        if (aiTierError) {
+          console.error('[sync-registration] Failed to create user_ai_tiers:', aiTierError);
+        } else {
+          console.log('[sync-registration] ✅ Created user_ai_tiers record');
+        }
+        
+        // Create user_ai_usage record for AI quota tracking
+        const { error: aiUsageError } = await edudashClient
+          .from('user_ai_usage')
+          .insert({
+            user_id: parentUserId,
+            current_tier: 'parent_plus'
+          });
+        
+        if (aiUsageError) {
+          console.error('[sync-registration] Failed to create user_ai_usage:', aiUsageError);
+        } else {
+          console.log('[sync-registration] ✅ Created user_ai_usage record');
+        }
+      } catch (trialErr) {
+        console.error('[sync-registration] Trial activation error:', trialErr);
+      }
+    }
 
-      // Trigger password reset email instead of sending temporary password
-      const { error: resetError } = await edudashClient.auth.admin.generateLink({
+    // Send welcome email ONLY for new parent accounts (when temp password was generated)
+    if (tempPassword) {
+
+      // Generate password reset link with actual token
+      const { data: resetData, error: resetError } = await edudashClient.auth.admin.generateLink({
         type: 'recovery',
-        email: registration.guardian_email,
+        email: normalizedEmail,
         options: {
           redirectTo: 'https://edudashpro.org.za/reset-password',
         },
@@ -245,22 +369,27 @@ Deno.serve(async (req) => {
 
       if (resetError) {
         console.error('[sync-registration] Error generating password reset link:', resetError);
-        // Don't fail the whole process if email fails
-      } else {
-        console.log('[sync-registration] Password reset email sent to parent');
+        throw new Error(`Failed to generate password reset link: ${resetError.message}`);
       }
 
-      // Send welcome email with app install instructions
+      const resetPasswordUrl = resetData?.properties?.action_link || 'https://edudashpro.org.za/reset-password';
+      
+      console.log('[sync-registration] Generated password reset link for parent');
+
+      // Send welcome email with actual password reset link
       const approvalEmail = generateParentApprovalEmail({
         guardianName: registration.guardian_name,
         studentName: `${registration.student_first_name} ${registration.student_last_name}`,
-        email: registration.guardian_email,
+        email: normalizedEmail,
         schoolName: schoolName,
-        resetPasswordUrl: 'https://edudashpro.org.za/reset-password',
+        resetPasswordUrl: resetPasswordUrl,
         pwaUrl: 'https://edudashpro.org.za',
+        tempPassword: tempPassword, // Include temp password if it was generated
       });
 
-      await edudashClient.functions.invoke('send-email', {
+      console.log('[sync-registration] Sending welcome email to:', registration.guardian_email);
+
+      const { data: emailResult, error: emailError } = await edudashClient.functions.invoke('send-email', {
         body: {
           to: registration.guardian_email,
           subject: '🎉 Registration Approved - Your EduDash Pro Account is Ready!',
@@ -270,7 +399,17 @@ Deno.serve(async (req) => {
         },
       });
 
-      console.log('[sync-registration] Sent welcome email to parent');
+      if (emailError) {
+        console.error('[sync-registration] ⚠️ Failed to send welcome email:', emailError);
+        // Don't throw - we still want to complete the sync even if email fails
+      } else {
+        console.log('[sync-registration] ✅ Successfully sent welcome email to parent');
+        if (emailResult) {
+          console.log('[sync-registration] Email result:', emailResult);
+        }
+      }
+    } else {
+      console.log('[sync-registration] Skipping email - parent account already exists');
     }
 
     // Step 2: Create student profile (check for existing first)
@@ -342,16 +481,32 @@ Deno.serve(async (req) => {
       console.log('[sync-registration] Assigned student to class:', defaultClass.id);
     }
 
-    // Step 4: Mark registration as synced in EduSitePro
-    await edusiteproClient
-      .from('registration_requests')
-      .update({
-        synced_to_edudash: true,
-        synced_at: new Date().toISOString(),
-        edudash_student_id: newStudent.id,
-        edudash_parent_id: parentProfileId,
-      })
-      .eq('id', registration_id);
+    // Step 4: Mark registration as synced AND approved in EduSitePro (if it came from there)
+    // This ensures both databases stay in sync regardless of which UI approved it
+    if (registration.edusite_id || registration.synced_from_edusite) {
+      // This registration came from EduSitePro, so update it there too
+      const edusiteId = registration.edusite_id || registration.id;
+      
+      console.log('[sync-registration] Updating EduSitePro registration:', edusiteId);
+      
+      const { error: edusiteUpdateError } = await edusiteproClient
+        .from('registration_requests')
+        .update({
+          status: 'approved',
+          synced_to_edudash: true,
+          synced_at: new Date().toISOString(),
+          edudash_student_id: newStudent.id,
+          edudash_parent_id: parentProfileId,
+        })
+        .eq('id', edusiteId);
+
+      if (edusiteUpdateError) {
+        console.error('[sync-registration] Failed to update EduSitePro:', edusiteUpdateError);
+        // Don't fail the whole operation if EduSitePro update fails
+      } else {
+        console.log('[sync-registration] Successfully updated EduSitePro database');
+      }
+    }
 
     console.log('[sync-registration] Sync completed successfully');
 

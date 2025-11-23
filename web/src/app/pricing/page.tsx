@@ -32,8 +32,18 @@ export default function PricingPage() {
         setUserName(session.user.user_metadata?.full_name || null);
         
         try {
-          const { data: trialData } = await supabase.rpc('get_my_trial_status');
-          setIsOnTrial(trialData?.is_trial || false);
+          // Fetch trial info directly from profile
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('is_trial, trial_ends_at')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profileData?.is_trial && profileData.trial_ends_at) {
+            const trialEnd = new Date(profileData.trial_ends_at);
+            const now = new Date();
+            setIsOnTrial(trialEnd > now);
+          }
         } catch (err) {
           console.debug('Trial check failed:', err);
         }

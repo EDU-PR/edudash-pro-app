@@ -3,6 +3,7 @@
 import { useQuotaCheck, type QuotaUsage } from '@/hooks/useQuotaCheck';
 import { useEffect, useState } from 'react';
 import { TrendingUp, MessageSquare, FileText, HelpCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 interface QuotaCardProps {
   userId: string;
@@ -71,6 +72,33 @@ const TIER_LIMITS: Record<string, TierLimits> = {
 export function QuotaCard({ userId }: QuotaCardProps) {
   const { usage, loading, refreshUsage } = useQuotaCheck(userId);
   const [limits, setLimits] = useState<TierLimits | null>(null);
+  const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysLeft: number } | null>(null);
+  const supabase = createClient();
+
+  // Fetch trial status from profile
+  useEffect(() => {
+    if (!userId) return;
+    
+    const fetchTrialStatus = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_trial, trial_ends_at')
+        .eq('id', userId)
+        .single();
+      
+      if (profile?.is_trial && profile.trial_ends_at) {
+        const trialEnd = new Date(profile.trial_ends_at);
+        const now = new Date();
+        const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysLeft > 0) {
+          setTrialInfo({ isActive: true, daysLeft });
+        }
+      }
+    };
+    
+    fetchTrialStatus();
+  }, [userId, supabase]);
 
   useEffect(() => {
     if (usage?.current_tier) {
@@ -79,7 +107,46 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     }
   }, [usage?.current_tier]);
 
-  if (loading || !usage || !limits) {
+  if (loading) {
+    return (
+      <div className="card" style={{ padding: 'var(--space-4)' }}>
+        <div className="loading-skeleton" style={{ height: 200 }} />
+      </div>
+    );
+  }
+
+  // If no usage data exists yet, create default empty state
+  if (!usage) {
+    return (
+      <div className="card" style={{ padding: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+            <TrendingUp size={20} style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)' }} />
+            AI Usage
+          </h3>
+          <span 
+            className="badge badge-primary" 
+            style={{ 
+              textTransform: 'capitalize',
+              fontSize: 12,
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white'
+            }}
+          >
+            Premium Trial
+          </span>
+        </div>
+        
+        <div style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+          <MessageSquare size={48} style={{ margin: '0 auto var(--space-3)', opacity: 0.5 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>Start using AI features to see your usage stats</p>
+          <p style={{ margin: 'var(--space-2) 0 0', fontSize: 12 }}>Unlimited access during your 7-day trial</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!limits) {
     return (
       <div className="card" style={{ padding: 'var(--space-4)' }}>
         <div className="loading-skeleton" style={{ height: 200 }} />

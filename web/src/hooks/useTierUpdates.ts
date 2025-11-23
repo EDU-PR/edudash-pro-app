@@ -25,7 +25,7 @@ export function useTierUpdates(userId: string | undefined, onTierChange?: (newTi
     let channel: RealtimeChannel | null = null;
 
     const setupRealtimeSubscription = async () => {
-      // First, fetch current tier
+      // First, try to fetch from user_ai_tiers
       const { data, error } = await supabase
         .from('user_ai_tiers')
         .select('tier')
@@ -33,9 +33,28 @@ export function useTierUpdates(userId: string | undefined, onTierChange?: (newTi
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('[TierUpdates] Failed to fetch initial tier:', error);
-      } else if (data) {
-        setCurrentTier(data.tier || 'free');
+        console.error('[TierUpdates] Failed to fetch tier from user_ai_tiers:', error);
+      }
+      
+      if (data && data.tier) {
+        setCurrentTier(data.tier);
+      } else {
+        // Fallback: check profile for trial or subscription tier
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_trial, trial_plan_tier, subscription_tier')
+          .eq('id', userId)
+          .single();
+        
+        if (profile) {
+          if (profile.is_trial && profile.trial_plan_tier) {
+            setCurrentTier(profile.trial_plan_tier);
+          } else if (profile.subscription_tier) {
+            setCurrentTier(profile.subscription_tier);
+          } else {
+            setCurrentTier('free');
+          }
+        }
       }
 
       setLoading(false);

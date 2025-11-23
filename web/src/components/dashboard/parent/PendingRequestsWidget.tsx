@@ -55,6 +55,8 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
         );
 
         // Fetch pending child registration requests
+        // Note: registration_requests table is in EduSitePro, not EduDashPro
+        // Once approved, requests are synced as students in EduDashPro
         const { data: registrationRequests, error: regError } = await supabase
           .from('registration_requests')
           .select('id, child_first_name, child_last_name, created_at, preschool_id, preschools(name)')
@@ -62,6 +64,7 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
           .eq('status', 'pending')
           .order('created_at', { ascending: false });
 
+        // Silently ignore errors (table doesn't exist in EduDashPro)
         if (!regError && registrationRequests) {
           registrationRequests.forEach((req: any) => {
             const requestName = `${req.child_first_name} ${req.child_last_name}`.toLowerCase().trim();

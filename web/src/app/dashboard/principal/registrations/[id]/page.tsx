@@ -76,6 +76,11 @@ export default function RegistrationDetailPage() {
 
       if (error) throw error;
       setRegistration(data);
+      
+      // If payment is already verified, set popVerified to true
+      if (data.registration_fee_paid) {
+        setPopVerified(true);
+      }
     } catch (error) {
       console.error('Error fetching registration:', error);
       alert('Failed to load registration details');
@@ -96,19 +101,14 @@ export default function RegistrationDetailPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // When approving, also verify payment if there's a proof of payment
+      // Only update status - payment should already be verified
       const updates: any = {
         status: 'approved',
         reviewed_by: user?.email,
         reviewed_date: new Date().toISOString(),
       };
 
-      // If there's a proof of payment, mark it as verified
-      if (registration.proof_of_payment_url) {
-        updates.registration_fee_paid = true;
-        updates.payment_date = new Date().toISOString();
-      }
-
+      // Update local EduDashPro database
       const { error } = await supabase
         .from('registration_requests')
         .update(updates)
@@ -116,12 +116,26 @@ export default function RegistrationDetailPage() {
 
       if (error) throw error;
 
-      // Trigger sync to create student record
-      await supabase.functions.invoke('sync-registration-to-edudash', {
+      // Trigger sync to create parent account and student record
+      console.log('Triggering sync for registration:', registration.id);
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
         body: { registration_id: registration.id },
       });
 
-      alert('Registration approved successfully!');
+      console.log('Sync result:', syncResult);
+      console.log('Sync error:', syncError);
+
+      // Check if sync was successful
+      if (syncError || (syncResult && !syncResult.success)) {
+        const errorMessage = syncError?.message || syncResult?.error || 'Unknown error';
+        console.error('Sync failed:', errorMessage);
+        
+        // Show error but don't block the approval
+        alert(`⚠️ Registration approved locally.\n\nHowever, parent account creation ${syncError ? 'failed' : 'may have failed'}:\n${errorMessage}\n\nYou may need to create the parent account manually.`);
+      } else {
+        alert('✅ Registration approved successfully!\n\nParent account created and welcome email sent.');
+      }
+
       router.push('/dashboard/principal/registrations');
     } catch (error) {
       console.error('Error approving registration:', error);
@@ -148,6 +162,7 @@ export default function RegistrationDetailPage() {
           reviewed_by: user?.email,
           reviewed_date: new Date().toISOString(),
           rejection_reason: reason,
+          registration_fee_paid: false, // Clear payment status when rejecting
         })
         .eq('id', registration.id);
 
@@ -158,6 +173,34 @@ export default function RegistrationDetailPage() {
     } catch (error) {
       console.error('Error rejecting registration:', error);
       alert('Failed to reject registration. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleVerifyPayment = async () => {
+    if (!registration) return;
+
+    if (!confirm(`Verify payment for ${registration.student_first_name} ${registration.student_last_name}?`)) {
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('registration_requests')
+        .update({
+          registration_fee_paid: true,
+        })
+        .eq('id', registration.id);
+
+      if (error) throw error;
+
+      alert('✅ Payment verified successfully!');
+      window.location.reload();
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+      alert('Failed to verify payment. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -219,13 +262,13 @@ export default function RegistrationDetailPage() {
                 </button>
                 <button
                   onClick={handleApprove}
-                  disabled={processing || !popVerified}
+                  disabled={processing || !registration.registration_fee_paid}
                   className="btn btnPrimary"
                   style={{ 
-                    opacity: (processing || !popVerified) ? 0.5 : 1,
-                    cursor: (!popVerified) ? 'not-allowed' : 'pointer'
+                    opacity: (processing || !registration.registration_fee_paid) ? 0.5 : 1,
+                    cursor: (!registration.registration_fee_paid) ? 'not-allowed' : 'pointer'
                   }}
-                  title={!popVerified ? 'Please verify proof of payment first' : 'Approve registration'}
+                  title={!registration.registration_fee_paid ? 'Please verify payment first' : 'Approve registration'}
                 >
                   <CheckCircle2 size={18} style={{ marginRight: 8 }} />
                   Approve
@@ -358,7 +401,7 @@ export default function RegistrationDetailPage() {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Registration Fee</div>
                 <div style={{ marginTop: 6, fontSize: 18, fontWeight: 700 }}>
-                  R150
+                  R{registration.registration_fee_amount || 200}
                 </div>
               </div>
             </div>
@@ -382,16 +425,16 @@ export default function RegistrationDetailPage() {
                     fontSize: 13,
                     fontWeight: 500,
                     borderRadius: 8,
-                    background: registration.registration_fee_paid ? '#d1fae5' : '#fee2e2',
-                    color: registration.registration_fee_paid ? '#065f46' : '#991b1b'
+                    background: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#d1fae5' : '#fee2e2',
+                    color: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#065f46' : '#991b1b'
                   }}>
                     <div style={{
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: registration.registration_fee_paid ? '#10b981' : '#ef4444'
+                      background: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#10b981' : '#ef4444'
                     }} />
-                    {registration.registration_fee_paid ? 'Paid' : 'No Payment'}
+                    {(registration.registration_fee_paid && registration.status !== 'rejected') ? 'Paid' : 'No Payment'}
                   </span>
                 </div>
               </div>
@@ -400,7 +443,7 @@ export default function RegistrationDetailPage() {
                 <div style={{ marginTop: 6 }}>
                   {registration.proof_of_payment_url ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {popVerified ? (
+                      {registration.registration_fee_paid ? (
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -461,7 +504,7 @@ export default function RegistrationDetailPage() {
               <FileText size={20} color="var(--primary)" />
               Proof of Payment
             </h3>
-            {registration.proof_of_payment_url && popVerified && (
+            {registration.proof_of_payment_url && registration.registration_fee_paid && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -512,15 +555,48 @@ export default function RegistrationDetailPage() {
                     </svg>
                     View Full Size
                   </button>
-                  {!popVerified && registration.status === 'pending' && (
-                    <button
-                      onClick={() => setPopVerified(true)}
-                      className="btn"
-                      style={{ background: 'var(--green)' }}
-                    >
-                      <CheckCircle2 size={16} style={{ marginRight: 8 }} />
-                      Verify Payment
-                    </button>
+                  {registration.status === 'pending' && (
+                    !popVerified ? (
+                      <button
+                        onClick={() => setPopVerified(true)}
+                        className="btn"
+                        style={{ background: '#f59e0b', color: 'white' }}
+                      >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ marginRight: 8 }}>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        1. Verify POP
+                      </button>
+                    ) : !registration.registration_fee_paid ? (
+                      <button
+                        onClick={handleVerifyPayment}
+                        disabled={processing}
+                        className="btn"
+                        style={{ 
+                          background: 'var(--green)',
+                          color: 'white',
+                          opacity: processing ? 0.5 : 1 
+                        }}
+                      >
+                        <CheckCircle2 size={16} style={{ marginRight: 8 }} />
+                        2. Verify Payment
+                      </button>
+                    ) : (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        background: '#d1fae5',
+                        color: '#065f46',
+                        fontSize: 14,
+                        fontWeight: 500
+                      }}>
+                        <CheckCircle2 size={16} />
+                        Payment Verified - Ready to Approve
+                      </div>
+                    )
                   )}
                 </div>
               </div>

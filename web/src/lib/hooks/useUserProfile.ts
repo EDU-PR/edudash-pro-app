@@ -55,7 +55,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       // Get profile data from profiles table (includes role, usage_type, and trial info)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, preschool_id, role, usage_type, is_trial, trial_end_date')
+        .select('first_name, last_name, preschool_id, role, usage_type, is_trial, trial_ends_at, trial_plan_tier, subscription_tier')
         .eq('id', userId)
         .maybeSingle();
 
@@ -136,7 +136,9 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         organizationName,
         preferredLanguage: profileData?.preferred_language || 'en-ZA',
         is_trial: profileData?.is_trial,
-        trial_end_date: profileData?.trial_end_date,
+        trial_end_date: profileData?.trial_ends_at, // Map to expected field name
+        trial_plan_tier: profileData?.trial_plan_tier,
+        subscription_tier: profileData?.subscription_tier,
       };
       
       

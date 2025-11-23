@@ -319,6 +319,7 @@ export default function PrincipalRegistrationsPage() {
           reviewed_by: user?.email,
           reviewed_date: new Date().toISOString(),
           rejection_reason: reason,
+          registration_fee_paid: false, // Clear payment status when rejecting
         })
         .eq('id', registration.id);
 
@@ -471,7 +472,7 @@ export default function PrincipalRegistrationsPage() {
                           <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 200}</div>
                         </td>
                         <td className="py-3 px-4">
-                          {reg.registration_fee_paid || reg.proof_of_payment_url ? (
+                          {reg.registration_fee_paid && reg.status !== 'rejected' ? (
                             <span className="inline-flex items-center gap-1.5 text-xs">
                               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                               <span className="text-green-400 font-medium">Paid</span>
@@ -570,8 +571,8 @@ export default function PrincipalRegistrationsPage() {
                       <div className="reg-card-info">
                         <DollarSign size={14} className="text-gray-500" />
                         <div className="flex-1">
-                          <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 150}</div>
-                          {reg.registration_fee_paid || reg.proof_of_payment_url ? (
+                          <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 200}</div>
+                          {reg.registration_fee_paid && reg.status !== 'rejected' ? (
                             <div className="flex items-center gap-1.5 text-xs">
                               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                               <span className="text-green-400">Paid</span>

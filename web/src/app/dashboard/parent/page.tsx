@@ -8,22 +8,14 @@ import { useTierUpdates } from '@/hooks/useTierUpdates';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { DashboardHeader } from '@/components/dashboard/parent/DashboardHeader';
 import { TrialBanner } from '@/components/dashboard/parent/TrialBanner';
-import { OrganizationBanner } from '@/components/dashboard/parent/OrganizationBanner';
-import { ExamWeekBanner } from '@/components/dashboard/parent/ExamWeekBanner';
-import { EmergencyExamHelp } from '@/components/dashboard/parent/EmergencyExamHelp';
-import { QuickSubjectPractice } from '@/components/dashboard/parent/QuickSubjectPractice';
-import { ExamTips } from '@/components/dashboard/parent/ExamTips';
-import { CAPSExamCalendar } from '@/components/dashboard/parent/CAPSExamCalendar';
-import { AllGradesAllSubjects } from '@/components/dashboard/parent/AllGradesAllSubjects';
 import { PendingRequestsWidget } from '@/components/dashboard/parent/PendingRequestsWidget';
 import { EmptyChildrenState } from '@/components/dashboard/parent/EmptyChildrenState';
 import { QuickActionsGrid } from '@/components/dashboard/parent/QuickActionsGrid';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
-import { ExamPrepWidget } from '@/components/dashboard/exam-prep/ExamPrepWidget';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
-import { Users, BarChart3, Calendar, BookOpen, GraduationCap, Zap, Target, Lightbulb } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
 
 export default function ParentDashboard() {
   const router = useRouter();
@@ -62,7 +54,7 @@ export default function ParentDashboard() {
   const [aiDisplay, setAIDisplay] = useState('');
   const [aiLanguage, setAILanguage] = useState('en-ZA');
   const [aiInteractive, setAIInteractive] = useState(false);
-  const [openSection, setOpenSection] = useState<string | null>(null);
+  const [openSection, setOpenSection] = useState<string | null>('children'); // Auto-open My Children by default
 
   // Set greeting based on time of day
   useEffect(() => {
@@ -125,8 +117,22 @@ export default function ParentDashboard() {
     );
   }
 
-  // Active child
+  // Active child and age calculations
   const activeChild = childrenCards.find((c) => c.id === activeChildId);
+  
+  // Calculate age of active child (for age-appropriate content)
+  const getChildAge = (dateOfBirth?: string): number => {
+    if (!dateOfBirth) return 0;
+    const dob = new Date(dateOfBirth);
+    const age = Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+    return age;
+  };
+  
+  const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
+  
+  // Check if ALL children are preschoolers (under 6 years)
+  const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
+  const hasSchoolAgeChildren = childrenCards.some(child => getChildAge(child.dateOfBirth) >= 6);
 
   return (
     <ParentShell
@@ -143,16 +149,6 @@ export default function ParentDashboard() {
 
         {/* Trial Banner */}
         <TrialBanner trialStatus={trialStatus} />
-
-        {/* CRITICAL: Exam Banner - ALWAYS SHOW (Exams in Progress!) */}
-        <ExamWeekBanner onStartExamPrep={handleStartExamPrep} />
-
-        {/* Organization Banner (ONLY if has organization) */}
-        <OrganizationBanner
-          hasOrganization={hasOrganization}
-          preschoolName={preschoolName}
-          userId={userId}
-        />
 
         {/* AI Usage Quota Card - Shows remaining AI credits */}
         {userId && (
@@ -229,79 +225,57 @@ export default function ParentDashboard() {
         {/* Quick Actions Grid */}
         <QuickActionsGrid usageType={usageType} hasOrganization={hasOrganization} />
 
-        {/* Emergency Exam Help - Priority Access to AI Tutor */}
-        <CollapsibleSection 
-          title="Emergency Exam Help" 
-          icon={Zap} 
-          isOpen={openSection === 'emergency'}
-          onToggle={() => setOpenSection(openSection === 'emergency' ? null : 'emergency')}
-        >
-          <EmergencyExamHelp onClick={handleStartExamPrep} />
-        </CollapsibleSection>
-
-        {/* CAPS Exam Calendar - Real Exam Schedule */}
-        <CollapsibleSection 
-          title="CAPS Exam Calendar" 
-          icon={Calendar} 
-          isOpen={openSection === 'calendar'}
-          onToggle={() => setOpenSection(openSection === 'calendar' ? null : 'calendar')}
-        >
-          <CAPSExamCalendar 
-            childGrade={activeChild ? `Grade ${Math.floor(10 + (activeChild.progressScore / 20))}` : undefined}
-            usageType={usageType}
-          />
-        </CollapsibleSection>
-
-        {/* Quick Subject Practice - One-Click Practice Tests */}
-        {activeChild && (
+        {/* Early Learning Activities - ONLY for preschoolers */}
+        {allChildrenArePreschoolers && activeChild && (
           <CollapsibleSection 
-            title="Quick Subject Practice" 
-            icon={Target} 
-            isOpen={openSection === 'practice'}
-            onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
+            title="Early Learning Activities" 
+            icon={BookOpen} 
+            isOpen={openSection === 'activities'}
+            onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
           >
-            <QuickSubjectPractice
-              childAge={activeChild.progressScore > 80 ? 15 : 10}
-              onSelectSubject={handleSubjectPractice}
+            <CAPSActivitiesWidget
+              childAge={activeChildAge}
+              childName={activeChild.firstName}
+              onAskDashAI={(prompt, display) => handleAskFromActivity(prompt, display)}
             />
           </CollapsibleSection>
         )}
 
-        {/* All Grades & Subjects - Complete CAPS Coverage */}
-        <CollapsibleSection 
-          title="All Grades & Subjects" 
-          icon={BookOpen} 
-          isOpen={openSection === 'grades'}
-          onToggle={() => setOpenSection(openSection === 'grades' ? null : 'grades')}
-        >
-          <AllGradesAllSubjects onSelectSubject={handleSubjectPractice} />
-        </CollapsibleSection>
-
-        {/* Exam Tips - Study Best Practices */}
-        <CollapsibleSection 
-          title="Exam Tips & Study Strategies" 
-          icon={Lightbulb} 
-          isOpen={openSection === 'tips'}
-          onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
-        >
-          <ExamTips />
-        </CollapsibleSection>
-
-        {/* CAPS Exam Preparation Builder - Continuous Conversational Process */}
-        <CollapsibleSection 
-          title="CAPS Exam Preparation" 
-          icon={GraduationCap} 
-          isOpen={openSection === 'exam-prep'}
-          onToggle={() => setOpenSection(openSection === 'exam-prep' ? null : 'exam-prep')}
-        >
-          <ExamPrepWidget
-            userId={userId}
-            onAskDashAI={(prompt, display, language, enableInteractive) => 
-              handleAskFromActivity(prompt, display, language, enableInteractive)
-            }
-            guestMode={false}
-          />
-        </CollapsibleSection>
+        {/* Preschool Learning Tips - ONLY for preschoolers */}
+        {allChildrenArePreschoolers && childrenCards.length > 0 && (
+          <CollapsibleSection 
+            title="Early Learning Tips for Parents" 
+            icon={Lightbulb} 
+            isOpen={openSection === 'tips'}
+            onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
+          >
+            <div className="card">
+              <h3 style={{ marginBottom: 12 }}>Supporting Your Preschooler's Development</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <strong>🎨 Creative Play</strong>
+                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills.</p>
+                </div>
+                <div>
+                  <strong>📚 Reading Together</strong>
+                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Read stories daily to build language skills, vocabulary, and a love for books.</p>
+                </div>
+                <div>
+                  <strong>🔢 Numbers & Shapes</strong>
+                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Use everyday activities to introduce counting, colors, and shapes in fun ways.</p>
+                </div>
+                <div>
+                  <strong>🎵 Songs & Rhymes</strong>
+                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness.</p>
+                </div>
+                <div>
+                  <strong>🤝 Social Skills</strong>
+                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Arrange playdates and teach sharing, turn-taking, and expressing emotions.</p>
+                </div>
+              </div>
+            </div>
+          </CollapsibleSection>
+        )}
 
         {/* Overview Section (ONLY for organization-linked parents) */}
         {hasOrganization && (
@@ -329,22 +303,6 @@ export default function ParentDashboard() {
                 <div className="metricLabel">Total Children</div>
               </div>
             </div>
-          </CollapsibleSection>
-        )}
-
-        {/* CAPS Activities Widget */}
-        {activeChild && (
-          <CollapsibleSection 
-            title="Learning Activities" 
-            icon={GraduationCap} 
-            isOpen={openSection === 'activities'}
-            onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
-          >
-            <CAPSActivitiesWidget
-              childAge={activeChild.progressScore > 80 ? 6 : 5}
-              childName={activeChild.firstName}
-              onAskDashAI={(prompt, display) => handleAskFromActivity(prompt, display)}
-            />
           </CollapsibleSection>
         )}
       </div>

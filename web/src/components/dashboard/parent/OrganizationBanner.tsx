@@ -1,9 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { TierBadge } from '@/components/ui/TierBadge';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { Crown, Sparkles } from 'lucide-react';
 
 interface OrganizationBannerProps {
   hasOrganization: boolean;
@@ -19,22 +19,48 @@ export function OrganizationBanner({
   const router = useRouter();
   const supabase = createClient();
   const [isCommunitySchool, setIsCommunitySchool] = useState(false);
+  const [parentTierInfo, setParentTierInfo] = useState<{ label: string; color: string } | null>(null);
 
   useEffect(() => {
     if (!userId) return;
 
-    const checkCommunitySchool = async () => {
+    const checkParentStatus = async () => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('preschool_id')
+        .select('preschool_id, is_trial, trial_ends_at, subscription_tier')
         .eq('id', userId)
         .maybeSingle();
 
       const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
       setIsCommunitySchool(profile?.preschool_id === COMMUNITY_SCHOOL_ID);
+
+      // Determine parent's tier/trial status
+      if (profile?.is_trial && profile.trial_ends_at) {
+        const trialEnd = new Date(profile.trial_ends_at);
+        const now = new Date();
+        if (trialEnd > now) {
+          const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          setParentTierInfo({ 
+            label: `Parent Plus Trial (${daysLeft}d)`, 
+            color: '#7C3AED' 
+          });
+          return;
+        }
+      }
+
+      // Show subscription tier if not on trial
+      const tier = profile?.subscription_tier || 'free';
+      const tierLabels: Record<string, { label: string; color: string }> = {
+        parent_plus: { label: 'Parent Plus', color: '#7C3AED' },
+        parent_starter: { label: 'Parent Starter', color: '#059669' },
+        premium: { label: 'Parent Plus', color: '#7C3AED' }, // Legacy support
+        basic: { label: 'Parent Starter', color: '#059669' }, // Legacy support
+        free: { label: 'Free', color: '#6B7280' },
+      };
+      setParentTierInfo(tierLabels[tier] || tierLabels.free);
     };
 
-    checkCommunitySchool();
+    checkParentStatus();
   }, [userId, supabase]);
 
   // Don't render if no organization OR no preschool name
@@ -75,9 +101,30 @@ export function OrganizationBanner({
           {preschoolName}
         </span>
       </div>
-      {userId && !isCommunitySchool && (
-        <div style={{ flexShrink: 0 }}>
-          <TierBadge userId={userId} size="sm" showUpgrade />
+      {parentTierInfo && !isCommunitySchool && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 6,
+          padding: '4px 12px',
+          borderRadius: 20,
+          background: 'rgba(255, 255, 255, 0.25)',
+          backdropFilter: 'blur(10px)',
+          flexShrink: 0
+        }}>
+          {parentTierInfo.label.includes('Trial') ? (
+            <Sparkles size={14} style={{ color: '#FCD34D' }} />
+          ) : (
+            <Crown size={14} style={{ color: parentTierInfo.color }} />
+          )}
+          <span style={{ 
+            fontSize: 11, 
+            fontWeight: 700, 
+            color: 'white',
+            whiteSpace: 'nowrap'
+          }}>
+            {parentTierInfo.label}
+          </span>
         </div>
       )}
     </div>
