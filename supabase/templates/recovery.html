@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  
+  <!-- Full-width gradient header -->
+  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
+    <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 600;">🔐 Reset Your Password</h1>
+    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.95); font-size: 16px;">EduDash Pro Account Security</p>
+  </div>
+
+  <!-- Content -->
+  <div style="max-width: 600px; margin: 0 auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    
+    <!-- Main content -->
+    <div style="padding: 30px 20px;">
+      <p style="margin: 0 0 20px 0; font-size: 16px; color: #333;">Hello,</p>
+      
+      <p style="margin: 0 0 20px 0; font-size: 15px; color: #555; line-height: 1.6;">
+        We received a request to reset the password for your EduDash Pro account. Click the button below to set a new password.
+      </p>
+
+      <!-- Reset password button -->
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ .ConfirmationURL }}" 
+           style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);">
+          Reset My Password
+        </a>
+      </div>
+
+      <!-- Alternative link -->
+      <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #666; font-weight: 600;">
+          Button not working?
+        </p>
+        <p style="margin: 0; font-size: 13px; color: #666; line-height: 1.5; word-break: break-all;">
+          Copy and paste this link into your browser:<br>
+          <span style="color: #667eea;">{{ .ConfirmationURL }}</span>
+        </p>
+      </div>
+
+      <!-- Security notice -->
+      <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin: 30px 0;">
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #856404; font-weight: 600;">
+          ⚠️ Security Notice
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #856404; line-height: 1.6;">
+          If you didn't request a password reset, please ignore this email or contact support if you have concerns about your account security.
+        </p>
+      </div>
+
+      <!-- Expiry notice -->
+      <div style="text-align: center; margin: 30px 0;">
+        <p style="margin: 0; font-size: 13px; color: #999;">
+          ⏱️ This link will expire in 24 hours for security reasons
+        </p>
+      </div>
+
+      <!-- Help section -->
+      <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 30px 0;">
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">
+          <strong>Need Help?</strong>
+        </p>
+        <p style="margin: 0; font-size: 14px; color: #666; line-height: 1.6;">
+          If you're having trouble resetting your password or didn't request this change, please contact our support team at <a href="mailto:support@edudashpro.org.za" style="color: #667eea; text-decoration: none;">support@edudashpro.org.za</a>
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="background: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+      <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">
+        Best regards,<br>
+        <strong>The EduDash Pro Team</strong>
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #999;">
+        © 2025 EduDash Pro. All rights reserved.
+      </p>
+      <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">
+        Built for South African Preschools 🇿🇦
+      </p>
+    </div>
+
+  </div>
+
+  <!-- Bottom spacing -->
+  <div style="height: 40px;"></div>
+
+</body>
+</html>

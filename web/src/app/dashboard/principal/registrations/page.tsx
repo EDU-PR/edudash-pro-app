@@ -468,13 +468,20 @@ export default function PrincipalRegistrationsPage() {
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-sm font-medium text-white">R150</div>
+                          <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 200}</div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="inline-flex items-center gap-1.5 text-xs">
-                            <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                            <span className="text-red-400 font-medium">No Payment</span>
-                          </span>
+                          {reg.registration_fee_paid || reg.proof_of_payment_url ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                              <span className="text-green-400 font-medium">Paid</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                              <span className="text-red-400 font-medium">No Payment</span>
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
@@ -563,11 +570,18 @@ export default function PrincipalRegistrationsPage() {
                       <div className="reg-card-info">
                         <DollarSign size={14} className="text-gray-500" />
                         <div className="flex-1">
-                          <div className="text-sm font-medium text-white">R150</div>
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                            <span className="text-red-400">No Payment</span>
-                          </div>
+                          <div className="text-sm font-medium text-white">R{reg.registration_fee_amount || 150}</div>
+                          {reg.registration_fee_paid || reg.proof_of_payment_url ? (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                              <span className="text-green-400">Paid</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                              <span className="text-red-400">No Payment</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 

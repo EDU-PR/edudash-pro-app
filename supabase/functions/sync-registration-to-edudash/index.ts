@@ -137,9 +137,19 @@ Deno.serve(async (req) => {
     const edudashClient = createClient(edudashUrl, edudashKey);
 
     // Map organization_id from EduSitePro to preschool_id in EduDashPro
-    // For now, we'll use a default preschool or create a mapping table
     // This assumes the organization_id exists in both databases
     const preschoolId = registration.organization_id;
+
+    // Fetch preschool/school name for the email
+    const { data: preschool, error: preschoolError } = await edudashClient
+      .from('preschools')
+      .select('name')
+      .eq('id', preschoolId)
+      .maybeSingle();
+
+    const schoolName = preschool?.name || 'Your School';
+
+    console.log('[sync-registration] Using school name:', schoolName);
 
     // Step 1: Create or find parent account
     console.log('[sync-registration] Creating/finding parent account...');
@@ -215,7 +225,7 @@ Deno.serve(async (req) => {
         guardianName: registration.guardian_name,
         studentName: `${registration.student_first_name} ${registration.student_last_name}`,
         email: registration.guardian_email,
-        schoolName: 'Young Eagles Preschool', // TODO: Get from organization
+        schoolName: schoolName,
         resetPasswordUrl: `${edudashUrl}/reset-password?email=${encodeURIComponent(registration.guardian_email)}`,
         pwaUrl: 'https://edudashpro.org.za',
       });

@@ -113,7 +113,7 @@ export default function MessagesPage() {
           .eq('preschool_id', preschoolId)
           .not('guardian_id', 'is', null);
 
-        recipientEmails = students?.map(s => (s.profiles as any)?.email).filter(Boolean) || [];
+        recipientEmails = students?.map((s: any) => (s.profiles as any)?.email).filter(Boolean) || [];
       } else if (formData.recipient_type === 'all_teachers') {
         const { data: teachers } = await supabase
           .from('profiles')
@@ -121,7 +121,7 @@ export default function MessagesPage() {
           .eq('preschool_id', preschoolId)
           .eq('role', 'teacher');
 
-        recipientEmails = teachers?.map(t => t.email).filter(Boolean) || [];
+        recipientEmails = teachers?.map((t: any) => t.email).filter(Boolean) || [];
       } else {
         const { data: staff } = await supabase
           .from('profiles')
@@ -129,7 +129,7 @@ export default function MessagesPage() {
           .eq('preschool_id', preschoolId)
           .in('role', ['teacher', 'admin', 'principal']);
 
-        recipientEmails = staff?.map(s => s.email).filter(Boolean) || [];
+        recipientEmails = staff?.map((s: any) => s.email).filter(Boolean) || [];
       }
 
       // In a real implementation, this would trigger email sending via an edge function

@@ -177,7 +177,7 @@ serve(async (req) => {
         updated: updatedCount,
         deleted: deletedCount,
         total_in_edusite: edusiteRegistrations?.length || 0,
-        total_in_edudash_before: allEdudashRecords?.length || 0
+        total_in_edudash_before: existingRegistrations?.length || 0
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

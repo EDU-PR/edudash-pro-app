@@ -68,7 +68,7 @@ export default function FinancialsPage() {
         const { data: registrations, error } = await supabase
           .from('registration_requests')
           .select('id, student_first_name, student_last_name, registration_fee_amount, registration_fee_paid, payment_date, created_at')
-          .eq('preschool_id', preschoolId)
+          .eq('organization_id', preschoolId)
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -78,8 +78,8 @@ export default function FinancialsPage() {
         }
 
         if (registrations) {
-          const paid = registrations.filter(r => r.registration_fee_paid);
-          const pending = registrations.filter(r => !r.registration_fee_paid && r.registration_fee_amount);
+          const paid = registrations.filter((r) => r.registration_fee_paid);
+          const pending = registrations.filter((r) => !r.registration_fee_paid && r.registration_fee_amount);
 
           const totalRevenue = paid.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
           const pendingAmount = pending.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);

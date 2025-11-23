@@ -136,16 +136,16 @@ export default function PrincipalDashboard() {
         const { data: registrations } = await supabase
           .from('registration_requests')
           .select('registration_fee_amount, registration_fee_paid')
-          .eq('preschool_id', preschoolId);
+          .eq('organization_id', preschoolId);
 
         let revenue = 0;
         let pendingPayments = 0;
 
         if (registrations) {
-          const paid = registrations.filter(r => r.registration_fee_paid);
-          const pending = registrations.filter(r => !r.registration_fee_paid && r.registration_fee_amount);
+          const paid = registrations.filter((r: any) => r.registration_fee_paid);
+          const pending = registrations.filter((r: any) => !r.registration_fee_paid && r.registration_fee_amount);
           
-          revenue = paid.reduce((sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
+          revenue = paid.reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0);
           pendingPayments = pending.length;
         }
 
@@ -181,7 +181,7 @@ export default function PrincipalDashboard() {
         const { data: registrations } = await supabase
           .from('registration_requests')
           .select('id, student_first_name, student_last_name, status, created_at, reviewed_date')
-          .eq('preschool_id', preschoolId)
+          .eq('organization_id', preschoolId)
           .order('created_at', { ascending: false })
           .limit(3);
 

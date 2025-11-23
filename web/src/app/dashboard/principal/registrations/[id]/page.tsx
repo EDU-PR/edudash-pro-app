@@ -96,13 +96,22 @@ export default function RegistrationDetailPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
+      // When approving, also verify payment if there's a proof of payment
+      const updates: any = {
+        status: 'approved',
+        reviewed_by: user?.email,
+        reviewed_date: new Date().toISOString(),
+      };
+
+      // If there's a proof of payment, mark it as verified
+      if (registration.proof_of_payment_url) {
+        updates.registration_fee_paid = true;
+        updates.payment_date = new Date().toISOString();
+      }
+
       const { error } = await supabase
         .from('registration_requests')
-        .update({
-          status: 'approved',
-          reviewed_by: user?.email,
-          reviewed_date: new Date().toISOString(),
-        })
+        .update(updates)
         .eq('id', registration.id);
 
       if (error) throw error;
