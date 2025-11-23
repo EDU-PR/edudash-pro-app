@@ -17,6 +17,8 @@ import {
   Download,
   DollarSign,
   ArrowLeft,
+  ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 
@@ -40,6 +42,7 @@ interface Registration {
   payment_reference?: string;
   registration_fee_amount?: number;
   registration_fee_paid: boolean;
+  payment_verified?: boolean;
   payment_method?: string;
   proof_of_payment_url?: string;
   campaign_applied?: string;
@@ -178,29 +181,103 @@ export default function RegistrationDetailPage() {
     }
   };
 
-  const handleVerifyPayment = async () => {
+  const handleVerifyPayment = async (verify: boolean) => {
     if (!registration) return;
 
-    if (!confirm(`Verify payment for ${registration.student_first_name} ${registration.student_last_name}?`)) {
+    const action = verify ? 'verify' : 'remove verification for';
+    if (!confirm(`${verify ? 'Verify' : 'Remove verification for'} payment for ${registration.student_first_name} ${registration.student_last_name}?`)) {
       return;
     }
 
     setProcessing(true);
     try {
-      const { error } = await supabase
+      const response = await fetch('/api/registrations/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          registrationId: registration.id,
+          verified: verify
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `Failed to ${action} payment`);
+      }
+
+      alert(result.message || `Payment ${verify ? 'verified' : 'verification removed'}!`);
+      await fetchRegistration();
+    } catch (error: any) {
+      console.error(`Error ${action}ing payment:`, error);
+      alert(`Failed to ${action} payment. Please try again.`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!registration) return;
+
+    const reason = prompt(`⚠️ WARNING: This will DELETE the student and potentially their parent account.
+
+Enter reason for deletion:
+(This will be sent to the parent)`);
+    if (!reason) return;
+
+    if (!confirm(`🚨 FINAL CONFIRMATION 🚨
+
+This will:
+- Delete ${registration.student_first_name} ${registration.student_last_name}
+- Delete the registration record
+- Potentially delete the parent's account if no other students
+- Send an email notification
+
+Type 'DELETE' to confirm this cannot be undone.`)) {
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // First, find the student ID from the approved registration
+      const { data: students, error: findError } = await supabase
+        .from('students')
+        .select('id, parent_user_id')
+        .eq('organization_id', registration.organization_id)
+        .ilike('first_name', registration.student_first_name)
+        .ilike('last_name', registration.student_last_name);
+
+      if (findError || !students || students.length === 0) {
+        throw new Error('Student not found in database. They may not have been approved yet.');
+      }
+
+      const studentId = students[0].id;
+
+      // Call delete API
+      const response = await fetch('/api/students/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, reason }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete student');
+      }
+
+      alert(`✅ ${result.message}\n\nParent email: ${result.parentEmail}\nAccount deleted: ${result.accountDeleted ? 'Yes' : 'No (has other students)'}`);
+      
+      // Delete the registration request too
+      await supabase
         .from('registration_requests')
-        .update({
-          registration_fee_paid: true,
-        })
+        .delete()
         .eq('id', registration.id);
 
-      if (error) throw error;
-
-      alert('✅ Payment verified successfully!');
-      window.location.reload();
-    } catch (error) {
-      console.error('Error verifying payment:', error);
-      alert('Failed to verify payment. Please try again.');
+      router.push('/dashboard/principal/registrations');
+    } catch (error: any) {
+      console.error('Error deleting student:', error);
+      alert(`❌ Error: ${error.message}`);
     } finally {
       setProcessing(false);
     }
@@ -245,36 +322,98 @@ export default function RegistrationDetailPage() {
               </p>
             </div>
 
-            {registration.status === 'pending' && (
-              <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {registration.status === 'approved' && registration.registration_fee_paid && !registration.payment_verified && (
                 <button
-                  onClick={handleReject}
+                  onClick={() => handleVerifyPayment(true)}
                   disabled={processing}
                   className="btn"
                   style={{ 
-                    background: 'var(--red)', 
+                    background: '#f59e0b',
+                    color: 'white',
+                    opacity: processing ? 0.5 : 1 
+                  }}
+                >
+                  <ShieldCheck size={18} style={{ marginRight: 8 }} />
+                  Verify Payment
+                </button>
+              )}
+              {registration.status === 'approved' && registration.payment_verified && (
+                <button
+                  onClick={() => handleVerifyPayment(false)}
+                  disabled={processing}
+                  className="btn"
+                  style={{ 
+                    background: '#6b7280',
                     color: 'white',
                     opacity: processing ? 0.5 : 1 
                   }}
                 >
                   <XCircle size={18} style={{ marginRight: 8 }} />
-                  Reject
+                  Unverify Payment
                 </button>
+              )}
+              {registration.status === 'approved' && (
                 <button
-                  onClick={handleApprove}
-                  disabled={processing || !registration.registration_fee_paid}
-                  className="btn btnPrimary"
+                  onClick={handleDeleteStudent}
+                  disabled={processing}
+                  className="btn"
                   style={{ 
-                    opacity: (processing || !registration.registration_fee_paid) ? 0.5 : 1,
-                    cursor: (!registration.registration_fee_paid) ? 'not-allowed' : 'pointer'
+                    background: '#dc2626',
+                    color: 'white',
+                    opacity: processing ? 0.5 : 1 
                   }}
-                  title={!registration.registration_fee_paid ? 'Please verify payment first' : 'Approve registration'}
                 >
-                  <CheckCircle2 size={18} style={{ marginRight: 8 }} />
-                  Approve
+                  <Trash2 size={18} style={{ marginRight: 8 }} />
+                  Delete Student
                 </button>
-              </div>
-            )}
+              )}
+              {registration.status === 'pending' && (
+                <>
+                  {registration.proof_of_payment_url && registration.registration_fee_paid && !registration.payment_verified && (
+                    <button
+                      onClick={() => handleVerifyPayment(true)}
+                      disabled={processing}
+                      className="btn"
+                      style={{ 
+                        background: '#f59e0b',
+                        color: 'white',
+                        opacity: processing ? 0.5 : 1 
+                      }}
+                    >
+                      <ShieldCheck size={18} style={{ marginRight: 8 }} />
+                      Verify Payment
+                    </button>
+                  )}
+                  <button
+                    onClick={handleReject}
+                    disabled={processing}
+                    className="btn"
+                    style={{ 
+                      background: 'var(--red)', 
+                      color: 'white',
+                      opacity: processing ? 0.5 : 1 
+                    }}
+                  >
+                    <XCircle size={18} style={{ marginRight: 8 }} />
+                    Reject
+                  </button>
+                  <button
+                    onClick={handleApprove}
+                    disabled={processing || !registration.payment_verified}
+                    className="btn btnPrimary"
+                    style={{ 
+                      opacity: (processing || !registration.payment_verified) ? 0.5 : 1,
+                      cursor: (!registration.payment_verified) ? 'not-allowed' : 'pointer'
+                    }}
+                    title={!registration.payment_verified ? 'Please verify payment first' : 'Approve registration'}
+                  >
+                    <CheckCircle2 size={18} style={{ marginRight: 8 }} />
+                    Approve
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -415,27 +554,54 @@ export default function RegistrationDetailPage() {
             </h3>
             <div style={{ display: 'grid', gap: 16 }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Received</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Status</div>
                 <div style={{ marginTop: 6 }}>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    borderRadius: 8,
-                    background: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#d1fae5' : '#fee2e2',
-                    color: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#065f46' : '#991b1b'
-                  }}>
-                    <div style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: (registration.registration_fee_paid && registration.status !== 'rejected') ? '#10b981' : '#ef4444'
-                    }} />
-                    {(registration.registration_fee_paid && registration.status !== 'rejected') ? 'Paid' : 'No Payment'}
-                  </span>
+                  {registration.payment_verified && registration.status !== 'rejected' ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      borderRadius: 8,
+                      background: '#d1fae5',
+                      color: '#065f46'
+                    }}>
+                      <ShieldCheck size={16} />
+                      Verified
+                    </span>
+                  ) : registration.registration_fee_paid && registration.status !== 'rejected' ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      borderRadius: 8,
+                      background: '#fef3c7',
+                      color: '#92400e'
+                    }}>
+                      <Clock size={16} />
+                      Paid (Pending)
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      borderRadius: 8,
+                      background: '#fee2e2',
+                      color: '#991b1b'
+                    }}>
+                      <XCircle size={16} />
+                      No Payment
+                    </span>
+                  )}
                 </div>
               </div>
               <div>
@@ -443,7 +609,7 @@ export default function RegistrationDetailPage() {
                 <div style={{ marginTop: 6 }}>
                   {registration.proof_of_payment_url ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {registration.registration_fee_paid ? (
+                      {registration.payment_verified ? (
                         <span style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -504,7 +670,7 @@ export default function RegistrationDetailPage() {
               <FileText size={20} color="var(--primary)" />
               Proof of Payment
             </h3>
-            {registration.proof_of_payment_url && registration.registration_fee_paid && (
+            {registration.proof_of_payment_url && registration.payment_verified && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -555,54 +721,41 @@ export default function RegistrationDetailPage() {
                     </svg>
                     View Full Size
                   </button>
-                  {registration.status === 'pending' && (
-                    !popVerified ? (
-                      <button
-                        onClick={() => setPopVerified(true)}
-                        className="btn"
-                        style={{ background: '#f59e0b', color: 'white' }}
-                      >
-                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ marginRight: 8 }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        1. Verify POP
-                      </button>
-                    ) : !registration.registration_fee_paid ? (
-                      <button
-                        onClick={handleVerifyPayment}
-                        disabled={processing}
-                        className="btn"
-                        style={{ 
-                          background: 'var(--green)',
-                          color: 'white',
-                          opacity: processing ? 0.5 : 1 
-                        }}
-                      >
-                        <CheckCircle2 size={16} style={{ marginRight: 8 }} />
-                        2. Verify Payment
-                      </button>
-                    ) : (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '8px 16px',
-                        borderRadius: 8,
-                        background: '#d1fae5',
-                        color: '#065f46',
-                        fontSize: 14,
-                        fontWeight: 500
-                      }}>
-                        <CheckCircle2 size={16} />
-                        Payment Verified - Ready to Approve
-                      </div>
-                    )
+                  {!registration.payment_verified && (
+                    <button
+                      onClick={() => handleVerifyPayment(true)}
+                      disabled={processing}
+                      className="btn"
+                      style={{ 
+                        background: '#f59e0b',
+                        color: 'white',
+                        opacity: processing ? 0.5 : 1 
+                      }}
+                    >
+                      <ShieldCheck size={16} style={{ marginRight: 8 }} />
+                      Verify Payment
+                    </button>
+                  )}
+                  {registration.payment_verified && (
+                    <button
+                      onClick={() => handleVerifyPayment(false)}
+                      disabled={processing}
+                      className="btn"
+                      style={{ 
+                        background: '#6b7280',
+                        color: 'white',
+                        opacity: processing ? 0.5 : 1 
+                      }}
+                    >
+                      <XCircle size={16} style={{ marginRight: 8 }} />
+                      Unverify Payment
+                    </button>
                   )}
                 </div>
               </div>
 
               {/* Warning if not verified */}
-              {!popVerified && registration.status === 'pending' && (
+              {!registration.payment_verified && registration.status === 'pending' && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'flex-start',

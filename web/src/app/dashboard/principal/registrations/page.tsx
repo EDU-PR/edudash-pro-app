@@ -19,6 +19,7 @@ import {
   Download,
   RefreshCw,
   DollarSign,
+  ShieldCheck,
 } from 'lucide-react';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 
@@ -302,6 +303,40 @@ export default function PrincipalRegistrationsPage() {
     }
   };
 
+  // Verify payment
+  const handleVerifyPayment = async (registration: Registration, verify: boolean) => {
+    const action = verify ? 'verify' : 'unverify';
+    if (!confirm(`${verify ? 'Verify' : 'Remove verification for'} payment for ${registration.student_first_name} ${registration.student_last_name}?`)) {
+      return;
+    }
+
+    setProcessing(registration.id);
+    try {
+      const response = await fetch('/api/registrations/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          registrationId: registration.id,
+          verified: verify
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `Failed to ${action} payment`);
+      }
+
+      alert(result.message || `Payment ${verify ? 'verified' : 'verification removed'}!`);
+      await fetchRegistrations();
+    } catch (error: any) {
+      console.error(`Error ${action}ing payment:`, error);
+      alert(`Failed to ${action} payment. Please try again.`);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   // Reject registration
   const handleReject = async (registration: Registration) => {
     const reason = prompt(`Enter reason for rejecting ${registration.student_first_name} ${registration.student_last_name}'s registration:`);
@@ -509,6 +544,27 @@ export default function PrincipalRegistrationsPage() {
                             >
                               View
                             </button>
+                            {reg.status === 'approved' && reg.registration_fee_paid && !reg.payment_verified && (
+                              <button
+                                onClick={() => handleVerifyPayment(reg, true)}
+                                disabled={processing === reg.id}
+                                className="text-yellow-400 hover:text-yellow-300 text-xs font-medium disabled:opacity-50 transition-colors flex items-center gap-1"
+                                title="Verify payment proof"
+                              >
+                                <ShieldCheck size={14} />
+                                Verify
+                              </button>
+                            )}
+                            {reg.status === 'approved' && reg.payment_verified && (
+                              <button
+                                onClick={() => handleVerifyPayment(reg, false)}
+                                disabled={processing === reg.id}
+                                className="text-gray-400 hover:text-gray-300 text-xs font-medium disabled:opacity-50 transition-colors"
+                                title="Remove verification"
+                              >
+                                Unverify
+                              </button>
+                            )}
                             {reg.status === 'pending' && (
                               <>
                                 <button
@@ -608,6 +664,36 @@ export default function PrincipalRegistrationsPage() {
                       </div>
                     </div>
 
+                    {reg.status === 'approved' && reg.registration_fee_paid && !reg.payment_verified && (
+                      <div className="reg-card-actions">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVerifyPayment(reg, true);
+                          }}
+                          disabled={processing === reg.id}
+                          className="reg-card-btn reg-card-btn-verify"
+                          title="Verify payment proof"
+                        >
+                          <ShieldCheck size={16} />
+                          Verify Payment
+                        </button>
+                      </div>
+                    )}
+                    {reg.status === 'approved' && reg.payment_verified && (
+                      <div className="reg-card-actions">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleVerifyPayment(reg, false);
+                          }}
+                          disabled={processing === reg.id}
+                          className="reg-card-btn reg-card-btn-unverify"
+                        >
+                          Remove Verification
+                        </button>
+                      </div>
+                    )}
                     {reg.status === 'pending' && (
                       <>
                         {!reg.proof_of_payment_url && (
@@ -863,6 +949,22 @@ export default function PrincipalRegistrationsPage() {
         }
         .reg-card-btn-reject:active:not(:disabled) {
           background: rgba(239, 68, 68, 0.2);
+        }
+        .reg-card-btn-verify {
+          background: rgba(234, 179, 8, 0.1);
+          border-color: rgba(234, 179, 8, 0.2);
+          color: #facc15;
+        }
+        .reg-card-btn-verify:active:not(:disabled) {
+          background: rgba(234, 179, 8, 0.2);
+        }
+        .reg-card-btn-unverify {
+          background: rgba(107, 114, 128, 0.1);
+          border-color: rgba(107, 114, 128, 0.2);
+          color: #9ca3af;
+        }
+        .reg-card-btn-unverify:active:not(:disabled) {
+          background: rgba(107, 114, 128, 0.2);
         }
 
         /* Responsive */
