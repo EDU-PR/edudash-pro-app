@@ -212,7 +212,7 @@ export default function RegistrationDetailPage() {
       await supabase
         .from('students')
         .update(updateData)
-        .eq('organization_id', registration.organization_id)
+        .eq('preschool_id', registration.organization_id)
         .ilike('first_name', registration.student_first_name)
         .ilike('last_name', registration.student_last_name);
 
@@ -253,7 +253,7 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
       const { data: students, error: findError } = await supabase
         .from('students')
         .select('id, parent_user_id')
-        .eq('organization_id', registration.organization_id)
+        .eq('preschool_id', registration.organization_id)
         .ilike('first_name', registration.student_first_name)
         .ilike('last_name', registration.student_last_name);
 
