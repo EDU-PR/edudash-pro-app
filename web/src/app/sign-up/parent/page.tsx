@@ -168,23 +168,24 @@ function ParentSignUpForm() {
       }
     }
 
-    // Start 7-day Premium trial for ALL independent users (no organization selected)
+    // Start 7-day Parent Plus trial for ALL independent users (no organization selected)
     const isIndependentUser = !selectedOrganization && !invitationCode;
     
     // Give trial to ALL independent users regardless of usage type
+    // Parents should NEVER be on premium tier - use parent_plus instead
     if (isIndependentUser) {
       try {
         const { data: trialData, error: trialError } = await supabase.rpc('start_user_trial', {
           target_user_id: authData.user.id,
           trial_days: 7,
-          plan_tier: 'premium'
+          plan_tier: 'parent_plus'
         });
         
         if (trialError) {
           console.error('[Signup] Failed to start trial:', trialError);
           // Don't fail signup - trial is a bonus feature
         } else {
-          console.log('[Signup] ✅ 7-day Premium trial started for', authData.user.email);
+          console.log('[Signup] ✅ 7-day Parent Plus trial started for', authData.user.email);
         }
       } catch (err) {
         console.error('[Signup] Trial start error:', err);

@@ -1,0 +1,497 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
+import { Ticket, Plus, Trash2, Edit2, Save, X, TrendingUp, Users, AlertCircle } from 'lucide-react';
+
+interface Campaign {
+  id: string;
+  organization_id: string;
+  campaign_name: string;
+  coupon_code: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_percentage: number | null;
+  discount_amount: number | null;
+  max_redemptions: number;
+  current_redemptions: number;
+  start_date: string;
+  end_date: string;
+  active: boolean;
+  created_at: string;
+}
+
+interface EditingCampaign {
+  id: string;
+  max_redemptions: number;
+  current_redemptions: number;
+}
+
+export default function CampaignsPage() {
+  const router = useRouter();
+  const supabase = createClient();
+  const [userId, setUserId] = useState<string>();
+  const { profile, loading: profileLoading } = useUserProfile(userId);
+  const { slug: tenantSlug } = useTenantSlug(userId);
+
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<EditingCampaign | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newCampaign, setNewCampaign] = useState({
+    campaign_name: '',
+    coupon_code: '',
+    discount_type: 'percentage' as 'percentage' | 'fixed',
+    discount_percentage: 50,
+    discount_amount: 200,
+    max_redemptions: 50,
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    active: true,
+  });
+
+  // Check authentication
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/sign-in');
+      } else {
+        setUserId(session.user.id);
+      }
+    };
+    checkUser();
+  }, [supabase, router]);
+
+  useEffect(() => {
+    if (profile?.organizationId) {
+      fetchCampaigns();
+    }
+  }, [profile?.organizationId]);
+
+  const fetchCampaigns = async () => {
+    if (!profile?.organizationId) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('marketing_campaigns')
+        .select('*')
+        .eq('organization_id', profile.organizationId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCampaigns(data || []);
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+      alert('Failed to load campaigns');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateCampaign = async () => {
+    if (!profile?.organizationId) {
+      alert('You must be linked to an organization to create campaigns');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('marketing_campaigns')
+        .insert({
+          organization_id: profile.organizationId,
+          campaign_name: newCampaign.campaign_name,
+          coupon_code: newCampaign.coupon_code.toUpperCase(),
+          discount_type: newCampaign.discount_type,
+          discount_percentage: newCampaign.discount_type === 'percentage' ? newCampaign.discount_percentage : null,
+          discount_amount: newCampaign.discount_type === 'fixed' ? newCampaign.discount_amount : null,
+          max_redemptions: newCampaign.max_redemptions,
+          current_redemptions: 0,
+          start_date: newCampaign.start_date,
+          end_date: newCampaign.end_date,
+          active: newCampaign.active,
+        });
+
+      if (error) throw error;
+
+      alert('Campaign created successfully!');
+      setCreating(false);
+      setNewCampaign({
+        campaign_name: '',
+        coupon_code: '',
+        discount_type: 'percentage',
+        discount_percentage: 50,
+        discount_amount: 200,
+        max_redemptions: 50,
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        active: true,
+      });
+      fetchCampaigns();
+    } catch (error: any) {
+      console.error('Error creating campaign:', error);
+      alert(error.message || 'Failed to create campaign');
+    }
+  };
+
+  const handleUpdateSlots = async (campaignId: string, newMax: number, newCurrent: number) => {
+    try {
+      const { error } = await supabase
+        .from('marketing_campaigns')
+        .update({
+          max_redemptions: newMax,
+          current_redemptions: newCurrent,
+        })
+        .eq('id', campaignId);
+
+      if (error) throw error;
+
+      alert('Slots updated successfully!');
+      setEditing(null);
+      fetchCampaigns();
+    } catch (error: any) {
+      console.error('Error updating slots:', error);
+      alert(error.message || 'Failed to update slots');
+    }
+  };
+
+  const handleToggleActive = async (campaignId: string, currentActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('marketing_campaigns')
+        .update({ active: !currentActive })
+        .eq('id', campaignId);
+
+      if (error) throw error;
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Error toggling campaign:', error);
+      alert('Failed to toggle campaign status');
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('marketing_campaigns')
+        .delete()
+        .eq('id', campaignId);
+
+      if (error) throw error;
+
+      alert('Campaign deleted successfully!');
+      fetchCampaigns();
+    } catch (error: any) {
+      console.error('Error deleting campaign:', error);
+      alert(error.message || 'Failed to delete campaign');
+    }
+  };
+
+  if (profileLoading || loading) {
+    return (
+      <PrincipalShell
+        tenantSlug={tenantSlug}
+        preschoolName={profile?.preschoolId ? 'Loading...' : undefined}
+        preschoolId={profile?.preschoolId}
+        hideRightSidebar={true}
+      >
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-slate-400">Loading campaigns...</p>
+        </div>
+      </PrincipalShell>
+    );
+  }
+
+  return (
+    <PrincipalShell
+      tenantSlug={tenantSlug}
+      preschoolName={profile?.preschoolId ? 'Your School' : undefined}
+      preschoolId={profile?.preschoolId}
+      hideRightSidebar={true}
+    >
+      <div className="section">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="h1">Marketing Campaigns</h1>
+            <p style={{ color: 'var(--muted)' }}>
+              Create and manage promo codes for registration discounts
+            </p>
+          </div>
+          <button
+            onClick={() => setCreating(true)}
+            className="btn btnPrimary"
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <Plus size={18} />
+            Create Campaign
+          </button>
+        </div>
+
+        {/* Create Campaign Modal */}
+        {creating && (
+          <div className="card" style={{ marginBottom: 24, border: '2px solid var(--primary)' }}>
+            <h2 className="h2" style={{ marginBottom: 16 }}>New Campaign</h2>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16, marginBottom: 16 }}>
+              <div>
+                <label className="label">Campaign Name</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={newCampaign.campaign_name}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, campaign_name: e.target.value })}
+                  placeholder="Early Bird 2026"
+                />
+              </div>
+
+              <div>
+                <label className="label">Coupon Code</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={newCampaign.coupon_code}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, coupon_code: e.target.value.toUpperCase() })}
+                  placeholder="WELCOME2026"
+                />
+              </div>
+
+              <div>
+                <label className="label">Discount Type</label>
+                <select
+                  className="input"
+                  value={newCampaign.discount_type}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, discount_type: e.target.value as 'percentage' | 'fixed' })}
+                >
+                  <option value="percentage">Percentage</option>
+                  <option value="fixed">Fixed Amount</option>
+                </select>
+              </div>
+
+              {newCampaign.discount_type === 'percentage' ? (
+                <div>
+                  <label className="label">Discount %</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={newCampaign.discount_percentage}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_percentage: Number(e.target.value) })}
+                    min="1"
+                    max="100"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Discount Amount (R)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={newCampaign.discount_amount}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_amount: Number(e.target.value) })}
+                    min="1"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="label">Max Redemptions</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={newCampaign.max_redemptions}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, max_redemptions: Number(e.target.value) })}
+                  min="1"
+                />
+              </div>
+
+              <div>
+                <label className="label">Start Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={newCampaign.start_date}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, start_date: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">End Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={newCampaign.end_date}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={handleCreateCampaign} className="btn btnPrimary">
+                <Save size={18} />
+                Create Campaign
+              </button>
+              <button onClick={() => setCreating(false)} className="btn btnSecondary">
+                <X size={18} />
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Campaigns List */}
+        {campaigns.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+            <Ticket size={48} style={{ margin: '0 auto 16px', color: 'var(--muted)' }} />
+            <h3 className="h3" style={{ marginBottom: 8 }}>No Campaigns Yet</h3>
+            <p style={{ color: 'var(--muted)', marginBottom: 24 }}>
+              Create your first campaign to offer registration discounts
+            </p>
+            <button onClick={() => setCreating(true)} className="btn btnPrimary">
+              <Plus size={18} />
+              Create Campaign
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 16 }}>
+            {campaigns.map((campaign) => {
+              const usagePercent = (campaign.current_redemptions / campaign.max_redemptions) * 100;
+              const isEditing = editing?.id === campaign.id;
+
+              return (
+                <div key={campaign.id} className="card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16 }}>
+                    <div>
+                      <h3 className="h3" style={{ marginBottom: 4 }}>{campaign.campaign_name}</h3>
+                      <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+                        Code: <strong style={{ color: 'var(--primary)' }}>{campaign.coupon_code}</strong>
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => handleToggleActive(campaign.id, campaign.active)}
+                        className={campaign.active ? 'btn btnSuccess' : 'btn btnSecondary'}
+                        style={{ fontSize: 12, padding: '6px 12px' }}
+                      >
+                        {campaign.active ? 'Active' : 'Inactive'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        className="btn btnDanger"
+                        style={{ padding: 8 }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
+                    <div>
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Discount</p>
+                      <p style={{ fontSize: 16, fontWeight: 600 }}>
+                        {campaign.discount_type === 'percentage'
+                          ? `${campaign.discount_percentage}%`
+                          : `R${campaign.discount_amount}`}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Valid Period</p>
+                      <p style={{ fontSize: 14 }}>
+                        {new Date(campaign.start_date).toLocaleDateString()} - {new Date(campaign.end_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Usage Stats */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <p style={{ fontSize: 14, color: 'var(--muted)' }}>Redemptions</p>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: 80, padding: '4px 8px', fontSize: 12 }}
+                            value={editing.current_redemptions}
+                            onChange={(e) => setEditing({ ...editing, current_redemptions: Number(e.target.value) })}
+                            min="0"
+                            max={editing.max_redemptions}
+                          />
+                          <span>/</span>
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: 80, padding: '4px 8px', fontSize: 12 }}
+                            value={editing.max_redemptions}
+                            onChange={(e) => setEditing({ ...editing, max_redemptions: Number(e.target.value) })}
+                            min={editing.current_redemptions}
+                          />
+                          <button
+                            onClick={() => handleUpdateSlots(campaign.id, editing.max_redemptions, editing.current_redemptions)}
+                            className="btn btnPrimary"
+                            style={{ padding: 6 }}
+                          >
+                            <Save size={14} />
+                          </button>
+                          <button
+                            onClick={() => setEditing(null)}
+                            className="btn btnSecondary"
+                            style={{ padding: 6 }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <p style={{ fontSize: 14, fontWeight: 600 }}>
+                            {campaign.current_redemptions} / {campaign.max_redemptions}
+                          </p>
+                          <button
+                            onClick={() => setEditing({
+                              id: campaign.id,
+                              max_redemptions: campaign.max_redemptions,
+                              current_redemptions: campaign.current_redemptions,
+                            })}
+                            className="btn btnSecondary"
+                            style={{ padding: 6 }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div style={{
+                      width: '100%',
+                      height: 8,
+                      backgroundColor: 'var(--border)',
+                      borderRadius: 4,
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        width: `${usagePercent}%`,
+                        height: '100%',
+                        backgroundColor: usagePercent >= 90 ? '#ef4444' : usagePercent >= 70 ? '#f59e0b' : '#10b981',
+                        transition: 'width 0.3s ease',
+                      }} />
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                      {usagePercent.toFixed(1)}% used
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </PrincipalShell>
+  );
+}
