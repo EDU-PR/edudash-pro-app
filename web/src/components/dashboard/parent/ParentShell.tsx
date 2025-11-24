@@ -129,6 +129,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/dashboard/parent/ai-help', label: 'AI Help', icon: Sparkles },
+        { href: '/dashboard/parent/generate-exam', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
         { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },

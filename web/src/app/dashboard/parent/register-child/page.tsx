@@ -304,7 +304,7 @@ export default function RegisterChildPage() {
   }
 
   return (
-    <ParentShell tenantSlug={slug} userEmail={userEmail} hideSidebar={true}>
+    <ParentShell tenantSlug={slug} userEmail={userEmail}>
       <div className="container" style={{ maxWidth: 800, margin: '0 auto' }}>
         <div className="section">
           <button
