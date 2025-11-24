@@ -26,11 +26,10 @@ interface ParentShellProps {
   preschoolName?: string;
   unreadCount?: number;
   hasOrganization?: boolean;
-  hideSidebar?: boolean;
   children: React.ReactNode;
 }
 
-export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, hideSidebar = false, children }: ParentShellProps) {
+export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -40,8 +39,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Check if we should show sidebar (only on dashboard home, unless hideSidebar is true)
-  const showSidebar = !hideSidebar && pathname === '/dashboard/parent';
+  // Show sidebar navigation for parent dashboard
+  const showSidebar = true;
 
   // Get user ID
   useEffect(() => {
@@ -211,7 +210,12 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         </div>
       </header>
 
-      <div className={`frame ${!showSidebar ? 'frame-no-sidebar' : ''}`}>
+      <div className="frame" style={{
+        width: '100%',
+        height: '100%',
+        display: 'grid',
+        gridTemplateColumns: showSidebar ? '240px 1fr' : '1fr'
+      }}>
         {showSidebar && (
           <aside className="sidenav sticky" aria-label="Sidebar">
             <div className="sidenavCol">
@@ -244,7 +248,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           </aside>
         )}
 
-        <main className="content">
+        <main className="content" style={{ maxWidth: '100%', width: '100%' }}>
           {children}
         </main>
       </div>

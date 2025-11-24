@@ -33,11 +33,13 @@ export function useTierUpdates(userId: string | undefined, onTierChange?: (newTi
         .single();
 
       // Silently ignore errors for community users (table may not exist or be accessible)
-      // Only log unexpected errors (not 400/404/PGRST116)
+      // Only log unexpected errors (not 400/404/406/PGRST116)
       if (error) {
         const isExpectedError = 
           error.code === 'PGRST116' || // Not found
+          error.code === 'PGRST204' || // Column not found
           error.message?.includes('relation "user_ai_tiers" does not exist') ||
+          error.message?.includes('406') || // Not acceptable
           error.message?.includes('400');
         
         if (!isExpectedError) {

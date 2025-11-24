@@ -18,9 +18,9 @@ interface TierLimits {
 // Tier limits from database configuration (aligned with tier_name_aligned enum)
 const TIER_LIMITS: Record<string, TierLimits> = {
   free: {
-    exams_per_month: 3,
-    explanations_per_month: 5,
-    chat_messages_per_day: 10,
+    exams_per_month: 90, // 3 per day × 30 days
+    explanations_per_month: 1500, // 50 per day × 30 days
+    chat_messages_per_day: 100,
   },
   trial: {
     exams_per_month: 10,
@@ -143,11 +143,11 @@ export function QuotaCard({ userId }: QuotaCardProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', fontSize: 14, color: 'var(--text-muted)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <FileText size={16} style={{ color: '#3b82f6' }} />
-            <span>{freeLimits.exams_per_month} exams per month (ad-supported)</span>
+            <span>{freeLimits.exams_per_month} exams/month (3/day) • ad-supported</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <HelpCircle size={16} style={{ color: '#8b5cf6' }} />
-            <span>{freeLimits.explanations_per_month} explanations per month (ad-supported)</span>
+            <span>{freeLimits.explanations_per_month} explanations/month (50/day) • ad-supported</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <MessageSquare size={16} style={{ color: '#10b981' }} />
@@ -199,8 +199,8 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     );
   }
 
-  const isUnlimited = ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
-  const isHighestTier = ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isUnlimited = usage?.current_tier && ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isHighestTier = usage?.current_tier && ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
 
   const quotaItems = [
     {
