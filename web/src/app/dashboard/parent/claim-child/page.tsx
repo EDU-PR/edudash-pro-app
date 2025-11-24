@@ -29,19 +29,29 @@ export default function ClaimChildPage() {
       setEmail(session.user.email || '');
       setUserId(session.user.id);
       
-      // Get user's preschool_id
+      // Get user's preschool_id and check if Community School
       const { data: userData } = await supabase
         .from('profiles')
-        .select('preschool_id')
+        .select('preschool_id, preschools(name)')
         .eq('id', session.user.id)
         .maybeSingle();
+      
+      // Redirect Community School parents to register-child (auto-approval flow)
+      const schoolName = (userData as any)?.preschools?.name || '';
+      const isCommunitySchool = schoolName.toLowerCase().includes('community school');
+      
+      if (isCommunitySchool) {
+        router.replace('/dashboard/parent/register-child');
+        return;
+      }
       
       if (userData?.preschool_id) {
         setPreschoolId(userData.preschool_id);
         setSelectedSchoolId(userData.preschool_id);
       } else {
-        // No preschool - show school selector
-        setShowSchoolSelector(true);
+        // No preschool - redirect to register-child
+        router.replace('/dashboard/parent/register-child');
+        return;
         
         // Load available schools
         const { data: schoolsData } = await supabase
