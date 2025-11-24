@@ -81,7 +81,7 @@ export default function RegisterChildPage() {
         
         // Always put community school first if it exists
         if (communitySchool) {
-          const filtered = schools.filter((s) => s.id !== communitySchool.id);
+          const filtered = schools.filter((s: any) => s.id !== communitySchool.id);
           setOrganizations([{ id: communitySchool.id, name: 'EduDash Pro Community School (Default)', type: 'preschool' }, ...filtered]);
           // Auto-select community school for independent parents
           if (!preschoolId) {
