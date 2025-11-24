@@ -177,13 +177,9 @@ export default function ParentDashboard() {
           <EmptyChildrenState
             usageType={usageType}
             onAddChild={() => {
-              // If parent has organization, they should claim/link children
-              // If independent parent, they should register children
-              if (hasOrganization) {
-                router.push('/dashboard/parent/claim-child');
-              } else {
-                router.push('/dashboard/parent/register-child');
-              }
+              // Community School parents always use register-child (auto-approved)
+              // Organization-linked parents use claim-child (needs approval)
+              router.push('/dashboard/parent/register-child');
             }}
           />
         )}

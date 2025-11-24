@@ -28,9 +28,25 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
   const supabase = createClient();
 
   useEffect(() => {
-    if (!preschoolId) return;
+    if (!preschoolId || !userId) {
+      setLoading(false);
+      return;
+    }
 
     const loadRequests = async () => {
+      // Role-based access: Only principal/admin can view registrations
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (!profile || !['principal', 'admin', 'superadmin'].includes(profile.role)) {
+        console.log('👶 [ChildRegistrationWidget] Non-admin user - skipping registration queries');
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         console.log('👶 [ChildRegistrationWidget] Loading requests for preschool:', preschoolId);

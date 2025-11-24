@@ -60,7 +60,7 @@ export function EmptyChildrenState({ usageType, onAddChild }: EmptyChildrenState
         return {
           icon: UserPlus,
           title: 'Join Our Digital Community',
-          description: 'Start learning Robotics, AI, Data Science, and Software Development. Free tier includes daily AI assistance supported by ads.',
+          description: 'Start learning Robotics, AI, Data Science, and Software Development. Instant access with free tier (ad-supported daily AI limits).',
           cta: 'Add Child',
           color: '#667eea'
         };
