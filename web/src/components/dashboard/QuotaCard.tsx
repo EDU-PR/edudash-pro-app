@@ -101,10 +101,10 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   }, [userId, supabase]);
 
   useEffect(() => {
-    if (usage?.current_tier) {
-      const tierLimits = TIER_LIMITS[usage.current_tier.toLowerCase()] || TIER_LIMITS.free;
-      setLimits(tierLimits);
-    }
+    // Default to 'free' tier if no tier is detected
+    const tier = usage?.current_tier?.toLowerCase() || 'free';
+    const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
+    setLimits(tierLimits);
   }, [usage?.current_tier]);
 
   if (loading) {
@@ -115,8 +115,9 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     );
   }
 
-  // If no usage data exists yet, create default empty state
+  // If no usage data exists yet, default to free tier
   if (!usage) {
+    const freeLimits = TIER_LIMITS.free;
     return (
       <div className="card" style={{ padding: 'var(--space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
@@ -125,22 +126,66 @@ export function QuotaCard({ userId }: QuotaCardProps) {
             AI Usage
           </h3>
           <span 
-            className="badge badge-primary" 
+            className="badge" 
             style={{ 
               textTransform: 'capitalize',
               fontSize: 12,
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: 'white'
+              backgroundColor: '#6b7280',
+              color: 'white',
+              padding: '4px 12px',
+              borderRadius: 12
             }}
           >
-            Premium Trial
+            Free Plan
           </span>
         </div>
         
-        <div style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
-          <MessageSquare size={48} style={{ margin: '0 auto var(--space-3)', opacity: 0.5 }} />
-          <p style={{ margin: 0, fontSize: 14 }}>Start using AI features to see your usage stats</p>
-          <p style={{ margin: 'var(--space-2) 0 0', fontSize: 12 }}>Unlimited access during your 7-day trial</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', fontSize: 14, color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <FileText size={16} style={{ color: '#3b82f6' }} />
+            <span>{freeLimits.exams_per_month} exams per month (ad-supported)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <HelpCircle size={16} style={{ color: '#8b5cf6' }} />
+            <span>{freeLimits.explanations_per_month} explanations per month (ad-supported)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <MessageSquare size={16} style={{ color: '#10b981' }} />
+            <span>{freeLimits.chat_messages_per_day} chat messages per day</span>
+          </div>
+        </div>
+        
+        <div 
+          style={{
+            marginTop: 'var(--space-4)',
+            padding: 'var(--space-3)',
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 8,
+            fontSize: 13,
+          }}
+        >
+          <p style={{ margin: '0 0 var(--space-2) 0', color: 'var(--text-muted)' }}>
+            💡 Start using AI features and upgrade anytime for higher limits.
+          </p>
+          <a 
+            href="/dashboard/parent/subscription" 
+            className="btn btn-primary"
+            style={{
+              fontSize: 12,
+              padding: '8px 16px',
+              width: '100%',
+              textAlign: 'center',
+              textDecoration: 'none',
+              display: 'block',
+              cursor: 'pointer',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
+              borderRadius: 6,
+              fontWeight: 500,
+            }}
+          >
+            View Plans
+          </a>
         </div>
       </div>
     );
