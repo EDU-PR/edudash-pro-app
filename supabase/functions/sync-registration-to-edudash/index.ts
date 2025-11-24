@@ -228,8 +228,9 @@ Deno.serve(async (req) => {
       const existingAuthUser = authUsers?.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
       
       // Always generate temp password for new accounts (whether auth user exists or not)
-      // Generate secure password: 12 random chars + complexity requirements
-      tempPassword = crypto.randomUUID().substring(0, 12) + 'Aa1!'; // 16 chars with complexity
+      // Generate secure password: 8 random chars + Aa1! for complexity
+      const randomChars = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
+      tempPassword = randomChars + 'Aa1!'; // 12 chars with complexity
       
       if (existingAuthUser) {
         console.log('[sync-registration] Found orphaned auth user, will create profile:', existingAuthUser.id);

@@ -31,7 +31,10 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
     }
 
     // Create parent user account with temporary password
-    const tempPassword = crypto.randomUUID().substring(0, 12) + 'Aa1!'; // 12 chars + complexity
+    // Generate a strong password: 8 random chars + Aa1! for complexity
+    const randomChars = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
+    const tempPassword = randomChars + 'Aa1!';
+    
     const { data: newUser, error: createError } = await edusiteClient.auth.admin.createUser({
       email: registration.guardian_email,
       password: tempPassword,
@@ -59,65 +62,100 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
         <!DOCTYPE html>
         <html>
         <head>
+          <meta charset="utf-8">
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .credentials { background: white; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; }
-            .reference-box { background: #fff; border: 2px solid #667eea; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-            .reference-number { font-size: 24px; font-weight: bold; color: #667eea; letter-spacing: 2px; margin: 10px 0; }
-            .copy-note { font-size: 12px; color: #666; margin-top: 10px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+            body { 
+              font-family: Arial, sans-serif; 
+              line-height: 1.6; 
+              color: #333; 
+              margin: 0; 
+              padding: 0; 
+              background-color: #f5f5f5; 
+            }
+            .email-wrapper { 
+              max-width: 600px; 
+              margin: 20px auto; 
+              background: white; 
+            }
+            .header { 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              padding: 30px 20px; 
+              text-align: center; 
+            }
+            .header h1 { 
+              margin: 0; 
+              font-size: 24px; 
+            }
+            .content { 
+              padding: 30px 20px; 
+            }
+            .info-box { 
+              background: #f9f9f9; 
+              border-left: 4px solid #667eea; 
+              padding: 15px; 
+              margin: 20px 0; 
+            }
+            .button { 
+              display: inline-block; 
+              background: #667eea; 
+              color: white; 
+              padding: 12px 30px; 
+              text-decoration: none; 
+              border-radius: 5px; 
+              margin: 10px 5px; 
+            }
+            .button-green { 
+              background: #10b981; 
+            }
+            .footer { 
+              text-align: center; 
+              padding: 20px; 
+              color: #666; 
+              font-size: 12px; 
+              border-top: 1px solid #eee; 
+            }
           </style>
         </head>
         <body>
-          <div class="container">
+          <div class="email-wrapper">
             <div class="header">
               <h1>🎉 Registration Approved!</h1>
+              <p style="margin: 10px 0 0 0;">Young Eagles Preschool</p>
             </div>
+            
             <div class="content">
-              <p>Dear ${registration.guardian_name},</p>
+              <p>Dear <strong>${registration.guardian_name}</strong>,</p>
               
-              <p>Congratulations! Your child <strong>${registration.student_first_name} ${registration.student_last_name}</strong> has been approved for registration at <strong>Young Eagles Preschool</strong>.</p>
+              <p>Great news! Your child <strong>${registration.student_first_name} ${registration.student_last_name}</strong> has been approved for registration.</p>
               
-              <div class="reference-box">
-                <h3 style="margin: 0 0 10px 0; color: #667eea;">📋 Your Reference Number</h3>
-                <div class="reference-number">${registration.application_number || 'N/A'}</div>
-                <p class="copy-note">Please save this reference number for your records</p>
+              <div class="info-box">
+                <p style="margin: 0 0 10px 0;"><strong>📋 Reference Number:</strong> ${registration.application_number || registration.id}</p>
+                <p style="margin: 0;"><strong>📧 Email:</strong> ${registration.guardian_email}</p>
+                <p style="margin: 10px 0 0 0;"><strong>🔑 Temporary Password:</strong> <code style="background: #e0e0e0; padding: 5px 10px; border-radius: 3px; font-size: 16px;">${tempPassword}</code></p>
               </div>
               
-              <div class="credentials">
-                <h3>Your Account Credentials</h3>
-                <p><strong>Email:</strong> ${registration.guardian_email}</p>
-                <p><strong>Temporary Password:</strong> <code style="background: #f0f0f0; padding: 5px 10px; border-radius: 3px;">${tempPassword}</code></p>
-              </div>
-              
-              <p><strong>⚠️ Important:</strong> Please change your password after your first login for security.</p>
+              <p><strong>⚠️ Important:</strong> Please change your password after your first login.</p>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="https://youngeagles.org.za/dashboard" class="button" style="margin-right: 10px;">Login to Your Dashboard</a>
-                <a href="https://edusitepro.edudashpro.org.za/upload-payment?ref=${registration.application_number || registration.id}" class="button" style="background: #10b981;">Upload Proof of Payment</a>
+                <a href="https://youngeagles.org.za/dashboard" class="button">Login to Dashboard</a>
+                <a href="https://edusitepro.edudashpro.org.za/upload-payment?ref=${registration.application_number || registration.id}" class="button button-green">Upload Payment</a>
               </div>
               
-              <h3>Next Steps:</h3>
+              <p><strong>Next Steps:</strong></p>
               <ol>
-                <li>Upload your proof of payment using the button above (if not already done)</li>
-                <li>Log in to your parent dashboard using the credentials above</li>
-                <li>Complete any remaining registration forms</li>
-                <li>Upload required documents if not already done</li>
-                <li>Review the school calendar and upcoming events</li>
+                <li>Upload your proof of payment (if not done)</li>
+                <li>Log in and complete your profile</li>
+                <li>Upload required documents</li>
+                <li>Review school calendar and events</li>
               </ol>
               
-              <p>If you have any questions, please don't hesitate to contact us.</p>
-              
               <p>Welcome to the Young Eagles family!</p>
-              
-              <div class="footer">
-                <p>Young Eagles Preschool<br>
-                📧 admin@youngeagles.org.za | 📞 +27 XX XXX XXXX</p>
-              </div>
+            </div>
+            
+            <div class="footer">
+              <p><strong>Young Eagles Preschool</strong><br>
+              📧 admin@youngeagles.org.za | 📞 +27 XX XXX XXXX</p>
             </div>
           </div>
         </body>
