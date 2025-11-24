@@ -162,7 +162,6 @@ export default function RegisterChildPage() {
     setSubmitting(true);
 
     try {
-      // Proactive duplicate check: query for existing pending requests
       // Normalize names: trim and collapse inner spaces
       const normalizedFirst = firstName.trim().replace(/\s+/g, ' ');
       const normalizedLast = lastName.trim().replace(/\s+/g, ' ');
@@ -170,43 +169,98 @@ export default function RegisterChildPage() {
         ? manualSchoolName.trim() 
         : (organizations.find(o => o.id === selectedOrgId)?.name || 'this school');
 
-      console.log('[RegisterChild] Checking for duplicate pending requests...');
-      
-      // Build duplicate check query
-      let duplicateQuery = supabase
-        .from('registration_requests')
+      // Check if selected school is Community School
+      const isCommunitySchool = !schoolNotListed && selectedOrgId && 
+        selectedOrgName.toLowerCase().includes('community school');
+
+      console.log('[RegisterChild] School type:', { isCommunitySchool, selectedOrgName });
+
+      // Check for duplicate students (in students table, not requests)
+      const { data: existingStudents, error: dupCheckError } = await supabase
+        .from('students')
         .select('id')
         .eq('parent_id', userId)
-        .eq('status', 'pending')
-        .ilike('child_first_name', normalizedFirst)
-        .ilike('child_last_name', normalizedLast);
-      
-      // Add preschool_id filter only if a school is selected from the list
-      if (!schoolNotListed && selectedOrgId) {
-        duplicateQuery = duplicateQuery.eq('preschool_id', selectedOrgId);
-      }
-      
-      const { data: existingRequests, error: checkError } = await duplicateQuery;
+        .ilike('first_name', normalizedFirst)
+        .ilike('last_name', normalizedLast);
 
-      if (checkError) {
-        // Log error but continue - DB uniqueness constraint is our fallback
-        console.error('[RegisterChild] Duplicate check query failed:', checkError);
-      } else if (existingRequests && existingRequests.length > 0) {
-        // Found duplicate - block submission
-        alert(`You already have a pending registration request for ${normalizedFirst} ${normalizedLast} at ${selectedOrgName}.\n\nPlease wait for the school to review your existing request.`);
+      if (dupCheckError) {
+        console.error('[RegisterChild] Duplicate check failed:', dupCheckError);
+      } else if (existingStudents && existingStudents.length > 0) {
+        alert(`${normalizedFirst} ${normalizedLast} is already registered in your account.`);
         setSubmitting(false);
         return;
       }
 
-      // Note: We use profiles table directly (users table is deprecated)
-      console.log('[RegisterChild] Using auth user ID directly (profiles-first architecture):', userId);
+      // Calculate grade from date of birth
+      const dob = new Date(dateOfBirth);
+      const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      let autoGrade = gradeLevel || 'Not specified';
+      
+      if (!gradeLevel) {
+        // Auto-assign grade based on age
+        if (age < 5) autoGrade = 'Pre-K';
+        else if (age === 5) autoGrade = 'Grade R';
+        else if (age >= 6 && age <= 18) autoGrade = `Grade ${age - 5}`;
+      }
 
+      // For Community School: AUTO-APPROVE and create student directly
+      if (isCommunitySchool) {
+        console.log('[RegisterChild] Community School detected - auto-approving');
+
+        // Update parent's preschool_id if not set
+        if (!preschoolId) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ preschool_id: selectedOrgId })
+            .eq('id', userId);
+          
+          if (updateError) {
+            console.error('❌ Failed to update parent preschool_id:', updateError);
+          }
+        }
+
+        // Create student directly (auto-approved)
+        const studentPayload = {
+          first_name: normalizedFirst,
+          last_name: normalizedLast,
+          date_of_birth: dateOfBirth,
+          gender: gender || null,
+          grade: autoGrade,
+          parent_id: userId,
+          preschool_id: selectedOrgId,
+          dietary_requirements: dietaryRequirements || null,
+          medical_info: medicalInfo || null,
+          special_needs: specialNeeds || null,
+          emergency_contact_name: emergencyContactName || null,
+          emergency_contact_phone: emergencyContactPhone || null,
+          notes: notes || null,
+          is_active: true,
+          enrollment_date: new Date().toISOString(),
+        };
+
+        const { error: studentError } = await supabase
+          .from('students')
+          .insert(studentPayload);
+
+        if (studentError) {
+          console.error('❌ Failed to create student:', studentError);
+          throw studentError;
+        }
+
+        alert(`🎉 Welcome to EduDashPro Community School!\n\n✅ ${normalizedFirst} ${normalizedLast} has been added to your account.\n\n🤖 You now have access to:\n• Dash Chat (10 messages/day)\n• Robotics Lab\n• Digital Learning Content\n• Exam Prep (Grade 4+)`);
+        router.push('/dashboard/parent');
+        return;
+      }
+
+      // For regular schools: use approval workflow
+      console.log('[RegisterChild] Regular school - submitting for approval');
+      
       const relationshipNote = emergencyRelation ? `[EmergencyRelationship: ${emergencyRelation.trim()}]` : '';
-      const gradeNote = gradeLevel ? `[Grade: ${gradeLevel.trim()}]` : '';
+      const gradeNote = autoGrade ? `[Grade: ${autoGrade}]` : '';
       const schoolNote = schoolNotListed ? `[School: ${manualSchoolName.trim()}]` : '';
       const combinedNotes = ([relationshipNote, gradeNote, schoolNote].filter(Boolean).join(' ') + (notes ? ` ${notes}` : '')).trim();
 
-      const payload = {
+      const requestPayload = {
         child_first_name: normalizedFirst,
         child_last_name: normalizedLast,
         child_birth_date: dateOfBirth,
@@ -217,16 +271,13 @@ export default function RegisterChildPage() {
         emergency_contact_name: emergencyContactName || null,
         emergency_contact_phone: emergencyContactPhone || null,
         notes: combinedNotes || null,
-        parent_id: userId, // Use auth.uid() directly (references profiles.id)
-        preschool_id: schoolNotListed ? null : selectedOrgId, // Null if school not in system
+        parent_id: userId,
+        preschool_id: schoolNotListed ? null : selectedOrgId,
         status: 'pending',
       };
 
-      console.log('[RegisterChild] Submitting payload:', { ...payload, parent_id: userId });
-
-      // Update parent's preschool_id if not set AND school is from our list (not manual entry)
+      // Update parent's preschool_id if not set AND school is from our list
       if (!preschoolId && !schoolNotListed && selectedOrgId) {
-        console.log('✅ Setting parent preschool_id to:', selectedOrgId);
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ preschool_id: selectedOrgId })
@@ -234,12 +285,10 @@ export default function RegisterChildPage() {
         
         if (updateError) {
           console.error('❌ Failed to update parent preschool_id:', updateError);
-        } else {
-          console.log('✅ Parent preschool_id updated successfully');
         }
       }
 
-      const { error } = await supabase.from('registration_requests').insert(payload);
+      const { error } = await supabase.from('registration_requests').insert(requestPayload);
 
       if (error) {
         if (error.code === '23505' || error.message?.includes('duplicate')) {
