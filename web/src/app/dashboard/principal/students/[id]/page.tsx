@@ -335,4 +335,268 @@ export default function StudentDetailPage() {
                         gap: 6,
                         whiteSpace: 'nowrap'
                       }}
-                      title="Send pas
+                      title="Send password reset email to parent"
+                    >
+                      <KeyRound size={14} />
+                      {sendingPasswordReset ? 'Sending...' : 'Send Password Reset'}
+                    </button>
+                  </div>
+                </div>
+                {student.profiles.phone && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Phone</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Phone size={16} style={{ color: 'var(--muted)' }} />
+                      {student.profiles.phone}
+                    </div>
+                  </div>
+                )}
+                {student.registration_data?.guardian_id_number && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>ID Number</div>
+                    <div>{student.registration_data.guardian_id_number}</div>
+                  </div>
+                )}
+                {student.registration_data?.guardian_address && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Address</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <MapPin size={16} style={{ color: 'var(--muted)', marginTop: 2, flexShrink: 0 }} />
+                      <div>{student.registration_data.guardian_address}</div>
+                    </div>
+                  </div>
+                )}
+                {student.registration_data?.guardian_occupation && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Occupation</div>
+                    <div>{student.registration_data.guardian_occupation}</div>
+                  </div>
+                )}
+                {student.registration_data?.guardian_employer && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Employer</div>
+                    <div>{student.registration_data.guardian_employer}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Medical Information */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={20} />
+              Medical Information
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Allergies</div>
+                <div style={{ 
+                  padding: 12, 
+                  backgroundColor: student.allergies ? '#ef444420' : 'var(--surface)', 
+                  borderRadius: 8,
+                  color: student.allergies ? '#ef4444' : 'var(--muted)'
+                }}>
+                  {student.allergies || 'None reported'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Medical Notes</div>
+                <div style={{ 
+                  padding: 12, 
+                  backgroundColor: 'var(--surface)', 
+                  borderRadius: 8,
+                  minHeight: 60,
+                  color: student.medical_info ? 'inherit' : 'var(--muted)'
+                }}>
+                  {student.medical_info || 'No medical information provided'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Class Information */}
+          {student.classes && (
+            <div className="card">
+              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MapPin size={20} />
+                Class Assignment
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Class Name</div>
+                  <div style={{ fontWeight: 600 }}>{student.classes.name}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Age Group</div>
+                  <div>{student.classes.age_group}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Additional Registration Information */}
+          {student.registration_data && (
+            <>
+              {(student.registration_data.preferred_class || student.registration_data.preferred_start_date || student.registration_data.how_did_you_hear) && (
+                <div className="card">
+                  <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText size={20} />
+                    Registration Details
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {student.registration_data.student_id_number && (
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Student ID Number</div>
+                        <div>{student.registration_data.student_id_number}</div>
+                      </div>
+                    )}
+                    {student.registration_data.preferred_class && (
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Preferred Class</div>
+                        <div>{student.registration_data.preferred_class}</div>
+                      </div>
+                    )}
+                    {student.registration_data.preferred_start_date && (
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Preferred Start Date</div>
+                        <div>{new Date(student.registration_data.preferred_start_date).toLocaleDateString()}</div>
+                      </div>
+                    )}
+                    {student.registration_data.how_did_you_hear && (
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>How Did You Hear About Us</div>
+                        <div>{student.registration_data.how_did_you_hear}</div>
+                      </div>
+                    )}
+                    {student.registration_data.sibling_enrolled && (
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Sibling Information</div>
+                        <div style={{ 
+                          padding: 12, 
+                          backgroundColor: '#10b98120', 
+                          borderRadius: 8,
+                          color: '#10b981'
+                        }}>
+                          Has sibling enrolled
+                          {student.registration_data.sibling_student_id && ` (ID: ${student.registration_data.sibling_student_id})`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {student.registration_data.special_requests && (
+                <div className="card">
+                  <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText size={20} />
+                    Special Requests
+                  </h3>
+                  <div style={{ 
+                    padding: 12, 
+                    backgroundColor: 'var(--surface)', 
+                    borderRadius: 8,
+                    minHeight: 60
+                  }}>
+                    {student.registration_data.special_requests}
+                  </div>
+                </div>
+              )}
+
+              {student.registration_data.internal_notes && (
+                <div className="card">
+                  <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText size={20} />
+                    Internal Notes
+                  </h3>
+                  <div style={{ 
+                    padding: 12, 
+                    backgroundColor: '#f59e0b20', 
+                    borderRadius: 8,
+                    minHeight: 60,
+                    border: '1px solid #f59e0b40'
+                  }}>
+                    {student.registration_data.internal_notes}
+                  </div>
+                </div>
+              )}
+
+              {student.registration_data.documents && student.registration_data.documents.length > 0 && (
+                <div className="card">
+                  <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText size={20} />
+                    Uploaded Documents ({student.registration_data.documents.length})
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {student.registration_data.documents.map((doc: any, index: number) => (
+                      <div 
+                        key={index}
+                        style={{ 
+                          padding: 12,
+                          backgroundColor: 'var(--surface)',
+                          borderRadius: 8,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{doc.name || `Document ${index + 1}`}</div>
+                          {doc.type && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{doc.type}</div>}
+                        </div>
+                        {doc.url && (
+                          <a 
+                            href={doc.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="btn btnSecondary"
+                            style={{ fontSize: 12, padding: '6px 12px' }}
+                          >
+                            View
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="card" style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            <button 
+              className="btn btnSecondary"
+              onClick={() => router.push(`/dashboard/principal/students/${student.id}/edit`)}
+            >
+              Edit Student
+            </button>
+            <button 
+              className="btn"
+              style={{ 
+                backgroundColor: student.status === 'active' ? '#f59e0b' : '#10b981',
+                color: 'white'
+              }}
+              onClick={async () => {
+                const newStatus = student.status === 'active' ? 'inactive' : 'active';
+                const { error } = await supabase
+                  .from('students')
+                  .update({ status: newStatus })
+                  .eq('id', student.id);
+                
+                if (!error) {
+                  setStudent({ ...student, status: newStatus });
+                }
+              }}
+            >
+              {student.status === 'active' ? 'Deactivate' : 'Activate'} Student
+            </button>
+          </div>
+        </div>
+      </div>
+    </PrincipalShell>
+  );
+}
