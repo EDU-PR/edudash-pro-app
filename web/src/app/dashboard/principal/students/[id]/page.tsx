@@ -32,6 +32,21 @@ interface StudentDetail {
     email: string;
     phone: string | null;
   };
+  registration_data?: {
+    guardian_address: string | null;
+    guardian_occupation: string | null;
+    guardian_employer: string | null;
+    guardian_id_number: string | null;
+    student_id_number: string | null;
+    preferred_class: string | null;
+    preferred_start_date: string | null;
+    how_did_you_hear: string | null;
+    special_requests: string | null;
+    sibling_enrolled: boolean;
+    sibling_student_id: string | null;
+    documents: any[];
+    internal_notes: string | null;
+  };
 }
 
 export default function StudentDetailPage() {
@@ -99,10 +114,26 @@ export default function StudentDetailPage() {
           return;
         }
 
+        // Fetch registration data
+        const { data: regData, error: regError } = await supabase
+          .from('registration_requests')
+          .select('*')
+          .eq('id', studentId)
+          .maybeSingle();
+
+        if (regError) {
+          console.error('Error loading registration data:', regError);
+        }
+
         console.log('[Student Page] Loaded student data:', data);
+        console.log('[Student Page] Registration data:', regData);
         console.log('[Student Page] Has profiles?', !!data?.profiles);
         console.log('[Student Page] Profile data:', data?.profiles);
-        setStudent(data);
+        
+        setStudent({
+          ...data,
+          registration_data: regData || undefined
+        });
       } catch (error) {
         console.error('Error loading student:', error);
         setStudent(null);
@@ -304,112 +335,4 @@ export default function StudentDetailPage() {
                         gap: 6,
                         whiteSpace: 'nowrap'
                       }}
-                      title="Send password reset email to parent"
-                    >
-                      <KeyRound size={14} />
-                      {sendingPasswordReset ? 'Sending...' : 'Send Password Reset'}
-                    </button>
-                  </div>
-                </div>
-                {student.profiles.phone && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Phone</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Phone size={16} style={{ color: 'var(--muted)' }} />
-                      {student.profiles.phone}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Medical Information */}
-          <div className="card">
-            <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={20} />
-              Medical Information
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Allergies</div>
-                <div style={{ 
-                  padding: 12, 
-                  backgroundColor: student.allergies ? '#ef444420' : 'var(--surface)', 
-                  borderRadius: 8,
-                  color: student.allergies ? '#ef4444' : 'var(--muted)'
-                }}>
-                  {student.allergies || 'None reported'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Medical Notes</div>
-                <div style={{ 
-                  padding: 12, 
-                  backgroundColor: 'var(--surface)', 
-                  borderRadius: 8,
-                  minHeight: 60,
-                  color: student.medical_info ? 'inherit' : 'var(--muted)'
-                }}>
-                  {student.medical_info || 'No medical information provided'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Class Information */}
-          {student.classes && (
-            <div className="card">
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MapPin size={20} />
-                Class Assignment
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Class Name</div>
-                  <div style={{ fontWeight: 600 }}>{student.classes.name}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Age Group</div>
-                  <div>{student.classes.age_group}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="card" style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button 
-              className="btn btnSecondary"
-              onClick={() => router.push(`/dashboard/principal/students/${student.id}/edit`)}
-            >
-              Edit Student
-            </button>
-            <button 
-              className="btn"
-              style={{ 
-                backgroundColor: student.status === 'active' ? '#f59e0b' : '#10b981',
-                color: 'white'
-              }}
-              onClick={async () => {
-                const newStatus = student.status === 'active' ? 'inactive' : 'active';
-                const { error } = await supabase
-                  .from('students')
-                  .update({ status: newStatus })
-                  .eq('id', student.id);
-                
-                if (!error) {
-                  setStudent({ ...student, status: newStatus });
-                }
-              }}
-            >
-              {student.status === 'active' ? 'Deactivate' : 'Activate'} Student
-            </button>
-          </div>
-        </div>
-      </div>
-    </PrincipalShell>
-  );
-}
+                      title="Send pas
