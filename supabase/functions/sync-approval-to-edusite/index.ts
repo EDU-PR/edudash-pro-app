@@ -30,10 +30,9 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
       return;
     }
 
-    // Create parent user account with temporary password
-    // Generate a strong password: 8 random chars + Aa1! for complexity
-    const randomChars = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
-    const tempPassword = randomChars + 'Aa1!';
+    // Create parent user account
+    // Note: User will set their own password via reset link
+    const tempPassword = crypto.randomUUID(); // Temporary, user will reset
     
     const { data: newUser, error: createError } = await edusiteClient.auth.admin.createUser({
       email: registration.guardian_email,
@@ -63,99 +62,182 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body { 
-              font-family: Arial, sans-serif; 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
               line-height: 1.6; 
-              color: #333; 
+              color: #1a1a1a; 
               margin: 0; 
               padding: 0; 
-              background-color: #f5f5f5; 
+              background-color: #f4f4f5; 
             }
-            .email-wrapper { 
+            .email-container { 
               max-width: 600px; 
-              margin: 20px auto; 
-              background: white; 
+              margin: 40px auto; 
+              background: #ffffff; 
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
             .header { 
               background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-              color: white; 
-              padding: 30px 20px; 
+              padding: 40px 30px; 
               text-align: center; 
             }
             .header h1 { 
+              margin: 0 0 10px 0; 
+              font-size: 28px; 
+              font-weight: 600;
+              color: #ffffff;
+              letter-spacing: -0.5px;
+            }
+            .header p { 
               margin: 0; 
-              font-size: 24px; 
+              font-size: 16px;
+              color: rgba(255,255,255,0.9);
             }
             .content { 
-              padding: 30px 20px; 
+              padding: 40px 30px; 
             }
-            .info-box { 
-              background: #f9f9f9; 
+            .content p {
+              margin: 0 0 16px 0;
+              font-size: 16px;
+              line-height: 1.7;
+            }
+            .highlight-box { 
+              background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
               border-left: 4px solid #667eea; 
-              padding: 15px; 
-              margin: 20px 0; 
+              padding: 24px; 
+              margin: 28px 0;
+              border-radius: 4px;
             }
-            .button { 
+            .highlight-box p {
+              margin: 0 0 8px 0;
+              font-size: 15px;
+            }
+            .highlight-box p:last-child {
+              margin: 0;
+            }
+            .reference-number {
+              font-family: 'Courier New', monospace;
+              font-size: 13px;
+              color: #667eea;
+              background: #ffffff;
+              padding: 8px 12px;
+              border-radius: 4px;
+              display: inline-block;
+              margin-top: 4px;
+            }
+            .cta-button { 
               display: inline-block; 
-              background: #667eea; 
-              color: white; 
-              padding: 12px 30px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: #ffffff !important; 
+              padding: 14px 32px; 
               text-decoration: none; 
-              border-radius: 5px; 
-              margin: 10px 5px; 
+              border-radius: 6px; 
+              font-weight: 600;
+              font-size: 16px;
+              margin: 24px 0;
+              box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+              transition: all 0.3s ease;
             }
-            .button-green { 
-              background: #10b981; 
+            .cta-section {
+              text-align: center;
+              margin: 32px 0;
+            }
+            .divider {
+              height: 1px;
+              background: linear-gradient(to right, transparent, #e5e7eb, transparent);
+              margin: 32px 0;
+            }
+            .next-steps {
+              background: #fafafa;
+              padding: 24px;
+              border-radius: 8px;
+              margin: 24px 0;
+            }
+            .next-steps h3 {
+              margin: 0 0 16px 0;
+              font-size: 18px;
+              color: #1a1a1a;
+              font-weight: 600;
+            }
+            .next-steps ol {
+              margin: 0;
+              padding-left: 20px;
+            }
+            .next-steps li {
+              margin-bottom: 12px;
+              font-size: 15px;
+              color: #4a5568;
+            }
+            .next-steps li:last-child {
+              margin-bottom: 0;
             }
             .footer { 
+              background: #fafafa;
               text-align: center; 
-              padding: 20px; 
-              color: #666; 
-              font-size: 12px; 
-              border-top: 1px solid #eee; 
+              padding: 32px 30px; 
+              border-top: 1px solid #e5e7eb;
+            }
+            .footer p {
+              margin: 0;
+              font-size: 14px;
+              color: #6b7280;
+              line-height: 1.6;
+            }
+            .footer strong {
+              color: #1a1a1a;
+              display: block;
+              margin-bottom: 8px;
+              font-size: 16px;
             }
           </style>
         </head>
         <body>
-          <div class="email-wrapper">
+          <div class="email-container">
             <div class="header">
               <h1>🎉 Registration Approved!</h1>
-              <p style="margin: 10px 0 0 0;">Young Eagles Preschool</p>
+              <p>Young Eagles Preschool</p>
             </div>
             
             <div class="content">
               <p>Dear <strong>${registration.guardian_name}</strong>,</p>
               
-              <p>Great news! Your child <strong>${registration.student_first_name} ${registration.student_last_name}</strong> has been approved for registration.</p>
+              <p>We are delighted to inform you that <strong>${registration.student_first_name} ${registration.student_last_name}</strong>'s registration has been approved! Welcome to the Young Eagles Preschool family.</p>
               
-              <div class="info-box">
-                <p style="margin: 0 0 10px 0;"><strong>📋 Reference Number:</strong> ${registration.application_number || registration.id}</p>
-                <p style="margin: 0;"><strong>📧 Email:</strong> ${registration.guardian_email}</p>
-                <p style="margin: 10px 0 0 0;"><strong>🔑 Temporary Password:</strong> <code style="background: #e0e0e0; padding: 5px 10px; border-radius: 3px; font-size: 16px;">${tempPassword}</code></p>
+              <div class="highlight-box">
+                <p><strong>📋 Your Reference Number</strong></p>
+                <div class="reference-number">${registration.application_number || registration.id}</div>
+                <p style="margin-top: 16px;"><strong>📧 Registered Email</strong></p>
+                <p style="margin: 4px 0 0 0; color: #667eea;">${registration.guardian_email}</p>
               </div>
               
-              <p><strong>⚠️ Important:</strong> Please change your password after your first login.</p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="https://youngeagles.org.za/dashboard" class="button">Login to Dashboard</a>
-                <a href="https://edusitepro.edudashpro.org.za/upload-payment?ref=${registration.application_number || registration.id}" class="button button-green">Upload Payment</a>
+              <div class="cta-section">
+                <a href="https://edudashpro.org.za/reset-password" class="cta-button">Set Up Your Account</a>
+                <p style="margin: 12px 0 0 0; font-size: 14px; color: #6b7280;">Click above to create your password and access your dashboard</p>
               </div>
               
-              <p><strong>Next Steps:</strong></p>
-              <ol>
-                <li>Upload your proof of payment (if not done)</li>
-                <li>Log in and complete your profile</li>
-                <li>Upload required documents</li>
-                <li>Review school calendar and events</li>
-              </ol>
+              <div class="divider"></div>
               
-              <p>Welcome to the Young Eagles family!</p>
+              <div class="next-steps">
+                <h3>📝 Next Steps</h3>
+                <ol>
+                  <li>Set up your account password using the button above</li>
+                  <li>Log in to your parent dashboard</li>
+                  <li>Complete your child's profile information</li>
+                  <li>Upload any remaining required documents</li>
+                  <li>Review the school calendar and upcoming events</li>
+                </ol>
+              </div>
+              
+              <p style="margin-top: 28px;">If you have any questions or need assistance, please don't hesitate to contact us. We look forward to having ${registration.student_first_name} join our learning community!</p>
+              
+              <p style="margin-top: 24px; font-size: 15px;">Warm regards,<br><strong>The Young Eagles Team</strong></p>
             </div>
             
             <div class="footer">
-              <p><strong>Young Eagles Preschool</strong><br>
-              📧 admin@youngeagles.org.za | 📞 +27 XX XXX XXXX</p>
+              <p><strong>Young Eagles Preschool</strong></p>
+              <p>📧 admin@youngeagles.org.za<br>📞 +27 XX XXX XXXX<br>🌐 youngeagles.org.za</p>
             </div>
           </div>
         </body>
