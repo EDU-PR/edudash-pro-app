@@ -11,11 +11,10 @@ import { Ticket, Plus, Trash2, Edit2, Save, X, TrendingUp, Users, AlertCircle } 
 interface Campaign {
   id: string;
   organization_id: string;
-  campaign_name: string;
-  coupon_code: string;
-  discount_type: 'percentage' | 'fixed';
-  discount_percentage: number | null;
-  discount_amount: number | null;
+  name: string;
+  promo_code: string;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number | null;
   max_redemptions: number;
   current_redemptions: number;
   start_date: string;
@@ -42,11 +41,10 @@ export default function CampaignsPage() {
   const [editing, setEditing] = useState<EditingCampaign | null>(null);
   const [creating, setCreating] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
-    campaign_name: '',
-    coupon_code: '',
-    discount_type: 'percentage' as 'percentage' | 'fixed',
-    discount_percentage: 50,
-    discount_amount: 200,
+    name: '',
+    promo_code: '',
+    discount_type: 'percentage' as 'percentage' | 'fixed_amount',
+    discount_value: 20,
     max_redemptions: 50,
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -108,11 +106,10 @@ export default function CampaignsPage() {
         .from('marketing_campaigns')
         .insert({
           organization_id: profile.organizationId,
-          campaign_name: newCampaign.campaign_name,
-          coupon_code: newCampaign.coupon_code.toUpperCase(),
+          name: newCampaign.name,
+          promo_code: newCampaign.promo_code.toUpperCase(),
           discount_type: newCampaign.discount_type,
-          discount_percentage: newCampaign.discount_type === 'percentage' ? newCampaign.discount_percentage : null,
-          discount_amount: newCampaign.discount_type === 'fixed' ? newCampaign.discount_amount : null,
+          discount_value: newCampaign.discount_value,
           max_redemptions: newCampaign.max_redemptions,
           current_redemptions: 0,
           start_date: newCampaign.start_date,
@@ -125,11 +122,10 @@ export default function CampaignsPage() {
       alert('Campaign created successfully!');
       setCreating(false);
       setNewCampaign({
-        campaign_name: '',
-        coupon_code: '',
+        name: '',
+        promo_code: '',
         discount_type: 'percentage',
-        discount_percentage: 50,
-        discount_amount: 200,
+        discount_value: 20,
         max_redemptions: 50,
         start_date: new Date().toISOString().split('T')[0],
         end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -272,8 +268,8 @@ export default function CampaignsPage() {
                 <input
                   type="text"
                   className="input"
-                  value={newCampaign.campaign_name}
-                  onChange={(e) => setNewCampaign({ ...newCampaign, campaign_name: e.target.value })}
+                  value={newCampaign.name}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
                   placeholder="Early Bird 2026"
                 />
               </div>
@@ -283,8 +279,8 @@ export default function CampaignsPage() {
                 <input
                   type="text"
                   className="input"
-                  value={newCampaign.coupon_code}
-                  onChange={(e) => setNewCampaign({ ...newCampaign, coupon_code: e.target.value.toUpperCase() })}
+                  value={newCampaign.promo_code}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, promo_code: e.target.value.toUpperCase() })}
                   placeholder="WELCOME2026"
                 />
               </div>
@@ -297,7 +293,7 @@ export default function CampaignsPage() {
                   onChange={(e) => setNewCampaign({ ...newCampaign, discount_type: e.target.value as 'percentage' | 'fixed' })}
                 >
                   <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed Amount</option>
+                  <option value="fixed_amount">Fixed Amount</option>
                 </select>
               </div>
 
@@ -307,8 +303,8 @@ export default function CampaignsPage() {
                   <input
                     type="number"
                     className="input"
-                    value={newCampaign.discount_percentage}
-                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_percentage: Number(e.target.value) })}
+                    value={newCampaign.discount_value}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_value: Number(e.target.value) })}
                     min="1"
                     max="100"
                   />
@@ -319,8 +315,8 @@ export default function CampaignsPage() {
                   <input
                     type="number"
                     className="input"
-                    value={newCampaign.discount_amount}
-                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_amount: Number(e.target.value) })}
+                    value={newCampaign.discount_value}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, discount_value: Number(e.target.value) })}
                     min="1"
                   />
                 </div>
@@ -394,9 +390,9 @@ export default function CampaignsPage() {
                 <div key={campaign.id} className="card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16 }}>
                     <div>
-                      <h3 className="h3" style={{ marginBottom: 4 }}>{campaign.campaign_name}</h3>
+                      <h3 className="h3" style={{ marginBottom: 4 }}>{campaign.name}</h3>
                       <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-                        Code: <strong style={{ color: 'var(--primary)' }}>{campaign.coupon_code}</strong>
+                        Code: <strong style={{ color: 'var(--primary)' }}>{campaign.promo_code}</strong>
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -421,9 +417,9 @@ export default function CampaignsPage() {
                     <div>
                       <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Discount</p>
                       <p style={{ fontSize: 16, fontWeight: 600 }}>
-                        {campaign.discount_type === 'percentage'
-                          ? `${campaign.discount_percentage}%`
-                          : `R${campaign.discount_amount}`}
+                        Discount: {campaign.discount_type === 'percentage'
+                          ? `${campaign.discount_value}%`
+                          : `R${campaign.discount_value}`}
                       </p>
                     </div>
                     <div>
