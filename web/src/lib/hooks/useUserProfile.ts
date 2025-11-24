@@ -118,9 +118,9 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         console.log('🏘️ [useUserProfile] Displaying as: EduDash Pro Community (standalone user)');
       }
 
-      // Organization data (columns don't exist yet in schema)
-      const organizationId = undefined;
-      const organizationName = undefined;
+      // Organization data - use preschool as organization for principals/teachers
+      const organizationId = preschoolId; // Map preschool_id to organizationId
+      const organizationName = preschoolName;
 
       const profileObj = {
         id: userId,

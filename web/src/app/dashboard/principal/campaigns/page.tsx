@@ -43,6 +43,9 @@ export default function CampaignsPage() {
   const [newCampaign, setNewCampaign] = useState({
     name: '',
     promo_code: '',
+    campaign_type: 'early_bird' as 'early_bird' | 'sibling_discount' | 'referral_bonus' | 'seasonal_promo' | 'bundle_offer' | 'scholarship',
+    description: '',
+    terms_conditions: '',
     discount_type: 'percentage' as 'percentage' | 'fixed_amount',
     discount_value: 20,
     max_redemptions: 50,
@@ -108,6 +111,9 @@ export default function CampaignsPage() {
           organization_id: profile.organizationId,
           name: newCampaign.name,
           promo_code: newCampaign.promo_code.toUpperCase(),
+          campaign_type: newCampaign.campaign_type,
+          description: newCampaign.description,
+          terms_conditions: newCampaign.terms_conditions,
           discount_type: newCampaign.discount_type,
           discount_value: newCampaign.discount_value,
           max_redemptions: newCampaign.max_redemptions,
@@ -124,6 +130,9 @@ export default function CampaignsPage() {
       setNewCampaign({
         name: '',
         promo_code: '',
+        campaign_type: 'early_bird',
+        description: '',
+        terms_conditions: '',
         discount_type: 'percentage',
         discount_value: 20,
         max_redemptions: 50,
@@ -286,11 +295,27 @@ export default function CampaignsPage() {
               </div>
 
               <div>
+                <label className="label">Campaign Type</label>
+                <select
+                  className="input"
+                  value={newCampaign.campaign_type}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, campaign_type: e.target.value as any })}
+                >
+                  <option value="early_bird">Early Bird</option>
+                  <option value="sibling_discount">Sibling Discount</option>
+                  <option value="referral_bonus">Referral Bonus</option>
+                  <option value="seasonal_promo">Seasonal Promo</option>
+                  <option value="bundle_offer">Bundle Offer</option>
+                  <option value="scholarship">Scholarship</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="label">Discount Type</label>
                 <select
                   className="input"
                   value={newCampaign.discount_type}
-                  onChange={(e) => setNewCampaign({ ...newCampaign, discount_type: e.target.value as 'percentage' | 'fixed' })}
+                  onChange={(e) => setNewCampaign({ ...newCampaign, discount_type: e.target.value as 'percentage' | 'fixed_amount' })}
                 >
                   <option value="percentage">Percentage</option>
                   <option value="fixed_amount">Fixed Amount</option>
@@ -352,6 +377,30 @@ export default function CampaignsPage() {
                   onChange={(e) => setNewCampaign({ ...newCampaign, end_date: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Description</label>
+              <textarea
+                className="input"
+                value={newCampaign.description}
+                onChange={(e) => setNewCampaign({ ...newCampaign, description: e.target.value })}
+                placeholder="Short description of this campaign..."
+                rows={2}
+                style={{ resize: 'vertical', minHeight: '60px' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="label">Terms & Conditions</label>
+              <textarea
+                className="input"
+                value={newCampaign.terms_conditions}
+                onChange={(e) => setNewCampaign({ ...newCampaign, terms_conditions: e.target.value })}
+                placeholder="Terms and conditions for this offer..."
+                rows={3}
+                style={{ resize: 'vertical', minHeight: '80px' }}
+              />
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
