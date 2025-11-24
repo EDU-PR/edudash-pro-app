@@ -127,12 +127,26 @@ export default function ParentDashboard() {
     const age = Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
     return age;
   };
+
+  // Extract grade number from grade string (e.g., "Grade 4" -> 4)
+  const getGradeNumber = (gradeString?: string): number => {
+    if (!gradeString) return 0;
+    const match = gradeString.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+  };
   
   const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
+  const activeChildGrade = activeChild ? getGradeNumber(activeChild.grade) : 0;
   
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
   const hasSchoolAgeChildren = childrenCards.some(child => getChildAge(child.dateOfBirth) >= 6);
+  
+  // Grade 4+ gets exam features (with daily quota)
+  const isExamEligible = activeChildGrade >= 4;
+  
+  // All children get access to general features (Dash Chat, Robotics, etc) with quotas
+  const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
 
   return (
     <ParentShell
@@ -222,9 +236,14 @@ export default function ParentDashboard() {
           </CollapsibleSection>
         )}
 
-        {/* Quick Actions Grid - Only show if children have age */}
-        {childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
-          <QuickActionsGrid usageType={usageType} hasOrganization={hasOrganization} />
+        {/* Quick Actions Grid - Show if children exist with age */}
+        {hasAnyChild && (
+          <QuickActionsGrid 
+            usageType={usageType} 
+            hasOrganization={hasOrganization}
+            activeChildGrade={activeChildGrade}
+            isExamEligible={isExamEligible}
+          />
         )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}

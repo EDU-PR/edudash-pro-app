@@ -17,9 +17,11 @@ interface QuickAction {
 interface QuickActionsGridProps {
   usageType?: 'preschool' | 'k12_school' | 'homeschool' | 'aftercare' | 'supplemental' | 'exploring' | 'independent';
   hasOrganization: boolean;
+  activeChildGrade?: number;
+  isExamEligible?: boolean;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization }: QuickActionsGridProps) {
+export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false }: QuickActionsGridProps) {
   const router = useRouter();
 
   const getQuickActions = (): QuickAction[] => {
@@ -30,25 +32,40 @@ export function QuickActionsGrid({ usageType, hasOrganization }: QuickActionsGri
       { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#10b981' },
       { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#3b82f6' },
       { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
-      { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#10b981' },
+      ...(isExamEligible ? [
+        { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/generate-exam', color: '#10b981' },
+        { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
+      ] : []),
       { icon: DollarSign, label: 'Payments', href: '/dashboard/parent/payments', color: '#f59e0b' },
       { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
       { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
     ] : [];
 
-    // Independent parents - all usage types get same simple actions (existing pages only)
+    // Independent parents - grade-appropriate actions
     if (!hasOrganization) {
-      return [
+      const baseActions = [
         { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
         { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
         { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
-        { icon: FileCheck, label: 'View My Exams', href: '/dashboard/parent/my-exams', color: '#10b981' },
         { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#06b6d4' },
-        { icon: BookOpen, label: 'Lessons', href: '/dashboard/parent/lessons', color: '#10b981' },
-        { icon: FileText, label: 'Homework', href: '/dashboard/parent/homework', color: '#f59e0b' },
-        { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#06b6d4' },
-        { icon: Settings, label: 'Settings', href: '/dashboard/parent/settings', color: '#6366f1' },
       ];
+
+      // Grade 4+ gets exam features
+      if (isExamEligible) {
+        baseActions.push(
+          { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/generate-exam', color: '#10b981' },
+          { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' }
+        );
+      }
+
+      // All grades get these
+      baseActions.push(
+        { icon: BookOpen, label: 'Lessons', href: '/dashboard/parent/lessons', color: '#10b981' },
+        { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#06b6d4' },
+        { icon: Settings, label: 'Settings', href: '/dashboard/parent/settings', color: '#6366f1' }
+      );
+
+      return baseActions;
     }
     
     // Organization-linked parents (k12, preschool, aftercare)
