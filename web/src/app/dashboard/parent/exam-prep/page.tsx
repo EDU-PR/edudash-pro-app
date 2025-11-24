@@ -90,6 +90,7 @@ export default function ExamPrepPage() {
             <select
               value={selectedGrade}
               onChange={(e) => setSelectedGrade(e.target.value)}
+              className="select-input"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -97,7 +98,8 @@ export default function ExamPrepPage() {
                 border: '1px solid var(--border)',
                 background: 'var(--surface-1)',
                 color: 'var(--text-primary)',
-                fontSize: '14px'
+                fontSize: '14px',
+                cursor: 'pointer'
               }}
             >
               <option value="">Select Grade</option>
@@ -114,6 +116,7 @@ export default function ExamPrepPage() {
             <select
               value={selectedSubject}
               onChange={(e) => setSelectedSubject(e.target.value)}
+              className="select-input"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -121,7 +124,8 @@ export default function ExamPrepPage() {
                 border: '1px solid var(--border)',
                 background: 'var(--surface-1)',
                 color: 'var(--text-primary)',
-                fontSize: '14px'
+                fontSize: '14px',
+                cursor: 'pointer'
               }}
             >
               <option value="">Select Subject</option>
@@ -178,6 +182,32 @@ export default function ExamPrepPage() {
           </button>
         </div>
       </div>
+
+      <style jsx>{`
+        .select-input option {
+          background: var(--surface-1);
+          color: var(--text-primary);
+          padding: 8px;
+        }
+        
+        .select-input:focus option {
+          background: var(--surface-1);
+          color: var(--text-primary);
+        }
+        
+        .select-input::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        .select-input::-webkit-scrollbar-track {
+          background: var(--bg-secondary);
+        }
+        
+        .select-input::-webkit-scrollbar-thumb {
+          background: var(--border);
+          border-radius: 4px;
+        }
+      `}</style>
     </ParentShell>
   );
 }
