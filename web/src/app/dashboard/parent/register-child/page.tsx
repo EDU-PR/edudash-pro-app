@@ -22,12 +22,6 @@ export default function RegisterChildPage() {
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>('');
-  const [dietaryRequirements, setDietaryRequirements] = useState('');
-  const [medicalInfo, setMedicalInfo] = useState('');
-  const [specialNeeds, setSpecialNeeds] = useState('');
-  const [emergencyContactName, setEmergencyContactName] = useState('');
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
-  const [emergencyRelation, setEmergencyRelation] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [gradeLevel, setGradeLevel] = useState('');
@@ -228,11 +222,6 @@ export default function RegisterChildPage() {
           grade: autoGrade,
           parent_id: userId,
           preschool_id: selectedOrgId,
-          dietary_requirements: dietaryRequirements || null,
-          medical_info: medicalInfo || null,
-          special_needs: specialNeeds || null,
-          emergency_contact_name: emergencyContactName || null,
-          emergency_contact_phone: emergencyContactPhone || null,
           notes: notes || null,
           is_active: true,
           enrollment_date: new Date().toISOString(),
@@ -255,21 +244,15 @@ export default function RegisterChildPage() {
       // For regular schools: use approval workflow
       console.log('[RegisterChild] Regular school - submitting for approval');
       
-      const relationshipNote = emergencyRelation ? `[EmergencyRelationship: ${emergencyRelation.trim()}]` : '';
       const gradeNote = autoGrade ? `[Grade: ${autoGrade}]` : '';
       const schoolNote = schoolNotListed ? `[School: ${manualSchoolName.trim()}]` : '';
-      const combinedNotes = ([relationshipNote, gradeNote, schoolNote].filter(Boolean).join(' ') + (notes ? ` ${notes}` : '')).trim();
+      const combinedNotes = ([gradeNote, schoolNote].filter(Boolean).join(' ') + (notes ? ` ${notes}` : '')).trim();
 
       const requestPayload = {
         child_first_name: normalizedFirst,
         child_last_name: normalizedLast,
         child_birth_date: dateOfBirth,
         child_gender: gender || null,
-        dietary_requirements: dietaryRequirements || null,
-        medical_info: medicalInfo || null,
-        special_needs: specialNeeds || null,
-        emergency_contact_name: emergencyContactName || null,
-        emergency_contact_phone: emergencyContactPhone || null,
         notes: combinedNotes || null,
         parent_id: userId,
         preschool_id: schoolNotListed ? null : selectedOrgId,
@@ -321,7 +304,7 @@ export default function RegisterChildPage() {
   }
 
   return (
-    <ParentShell tenantSlug={slug} userEmail={userEmail}>
+    <ParentShell tenantSlug={slug} userEmail={userEmail} hideSidebar={true}>
       <div className="container" style={{ maxWidth: 800, margin: '0 auto' }}>
         <div className="section">
           <button
@@ -511,96 +494,9 @@ export default function RegisterChildPage() {
                 </div>
               </div>
 
-              {/* Health & Special Needs */}
-              <div style={{ marginTop: 'var(--space-5)' }}>
-                <h3 className="sectionTitle">Health & Special Needs (Optional)</h3>
-
-                <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Dietary Requirements</label>
-                    <input
-                      type="text"
-                      value={dietaryRequirements}
-                      onChange={(e) => setDietaryRequirements(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%' }}
-                      placeholder="e.g. Vegetarian, Halal, Allergies"
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Medical Information</label>
-                    <textarea
-                      value={medicalInfo}
-                      onChange={(e) => setMedicalInfo(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%', minHeight: 80, paddingTop: 10, fontFamily: 'inherit', resize: 'vertical' }}
-                      rows={3}
-                      placeholder="e.g. Allergies, medications, conditions"
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Special Needs</label>
-                    <textarea
-                      value={specialNeeds}
-                      onChange={(e) => setSpecialNeeds(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%', minHeight: 80, paddingTop: 10, fontFamily: 'inherit', resize: 'vertical' }}
-                      rows={3}
-                      placeholder="Any special educational needs or accommodations"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Emergency Contact */}
-              <div style={{ marginTop: 'var(--space-5)' }}>
-                <h3 className="sectionTitle">Emergency Contact (Optional)</h3>
-
-                <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Emergency Contact Name</label>
-                    <input
-                      type="text"
-                      value={emergencyContactName}
-                      onChange={(e) => setEmergencyContactName(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%' }}
-                      placeholder="e.g. Sipho Mthethwa"
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Emergency Contact Phone</label>
-                    <input
-                      type="tel"
-                      value={emergencyContactPhone}
-                      onChange={(e) => setEmergencyContactPhone(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%' }}
-                      placeholder="+27 XX XXX XXXX"
-                    />
-                    <p className="muted" style={{ fontSize: 11, marginTop: 'var(--space-1)' }}>Format: +27 XX XXX XXXX or 0XX XXX XXXX</p>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Relationship to Child</label>
-                    <input
-                      type="text"
-                      value={emergencyRelation}
-                      onChange={(e) => setEmergencyRelation(e.target.value)}
-                      className="formInput"
-                      style={{ width: '100%' }}
-                      placeholder="e.g. Mother, Father, Aunt"
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* Additional Notes */}
               <div style={{ marginTop: 'var(--space-5)' }}>
-                <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Additional Notes</label>
+                <label style={{ display: 'block', marginBottom: 'var(--space-2)', fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Additional Notes (Optional)</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

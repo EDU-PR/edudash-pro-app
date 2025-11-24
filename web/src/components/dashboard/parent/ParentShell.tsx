@@ -26,10 +26,11 @@ interface ParentShellProps {
   preschoolName?: string;
   unreadCount?: number;
   hasOrganization?: boolean;
+  hideSidebar?: boolean;
   children: React.ReactNode;
 }
 
-export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children }: ParentShellProps) {
+export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, hideSidebar = false, children }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -38,6 +39,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [hasOrganization, setHasOrganization] = useState(hasOrganizationProp || false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Check if we should show sidebar (only on dashboard home, unless hideSidebar is true)
+  const showSidebar = !hideSidebar && pathname === '/dashboard/parent';
 
   // Get user ID
   useEffect(() => {
@@ -207,36 +211,38 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         </div>
       </header>
 
-      <div className="frame">
-        <aside className="sidenav sticky" aria-label="Sidebar">
-          <div className="sidenavCol">
-            <nav className="nav">
-              {nav.map((it) => {
-                const Icon = it.icon as any;
-                const active = pathname === it.href || pathname?.startsWith(it.href + '/');
-                return (
-                  <Link key={it.href} href={it.href} className={`navItem ${active ? 'navItemActive' : ''}`} aria-current={active ? 'page' : undefined}>
-                    <Icon className="navIcon" />
-                    <span>{it.label}</span>
-                    {typeof it.badge === 'number' && it.badge > 0 && (
-                      <span className="navItemBadge badgeNumber">{it.badge}</span>
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="sidenavFooter">
-              <button
-                className="navItem"
-                onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
-              >
-                <LogOut className="navIcon" />
-                <span>Sign out</span>
-              </button>
-              <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
+      <div className={`frame ${!showSidebar ? 'frame-no-sidebar' : ''}`}>
+        {showSidebar && (
+          <aside className="sidenav sticky" aria-label="Sidebar">
+            <div className="sidenavCol">
+              <nav className="nav">
+                {nav.map((it) => {
+                  const Icon = it.icon as any;
+                  const active = pathname === it.href || pathname?.startsWith(it.href + '/');
+                  return (
+                    <Link key={it.href} href={it.href} className={`navItem ${active ? 'navItemActive' : ''}`} aria-current={active ? 'page' : undefined}>
+                      <Icon className="navIcon" />
+                      <span>{it.label}</span>
+                      {typeof it.badge === 'number' && it.badge > 0 && (
+                        <span className="navItemBadge badgeNumber">{it.badge}</span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <div className="sidenavFooter">
+                <button
+                  className="navItem"
+                  onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+                >
+                  <LogOut className="navIcon" />
+                  <span>Sign out</span>
+                </button>
+                <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        )}
 
         <main className="content">
           {children}
@@ -345,6 +351,12 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
             display: block !important;
           }
         }
+        
+        /* Full width layout when sidebar is hidden */
+        .frame-no-sidebar {
+          grid-template-columns: 1fr !important;
+        }
+        
         @keyframes slideInLeft {
           from {
             transform: translateX(-100%);
