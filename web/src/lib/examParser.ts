@@ -25,6 +25,8 @@ export interface ParsedExam {
   title: string;
   grade?: string;
   subject?: string;
+  duration?: string;
+  schoolName?: string;
   instructions: string[];
   sections: {
     title: string;

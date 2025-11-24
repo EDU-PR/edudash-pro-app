@@ -53,7 +53,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
       // Grade 4+ gets exam features
       if (isExamEligible) {
         baseActions.push(
-          { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/generate-exam', color: '#10b981' },
+          { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/exam-prep', color: '#10b981' },
           { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' }
         );
       }

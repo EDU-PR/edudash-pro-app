@@ -249,8 +249,8 @@ export default function RegisterChildPage() {
       const combinedNotes = ([gradeNote, schoolNote].filter(Boolean).join(' ') + (notes ? ` ${notes}` : '')).trim();
 
       const requestPayload = {
-        child_first_name: normalizedFirst,
-        child_last_name: normalizedLast,
+        student_first_name: normalizedFirst,
+        student_last_name: normalizedLast,
         child_birth_date: dateOfBirth,
         child_gender: gender || null,
         notes: combinedNotes || null,
