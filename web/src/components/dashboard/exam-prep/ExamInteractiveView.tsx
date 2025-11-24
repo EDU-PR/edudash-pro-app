@@ -704,10 +704,10 @@ Every question you attempt is helping you learn and grow. Keep up the great work
                 <span>{exam.duration}</span>
               </div>
             )}
-            {(exam.totalMarks || exam.marks) && (
+            {exam.totalMarks && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontWeight: 600 }}>Total Marks:</span>
-                <span>{exam.totalMarks || exam.marks}</span>
+                <span>{exam.totalMarks}</span>
               </div>
             )}
           </div>
@@ -767,7 +767,7 @@ Every question you attempt is helping you learn and grow. Keep up the great work
                     grade: exam.grade || 'N/A',
                     subject: exam.subject || 'N/A',
                     duration: exam.duration || 'N/A',
-                    totalMarks: exam.totalMarks || exam.marks || 0,
+                    totalMarks: exam.totalMarks || 0,
                     instructions: exam.instructions || [],
                     sections: exam.sections || []
                   };
