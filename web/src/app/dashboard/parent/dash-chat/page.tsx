@@ -11,6 +11,16 @@ import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher'
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
 
+// Format school name for display
+function formatSchoolName(slug: string | null): string {
+  if (!slug) return 'EduDash Pro';
+  if (slug === 'edudash-pro-community-school') return 'EduDash Pro Community School';
+  return slug
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export default function DashChatPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -62,7 +72,7 @@ export default function DashChatPage() {
   };
 
   return (
-    <ParentShell tenantSlug={slug} userEmail={email}>
+    <ParentShell tenantSlug={formatSchoolName(slug)} userEmail={email}>
       {/* Full viewport height container - No scroll */}
       <div
         className="flex flex-col bg-gray-950 overflow-hidden relative"

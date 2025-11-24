@@ -51,7 +51,10 @@ export function ChatInput({
 
   const handleSend = async () => {
     if (input.trim() || selectedImagesCount > 0) {
-      await onSend();
+      // Clear input immediately for better UX
+      const textToSend = input;
+      setInput('');
+      await onSend(textToSend);
     }
   };
 

@@ -13,7 +13,6 @@ import remarkGfm from 'remark-gfm';
 import { ExamDiagram } from './ExamDiagram';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
-import { exportExamToPDF } from '@/lib/utils/pdf-export';
 
 // Helper component to render text with optional math support
 // Only uses KaTeX if the text contains actual math expressions
