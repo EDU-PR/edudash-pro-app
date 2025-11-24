@@ -220,13 +220,30 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
               <div class="divider"></div>
               
               <div class="next-steps">
-                <h3>📝 Next Steps</h3>
+                <h3>🔐 How to Set Up Your Password</h3>
                 <ol>
-                  <li>Set up your account password using the button above</li>
-                  <li>Log in to your parent dashboard</li>
+                  <li><strong>Click the "Set Up Your Account" button</strong> above (or visit https://edudashpro.org.za/reset-password)</li>
+                  <li><strong>Enter your email address:</strong> ${registration.guardian_email}</li>
+                  <li><strong>Click "Reset Password"</strong> - you will receive a password reset email</li>
+                  <li><strong>Open the password reset email</strong> and click the link inside</li>
+                  <li><strong>Create your new password</strong> (minimum 8 characters)</li>
+                  <li><strong>Log in to your dashboard</strong> at https://edudashpro.org.za</li>
+                </ol>
+                <p style="margin-top: 16px; padding: 12px; background: #fff3cd; border-radius: 4px; font-size: 14px; color: #856404;">
+                  ⚠️ <strong>Important:</strong> This is your first time logging in, so you need to set your password using the "Forgot Password" / "Reset Password" option.
+                </p>
+              </div>
+              
+              <div class="divider"></div>
+              
+              <div class="next-steps">
+                <h3>📝 After Logging In</h3>
+                <ol>
                   <li>Complete your child's profile information</li>
                   <li>Upload any remaining required documents</li>
                   <li>Review the school calendar and upcoming events</li>
+                  <li>Download the EduDash Pro mobile app for easier access</li>
+                  <li>Explore the parent dashboard features</li>
                 </ol>
               </div>
               
