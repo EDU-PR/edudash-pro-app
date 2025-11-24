@@ -1,17 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X } from 'lucide-react';
+import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X, Download } from 'lucide-react';
 import { ParsedExam, ExamQuestion, gradeAnswer } from '@/lib/examParser';
 import { useExamSession } from '@/lib/hooks/useExamSession';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
 import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import { createClient } from '@/lib/supabase/client';
+import { exportExamToPDF } from '@/lib/utils/pdf-export';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ExamDiagram } from './ExamDiagram';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
+import { exportExamToPDF } from '@/lib/utils/pdf-export';
 
 // Helper component to render text with optional math support
 // Only uses KaTeX if the text contains actual math expressions
@@ -81,6 +83,20 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
   const supabase = createClient();
+
+  // Format school name helper - converts "edudash-pro-community-school" to "EduDash Pro Community School"
+  const formatSchoolName = (name: string): string => {
+    if (!name) return name;
+    // Handle special case for EduDash Pro Community School
+    if (name.toLowerCase().includes('edudash') && name.toLowerCase().includes('community')) {
+      return 'EduDash Pro Community School';
+    }
+    // Generic formatting: replace dashes with spaces and capitalize words
+    return name
+      .split(/[-_]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
 
   // Fetch user info for UpgradeModal
   useEffect(() => {
@@ -604,10 +620,9 @@ Every question you attempt is helping you learn and grow. Keep up the great work
 
   return (
     <div style={{ 
-      maxWidth: isMobile ? '100vw' : 900, 
-      margin: '0 auto', 
-      padding: '0',
       width: '100%',
+      margin: '0',
+      padding: '0',
       minHeight: '100vh',
       background: isMobile ? 'var(--bg)' : 'transparent',
     }}>
@@ -635,17 +650,69 @@ Every question you attempt is helping you learn and grow. Keep up the great work
           </button>
         )}
         
-        {/* Title */}
-        <h1 style={{ 
-          fontSize: isMobile ? 20 : 26, 
-          fontWeight: 700, 
-          marginBottom: isMobile ? 'var(--space-3)' : 'var(--space-4)', 
+        {/* Title with school branding */}
+        <div style={{
+          marginBottom: isMobile ? 'var(--space-3)' : 'var(--space-4)',
           paddingRight: isMobile ? '40px' : '0',
-          letterSpacing: '-0.02em',
-          lineHeight: 1.3
         }}>
-          {exam.title}
-        </h1>
+          {/* School Name Badge */}
+          {exam.schoolName && (
+            <div style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              background: 'linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)',
+              color: 'white',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              marginBottom: 'var(--space-2)',
+              letterSpacing: '0.02em'
+            }}>
+              {formatSchoolName(exam.schoolName)}
+            </div>
+          )}
+          
+          {/* Main Title */}
+          <h1 style={{ 
+            fontSize: isMobile ? 20 : 26, 
+            fontWeight: 700, 
+            marginBottom: 'var(--space-2)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.3
+          }}>
+            {exam.title}
+          </h1>
+          
+          {/* Metadata Row */}
+          <div style={{
+            display: 'flex',
+            gap: 'var(--space-3)',
+            flexWrap: 'wrap',
+            fontSize: isMobile ? 13 : 14,
+            color: 'var(--text-muted)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 600 }}>Grade:</span>
+              <span>{exam.grade || 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontWeight: 600 }}>Subject:</span>
+              <span>{exam.subject || 'N/A'}</span>
+            </div>
+            {exam.duration && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 600 }}>Duration:</span>
+                <span>{exam.duration}</span>
+              </div>
+            )}
+            {(exam.totalMarks || exam.marks) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 600 }}>Total Marks:</span>
+                <span>{exam.totalMarks || exam.marks}</span>
+              </div>
+            )}
+          </div>
+        </div>
         
         {/* Actions: Export / Save */}
         <div style={{ 
@@ -689,7 +756,45 @@ Every question you attempt is helping you learn and grow. Keep up the great work
               }}
             >
               <Printer className="icon16" />
-              {isMobile ? 'Export PDF' : 'Export PDF'}
+              {isMobile ? 'Print' : 'Print'}
+            </button>
+            <button
+              className="btn btnPrimary"
+              onClick={() => {
+                try {
+                  // Export to PDF with proper formatting
+                  const examData = {
+                    title: exam.title || 'Practice Exam',
+                    grade: exam.grade || 'N/A',
+                    subject: exam.subject || 'N/A',
+                    duration: exam.duration || 'N/A',
+                    totalMarks: exam.totalMarks || exam.marks || 0,
+                    instructions: exam.instructions || [],
+                    sections: exam.sections || []
+                  };
+                  exportExamToPDF(examData);
+                  
+                  // Track download
+                  if (generationId) {
+                    const supabase = createClient();
+                    supabase
+                      .from('exam_generations')
+                      .update({ downloaded_at: new Date().toISOString() })
+                      .eq('id', generationId)
+                      .then(() => console.log('Download tracked'));
+                  }
+                } catch (e) {
+                  console.error('PDF export failed', e);
+                  alert('Failed to generate PDF. Please try again.');
+                }
+              }}
+              style={{
+                width: isMobile ? '100%' : 'auto',
+                justifyContent: isMobile ? 'center' : 'flex-start'
+              }}
+            >
+              <Download className="icon16" />
+              {isMobile ? 'Download PDF' : 'Download PDF'}
             </button>
             <button
               className="btn btnSecondary"
