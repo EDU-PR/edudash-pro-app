@@ -65,6 +65,9 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
             .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
             .credentials { background: white; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; }
+            .reference-box { background: #fff; border: 2px solid #667eea; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
+            .reference-number { font-size: 24px; font-weight: bold; color: #667eea; letter-spacing: 2px; margin: 10px 0; }
+            .copy-note { font-size: 12px; color: #666; margin-top: 10px; }
             .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
             .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
           </style>
@@ -78,6 +81,12 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
               <p>Dear ${registration.guardian_name},</p>
               
               <p>Congratulations! Your child <strong>${registration.student_first_name} ${registration.student_last_name}</strong> has been approved for registration at <strong>Young Eagles Preschool</strong>.</p>
+              
+              <div class="reference-box">
+                <h3 style="margin: 0 0 10px 0; color: #667eea;">📋 Your Reference Number</h3>
+                <div class="reference-number">${registration.application_number || 'N/A'}</div>
+                <p class="copy-note">Please save this reference number for your records</p>
+              </div>
               
               <div class="credentials">
                 <h3>Your Account Credentials</h3>
