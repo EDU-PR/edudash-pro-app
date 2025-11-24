@@ -77,26 +77,24 @@ export default function RegisterChildPage() {
 
         if (error) throw error;
         
-        // Find EduDash Pro Community School or create default entry
-        const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+        // Find EduDash Pro Community School
         const communitySchool = (data || []).find((p: any) => 
-          p.id === COMMUNITY_SCHOOL_ID ||
           p.name.toLowerCase().includes('edudash pro community') || 
           p.name.toLowerCase().includes('community school')
         );
         
         const schools = (data || []).map((p: any) => ({ id: p.id, name: p.name, type: 'preschool' }));
         
-        // If community school exists, move it to top; otherwise add it as first option
+        // Always put community school first if it exists
         if (communitySchool) {
-          const filtered = schools.filter((s: { id: string; name: string; type: string }) => s.id !== communitySchool.id);
-          setOrganizations([{ id: communitySchool.id, name: `${communitySchool.name} (Default)`, type: 'preschool' }, ...filtered]);
-          // Auto-select community school as default (always set it)
-          setSelectedOrgId(communitySchool.id);
+          const filtered = schools.filter((s) => s.id !== communitySchool.id);
+          setOrganizations([{ id: communitySchool.id, name: 'EduDash Pro Community School (Default)', type: 'preschool' }, ...filtered]);
+          // Auto-select community school for independent parents
+          if (!preschoolId) {
+            setSelectedOrgId(communitySchool.id);
+          }
         } else {
-          // If no community school found, create a virtual one as first option
-          setOrganizations([{ id: COMMUNITY_SCHOOL_ID, name: 'EduDash Pro Community School (Default)', type: 'preschool' }, ...schools]);
-          setSelectedOrgId(COMMUNITY_SCHOOL_ID);
+          setOrganizations(schools);
         }
       } catch (err) {
         console.error('Failed to load organizations:', err);

@@ -150,8 +150,8 @@ export default function ParentDashboard() {
         {/* Trial Banner */}
         <TrialBanner trialStatus={trialStatus} />
 
-        {/* AI Usage Quota Card - Shows remaining AI credits */}
-        {userId && (
+        {/* AI Usage Quota Card - Only show if children exist and have age */}
+        {userId && childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
           <QuotaCard userId={userId} />
         )}
 
@@ -222,8 +222,10 @@ export default function ParentDashboard() {
           </CollapsibleSection>
         )}
 
-        {/* Quick Actions Grid */}
-        <QuickActionsGrid usageType={usageType} hasOrganization={hasOrganization} />
+        {/* Quick Actions Grid - Only show if children have age */}
+        {childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
+          <QuickActionsGrid usageType={usageType} hasOrganization={hasOrganization} />
+        )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}
         {allChildrenArePreschoolers && activeChild && (

@@ -336,7 +336,7 @@ function ParentSignUpForm() {
                 <p style={{ color: "#6ee7b7", fontSize: 12, margin: 0, textAlign: "center", lineHeight: 1.5 }}>
                   🎁 <strong>Sign up with Google to get instant access!</strong>
                   <span style={{ display: 'block', marginTop: 4 }}>
-                    Includes 7-day Premium trial + EduDash Pro Community membership
+                    Includes 7-day Premium trial + EduDashPro Community School (Digital Learning)
                   </span>
                 </p>
               </div>
@@ -445,7 +445,7 @@ function ParentSignUpForm() {
                 {!selectedOrganization && (
                   <div style={{ marginBottom: 12, padding: 12, background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: 8 }}>
                     <p style={{ color: "#6ee7b7", fontSize: 13, margin: 0, lineHeight: 1.5 }}>
-                      ✨ <strong>EduDash Pro Community:</strong> If you skip linking to a school, you'll automatically join our <strong>EduDash Pro Community</strong> as a standalone user.
+                      ✨ <strong>EduDashPro Community School:</strong> If you skip linking to a school, you'll automatically join our <strong>EduDashPro Community School</strong> - a digital-first platform focusing on Robotics, AI, Data Science & Software Development. Free tier with ad-supported daily AI limits.
                       <span style={{ display: 'block', marginTop: 6 }}>
                         🎁 <strong>Includes 7-day Premium trial</strong> with full access to AI tools, exam generation, and learning resources!
                       </span>

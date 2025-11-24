@@ -31,8 +31,8 @@ export function EmptyChildrenState({ usageType, onAddChild }: EmptyChildrenState
       case 'exploring':
         return {
           icon: BookOpen,
-          title: 'Discover Learning Tools',
-          description: 'Add your children to explore our features, from CAPS curriculum to AI tutoring and progress tracking.',
+          title: 'Welcome to Digital Learning',
+          description: 'Join EduDashPro Community School - explore Robotics, AI, Data Science, Frontend & Backend Development. Build digital literacy with ad-supported free access.',
           cta: 'Get Started',
           color: '#06b6d4'
         };
@@ -59,8 +59,8 @@ export function EmptyChildrenState({ usageType, onAddChild }: EmptyChildrenState
       default:
         return {
           icon: UserPlus,
-          title: 'Add Your First Child',
-          description: 'Start by adding your children to access personalized learning tools, progress tracking, and educational resources.',
+          title: 'Join Our Digital Community',
+          description: 'Start learning Robotics, AI, Data Science, and Software Development. Free tier includes daily AI assistance supported by ads.',
           cta: 'Add Child',
           color: '#667eea'
         };
