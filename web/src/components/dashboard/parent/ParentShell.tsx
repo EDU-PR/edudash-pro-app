@@ -121,6 +121,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
+        { href: '/dashboard/parent/generate-exam', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
         { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },
       ];
@@ -211,12 +212,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         </div>
       </header>
 
-      <div className="frame" style={{
-        width: '100%',
-        height: '100%',
-        display: 'grid',
-        gridTemplateColumns: showSidebar ? '240px 1fr' : '1fr'
-      }}>
+      <div className="frame">
         {showSidebar && (
           <aside className="sidenav sticky" aria-label="Sidebar">
             <div className="sidenavCol">
@@ -249,7 +245,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           </aside>
         )}
 
-        <main className="content" style={{ maxWidth: '100%', width: '100%' }}>
+        <main className="content">
           {children}
         </main>
       </div>
