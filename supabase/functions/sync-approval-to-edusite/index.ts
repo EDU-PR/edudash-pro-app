@@ -96,10 +96,14 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
               
               <p><strong>⚠️ Important:</strong> Please change your password after your first login for security.</p>
               
-              <a href="https://youngeagles.org.za/dashboard" class="button">Login to Your Dashboard</a>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="https://youngeagles.org.za/dashboard" class="button" style="margin-right: 10px;">Login to Your Dashboard</a>
+                <a href="https://edusitepro.edudashpro.org.za/upload-payment?ref=${registration.application_number || registration.id}" class="button" style="background: #10b981;">Upload Proof of Payment</a>
+              </div>
               
               <h3>Next Steps:</h3>
               <ol>
+                <li>Upload your proof of payment using the button above (if not already done)</li>
                 <li>Log in to your parent dashboard using the credentials above</li>
                 <li>Complete any remaining registration forms</li>
                 <li>Upload required documents if not already done</li>
