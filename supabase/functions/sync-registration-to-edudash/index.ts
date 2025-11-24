@@ -228,7 +228,8 @@ Deno.serve(async (req) => {
       const existingAuthUser = authUsers?.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
       
       // Always generate temp password for new accounts (whether auth user exists or not)
-      tempPassword = crypto.randomUUID(); // Generate secure random password
+      // Generate secure password: 12 random chars + complexity requirements
+      tempPassword = crypto.randomUUID().substring(0, 12) + 'Aa1!'; // 16 chars with complexity
       
       if (existingAuthUser) {
         console.log('[sync-registration] Found orphaned auth user, will create profile:', existingAuthUser.id);
@@ -270,10 +271,10 @@ Deno.serve(async (req) => {
         lastName = registration.student_last_name;
       }
 
-      // Create parent profile - id must match auth_user_id due to FK constraint
+      // Create or update parent profile - use upsert to handle existing profiles
       const { data: newProfile, error: profileError } = await edudashClient
         .from('profiles')
-        .insert({
+        .upsert({
           id: parentUserId, // FK constraint: profiles.id -> auth.users.id
           auth_user_id: parentUserId,
           email: normalizedEmail,
@@ -283,12 +284,16 @@ Deno.serve(async (req) => {
           role: 'parent',
           preschool_id: preschoolId,
           address: registration.guardian_address,
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
         })
         .select()
         .single();
 
       if (profileError || !newProfile) {
-        throw new Error(`Failed to create parent profile: ${profileError?.message}`);
+        console.error('[sync-registration] Profile upsert error:', profileError);
+        throw new Error(`Failed to create/update parent profile: ${profileError?.message}`);
       }
 
       parentProfileId = newProfile.id;
@@ -440,7 +445,8 @@ Deno.serve(async (req) => {
           last_name: registration.student_last_name,
           date_of_birth: registration.student_dob,
           gender: registration.student_gender,
-          preschool_id: preschoolId,
+          preschool_id: preschoolId, // Link to preschool
+          organization_id: preschoolId, // Same as preschool_id for consistency
           parent_id: parentProfileId,
           guardian_id: parentProfileId,
           status: 'active',
@@ -450,19 +456,45 @@ Deno.serve(async (req) => {
           registration_fee_paid: registration.registration_fee_paid || false,
           payment_verified: registration.payment_verified || false,
           payment_date: registration.payment_date,
+          edusite_id: registration.edusite_id, // Track origin for sync
         })
         .select()
         .single();
 
       if (studentError || !createdStudent) {
-        throw new Error(`Failed to create student: ${studentError?.message}`);
+        console.error('[sync-registration] Student creation error:', studentError);
+        throw new Error(`Failed to create student: ${studentError?.message || 'Unknown error'}`);
       }
 
       newStudent = createdStudent;
       console.log('[sync-registration] Created student:', newStudent.id);
     }
 
-    // Step 3: Assign student to default class (if available)
+    // Step 3: Create parent-child linkage in children table
+    console.log('[sync-registration] Creating parent-child linkage...');
+    
+    const { error: childLinkError } = await edudashClient
+      .from('children')
+      .upsert({
+        id: newStudent.id, // Use student ID as child ID
+        parent_id: parentProfileId,
+        first_name: registration.student_first_name,
+        last_name: registration.student_last_name,
+        date_of_birth: registration.student_dob,
+        gender: registration.student_gender,
+        preschool_id: preschoolId,
+      }, {
+        onConflict: 'id',
+        ignoreDuplicates: false,
+      });
+
+    if (childLinkError) {
+      console.error('[sync-registration] Failed to create children linkage:', childLinkError);
+    } else {
+      console.log('[sync-registration] ✅ Created parent-child linkage');
+    }
+
+    // Step 4: Assign student to default class (if available)
     // This could be based on age group or grade level
     const { data: defaultClass } = await edudashClient
       .from('classes')

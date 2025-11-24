@@ -30,8 +30,8 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
       return;
     }
 
-    // Create parent user account
-    const tempPassword = crypto.randomUUID();
+    // Create parent user account with temporary password
+    const tempPassword = crypto.randomUUID().substring(0, 12) + 'Aa1!'; // 12 chars + complexity
     const { data: newUser, error: createError } = await edusiteClient.auth.admin.createUser({
       email: registration.guardian_email,
       password: tempPassword,
@@ -50,16 +50,93 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
 
     console.log(`✅ Parent user created: ${newUser.user.id}`);
 
-    // Send password reset email so parent can set their password
-    const { error: resetError } = await edusiteClient.auth.admin.generateLink({
-      type: 'recovery',
-      email: registration.guardian_email,
-    });
+    // Send welcome email with temporary password via Resend
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    const fromEmail = Deno.env.get('FROM_EMAIL') || 'noreply@youngeagles.org.za';
+    
+    if (resendApiKey) {
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+            .credentials { background: white; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; }
+            .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🎉 Registration Approved!</h1>
+            </div>
+            <div class="content">
+              <p>Dear ${registration.guardian_name},</p>
+              
+              <p>Congratulations! Your child <strong>${registration.student_first_name} ${registration.student_last_name}</strong> has been approved for registration at <strong>Young Eagles Preschool</strong>.</p>
+              
+              <div class="credentials">
+                <h3>Your Account Credentials</h3>
+                <p><strong>Email:</strong> ${registration.guardian_email}</p>
+                <p><strong>Temporary Password:</strong> <code style="background: #f0f0f0; padding: 5px 10px; border-radius: 3px;">${tempPassword}</code></p>
+              </div>
+              
+              <p><strong>⚠️ Important:</strong> Please change your password after your first login for security.</p>
+              
+              <a href="https://youngeagles.org.za/dashboard" class="button">Login to Your Dashboard</a>
+              
+              <h3>Next Steps:</h3>
+              <ol>
+                <li>Log in to your parent dashboard using the credentials above</li>
+                <li>Complete any remaining registration forms</li>
+                <li>Upload required documents if not already done</li>
+                <li>Review the school calendar and upcoming events</li>
+              </ol>
+              
+              <p>If you have any questions, please don't hesitate to contact us.</p>
+              
+              <p>Welcome to the Young Eagles family!</p>
+              
+              <div class="footer">
+                <p>Young Eagles Preschool<br>
+                📧 admin@youngeagles.org.za | 📞 +27 XX XXX XXXX</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
 
-    if (resetError) {
-      console.error('⚠️  Failed to send password reset email:', resetError);
+      try {
+        const emailResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: [registration.guardian_email],
+            subject: '🎉 Registration Approved - Welcome to Young Eagles!',
+            html: emailHtml,
+          }),
+        });
+
+        if (emailResponse.ok) {
+          console.log(`📧 Welcome email sent to ${registration.guardian_email}`);
+        } else {
+          const errorText = await emailResponse.text();
+          console.error('⚠️  Failed to send welcome email:', errorText);
+        }
+      } catch (emailError) {
+        console.error('⚠️  Error sending email:', emailError);
+      }
     } else {
-      console.log(`📧 Password reset email sent to ${registration.guardian_email}`);
+      console.warn('⚠️  RESEND_API_KEY not configured, email not sent');
     }
 
   } catch (error) {
