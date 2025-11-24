@@ -223,42 +223,54 @@ Deno.serve(async (req) => {
       
       // Skip email sending for existing parents - they already have login credentials
     } else {
-      // Check if auth user exists but no profile (orphaned user)
-      const { data: authUsers } = await edudashClient.auth.admin.listUsers();
-      const existingAuthUser = authUsers?.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
-      
-      // Always generate temp password for new accounts (whether auth user exists or not)
+      // Always generate temp password for new accounts
       // Generate secure password: 8 random chars + Aa1! for complexity
       const randomChars = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
       tempPassword = randomChars + 'Aa1!'; // 12 chars with complexity
       
-      if (existingAuthUser) {
-        console.log('[sync-registration] Found orphaned auth user, will create profile:', existingAuthUser.id);
-        parentUserId = existingAuthUser.id;
-        // Update password for orphaned user
-        await edudashClient.auth.admin.updateUserById(existingAuthUser.id, {
-          password: tempPassword,
-        });
-      } else {
-        // Create new parent user account
-        
-        const { data: newUser, error: createUserError } = await edudashClient.auth.admin.createUser({
-          email: normalizedEmail,
-          password: tempPassword,
-          email_confirm: true, // Auto-confirm email
-          user_metadata: {
-            full_name: registration.guardian_name,
-            phone: registration.guardian_phone,
-          },
-        });
+      // Try to create new parent user account (this will fail if user already exists)
+      console.log('[sync-registration] Creating new parent user account...');
+      
+      const { data: newUser, error: createUserError } = await edudashClient.auth.admin.createUser({
+        email: normalizedEmail,
+        password: tempPassword,
+        email_confirm: true, // Auto-confirm email
+        user_metadata: {
+          full_name: registration.guardian_name,
+          phone: registration.guardian_phone,
+        },
+      });
 
-        if (createUserError || !newUser.user) {
-          throw new Error(`Failed to create parent user: ${createUserError?.message}`);
+      if (createUserError) {
+        // Check if error is because user already exists
+        if (createUserError.message?.includes('already registered') || createUserError.message?.includes('already exists')) {
+          console.log('[sync-registration] Auth user already exists, fetching user ID...');
+          // Get user by email
+          const { data: existingUser, error: getUserError } = await edudashClient.auth.admin.getUserByEmail(normalizedEmail);
+          
+          if (getUserError || !existingUser) {
+            throw new Error(`User exists but could not fetch: ${getUserError?.message || 'Unknown error'}`);
+          }
+          
+          parentUserId = existingUser.id;
+          console.log('[sync-registration] Found existing auth user:', parentUserId);
+          
+          // Update password for this user
+          const { error: updateError } = await edudashClient.auth.admin.updateUserById(parentUserId, {
+            password: tempPassword,
+          });
+          
+          if (updateError) {
+            console.warn('[sync-registration] Could not update password:', updateError.message);
+          }
+        } else {
+          throw new Error(`Failed to create parent user: ${createUserError.message}`);
         }
-
+      } else if (!newUser.user) {
+        throw new Error('Failed to create parent user: No user returned');
+      } else {
         parentUserId = newUser.user.id;
-
-        console.log('[sync-registration] Created parent user:', parentUserId);
+        console.log('[sync-registration] Created new parent user:', parentUserId);
       }
 
       // Split guardian name into first and last name
@@ -447,7 +459,6 @@ Deno.serve(async (req) => {
           date_of_birth: registration.student_dob,
           gender: registration.student_gender,
           preschool_id: preschoolId, // Link to preschool
-          organization_id: preschoolId, // Same as preschool_id for consistency
           parent_id: parentProfileId,
           guardian_id: parentProfileId,
           status: 'active',
@@ -457,7 +468,6 @@ Deno.serve(async (req) => {
           registration_fee_paid: registration.registration_fee_paid || false,
           payment_verified: registration.payment_verified || false,
           payment_date: registration.payment_date,
-          edusite_id: registration.edusite_id, // Track origin for sync
         })
         .select()
         .single();
@@ -471,22 +481,19 @@ Deno.serve(async (req) => {
       console.log('[sync-registration] Created student:', newStudent.id);
     }
 
-    // Step 3: Create parent-child linkage in children table
+    // Step 3: Create parent-child linkage in student_parent_relationships table
     console.log('[sync-registration] Creating parent-child linkage...');
     
     const { error: childLinkError } = await edudashClient
-      .from('children')
+      .from('student_parent_relationships')
       .upsert({
-        id: newStudent.id, // Use student ID as child ID
+        student_id: newStudent.id,
         parent_id: parentProfileId,
-        first_name: registration.student_first_name,
-        last_name: registration.student_last_name,
-        date_of_birth: registration.student_dob,
-        gender: registration.student_gender,
-        preschool_id: preschoolId,
+        relationship_type: 'parent',
+        is_primary: true,
       }, {
-        onConflict: 'id',
-        ignoreDuplicates: false,
+        onConflict: 'student_id,parent_id',
+        ignoreDuplicates: true,
       });
 
     if (childLinkError) {

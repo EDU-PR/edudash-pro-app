@@ -194,7 +194,7 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
           </style>
         </head>
         <body>
-          <div class="email-container">
+          <div class="email-container" style="max-width: 800px;">
             <div class="header">
               <h1>🎉 Registration Approved!</h1>
               <p>Young Eagles Preschool</p>
@@ -205,44 +205,44 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
               
               <p>We are delighted to inform you that <strong>${registration.student_first_name} ${registration.student_last_name}</strong>'s registration has been approved! Welcome to the Young Eagles Preschool family.</p>
               
-              <div class="highlight-box">
-                <p><strong>📋 Your Reference Number</strong></p>
-                <div class="reference-number">${registration.application_number || registration.id}</div>
-                <p style="margin-top: 16px;"><strong>📧 Registered Email</strong></p>
-                <p style="margin: 4px 0 0 0; color: #667eea;">${registration.guardian_email}</p>
+              <div class="highlight-box" style="font-size: 16px;">
+                <p style="font-size: 16px; margin-bottom: 8px;"><strong>📋 Your Reference Number</strong></p>
+                <p style="font-family: 'Courier New', monospace; font-size: 15px; color: #667eea; background: #ffffff; padding: 10px 16px; border-radius: 4px; margin: 8px 0;">${registration.application_number || registration.id}</p>
+                <p style="font-size: 16px; margin-top: 20px; margin-bottom: 8px;"><strong>📧 Registered Email</strong></p>
+                <p style="font-size: 15px; margin: 8px 0; color: #667eea;">${registration.guardian_email}</p>
               </div>
               
-              <div class="cta-section">
-                <a href="https://edudashpro.org.za/reset-password" class="cta-button">Set Up Your Account</a>
-                <p style="margin: 12px 0 0 0; font-size: 14px; color: #6b7280;">Click above to create your password and access your dashboard</p>
+              <div class="cta-section" style="text-align: center; margin: 40px 0; font-size: 16px;">
+                <a href="https://edudashpro.org.za/reset-password" class="cta-button" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff !important; padding: 16px 40px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 18px; margin: 24px 0; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">Set Up Your Account</a>
+                <p style="margin: 16px 0 0 0; font-size: 15px; color: #6b7280;">Click above to create your password and access your dashboard</p>
               </div>
               
               <div class="divider"></div>
               
-              <div class="next-steps">
-                <h3>🔐 How to Set Up Your Password</h3>
-                <ol>
-                  <li><strong>Click the "Set Up Your Account" button</strong> above (or visit https://edudashpro.org.za/reset-password)</li>
-                  <li><strong>Enter your email address:</strong> ${registration.guardian_email}</li>
-                  <li><strong>Click "Reset Password"</strong> - you will receive a password reset email</li>
-                  <li><strong>Open the password reset email</strong> and click the link inside</li>
-                  <li><strong>Create your new password</strong> (minimum 8 characters)</li>
+              <div style="background: #fafafa; padding: 28px; border-radius: 8px; margin: 28px 0;">
+                <h3 style="margin: 0 0 18px 0; font-size: 20px; color: #1a1a1a; font-weight: 600;">🔐 How to Set Up Your Password</h3>
+                <ol style="margin: 0; padding-left: 24px; font-size: 16px; line-height: 1.8; color: #4a5568;">
+                  <li style="margin-bottom: 14px;"><strong>Click the "Set Up Your Account" button</strong> above (or visit https://edudashpro.org.za/reset-password)</li>
+                  <li style="margin-bottom: 14px;"><strong>Enter your email address:</strong> ${registration.guardian_email}</li>
+                  <li style="margin-bottom: 14px;"><strong>Click "Reset Password"</strong> - you will receive a password reset email</li>
+                  <li style="margin-bottom: 14px;"><strong>Open the password reset email</strong> and click the link inside</li>
+                  <li style="margin-bottom: 14px;"><strong>Create your new password</strong> (minimum 8 characters)</li>
                   <li><strong>Log in to your dashboard</strong> at https://edudashpro.org.za</li>
                 </ol>
-                <p style="margin-top: 16px; padding: 12px; background: #fff3cd; border-radius: 4px; font-size: 14px; color: #856404;">
+                <p style="margin-top: 20px; padding: 16px; background: #fff3cd; border-radius: 4px; font-size: 15px; color: #856404; line-height: 1.6;">
                   ⚠️ <strong>Important:</strong> This is your first time logging in, so you need to set your password using the "Forgot Password" / "Reset Password" option.
                 </p>
               </div>
               
               <div class="divider"></div>
               
-              <div class="next-steps">
-                <h3>📝 After Logging In</h3>
-                <ol>
-                  <li>Complete your child's profile information</li>
-                  <li>Upload any remaining required documents</li>
-                  <li>Review the school calendar and upcoming events</li>
-                  <li>Download the EduDash Pro mobile app for easier access</li>
+              <div style="background: #fafafa; padding: 28px; border-radius: 8px; margin: 28px 0;">
+                <h3 style="margin: 0 0 18px 0; font-size: 20px; color: #1a1a1a; font-weight: 600;">📝 After Logging In</h3>
+                <ol style="margin: 0; padding-left: 24px; font-size: 16px; line-height: 1.8; color: #4a5568;">
+                  <li style="margin-bottom: 14px;">Complete your child's profile information</li>
+                  <li style="margin-bottom: 14px;">Upload any remaining required documents</li>
+                  <li style="margin-bottom: 14px;">Review the school calendar and upcoming events</li>
+                  <li style="margin-bottom: 14px;">Download the EduDash Pro mobile app for easier access</li>
                   <li>Explore the parent dashboard features</li>
                 </ol>
               </div>
@@ -254,7 +254,7 @@ async function createParentAccountAndSendEmail(registration: any, edusiteClient:
             
             <div class="footer">
               <p><strong>Young Eagles Preschool</strong></p>
-              <p>📧 admin@youngeagles.org.za<br>📞 +27 XX XXX XXXX<br>🌐 youngeagles.org.za</p>
+              <p>📧 admin@youngeagles.org.za<br>📞 +27 60 482 8855 / +27 82 067 3133<br>🌐 youngeagles.org.za</p>
             </div>
           </div>
         </body>
