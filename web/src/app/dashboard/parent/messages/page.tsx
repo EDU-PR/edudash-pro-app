@@ -806,7 +806,7 @@ export default function ParentMessagesPage() {
 <<<<<<< HEAD
 <<<<<<< HEAD
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 92px)',
+                  paddingTop: isDesktop ? '32px' : '104px',
                   paddingBottom: 0,
 =======
                   padding: isDesktop ? '16px 16px' : '12px 8px',
