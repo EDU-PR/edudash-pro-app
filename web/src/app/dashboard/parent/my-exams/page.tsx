@@ -86,8 +86,33 @@ export default function MyExamsPage() {
   
   const handleOpenExam = (exam: SavedExam) => {
     try {
-      const parsedExam = parseExamMarkdown(exam.generated_content);
-      if (parsedExam) {
+      console.log('[MyExams] Opening exam:', exam.id);
+      console.log('[MyExams] Content type:', typeof exam.generated_content);
+      console.log('[MyExams] Content preview:', exam.generated_content?.substring(0, 200));
+      
+      // Try to parse as JSON first (new format from edge function)
+      let parsedExam;
+      try {
+        const contentObj = typeof exam.generated_content === 'string' 
+          ? JSON.parse(exam.generated_content) 
+          : exam.generated_content;
+        
+        // If it's already structured JSON with sections
+        if (contentObj && contentObj.sections && Array.isArray(contentObj.sections)) {
+          console.log('[MyExams] Content is JSON format');
+          parsedExam = contentObj;
+        } else {
+          // Fall back to markdown parsing
+          console.log('[MyExams] Trying markdown parser');
+          parsedExam = parseExamMarkdown(exam.generated_content);
+        }
+      } catch (jsonError) {
+        // Not JSON, try markdown
+        console.log('[MyExams] Not JSON, parsing as markdown');
+        parsedExam = parseExamMarkdown(exam.generated_content);
+      }
+      
+      if (parsedExam && parsedExam.sections && parsedExam.sections.length > 0) {
         setSelectedExam({
           ...parsedExam,
           generationId: exam.id,
@@ -95,6 +120,7 @@ export default function MyExamsPage() {
           subject: exam.subject
         });
       } else {
+        console.error('[MyExams] Invalid exam structure:', parsedExam);
         alert('Failed to load exam. Invalid format.');
       }
     } catch (err) {

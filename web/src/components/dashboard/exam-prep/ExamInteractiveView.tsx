@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X, Download } from 'lucide-react';
+import { CheckCircle2, XCircle, FileCheck, AlertCircle, Bot, Sparkles, Save as SaveIcon, Printer, X, Download, Volume2, VolumeX, Pause, Play } from 'lucide-react';
 import { ParsedExam, ExamQuestion, gradeAnswer } from '@/lib/examParser';
 import { useExamSession } from '@/lib/hooks/useExamSession';
 import { useQuotaCheck } from '@/hooks/useQuotaCheck';
+import { useTTS } from '@/hooks/useTTS';
 import { UpgradeModal } from '@/components/modals/UpgradeModal';
 import { createClient } from '@/lib/supabase/client';
 import { exportExamToPDF } from '@/lib/utils/pdf-export';
@@ -78,9 +79,11 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
+  const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   
   const { saveProgress } = useExamSession(generationId || null);
   const { checkQuota, incrementUsage } = useQuotaCheck(userId);
+  const { speak, pause, resume, stop, isSpeaking, isPaused, isSupported: ttsSupported, error: ttsError, quota: ttsQuota, userTier: ttsUserTier, voicePreference, setVoice, checkQuota: checkTTSQuota } = useTTS(userId);
   const supabase = createClient();
 
   // Format school name helper - converts "edudash-pro-community-school" to "EduDash Pro Community School"
@@ -595,11 +598,162 @@ Every question you attempt is helping you learn and grow. Keep up the great work
                   marginBottom: 'var(--space-3)',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
                   gap: 8,
                   color: 'var(--primary)'
                 }}>
-                  <Bot className="icon20" />
-                  <span style={{ fontSize: 15 }}>?? Dash AI Explanation</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Bot className="icon20" />
+                    <span style={{ fontSize: 15 }}>🤖 Dash AI Explanation</span>
+                  </div>
+                  
+                  {/* TTS Controls */}
+                  {ttsSupported && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                      {/* Quota Display */}
+                      {ttsQuota && (
+                        <div style={{
+                          fontSize: 10,
+                          color: ttsQuota.remaining === 0 ? 'var(--danger)' : 'var(--text-muted)',
+                          fontWeight: 500,
+                        }}>
+                          {ttsQuota.remaining}/{ttsQuota.limit} TTS left today ({ttsQuota.tier})
+                        </div>
+                      )}
+                      
+                      {/* Controls */}
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {isSpeaking && speakingQuestionId === question.id ? (
+                          <>
+                            {isPaused ? (
+                              <button
+                                onClick={() => resume()}
+                                title="Resume"
+                                style={{
+                                  padding: '6px 10px',
+                                  background: 'var(--primary)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 'var(--radius-1)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                <Play className="w-3.5 h-3.5" />
+                                Resume
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => pause()}
+                                title="Pause"
+                                style={{
+                                  padding: '6px 10px',
+                                  background: 'var(--warning)',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 'var(--radius-1)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  transition: 'all 0.2s ease'
+                                }}
+                              >
+                                <Pause className="w-3.5 h-3.5" />
+                                Pause
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                stop();
+                                setSpeakingQuestionId(null);
+                              }}
+                              title="Stop"
+                              style={{
+                                padding: '6px 10px',
+                                background: 'var(--danger)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: 'var(--radius-1)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <VolumeX className="w-3.5 h-3.5" />
+                              Stop
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              // Check quota before speaking
+                              const quotaCheck = await checkTTSQuota();
+                              if (!quotaCheck.allowed) {
+                                setUpgradeModalData({
+                                  currentUsage: quotaCheck.limit,
+                                  currentLimit: quotaCheck.limit,
+                                });
+                                setShowUpgradeModal(true);
+                                return;
+                              }
+                              
+                              setSpeakingQuestionId(question.id);
+                              // Use Azure TTS with friendly style and auto-detect language
+                              speak(explanations[question.id], {
+                                style: 'friendly',
+                                rate: 5,
+                                pitch: 0,
+                              });
+                            }}
+                            title={`Listen to explanation (${voicePreference} voice)`}
+                            disabled={ttsQuota?.remaining === 0}
+                            style={{
+                              padding: '6px 10px',
+                              background: ttsQuota?.remaining === 0 ? 'var(--border)' : 'var(--primary)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 'var(--radius-1)',
+                              cursor: ttsQuota?.remaining === 0 ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              transition: 'all 0.2s ease',
+                              opacity: ttsQuota?.remaining === 0 ? 0.5 : 1,
+                            }}
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                            {ttsQuota?.remaining === 0 ? 'Limit Reached' : 'Listen'}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Error Display */}
+                      {ttsError && (
+                        <div style={{
+                          fontSize: 10,
+                          color: 'var(--danger)',
+                          maxWidth: 200,
+                          textAlign: 'right',
+                        }}>
+                          {ttsError}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="markdown-content" style={{ fontSize: 14, lineHeight: 1.6 }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
