@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -33,6 +34,8 @@ interface TeacherShellProps {
   children: React.ReactNode;
   rightSidebar?: React.ReactNode;
   onOpenDashAI?: () => void;
+  contentClassName?: string;
+  contentStyle?: CSSProperties;
 }
 
 export function TeacherShell({ 
@@ -45,7 +48,9 @@ export function TeacherShell({
   unreadCount = 0, 
   children,
   rightSidebar,
-  onOpenDashAI 
+  onOpenDashAI,
+  contentClassName,
+  contentStyle,
 }: TeacherShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -158,7 +163,7 @@ export function TeacherShell({
           </div>
         </aside>
 
-        <main className="content">
+        <main className={`content ${contentClassName ?? ''}`} style={contentStyle}>
           {children}
         </main>
 

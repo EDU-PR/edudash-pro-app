@@ -21,7 +21,7 @@ export interface MessageThread {
     first_name: string;
     last_name: string;
   };
-  participants?: MessageParticipant[];
+  message_participants?: MessageParticipant[];
   last_message?: {
     content: string;
     sender_name: string;
@@ -39,7 +39,7 @@ export interface MessageParticipant {
   is_muted: boolean;
   last_read_at: string;
   // Joined data
-  user_profile?: {
+  profiles?: {
     first_name: string;
     last_name: string;
     role: string;
@@ -80,9 +80,9 @@ export const useParentThreads = (userId: string | undefined) => {
         .select(`
           *,
           student:students(id, first_name, last_name),
-          participants:message_participants(
+          message_participants(
             *,
-            user_profile:profiles(first_name, last_name, role)
+            profiles(first_name, last_name, role)
           )
         `)
         .order('last_message_at', { ascending: false });
@@ -107,7 +107,7 @@ export const useParentThreads = (userId: string | undefined) => {
             .maybeSingle();
           
           // Get unread count (messages after user's last_read_at)
-          const userParticipant = thread.participants?.find((p: any) => p.user_id === userId);
+          const userParticipant = thread.message_participants?.find((p: any) => p.user_id === userId);
           let unreadCount = 0;
           
           if (userParticipant) {

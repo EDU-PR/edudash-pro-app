@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -27,9 +28,11 @@ interface ParentShellProps {
   unreadCount?: number;
   hasOrganization?: boolean;
   children: React.ReactNode;
+  contentClassName?: string;
+  contentStyle?: CSSProperties;
 }
 
-export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children }: ParentShellProps) {
+export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -251,7 +254,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           </aside>
         )}
 
-        <main className="content">
+        <main className={`content ${contentClassName ?? ''}`} style={contentStyle}>
           {children}
         </main>
       </div>
