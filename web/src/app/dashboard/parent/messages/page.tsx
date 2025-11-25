@@ -433,10 +433,30 @@ export default function ParentMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        () => {
-          fetchMessages(selectedThreadId);
-          fetchThreads(); // Refresh thread list
-          setTimeout(() => scrollToBottom(), 100);
+        async (payload) => {
+          // Fetch the complete message with sender info
+          const { data: newMessage } = await supabase
+            .from('messages')
+            .select(`
+              id,
+              thread_id,
+              sender_id,
+              content,
+              created_at,
+              read_by,
+              sender:profiles(first_name, last_name, role)
+            `)
+            .eq('id', payload.new.id)
+            .single();
+
+          if (newMessage) {
+            // Add new message to state immediately
+            setMessages((prev) => [...prev, newMessage]);
+            // Refresh thread list to update last message
+            fetchThreads();
+            // Scroll to bottom
+            setTimeout(() => scrollToBottom(), 100);
+          }
         }
       )
       .subscribe();
@@ -444,7 +464,7 @@ export default function ParentMessagesPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
+  }, [selectedThreadId, supabase, fetchThreads]);
 
   // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {
@@ -625,34 +645,47 @@ export default function ParentMessagesPage() {
                 </h2>
               </div>
               
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '72px' }}>
-                <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px 10px 40px',
-                    borderRadius: 12,
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-2)',
-                    color: 'var(--text-primary)',
-                    fontSize: 15,
-                  }}
-                />
-                <Search
-                  size={18}
-                  style={{
-                    position: 'absolute',
-                    left: 20,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--muted)',
-                  }}
-                />
+              {/* Search bar fixed below header */}
+              <div style={{ 
+                position: 'fixed',
+                top: 60,
+                left: 0,
+                right: 0,
+                padding: '8px 16px',
+                background: 'var(--background)',
+                zIndex: 99,
+                borderBottom: '1px solid var(--border)',
+              }}>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px 10px 40px',
+                      borderRadius: 12,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface-2)',
+                      color: 'var(--text-primary)',
+                      fontSize: 15,
+                    }}
+                  />
+                  <Search
+                    size={18}
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--muted)',
+                    }}
+                  />
+                </div>
               </div>
+              
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '124px' }}>
               {threadsLoading ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <div className="spinner" style={{ margin: '0 auto' }}></div>
@@ -762,7 +795,7 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '128px',
+                  paddingTop: isDesktop ? '32px' : '92px',
                   paddingBottom: 0,
                   background: 'var(--background)',
                   backgroundImage:
