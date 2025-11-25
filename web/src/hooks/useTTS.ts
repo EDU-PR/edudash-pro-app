@@ -131,6 +131,76 @@ export function useTTS(userId?: string) {
     return 'en'; // Default to English
   }, []);
 
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    
+    setIsSpeaking(false);
+    setIsPaused(false);
+  }, []);
+
+  const speakWithBrowserTTS = useCallback((text: string, options: TTSOptions) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      console.warn('[TTS] Browser TTS not supported');
+      return;
+    }
+
+    const cleanText = text
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/`(.+?)`/g, '$1')
+      .replace(/[🎓💪🌟🤖✓⚠️📚👍]/g, '')
+      .replace(/\n+/g, '. ')
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Map Azure rate/pitch to browser TTS (Azure: -50 to +50, Browser: 0.1 to 10 / 0 to 2)
+    const browserRate = 0.95 + ((options.rate || 0) / 100);
+    const browserPitch = 1.0 + ((options.pitch || 0) / 100);
+    
+    utterance.rate = Math.max(0.1, Math.min(10, browserRate));
+    utterance.pitch = Math.max(0, Math.min(2, browserPitch));
+    utterance.volume = 1.0;
+
+    // Map language codes
+    const langMap: Record<string, string> = {
+      en: 'en-ZA',
+      af: 'af-ZA',
+      zu: 'zu-ZA',
+      xh: 'xh-ZA',
+      nso: 'nso-ZA',
+    };
+    utterance.lang = langMap[options.language || 'en'] || 'en-US';
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsPaused(false);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+
+    utterance.onerror = (event) => {
+      console.error('[TTS] Browser speech error:', event);
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
   const speak = useCallback(async (text: string, options: TTSOptions = {}) => {
     if (!text) return;
 
@@ -238,62 +308,7 @@ export function useTTS(userId?: string) {
       // Fallback to browser TTS on error
       speakWithBrowserTTS(text, options);
     }
-  }, [supabase, userId, checkTTSQuota, detectLanguage, voicePreference, stop]);
-
-  const speakWithBrowserTTS = useCallback((text: string, options: TTSOptions) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      console.warn('[TTS] Browser TTS not supported');
-      return;
-    }
-
-    const cleanText = text
-      .replace(/#{1,6}\s/g, '')
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/\*(.+?)\*/g, '$1')
-      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-      .replace(/`(.+?)`/g, '$1')
-      .replace(/[🎓💪🌟🤖✓⚠️📚👍]/g, '')
-      .replace(/\n+/g, '. ')
-      .trim();
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    
-    // Map Azure rate/pitch to browser TTS (Azure: -50 to +50, Browser: 0.1 to 10 / 0 to 2)
-    const browserRate = 0.95 + ((options.rate || 0) / 100); // Azure 0 → 0.95, +50 → 1.45
-    const browserPitch = 1.0 + ((options.pitch || 0) / 100); // Azure 0 → 1.0, +50 → 1.5
-    
-    utterance.rate = Math.max(0.1, Math.min(10, browserRate));
-    utterance.pitch = Math.max(0, Math.min(2, browserPitch));
-    utterance.volume = 1.0;
-
-    // Map language codes
-    const langMap: Record<string, string> = {
-      en: 'en-ZA',
-      af: 'af-ZA',
-      zu: 'zu-ZA',
-      xh: 'xh-ZA',
-      nso: 'nso-ZA',
-    };
-    utterance.lang = langMap[options.language || 'en'] || 'en-US';
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setIsPaused(false);
-    };
-
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setIsPaused(false);
-    };
-
-    utterance.onerror = (event) => {
-      console.error('[TTS] Browser speech error:', event);
-      setIsSpeaking(false);
-      setIsPaused(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [supabase, userId, checkTTSQuota, detectLanguage, voicePreference, stop, speakWithBrowserTTS]);
 
   const pause = useCallback(() => {
     if (!isSpeaking) return;
