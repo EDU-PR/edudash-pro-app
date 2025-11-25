@@ -54,7 +54,7 @@ export default function ClassDetailPage() {
         // Fetch class details
         const { data: cls, error: clsError } = await supabase
           .from('classes')
-          .select('id, name, grade, description, teacher_id, preschool_id')
+          .select('id, name, grade, age_group, teacher_id, preschool_id')
           .eq('id', classId)
           .eq('preschool_id', profile.preschool_id)
           .single();
