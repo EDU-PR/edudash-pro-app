@@ -144,6 +144,68 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
   return (
     <div className="app">
+      {!hideHeader && (
+        <header className="topbar">
+          <div className="topbarRow topbarEdge">
+            <div className="leftGroup">
+              <button 
+                className="iconBtn mobile-nav-btn" 
+                aria-label="Menu" 
+                onClick={() => setMobileNavOpen(true)}
+                style={{ display: 'none' }}
+              >
+                <Menu className="icon20" />
+              </button>
+              
+              {preschoolName ? (
+                <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '200px' }}>
+                  <span style={{ fontSize: 16 }}>🎓</span>
+                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {preschoolName}
+                  </span>
+                </div>
+              ) : (
+                <div className="chip" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  EduDash Pro
+                </div>
+              )}
+            </div>
+            <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                className="iconBtn"
+                aria-label="Notifications"
+                onClick={() => router.push('/dashboard/parent/notifications')}
+                style={{ position: 'relative' }}
+              >
+                <Bell className="icon20" />
+                {notificationCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      backgroundColor: 'var(--danger)',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 16,
+                      height: 16,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
+              </button>
+              <div className="avatar">{avatarLetter}</div>
+            </div>
+          </div>
+        </header>
+      )}
+
       <div className="frame">
         {showSidebar && (
           <aside className="sidenav sticky" aria-label="Sidebar">

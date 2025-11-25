@@ -98,6 +98,7 @@ export default function ClassDetailPage() {
         userEmail={profile?.email}
         userName={profile?.firstName}
         preschoolName={profile?.preschoolName}
+        hideHeader={true}
       >
         <div className="container">
           <div className="section">
@@ -123,6 +124,7 @@ export default function ClassDetailPage() {
       userEmail={profile?.email}
       userName={profile?.firstName}
       preschoolName={profile?.preschoolName}
+      hideHeader={true}
     >
       <div className="container">
         {/* Class Header */}

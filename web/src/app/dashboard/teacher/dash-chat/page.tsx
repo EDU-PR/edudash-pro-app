@@ -70,7 +70,7 @@ export default function TeacherDashChatPage() {
   };
 
   return (
-    <TeacherShell tenantSlug={slug} userEmail={email}>
+    <TeacherShell tenantSlug={slug} userEmail={email} hideHeader={true}>
       <div className="h-[calc(100vh-var(--topnav-h,64px)-var(--bottomnav-h,0px))] flex flex-col bg-gray-950 overflow-hidden">
         <header className="px-5 py-4 border-b border-gray-800 bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 flex items-center justify-between gap-4 flex-shrink-0 sticky top-0 z-20 shadow-lg shadow-purple-900/10">
           <div className="flex items-center gap-4">

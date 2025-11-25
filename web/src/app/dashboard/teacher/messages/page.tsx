@@ -762,8 +762,8 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '24px' : '116px',
-                  paddingBottom: isDesktop ? 120 : 80,
+                  paddingTop: isDesktop ? '32px' : '128px',
+                  paddingBottom: 0,
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
@@ -852,7 +852,8 @@ export default function TeacherMessagesPage() {
                   background: 'var(--background)',
                   borderTop: isDesktop ? '1px solid var(--border)' : 'none',
                   boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
-                  zIndex: 10,
+                  zIndex: 50,
+                  marginBottom: 0,
                 }}
               >
                 <input
