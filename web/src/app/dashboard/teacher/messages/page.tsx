@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, User, Search, Send, Smile, Paperclip, Mic, Loader2, X as CloseIcon } from 'lucide-react';
+import { MessageCircle, User, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
@@ -286,6 +286,23 @@ export default function TeacherMessagesPage() {
     }
   }, [supabase, userId]);
 
+  // Mark thread as read when selected (with delay to ensure messages are loaded)
+  useEffect(() => {
+    if (selectedThreadId && userId) {
+      // Mark as read and refresh immediately
+      const markAndRefresh = async () => {
+        await markThreadAsRead(selectedThreadId);
+        // Wait a bit for DB to update, then refresh
+        setTimeout(() => {
+          fetchThreads();
+        }, 300);
+      };
+      
+      // Delay slightly to ensure messages are loaded first
+      setTimeout(markAndRefresh, 500);
+    }
+  }, [selectedThreadId, userId, markThreadAsRead, fetchThreads]);
+
   const fetchMessages = useCallback(async (threadId: string) => {
     setMessagesLoading(true);
     try {
@@ -386,13 +403,13 @@ export default function TeacherMessagesPage() {
       );
       
       setThreads(threadsWithDetails);
-      if (threadsWithDetails.length > 0) {
+      // Don't auto-select threads - let user choose
+      // Only ensure selection is still valid if one exists
+      if (selectedThreadId) {
         const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
-        if (!selectedThreadId || !stillSelected) {
-          setSelectedThreadId(threadsWithDetails[0].id);
+        if (!stillSelected) {
+          setSelectedThreadId(null);
         }
-      } else {
-        setSelectedThreadId(null);
       }
     } catch (err: any) {
       console.error('Error fetching threads:', err);
@@ -538,6 +555,12 @@ export default function TeacherMessagesPage() {
 
   const handleClearSelection = () => {
     setSelectedThreadId(null);
+    // Refresh threads to update unread counts
+    fetchThreads();
+
+    if (!isDesktop) {
+      router.back();
+    }
   };
 
   return (
@@ -554,11 +577,10 @@ export default function TeacherMessagesPage() {
       <div
         style={{
           display: 'flex',
-          height: 'calc(100vh - var(--topnav-h))',
+          height: '100vh',
           overflow: 'hidden',
           width: '100%',
           boxSizing: 'border-box',
-          marginTop: '8px',
         }}
       >
         <div
@@ -574,13 +596,18 @@ export default function TeacherMessagesPage() {
             <>
               <div
                 style={{
-                  padding: isDesktop ? '16px 20px' : '16px 12px 12px 12px',
+                  position: isDesktop ? 'relative' : 'fixed',
+                  top: isDesktop ? 'auto' : 0,
+                  left: isDesktop ? 'auto' : 0,
+                  right: isDesktop ? 'auto' : 0,
+                  zIndex: isDesktop ? 'auto' : 100,
+                  padding: isDesktop ? '16px 20px' : '16px 8px 12px 8px',
                   borderBottom: isDesktop ? '1px solid var(--border)' : 'none',
                   background: 'var(--surface-1)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: isDesktop ? 16 : 8,
+                  gap: isDesktop ? 16 : 12,
                 }}
               >
                 {!isDesktop && (
@@ -600,7 +627,7 @@ export default function TeacherMessagesPage() {
                       padding: 0,
                     }}
                   >
-                    <CloseIcon size={22} />
+                    <ArrowLeft size={22} />
                   </button>
                 )}
                 <div
@@ -641,7 +668,7 @@ export default function TeacherMessagesPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    <CloseIcon size={16} />
+                    <ArrowLeft size={16} />
                     Clear chat
                   </button>
                 )}
@@ -653,6 +680,7 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
+                  paddingTop: isDesktop ? '24px' : '80px',
                   paddingBottom: isDesktop ? 120 : 80,
                   background: 'var(--background)',
                   backgroundImage:
@@ -829,40 +857,42 @@ export default function TeacherMessagesPage() {
                       </div>
                     )}
 
-                    {/* Mobile & Desktop: Input field with embedded icons on mobile */}
+                    {/* Mobile: Emoji button next to input */}
+                    {!isDesktop && (
+                      <button
+                        type="button"
+                        ref={emojiButtonRef}
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 20,
+                          background: 'transparent',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: 'var(--muted)',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Smile size={20} />
+                      </button>
+                    )}
+
+                    {/* Input field with attachment icon inside on mobile */}
                     <div style={{ position: 'relative', flex: 1 }}>
-                      {/* Mobile: Left icons inside input */}
+                      {/* Mobile: Attachment icon inside input when no text */}
                       {!isDesktop && !messageText.trim() && (
                         <div style={{ 
                           position: 'absolute', 
                           left: 12, 
                           top: '50%', 
                           transform: 'translateY(-50%)',
-                          display: 'flex',
-                          gap: 8,
                           zIndex: 1,
                           pointerEvents: 'auto'
                         }}>
-                          <button
-                            type="button"
-                            ref={emojiButtonRef}
-                            onClick={() => setShowEmojiPicker((prev) => !prev)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              background: 'transparent',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: 'var(--muted)',
-                              padding: 0,
-                            }}
-                          >
-                            <Smile size={20} />
-                          </button>
                           <button
                             type="button"
                             onClick={triggerFilePicker}
@@ -893,7 +923,7 @@ export default function TeacherMessagesPage() {
                         rows={1}
                         style={{
                           width: '100%',
-                          padding: isDesktop ? '12px 16px' : (messageText.trim() ? '12px 52px 12px 16px' : '12px 52px 12px 84px'),
+                          padding: isDesktop ? '12px 16px' : (messageText.trim() ? '12px 52px 12px 16px' : '12px 52px 12px 44px'),
                           borderRadius: 24,
                           border: '1px solid var(--border)',
                           background: 'var(--surface-1)',
@@ -1049,18 +1079,31 @@ export default function TeacherMessagesPage() {
                   maxWidth: 360,
                   padding: 40,
                   borderRadius: 20,
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--border)',
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
                   boxShadow: '0 20px 80px rgba(15, 23, 42, 0.25)',
                 }}
               >
-                <div style={{ width: 96, height: 96, margin: '0 auto 24px' }}>
-                  <img src="/dash-web-placeholder.svg" alt="Messages" style={{ width: '100%' }} />
+                <div style={{ 
+                  width: 120, 
+                  height: 120, 
+                  margin: '0 auto 24px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3)'
+                }}>
+                  <svg width="60" height="60" viewBox="0 0 100 100" fill="none">
+                    <path d="M20 30L50 60L80 30" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M20 50L50 80L80 50" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity="0.7"/>
+                  </svg>
                 </div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-                  EduDash Messages
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 12, textAlign: 'center' }}>
+                  EduDash Pro Messages
                 </h2>
-                <p style={{ color: 'var(--muted)', fontSize: 15, lineHeight: 1.5 }}>
+                <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 15, lineHeight: 1.5, textAlign: 'center' }}>
                   Send private, secure messages between parents and teachers.
                 </p>
               </div>

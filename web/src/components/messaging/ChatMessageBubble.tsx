@@ -1,5 +1,32 @@
 import { parseMessageContent } from '@/lib/messaging/messageContent';
 
+// Add CSS animation for pulsing glow
+if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styles')) {
+  const style = document.createElement('style');
+  style.id = 'pulse-glow-styles';
+  style.textContent = `
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2), 0 8px 20px rgba(15, 23, 42, 0.15), 0 0 8px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      }
+      50% {
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25), 0 12px 28px rgba(15, 23, 42, 0.18), 0 0 16px rgba(139, 92, 246, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      }
+    }
+    @media (max-width: 1024px) {
+      @keyframes pulse-glow {
+        0%, 100% {
+          box-shadow: 0 3px 8px rgba(15, 23, 42, 0.18), 0 6px 16px rgba(15, 23, 42, 0.12), 0 0 6px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        50% {
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22), 0 8px 20px rgba(15, 23, 42, 0.15), 0 0 12px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export interface ChatMessage {
   id: string;
   sender_id: string;
@@ -38,8 +65,8 @@ export const ChatMessageBubble = ({
       ? '0 2px 10px rgba(59, 130, 246, 0.35), 0 0 24px rgba(59, 130, 246, 0.45)'
       : '0 2px 8px rgba(59, 130, 246, 0.3)'
     : isDesktop
-      ? '0 2px 10px rgba(15, 23, 42, 0.16), 0 0 20px rgba(148, 163, 184, 0.35)'
-      : '0 2px 8px rgba(15, 23, 42, 0.14)';
+      ? '0 4px 12px rgba(15, 23, 42, 0.2), 0 8px 20px rgba(15, 23, 42, 0.15), 0 0 8px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+      : '0 3px 8px rgba(15, 23, 42, 0.18), 0 6px 16px rgba(15, 23, 42, 0.12), 0 0 6px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
 
   const renderBody = () => {
     if (content.kind === 'media') {
@@ -113,8 +140,10 @@ export const ChatMessageBubble = ({
           borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
           background: bubbleBackground,
           color: bubbleColor,
-          border: isOwn ? 'none' : '1px solid var(--border)',
+          border: isOwn ? 'none' : '1px solid rgba(139, 92, 246, 0.2)',
           boxShadow: elevation,
+          animation: !isOwn ? 'pulse-glow 3s ease-in-out infinite' : 'none',
+          transform: !isOwn ? 'translateZ(0)' : 'none',
         }}
       >
         {renderBody()}

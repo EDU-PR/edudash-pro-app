@@ -30,9 +30,10 @@ interface ParentShellProps {
   children: React.ReactNode;
   contentClassName?: string;
   contentStyle?: CSSProperties;
+  hideHeader?: boolean;
 }
 
-export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle }: ParentShellProps) {
+export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle, hideHeader = false }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
@@ -141,86 +142,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
     }
   }, [hasOrganization, unreadCount]);
 
-  // Check if we should show back button (not on dashboard home)
-  const showBackButton = pathname !== '/dashboard/parent';
-
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="topbarRow topbarEdge">
-          <div className="leftGroup">
-            {/* On subpages: show back button. On dashboard home: show hamburger menu */}
-            {showBackButton ? (
-              <button 
-                className="iconBtn" 
-                aria-label="Back" 
-                onClick={() => router.push('/dashboard/parent')}
-              >
-                <ArrowLeft className="icon20" />
-              </button>
-            ) : (
-              <button 
-                className="iconBtn mobile-nav-btn" 
-                aria-label="Menu" 
-                onClick={() => setMobileNavOpen(true)}
-                style={{ display: 'none' }}
-              >
-                <Menu className="icon20" />
-              </button>
-            )}
-            
-            {preschoolName ? (
-              <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '200px' }}>
-                <span style={{ fontSize: 16 }}>🎓</span>
-                <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {preschoolName}
-                </span>
-              </div>
-            ) : (
-              <div className="chip" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {tenantSlug || 'EduDash Pro'}
-              </div>
-            )}
-          </div>
-          <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Notification Bell - Hidden on dash-chat to save space */}
-            {!pathname?.includes('/dash-chat') && (
-              <button
-                className="iconBtn"
-                aria-label="Notifications"
-                onClick={() => router.push('/dashboard/parent/notifications')}
-                style={{ position: 'relative' }}
-              >
-                <Bell className="icon20" />
-                {notificationCount > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -4,
-                      right: -4,
-                      backgroundColor: 'var(--danger)',
-                      color: 'white',
-                      borderRadius: '50%',
-                      minWidth: 18,
-                      height: 18,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '0 4px',
-                    }}
-                  >
-                    {notificationCount > 99 ? '99+' : notificationCount}
-                  </span>
-                )}
-              </button>
-            )}
-            <div className="avatar">{avatarLetter}</div>
-          </div>
-        </div>
-      </header>
-
       <div className="frame">
         {showSidebar && (
           <aside className="sidenav sticky" aria-label="Sidebar">

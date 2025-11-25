@@ -36,6 +36,7 @@ interface TeacherShellProps {
   onOpenDashAI?: () => void;
   contentClassName?: string;
   contentStyle?: CSSProperties;
+  hideHeader?: boolean;
 }
 
 export function TeacherShell({ 
@@ -51,6 +52,7 @@ export function TeacherShell({
   onOpenDashAI,
   contentClassName,
   contentStyle,
+  hideHeader = false,
 }: TeacherShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -74,64 +76,8 @@ export function TeacherShell({
     { href: '/dashboard/teacher/settings', label: 'Settings', icon: Settings },
   ];
 
-  // Check if we should show back button (not on dashboard home)
-  const showBackButton = pathname !== '/dashboard/teacher';
-
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="topbarRow topbarEdge">
-          <div className="leftGroup">
-            <button 
-              className="iconBtn mobile-nav-btn" 
-              aria-label="Menu" 
-              onClick={() => setMobileNavOpen(true)}
-              style={{ display: 'none' }}
-            >
-              <Menu className="icon20" />
-            </button>
-            {showBackButton && (
-              <button className="iconBtn desktop-back-btn" aria-label="Back" onClick={() => router.back()}>
-                <ArrowLeft className="icon20" />
-              </button>
-            )}
-            {preschoolName ? (
-              <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 16 }}>🎓</span>
-                <span style={{ fontWeight: 600 }}>{preschoolName}</span>
-              </div>
-            ) : (
-              <div className="chip">{tenantSlug ? `/${tenantSlug}` : 'EduDash Pro'}</div>
-            )}
-          </div>
-          <div className="rightGroup" style={{ marginLeft: 'auto' }}>
-            {rightSidebar && (
-              <button 
-                className="iconBtn" 
-                aria-label="Activity" 
-                onClick={() => setMobileWidgetsOpen(true)}
-                style={{ position: 'relative' }}
-              >
-                <Activity className="icon20" />
-                {activityCount > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: 4,
-                    right: 4,
-                    width: 8,
-                    height: 8,
-                    background: '#dc2626',
-                    borderRadius: '50%',
-                    border: '2px solid var(--surface-1)',
-                  }} />
-                )}
-              </button>
-            )}
-            <div className="avatar">{avatarLetter}</div>
-          </div>
-        </div>
-      </header>
-
       <div className="frame">
         <aside className="sidenav sticky" aria-label="Sidebar">
           <div className="sidenavCol">

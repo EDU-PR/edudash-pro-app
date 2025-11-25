@@ -9,7 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
-import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, X as CloseIcon } from 'lucide-react';
+import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft } from 'lucide-react';
 
 interface ParticipantProfile {
   first_name: string;
@@ -530,6 +530,10 @@ export default function ParentMessagesPage() {
   };
 
   const handleClearSelection = () => {
+    if (!isDesktop) {
+      // On mobile, navigate back to show the thread list
+      router.push('/dashboard/parent/messages');
+    }
     setSelectedThreadId(null);
   };
 
@@ -573,6 +577,10 @@ export default function ParentMessagesPage() {
             <>
               <div
                 style={{
+                  position: isDesktop ? 'relative' : 'fixed',
+                  top: isDesktop ? 'auto' : 0,
+                  left: isDesktop ? 'auto' : 0,
+                  right: isDesktop ? 'auto' : 0,
                   padding: isDesktop ? '16px 20px' : '16px 12px 12px 12px',
                   borderBottom: isDesktop ? '1px solid var(--border)' : 'none',
                   background: 'var(--surface-1)',
@@ -580,6 +588,7 @@ export default function ParentMessagesPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: isDesktop ? 12 : 8,
+                  zIndex: isDesktop ? 'auto' : 100,
                 }}
               >
                 {!isDesktop && (
@@ -599,7 +608,7 @@ export default function ParentMessagesPage() {
                       padding: 0,
                     }}
                   >
-                    <CloseIcon size={22} />
+                    <ArrowLeft size={22} />
                   </button>
                 )}
                 <div
@@ -625,25 +634,6 @@ export default function ParentMessagesPage() {
                     </p>
                   )}
                 </div>
-                {isDesktop && (
-                  <button
-                    onClick={handleClearSelection}
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 999,
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      color: 'var(--muted)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <CloseIcon size={16} />
-                    Clear chat
-                  </button>
-                )}
               </div>
 
               <div
@@ -652,6 +642,7 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
+                  paddingTop: isDesktop ? '24px' : '76px',
                   paddingBottom: isDesktop ? 120 : 80,
                   background: 'var(--background)',
                   backgroundImage:
@@ -831,39 +822,42 @@ export default function ParentMessagesPage() {
                     )}
 
                     {/* Mobile & Desktop: Input field with embedded icons on mobile */}
-                    <div style={{ position: 'relative', flex: 1 }}>
-                      {/* Mobile: Left icons inside input */}
+                    <div style={{ position: 'relative', flex: 1, display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                      {/* Mobile: Emoji button outside input (always visible) */}
+                      {!isDesktop && (
+                        <button
+                          type="button"
+                          ref={emojiButtonRef}
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: 'var(--muted)',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Smile size={20} />
+                        </button>
+                      )}
+
+                      <div style={{ position: 'relative', flex: 1 }}>
+                      {/* Mobile: Attachment icon inside input (only when no text) */}
                       {!isDesktop && !messageText.trim() && (
                         <div style={{ 
                           position: 'absolute', 
                           left: 12, 
                           top: '50%', 
                           transform: 'translateY(-50%)',
-                          display: 'flex',
-                          gap: 8,
                           zIndex: 1,
                           pointerEvents: 'auto'
                         }}>
-                          <button
-                            type="button"
-                            ref={emojiButtonRef}
-                            onClick={() => setShowEmojiPicker((prev) => !prev)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              background: 'transparent',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: 'var(--muted)',
-                              padding: 0,
-                            }}
-                          >
-                            <Smile size={20} />
-                          </button>
                           <button
                             type="button"
                             onClick={triggerFilePicker}
@@ -894,7 +888,7 @@ export default function ParentMessagesPage() {
                         rows={1}
                         style={{
                           width: '100%',
-                          padding: isDesktop ? '12px 16px' : (messageText.trim() ? '12px 52px 12px 16px' : '12px 52px 12px 84px'),
+                          padding: isDesktop ? '12px 16px' : (messageText.trim() ? '12px 52px 12px 16px' : '12px 52px 12px 44px'),
                           borderRadius: 24,
                           border: '1px solid var(--border)',
                           background: 'var(--surface-1)',
@@ -1027,6 +1021,7 @@ export default function ParentMessagesPage() {
                       )
                     )}
                   </div>
+                  </div>
                 </form>
                 {statusMessage && (
                   <p style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', textAlign: 'center' }}>{statusMessage}</p>
@@ -1034,7 +1029,8 @@ export default function ParentMessagesPage() {
               </div>
             </>
           ) : (
-            <div
+            isDesktop && (
+              <div
               style={{
                 flex: 1,
                 display: 'flex',
@@ -1065,6 +1061,7 @@ export default function ParentMessagesPage() {
                 </p>
               </div>
             </div>
+            )
           )}
         </div>
 
