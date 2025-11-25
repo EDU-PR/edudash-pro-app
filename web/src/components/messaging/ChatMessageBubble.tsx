@@ -172,8 +172,11 @@ export const ChatMessageBubble = ({
             <span 
               style={{ 
                 fontSize: 14,
-                color: isRead ? 'rgb(139, 92, 246)' : 'currentColor',
-                transition: 'color 0.3s ease'
+                fontWeight: isRead ? 700 : 400,
+                color: isRead ? '#a855f7' : 'rgba(255, 255, 255, 0.6)',
+                opacity: isRead ? 1 : 0.75,
+                textShadow: isRead ? '0 0 8px rgba(168, 85, 247, 0.5)' : 'none',
+                transition: 'all 0.3s ease'
               }}
             >
               ✓✓
