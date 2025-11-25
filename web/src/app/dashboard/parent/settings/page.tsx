@@ -277,15 +277,19 @@ export default function SettingsPage() {
                   <label className="label">Profile Picture</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
                     <div style={{ position: 'relative' }}>
-                      {profileImage ? (
+                      {uploadingAvatar ? (
+                        <div className="w-20 h-20 rounded-full bg-gray-700 flex items-center justify-center">
+                          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                        </div>
+                      ) : avatarUrl ? (
                         <img
-                          src={profileImage}
+                          src={avatarUrl}
                           alt="Profile"
                           style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary)' }}
                         />
                       ) : (
                         <div className="avatar" style={{ width: 80, height: 80, fontSize: 28, border: '2px solid var(--primary)' }}>
-                          {userEmail?.[0]?.toUpperCase() || 'U'}
+                          {fullName?.[0]?.toUpperCase() || userEmail?.[0]?.toUpperCase() || 'U'}
                         </div>
                       )}
                       <label style={{
@@ -299,8 +303,9 @@ export default function SettingsPage() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: 'var(--shadow-md)'
+                        cursor: uploadingAvatar ? 'not-allowed' : 'pointer',
+                        boxShadow: 'var(--shadow-md)',
+                        opacity: uploadingAvatar ? 0.5 : 1
                       }}>
                         <Camera className="icon16" style={{ color: 'white' }} />
                         <input
@@ -308,6 +313,7 @@ export default function SettingsPage() {
                           accept="image/*"
                           onChange={handleImageUpload}
                           style={{ display: 'none' }}
+                          disabled={uploadingAvatar}
                         />
                       </label>
                     </div>
@@ -319,7 +325,10 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="label">Email</label>
+                  <label className="label">
+                    <Mail className="icon16" style={{ marginRight: 'var(--space-1)', display: 'inline-block', verticalAlign: 'middle' }} />
+                    Email
+                  </label>
                   <input
                     type="email"
                     value={userEmail}
@@ -334,15 +343,53 @@ export default function SettingsPage() {
                   <input
                     type="text"
                     placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
                     className="input"
                   />
                 </div>
+                
+                <div>
+                  <label className="label">
+                    <Phone className="icon16" style={{ marginRight: 'var(--space-1)', display: 'inline-block', verticalAlign: 'middle' }} />
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +27 82 123 4567"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="input"
+                  />
+                  <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-1)' }}>Used for notifications and account recovery</p>
+                </div>
+                
+                {saveError && (
+                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', display: 'flex', alignItems: 'start', gap: 'var(--space-2)' }}>
+                    <X className="icon16" style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
+                    <p style={{ fontSize: 14, color: 'var(--danger)' }}>{saveError}</p>
+                  </div>
+                )}
 
-                <button className="btn btnPrimary" style={{ width: 'fit-content' }}>
-                  Save Changes
+                <button 
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className="btn btnPrimary" 
+                  style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+                >
+                  {saving && <Loader2 className="icon16 animate-spin" />}
+                  {saving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
+            
+            {/* Success Banner */}
+            {saveSuccess && (
+              <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 50, background: 'var(--success)', color: 'white', padding: '12px 24px', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', animation: 'slideIn 0.3s ease-out' }}>
+                <Check className="icon16" />
+                <span>Changes saved successfully!</span>
+              </div>
+            )}
 
             {/* Notifications */}
             <div className="card">
@@ -356,8 +403,11 @@ export default function SettingsPage() {
                     <div style={{ fontWeight: 600, marginBottom: 4 }}>Email Notifications</div>
                     <div className="muted" style={{ fontSize: 12 }}>Receive updates via email</div>
                   </div>
-                  <button className="toggle toggleActive">
-                    <span className="toggleThumb" style={{ transform: 'translateX(20px)' }} />
+                  <button 
+                    onClick={() => setEmailNotifications(!emailNotifications)}
+                    className={`toggle ${emailNotifications ? 'toggleActive' : ''}`}
+                  >
+                    <span className="toggleThumb" style={{ transform: emailNotifications ? 'translateX(20px)' : 'translateX(0)' }} />
                   </button>
                 </div>
                 <div className="listItem">
@@ -365,8 +415,11 @@ export default function SettingsPage() {
                     <div style={{ fontWeight: 600, marginBottom: 4 }}>Push Notifications</div>
                     <div className="muted" style={{ fontSize: 12 }}>Receive push notifications</div>
                   </div>
-                  <button className="toggle">
-                    <span className="toggleThumb" />
+                  <button 
+                    onClick={() => setPushNotifications(!pushNotifications)}
+                    className={`toggle ${pushNotifications ? 'toggleActive' : ''}`}
+                  >
+                    <span className="toggleThumb" style={{ transform: pushNotifications ? 'translateX(20px)' : 'translateX(0)' }} />
                   </button>
                 </div>
               </div>
@@ -420,11 +473,17 @@ export default function SettingsPage() {
                 <Globe className="icon20" style={{ color: 'var(--primary)' }} />
                 <h2 className="h2" style={{ margin: 0 }}>Language</h2>
               </div>
-              <select className="input">
-                <option>English (South Africa)</option>
-                <option>Afrikaans</option>
-                <option>Zulu</option>
-                <option>Xhosa</option>
+              <select 
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="input"
+              >
+                <option value="en-ZA">English (South Africa)</option>
+                <option value="af-ZA">Afrikaans</option>
+                <option value="zu-ZA">Zulu</option>
+                <option value="xh-ZA">Xhosa</option>
+                <option value="st-ZA">Sesotho</option>
+                <option value="tn-ZA">Setswana</option>
               </select>
             </div>
 
@@ -434,8 +493,13 @@ export default function SettingsPage() {
                 <Lock className="icon20" style={{ color: 'var(--primary)' }} />
                 <h2 className="h2" style={{ margin: 0 }}>Security</h2>
               </div>
-              <button className="btn btnSecondary" style={{ width: '100%', justifyContent: 'flex-start' }}>
-                Change Password
+              <button 
+                onClick={() => setShowPasswordModal(true)}
+                className="btn btnSecondary" 
+                style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+              >
+                <span>Change Password</span>
+                <Lock className="icon16" style={{ marginLeft: 'auto', color: 'var(--textMuted)' }} />
               </button>
             </div>
 
@@ -500,6 +564,86 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ background: 'var(--cardBg)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-2xl)', maxWidth: 480, width: '100%', padding: 24, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Lock className="icon20" style={{ color: 'var(--primary)' }} />
+                Change Password
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordError(null);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                style={{ color: 'var(--textMuted)', background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+              >
+                <X className="icon20" />
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="input"
+                />
+              </div>
+              
+              <div>
+                <label className="label">Confirm Password</label>
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input"
+                />
+              </div>
+              
+              {passwordError && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', padding: 12, display: 'flex', alignItems: 'start', gap: 8 }}>
+                  <X className="icon16" style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
+                  <p style={{ fontSize: 14, color: 'var(--danger)' }}>{passwordError}</p>
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: 12, paddingTop: 8 }}>
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordError(null);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                  }}
+                  className="btn btnSecondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePasswordChange}
+                  disabled={changingPassword || !newPassword || !confirmPassword}
+                  className="btn btnPrimary"
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (changingPassword || !newPassword || !confirmPassword) ? 0.6 : 1, cursor: (changingPassword || !newPassword || !confirmPassword) ? 'not-allowed' : 'pointer' }}
+                >
+                  {changingPassword && <Loader2 className="icon16 animate-spin" />}
+                  {changingPassword ? 'Changing...' : 'Change Password'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </ParentShell>
   );
 }
