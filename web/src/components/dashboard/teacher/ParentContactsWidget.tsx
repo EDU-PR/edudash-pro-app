@@ -84,6 +84,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       
       // Get unique parent IDs
       const parentIds = [...new Set(students.map((s: any) => s.parent_id).filter(Boolean))] as string[];
+      console.log('Unique parent IDs:', parentIds);
       
       // Fetch parent profiles
       const { data: profiles, error: profilesError } = await supabase
@@ -91,7 +92,11 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
         .select('id, email, first_name, last_name, phone')
         .in('id', parentIds);
       
-      if (profilesError) throw profilesError;
+      console.log('Parent profiles fetched:', profiles);
+      if (profilesError) {
+        console.error('Error fetching parent profiles:', profilesError);
+        throw profilesError;
+      }
       
       // Get unread message counts for each parent
       const unreadCounts = await Promise.all(
@@ -154,9 +159,12 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
         });
       });
       
-      setParents(Array.from(parentsMap.values()).sort((a, b) => 
+      const finalParents = Array.from(parentsMap.values()).sort((a, b) => 
         `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
-      ));
+      );
+      
+      console.log('Final parents array to display:', finalParents);
+      setParents(finalParents);
     } catch (err: any) {
       console.error('Error fetching parents:', err);
       setError(err.message);
