@@ -433,7 +433,7 @@ export default function ParentMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        async (payload) => {
+        async (payload: any) => {
           // Fetch the complete message with sender info
           const { data: newMessage } = await supabase
             .from('messages')
