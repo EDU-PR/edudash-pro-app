@@ -12,6 +12,7 @@ import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
 import { ClassCard } from '@/components/dashboard/teacher/ClassCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { ParentContactsWidget } from '@/components/dashboard/teacher/ParentContactsWidget';
 import {
   Users,
   School,
@@ -191,6 +192,14 @@ export default function TeacherDashboard() {
             <span>Message Parents</span>
           </button>
         </div>
+      </div>
+
+      {/* Parent Contacts */}
+      <div className="section">
+        <ParentContactsWidget 
+          preschoolId={preschoolId} 
+          teacherId={userId}
+        />
       </div>
 
       {/* My Classes */}
