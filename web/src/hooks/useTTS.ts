@@ -334,21 +334,6 @@ export function useTTS(userId?: string) {
     }
   }, [isPaused]);
 
-  const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
-    }
-    
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    
-    setIsSpeaking(false);
-    setIsPaused(false);
-  }, []);
-
   // Update voice preference
   const setVoice = useCallback(async (voice: 'male' | 'female') => {
     setVoicePreference(voice);
