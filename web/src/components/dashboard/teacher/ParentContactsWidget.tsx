@@ -93,19 +93,26 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       // Get unread message counts for each parent
       const unreadCounts = await Promise.all(
         parentIds.map(async (parentId) => {
-          const { data: threads } = await supabase
+          // First get all threads for this preschool
+          const { data: allThreads } = await supabase
             .from('message_threads')
             .select(`
               id,
               message_participants!inner(user_id, role, last_read_at)
             `)
-            .eq('preschool_id', preschoolId)
-            .contains('message_participants', [{ user_id: parentId, role: 'parent' }]);
+            .eq('preschool_id', preschoolId);
           
-          if (!threads) return { parentId, count: 0 };
+          if (!allThreads) return { parentId, count: 0 };
+          
+          // Filter threads where this parent is a participant
+          const parentThreads = allThreads.filter((thread: any) => 
+            thread.message_participants?.some((p: any) => 
+              p.user_id === parentId && p.role === 'parent'
+            )
+          );
           
           let totalUnread = 0;
-          for (const thread of threads) {
+          for (const thread of parentThreads) {
             const parentParticipant = thread.message_participants?.find(
               (p: any) => p.user_id === parentId && p.role === 'parent'
             );
@@ -159,8 +166,8 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
     if (!teacherId) return;
     
     try {
-      // Check if thread exists
-      const { data: existingThreads } = await supabase
+      // Check if thread exists - get all threads for this student and filter client-side
+      const { data: allThreads } = await supabase
         .from('message_threads')
         .select(`
           id,
@@ -172,9 +179,9 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       
       let threadId: string | null = null;
       
-      if (existingThreads && existingThreads.length > 0) {
+      if (allThreads && allThreads.length > 0) {
         // Find thread where both parent and teacher are participants
-        const matchingThread = existingThreads.find((thread: any) => {
+        const matchingThread = allThreads.find((thread: any) => {
           const participants = thread.message_participants || [];
           const hasParent = participants.some((p: any) => p.user_id === parent.id && p.role === 'parent');
           const hasTeacher = participants.some((p: any) => p.user_id === teacherId && p.role === 'teacher');
