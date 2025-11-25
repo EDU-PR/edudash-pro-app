@@ -207,6 +207,7 @@ export default function TeacherMessagesPage() {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
@@ -289,19 +290,19 @@ export default function TeacherMessagesPage() {
   // Mark thread as read when selected (with delay to ensure messages are loaded)
   useEffect(() => {
     if (selectedThreadId && userId) {
-      // Mark as read and refresh immediately
+      // Mark as read and trigger refresh
       const markAndRefresh = async () => {
         await markThreadAsRead(selectedThreadId);
-        // Wait a bit for DB to update, then refresh
+        // Wait a bit for DB to update, then trigger refresh
         setTimeout(() => {
-          fetchThreads();
+          setRefreshTrigger(prev => prev + 1);
         }, 300);
       };
       
       // Delay slightly to ensure messages are loaded first
       setTimeout(markAndRefresh, 500);
     }
-  }, [selectedThreadId, userId, markThreadAsRead, fetchThreads]);
+  }, [selectedThreadId, userId, markThreadAsRead]);
 
   const fetchMessages = useCallback(async (threadId: string) => {
     setMessagesLoading(true);
@@ -430,7 +431,7 @@ export default function TeacherMessagesPage() {
     if (userId && profile?.preschoolId) {
       fetchThreads();
     }
-  }, [userId, profile?.preschoolId, fetchThreads]);
+  }, [userId, profile?.preschoolId, fetchThreads, refreshTrigger]);
 
   useEffect(() => {
     if (selectedThreadId) {
