@@ -74,10 +74,13 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       if (studentsError) throw studentsError;
       
       if (!students || students.length === 0) {
+        console.log('No students found with parent_id for preschool:', preschoolId);
         setParents([]);
         setLoading(false);
         return;
       }
+      
+      console.log(`Found ${students.length} students with parents:`, students);
       
       // Get unique parent IDs
       const parentIds = [...new Set(students.map((s: any) => s.parent_id).filter(Boolean))] as string[];
@@ -338,9 +341,14 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       {filteredParents.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
           <Users size={48} color="var(--muted)" style={{ margin: '0 auto 12px' }} />
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 8 }}>
             {searchQuery ? 'No matching parents found' : 'No parent contacts yet'}
           </p>
+          {!searchQuery && !classIds && (
+            <p style={{ color: 'var(--muted-light)', fontSize: 12 }}>
+              Students need to be assigned to classes to appear here
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ 
