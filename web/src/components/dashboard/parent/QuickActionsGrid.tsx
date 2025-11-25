@@ -19,9 +19,10 @@ interface QuickActionsGridProps {
   hasOrganization: boolean;
   activeChildGrade?: number;
   isExamEligible?: boolean;
+  unreadCount?: number;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false }: QuickActionsGridProps) {
+export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0 }: QuickActionsGridProps) {
   const router = useRouter();
 
   const getQuickActions = (): QuickAction[] => {
@@ -87,6 +88,8 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
         {actions.map((action) => {
           const Icon = action.icon;
           const isChatWithDash = action.label === 'Chat with Dash';
+          const isMessages = action.label === 'Messages';
+          const hasUnread = isMessages && unreadCount > 0;
           return (
             <button
               key={action.href}
@@ -110,6 +113,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 textAlign: 'center',
                 minHeight: '120px',
                 boxShadow: isChatWithDash ? '0 4px 20px rgba(236, 72, 153, 0.5)' : 'none',
+                position: 'relative',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -130,6 +134,23 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 }
               }}
             >
+              {hasUnread && (
+                <div style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  background: '#ef4444',
+                  color: 'white',
+                  borderRadius: 12,
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+                  zIndex: 1,
+                }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
               <div style={{
                 width: 48,
                 height: 48,

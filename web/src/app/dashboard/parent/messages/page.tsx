@@ -433,14 +433,18 @@ export default function ParentMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        () => fetchMessages(selectedThreadId)
+        () => {
+          fetchMessages(selectedThreadId);
+          fetchThreads(); // Refresh thread list
+          setTimeout(() => scrollToBottom(), 100);
+        }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchMessages]);
+  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
 
   // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {
@@ -517,6 +521,9 @@ export default function ParentMessagesPage() {
 
       setMessageText('');
       setRefreshTrigger(prev => prev + 1);
+      
+      // Scroll to bottom after sending
+      setTimeout(() => scrollToBottom(), 100);
     } catch (err: any) {
       console.error('Error sending message:', err);
       alert('Failed to send message. Please try again.');
@@ -554,9 +561,11 @@ export default function ParentMessagesPage() {
       userName={profile?.firstName}
       preschoolName={profile?.preschoolName}
       unreadCount={totalUnread}
-      contentStyle={{ padding: 0, overflow: 'hidden' }}
+      contentStyle={{ padding: 0, overflow: 'hidden', height: '100vh' }}
+      hideHeader={true}
     >
       <div
+        className="parent-messages-page"
         style={{
           display: 'flex',
           height: '100vh',
@@ -564,6 +573,7 @@ export default function ParentMessagesPage() {
           width: '100%',
           margin: 0,
           boxSizing: 'border-box',
+          background: 'rgba(17, 24, 39, 0.98)',
         }}
       >
         <div
@@ -861,7 +871,7 @@ export default function ParentMessagesPage() {
                       ref={emojiPickerRef}
                       style={{
                         position: 'absolute',
-                        bottom: 70,
+                        bottom: 60,
                         left: 12,
                         background: 'var(--surface-2)',
                         borderRadius: 12,

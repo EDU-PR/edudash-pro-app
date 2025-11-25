@@ -149,7 +149,15 @@ export default function ParentDashboard() {
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
 
   return (
-    <ParentShell
+    <>
+      <style jsx global>{`
+        /* Hide header on parent dashboard main page */
+        body:has(.parent-dashboard-main) .topbar,
+        body:has(.parent-dashboard-main) header.topbar {
+          display: none !important;
+        }
+      `}</style>
+      <ParentShell
       tenantSlug={tenantSlug}
       userEmail={profile?.email}
       userName={userName}
@@ -157,7 +165,7 @@ export default function ParentDashboard() {
       unreadCount={unreadCount}
       hasOrganization={hasOrganization}
     >
-      <div className="container">
+      <div className="container parent-dashboard-main">
         {/* Header */}
         <DashboardHeader userName={userName} greeting={greeting} />
 
@@ -239,6 +247,7 @@ export default function ParentDashboard() {
             hasOrganization={hasOrganization}
             activeChildGrade={activeChildGrade}
             isExamEligible={isExamEligible}
+            unreadCount={unreadCount}
           />
         )}
 
@@ -367,7 +376,4 @@ export default function ParentDashboard() {
             />
           </div>
         </div>
-      )}
-    </ParentShell>
-  );
-}
+      )}\n    </ParentShell>\n    </>\n  );\n}

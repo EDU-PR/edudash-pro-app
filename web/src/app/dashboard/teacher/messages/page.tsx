@@ -450,14 +450,19 @@ export default function TeacherMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        () => fetchMessages(selectedThreadId)
+        () => {
+          fetchMessages(selectedThreadId);
+          fetchThreads(); // Refresh thread list to update unread counts
+          // Scroll to bottom after a brief delay to allow DOM update
+          setTimeout(() => scrollToBottom(), 100);
+        }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchMessages]);
+  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
 
   // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {
@@ -513,6 +518,9 @@ export default function TeacherMessagesPage() {
 
       setMessageText('');
       setRefreshTrigger(prev => prev + 1);
+      
+      // Scroll to bottom after sending
+      setTimeout(() => scrollToBottom(), 100);
     } catch (err: any) {
       console.error('Error sending message:', err);
       alert('Failed to send message. Please try again.');
@@ -562,19 +570,33 @@ export default function TeacherMessagesPage() {
   };
 
   return (
-    <TeacherShell
-      tenantSlug={tenantSlug}
-      userEmail={profile?.email}
-      userName={profile?.firstName}
-      preschoolName={profile?.preschoolName}
-      preschoolId={profile?.preschoolId}
-      userId={userId}
-      unreadCount={totalUnread}
-      contentStyle={{ padding: 0, overflow: 'hidden' }}
-    >
-      <div
-        style={{
-          display: 'flex',
+    <>
+      <style jsx global>{`
+        /* Hide the header on teacher messages page */
+        body:has(.teacher-messages-page) .topbar,
+        body:has(.teacher-messages-page) header.topbar {
+          display: none !important;
+        }
+        .teacher-messages-page {
+          background: rgba(17, 24, 39, 0.98) !important;
+          position: relative;
+          z-index: 10;
+        }
+      `}</style>
+      <TeacherShell
+        tenantSlug={tenantSlug}
+        userEmail={profile?.email}
+        userName={profile?.firstName}
+        preschoolName={profile?.preschoolName}
+        preschoolId={profile?.preschoolId}
+        userId={userId}
+        unreadCount={totalUnread}
+        contentStyle={{ padding: 0, overflow: 'hidden' }}
+      >
+        <div
+          className="teacher-messages-page"
+          style={{
+            display: 'flex',
           height: '100vh',
           overflow: 'hidden',
           width: '100%',
@@ -1279,5 +1301,6 @@ export default function TeacherMessagesPage() {
         )}
       </div>
     </TeacherShell>
+    </>
   );
 }
