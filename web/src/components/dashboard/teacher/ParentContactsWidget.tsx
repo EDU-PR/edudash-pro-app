@@ -18,7 +18,7 @@ interface Parent {
   email: string;
   first_name: string;
   last_name: string;
-  phone_number?: string;
+  phone?: string;
   students: Student[];
   unread_count: number;
 }
@@ -85,7 +85,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
       // Fetch parent profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, email, first_name, last_name, phone_number')
+        .select('id, email, first_name, last_name, phone')
         .in('id', parentIds);
       
       if (profilesError) throw profilesError;
@@ -138,7 +138,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
           email: profile.email || '',
           first_name: profile.first_name || '',
           last_name: profile.last_name || '',
-          phone_number: profile.phone_number,
+          phone: profile.phone,
           students: studentList,
           unread_count: unreadData?.count || 0,
         });
@@ -407,10 +407,10 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
                       <Mail size={12} />
                       {parent.email}
                     </span>
-                    {parent.phone_number && (
+                    {parent.phone && (
                       <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Phone size={12} />
-                        {parent.phone_number}
+                        {parent.phone}
                       </span>
                     )}
                   </div>
