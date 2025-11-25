@@ -52,6 +52,7 @@ export default function TeacherClassesPage() {
       userEmail={userEmail}
       userName={userName}
       preschoolName={preschoolName}
+      hideHeader={true}
     >
       <div className="container">
         <div className="section">

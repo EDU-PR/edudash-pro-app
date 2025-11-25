@@ -44,6 +44,7 @@ export default function AssignmentsGradingPage() {
       userEmail={profile?.email}
       userName={profile?.firstName}
       preschoolName={profile?.preschoolName}
+      hideHeader={true}
     >
       <div className="container">
         <div className="section">

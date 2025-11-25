@@ -78,6 +78,56 @@ export function TeacherShell({
 
   return (
     <div className="app">
+      {!hideHeader && (
+        <header className="topbar">
+          <div className="topbarRow topbarEdge">
+            <div className="leftGroup">
+              <button 
+                className="iconBtn mobile-nav-btn" 
+                aria-label="Menu" 
+                onClick={() => setMobileNavOpen(true)}
+                style={{ display: 'none' }}
+              >
+                <Menu className="icon20" />
+              </button>
+              {preschoolName ? (
+                <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 16 }}>🎓</span>
+                  <span style={{ fontWeight: 600 }}>{preschoolName}</span>
+                </div>
+              ) : (
+                <div className="chip">EduDash Pro</div>
+              )}
+            </div>
+            <div className="rightGroup" style={{ marginLeft: 'auto' }}>
+              {rightSidebar && (
+                <button 
+                  className="iconBtn" 
+                  aria-label="Activity" 
+                  onClick={() => setMobileWidgetsOpen(true)}
+                  style={{ position: 'relative' }}
+                >
+                  <Activity className="icon20" />
+                  {activityCount > 0 && (
+                    <span style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 8,
+                      height: 8,
+                      background: '#dc2626',
+                      borderRadius: '50%',
+                      border: '2px solid var(--surface-1)',
+                    }} />
+                  )}
+                </button>
+              )}
+              <div className="avatar">{avatarLetter}</div>
+            </div>
+          </div>
+        </header>
+      )}
+
       <div className="frame">
         <aside className="sidenav sticky" aria-label="Sidebar">
           <div className="sidenavCol">

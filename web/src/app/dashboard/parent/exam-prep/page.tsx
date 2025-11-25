@@ -70,6 +70,7 @@ export default function ExamPrepPage() {
       preschoolName={preschoolName}
       unreadCount={unreadCount}
       hasOrganization={hasOrganization}
+      hideHeader={true}
     >
       <div style={{ padding: 'var(--space-4)', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ marginBottom: 'var(--space-4)' }}>

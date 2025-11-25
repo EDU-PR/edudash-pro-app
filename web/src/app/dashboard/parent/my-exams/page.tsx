@@ -149,6 +149,7 @@ export default function MyExamsPage() {
       userName={userName}
       preschoolName={preschoolName}
       hasOrganization={hasOrganization}
+      hideHeader={true}
     >
       <div className="container" style={{ maxWidth: 900 }}>
         {/* Header */}

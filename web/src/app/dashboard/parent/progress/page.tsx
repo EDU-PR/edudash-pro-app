@@ -25,7 +25,7 @@ export default function ProgressPage() {
   }, [router, supabase.auth]);
 
   return (
-    <ParentShell tenantSlug={slug} userEmail={email}>
+    <ParentShell tenantSlug={slug} userEmail={email} hideHeader={true}>
       <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
         <SubPageHeader 
           title="Progress Tracking"

@@ -462,7 +462,31 @@ export default function ParentMessagesPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  // Early return for loading states
+  // Compute derived values BEFORE early return (hooks must always be called)
+  const filteredThreads = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return threads.filter((thread) => {
+      if (!query) return true;
+      const participants = thread.message_participants || [];
+      const educator = participants.find((p) => p.role !== 'parent');
+      const educatorName = educator?.profiles
+        ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.toLowerCase()
+        : '';
+      const studentName = thread.student
+        ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
+        : '';
+      const lastMessage = thread.last_message?.content?.toLowerCase() || '';
+
+      return (
+        educatorName.includes(query) ||
+        studentName.includes(query) ||
+        lastMessage.includes(query) ||
+        thread.subject.toLowerCase().includes(query)
+      );
+    });
+  }, [threads, searchQuery]);
+
+  // Early return for loading states (AFTER all hooks)
   if (authLoading || profileLoading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -500,30 +524,6 @@ export default function ParentMessagesPage() {
       setSending(false);
     }
   };
-
-  // Compute derived values
-  const filteredThreads = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return threads.filter((thread) => {
-      if (!query) return true;
-      const participants = thread.message_participants || [];
-      const educator = participants.find((p) => p.role !== 'parent');
-      const educatorName = educator?.profiles
-        ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.toLowerCase()
-        : '';
-      const studentName = thread.student
-        ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
-        : '';
-      const lastMessage = thread.last_message?.content?.toLowerCase() || '';
-
-      return (
-        educatorName.includes(query) ||
-        studentName.includes(query) ||
-        lastMessage.includes(query) ||
-        thread.subject.toLowerCase().includes(query)
-      );
-    });
-  }, [threads, searchQuery]);
 
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
   const currentThread = selectedThreadId
@@ -585,6 +585,12 @@ export default function ParentMessagesPage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                background: 'var(--background)',
+                zIndex: 100,
               }}>
                 <button
                   onClick={() => router.push('/dashboard/parent')}
@@ -609,7 +615,7 @@ export default function ParentMessagesPage() {
                 </h2>
               </div>
               
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '72px' }}>
                 <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
                 <input
                   type="text"
@@ -746,8 +752,8 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '24px' : '104px',
-                  paddingBottom: isDesktop ? 120 : 80,
+                  paddingTop: isDesktop ? '32px' : '128px',
+                  paddingBottom: 0,
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
@@ -838,7 +844,8 @@ export default function ParentMessagesPage() {
                   background: 'var(--background)',
                   borderTop: isDesktop ? '1px solid var(--border)' : 'none',
                   boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
-                  zIndex: 10,
+                  zIndex: 50,
+                  marginBottom: 0,
                 }}
               >
                 <input

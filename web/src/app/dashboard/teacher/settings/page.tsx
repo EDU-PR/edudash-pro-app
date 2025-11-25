@@ -58,7 +58,7 @@ export default function TeacherSettingsPage() {
   }
 
   return (
-    <TeacherShell tenantSlug={slug} userEmail={userEmail}>
+    <TeacherShell tenantSlug={slug} userEmail={userEmail} hideHeader={true}>
       <div className="container">
         <div className="section">
           <h1 className="h1">Settings</h1>
