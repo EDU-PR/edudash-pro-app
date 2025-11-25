@@ -60,12 +60,24 @@ export default function TeacherSettingsPage() {
   
   // Load profile data
   useEffect(() => {
-    if (profile) {
-      setFullName(profile.full_name || '');
-      setPhoneNumber(profile.phone || '');
-      setAvatarUrl(profile.avatar_url || null);
-    }
-  }, [profile]);
+    const loadProfileData = async () => {
+      if (!userId) return;
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name, phone, avatar_url')
+        .eq('id', userId)
+        .single();
+      
+      if (data && !error) {
+        setFullName(data.full_name || '');
+        setPhoneNumber(data.phone || '');
+        setAvatarUrl(data.avatar_url || null);
+      }
+    };
+    
+    loadProfileData();
+  }, [userId, supabase]);
   
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

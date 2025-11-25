@@ -4,9 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight, Phone, Mail, Check, X, Loader2 } from 'lucide-react';
+import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -14,174 +13,22 @@ export default function SettingsPage() {
   const [userEmail, setUserEmail] = useState<string>();
   const [userId, setUserId] = useState<string>();
   const { slug } = useTenantSlug(userId);
-  const { profile, loading: profileLoading } = useUserProfile(userId);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  
-  // Profile form state
-  const [fullName, setFullName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  
-  // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(false);
-  
-  // Language preference
-  const [language, setLanguage] = useState('en-ZA');
-  
-  // Password change modal
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  
-  // Avatar upload
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-
-  // Load profile data directly from database
-  useEffect(() => {
-    const loadProfileData = async () => {
-      if (!userId) return;
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name, phone, avatar_url')
-        .eq('id', userId)
-        .single();
-      
-      if (data && !error) {
-        setFullName(data.full_name || '');
-        setPhoneNumber(data.phone || '');
-        setAvatarUrl(data.avatar_url || null);
-      }
-    };
-    
-    loadProfileData();
-  }, [userId, supabase]);
-  
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !userId) return;
-    
-    // Validate file
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveError('Image must be less than 2MB');
-      return;
-    }
-    
-    if (!file.type.startsWith('image/')) {
-      setSaveError('Please upload an image file');
-      return;
-    }
-    
-    try {
-      setUploadingAvatar(true);
-      setSaveError(null);
-      
-      // Upload to Supabase storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-      
-      if (uploadError) throw uploadError;
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-      
-      // Update profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', userId);
-      
-      if (updateError) throw updateError;
-      
-      setAvatarUrl(publicUrl);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error: any) {
-      console.error('Avatar upload failed:', error);
-      setSaveError(error.message || 'Failed to upload avatar');
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-  
-  const handleSaveProfile = async () => {
-    if (!userId) return;
-    
-    try {
-      setSaving(true);
-      setSaveError(null);
-      
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: fullName.trim(),
-          phone: phoneNumber.trim(),
-        })
-        .eq('id', userId);
-      
-      if (error) throw error;
-      
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error: any) {
-      console.error('Save failed:', error);
-      setSaveError(error.message || 'Failed to save changes');
-    } finally {
-      setSaving(false);
-    }
-  };
-  
-  const handlePasswordChange = async () => {
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match');
-      return;
-    }
-    
-    if (newPassword.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
-      return;
-    }
-    
-    try {
-      setChangingPassword(true);
-      setPasswordError(null);
-      
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      
-      if (error) throw error;
-      
-      setShowPasswordModal(false);
-      setNewPassword('');
-      setConfirmPassword('');
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error: any) {
-      console.error('Password change failed:', error);
-      setPasswordError(error.message || 'Failed to change password');
-    } finally {
-      setChangingPassword(false);
-    }
-  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    handleAvatarUpload(event);
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfileImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSignOut = async () => {
