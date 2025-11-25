@@ -149,15 +149,7 @@ export default function ParentDashboard() {
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
 
   return (
-    <>
-      <style jsx global>{`
-        /* Hide header on parent dashboard main page */
-        body:has(.parent-dashboard-main) .topbar,
-        body:has(.parent-dashboard-main) header.topbar {
-          display: none !important;
-        }
-      `}</style>
-      <ParentShell
+    <ParentShell
       tenantSlug={tenantSlug}
       userEmail={profile?.email}
       userName={userName}
