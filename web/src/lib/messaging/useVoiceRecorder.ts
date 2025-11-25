@@ -173,8 +173,8 @@ export const useVoiceRecorder = ({ onRecordingComplete }: UseVoiceRecorderOption
       };
 
       recorder.onstop = async () => {
-        setIsRecording(false);
         cleanupRecording();
+        setIsRecording(false);
         
         const durationMs = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
         

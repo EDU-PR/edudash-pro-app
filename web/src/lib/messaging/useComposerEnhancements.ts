@@ -4,6 +4,9 @@ import { encodeMediaContent } from './messageContent';
 import { uploadMessageAttachment, validateAttachment, AttachmentValidationError, AttachmentUploadError } from './attachmentUploader';
 import { useVoiceRecorder } from './useVoiceRecorder';
 
+// Auto-clear error messages after this duration
+const ERROR_CLEAR_TIMEOUT_MS = 5000;
+
 export const EMOJI_OPTIONS = [
   '😊',
   '🙂',
@@ -242,12 +245,12 @@ export const useComposerEnhancements = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showEmojiPicker]);
 
-  // Clear error after 5 seconds
+  // Clear error after timeout
   useEffect(() => {
     if (attachmentError) {
       const timer = setTimeout(() => {
         setAttachmentError(null);
-      }, 5000);
+      }, ERROR_CLEAR_TIMEOUT_MS);
       return () => clearTimeout(timer);
     }
   }, [attachmentError]);

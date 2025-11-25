@@ -40,6 +40,30 @@ const ALLOWED_VIDEO_TYPES = [
 // Retry configuration
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 10000;
+
+// MIME type to extension mapping for common types
+const MIME_TO_EXT: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp3': 'mp3',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/wav': 'wav',
+  'audio/x-m4a': 'm4a',
+  'audio/m4a': 'm4a',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'video/x-msvideo': 'avi',
+};
 
 export interface UploadResult {
   url: string;
@@ -81,6 +105,31 @@ const getExtension = (input?: string) => {
   if (!input) return undefined;
   const clean = input.split('.').pop()?.toLowerCase();
   return clean?.replace(/[^a-z0-9]/g, '') || undefined;
+};
+
+/**
+ * Get file extension from MIME type using mapping or fallback
+ */
+const getExtensionFromMimeType = (mimeType: string): string => {
+  // Check exact match in mapping
+  if (MIME_TO_EXT[mimeType]) {
+    return MIME_TO_EXT[mimeType];
+  }
+  
+  // Try without codec parameters (e.g., 'audio/webm;codecs=opus' -> 'audio/webm')
+  const baseMimeType = mimeType.split(';')[0].trim();
+  if (MIME_TO_EXT[baseMimeType]) {
+    return MIME_TO_EXT[baseMimeType];
+  }
+  
+  // Fallback to extracting subtype and sanitizing
+  const subtype = baseMimeType.split('/')[1];
+  if (subtype) {
+    // Remove 'x-' prefix and any non-alphanumeric characters
+    return subtype.replace(/^x-/, '').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
+  }
+  
+  return 'bin';
 };
 
 /**
@@ -216,8 +265,7 @@ export const uploadMessageAttachment = async (
   const random = Math.random().toString(36).slice(2, 8);
   const fallbackExt = getExtension(options.filenameHint) || 
     (file instanceof File ? getExtension(file.name) : undefined) || 
-    contentType.split('/')[1]?.split(';')[0] || 
-    'bin';
+    getExtensionFromMimeType(contentType);
   const objectPath = `${options.pathPrefix ? `${options.pathPrefix}/` : ''}${timestamp}_${random}.${fallbackExt}`;
 
   let lastError: unknown;
@@ -244,7 +292,7 @@ export const uploadMessageAttachment = async (
         }
         
         lastError = error;
-        const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+        const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
         console.warn(`Upload attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
         await sleep(delay);
         continue;
@@ -269,7 +317,7 @@ export const uploadMessageAttachment = async (
       
       // For unexpected errors, retry if we have attempts left
       if (attempt < MAX_RETRIES - 1) {
-        const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+        const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
         console.warn(`Upload attempt ${attempt + 1} failed unexpectedly, retrying in ${delay}ms...`);
         await sleep(delay);
         continue;
