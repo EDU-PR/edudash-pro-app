@@ -200,7 +200,40 @@ export default function ParentMessagesPage() {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+  }, [selectedThreadId]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Call useComposerEnhancements early to satisfy Rules of Hooks
+  const {
+    emojiButtonRef,
+    emojiPickerRef,
+    showEmojiPicker,
+    setShowEmojiPicker,
+    handleEmojiSelect,
+    triggerFilePicker,
+    fileInputRef,
+    handleAttachmentChange,
+    attachmentUploading,
+    isRecording,
+    handleMicClick,
+    statusMessage,
+  } = useComposerEnhancements({
+    supabase,
+    threadId: selectedThreadId,
+    userId,
+    onRefresh: () => {
+      setRefreshTrigger(prev => prev + 1);
+    },
+    onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
+  });
 
   useEffect(() => {
     const initAuth = async () => {
@@ -229,44 +262,38 @@ export default function ParentMessagesPage() {
   }, []);
 
   useEffect(() => {
-    selectedThreadIdRef.current = selectedThreadId;
-  }, [selectedThreadId]);
+    scrollToBottom();
+  }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const markThreadAsRead = useCallback(async (threadId: string) => {
+    if (!userId) return;
+    try {
+      // Call the database function to mark all messages as read
+      await supabase.rpc('mark_thread_messages_as_read', {
+        thread_id: threadId,
+        reader_id: userId,
+      });
+    } catch (err) {
+      console.error('Error marking thread as read:', err);
+    }
+  }, [supabase, userId]);
 
-  const markThreadAsRead = useCallback(
-    async (threadId: string) => {
-      if (!userId) return;
-      try {
-        await supabase
-          .from('message_participants')
-          .update({ last_read_at: new Date().toISOString() })
-          .eq('thread_id', threadId)
-          .eq('user_id', userId);
-
-        setThreads((prev) =>
-          prev.map((thread) =>
-            thread.id === threadId
-              ? {
-                  ...thread,
-                  unread_count: 0,
-                  message_participants: (thread.message_participants || []).map((participant) =>
-                    participant.user_id === userId
-                      ? { ...participant, last_read_at: new Date().toISOString() }
-                      : participant
-                  ),
-                }
-              : thread
-          )
-        );
-      } catch (err) {
-        console.error('Error marking thread as read:', err);
-      }
-    },
-    [supabase, userId]
-  );
+  // Mark thread as read when selected (with delay to ensure messages are loaded)
+  useEffect(() => {
+    if (selectedThreadId && userId) {
+      // Mark as read and trigger refresh
+      const markAndRefresh = async () => {
+        await markThreadAsRead(selectedThreadId);
+        // Wait a bit for DB to update, then trigger refresh
+        setTimeout(() => {
+          setRefreshTrigger(prev => prev + 1);
+        }, 300);
+      };
+      
+      // Delay slightly to ensure messages are loaded first
+      setTimeout(markAndRefresh, 500);
+    }
+  }, [selectedThreadId, userId, markThreadAsRead]);
 
   const fetchThreads = useCallback(async () => {
     if (!userId) return;
@@ -333,8 +360,13 @@ export default function ParentMessagesPage() {
       );
 
       setThreads(threadsWithDetails);
-      if (threadsWithDetails.length > 0 && !selectedThreadId) {
-        setSelectedThreadId(threadsWithDetails[0].id);
+      // Don't auto-select threads - let user choose
+      // Only ensure selection is still valid if one exists
+      if (selectedThreadId) {
+        const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
+        if (!stillSelected) {
+          setSelectedThreadId(null);
+        }
       }
     } catch (err: any) {
       console.error('Error fetching threads:', err);
@@ -344,48 +376,43 @@ export default function ParentMessagesPage() {
     }
   }, [selectedThreadId, supabase, userId]);
 
-  const fetchMessages = useCallback(
-    async (threadId: string) => {
-      setMessagesLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('messages')
-          .select(`
-            id,
-            thread_id,
-            sender_id,
-            content,
-            created_at,
-            sender:profiles(first_name, last_name, role)
-          `)
-          .eq('thread_id', threadId)
-          .order('created_at', { ascending: true });
+  const fetchMessages = useCallback(async (threadId: string) => {
+    setMessagesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`
+          id,
+          thread_id,
+          sender_id,
+          content,
+          created_at,
+          read_by,
+          sender:profiles(first_name, last_name, role)
+        `)
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
 
-        if (error) throw error;
-        setMessages(data || []);
-        await markThreadAsRead(threadId);
-        setTimeout(() => scrollToBottom(), 80);
-      } catch (err) {
-        console.error('Error fetching messages:', err);
-      } finally {
-        setMessagesLoading(false);
-      }
-    },
-    [markThreadAsRead, supabase]
-  );
+      if (error) throw error;
+      setMessages(data || []);
+      await markThreadAsRead(threadId);
+      setTimeout(() => scrollToBottom(), 80);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [markThreadAsRead, supabase]);
 
   const refreshConversation = useCallback(() => {
-    if (selectedThreadId) {
-      fetchMessages(selectedThreadId);
-      fetchThreads();
-    }
-  }, [fetchMessages, fetchThreads, selectedThreadId]);
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (userId) {
       fetchThreads();
     }
-  }, [userId, fetchThreads]);
+  }, [userId, fetchThreads, refreshTrigger]);
 
   useEffect(() => {
     if (selectedThreadId) {
@@ -415,6 +442,7 @@ export default function ParentMessagesPage() {
     };
   }, [selectedThreadId, supabase, fetchMessages]);
 
+  // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (
@@ -433,6 +461,15 @@ export default function ParentMessagesPage() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
+
+  // Early return for loading states
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -455,8 +492,8 @@ export default function ParentMessagesPage() {
         .eq('id', selectedThreadId);
 
       setMessageText('');
-      refreshConversation();
-    } catch (err) {
+      setRefreshTrigger(prev => prev + 1);
+    } catch (err: any) {
       console.error('Error sending message:', err);
       alert('Failed to send message. Please try again.');
     } finally {
@@ -464,27 +501,7 @@ export default function ParentMessagesPage() {
     }
   };
 
-  const {
-    emojiButtonRef,
-    emojiPickerRef,
-    showEmojiPicker,
-    setShowEmojiPicker,
-    handleEmojiSelect,
-    triggerFilePicker,
-    fileInputRef,
-    handleAttachmentChange,
-    attachmentUploading,
-    isRecording,
-    handleMicClick,
-    statusMessage,
-  } = useComposerEnhancements({
-    supabase,
-    threadId: selectedThreadId,
-    userId,
-    onRefresh: refreshConversation,
-    onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
-  });
-
+  // Compute derived values
   const filteredThreads = useMemo(() => {
     const query = searchQuery.toLowerCase();
     return threads.filter((thread) => {
@@ -519,31 +536,16 @@ export default function ParentMessagesPage() {
 
   const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId);
-    // Immediately clear unread badge in UI
-    setThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === threadId
-          ? { ...thread, unread_count: 0 }
-          : thread
-      )
-    );
   };
 
   const handleClearSelection = () => {
-    if (!isDesktop) {
-      // On mobile, navigate back to show the thread list
-      router.push('/dashboard/parent/messages');
-    }
     setSelectedThreadId(null);
-  };
+    // Refresh threads to update unread counts
+    fetchThreads();
 
-  if (authLoading || profileLoading) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+    // On mobile, don't use router.back() - just clear selection to show contact list
+    // Router navigation is not needed since we're staying on the same page
+  };
 
   return (
     <ParentShell
@@ -557,11 +559,11 @@ export default function ParentMessagesPage() {
       <div
         style={{
           display: 'flex',
-          height: 'calc(100vh - var(--topnav-h))',
+          height: '100vh',
           overflow: 'hidden',
           width: '100%',
+          margin: 0,
           boxSizing: 'border-box',
-          marginTop: '8px',
         }}
       >
         <div
@@ -573,7 +575,90 @@ export default function ParentMessagesPage() {
             overflow: 'hidden',
           }}
         >
-          {currentThread ? (
+          {/* Mobile: Show thread list when no selection, otherwise show chat */}
+          {!isDesktop && !currentThread ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Mobile contacts header with back arrow */}
+              <div style={{ 
+                padding: '16px 12px', 
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <button
+                  onClick={() => router.push('/dashboard/parent')}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    padding: 0,
+                  }}
+                >
+                  <ArrowLeft size={22} />
+                </button>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  Messages
+                </h2>
+              </div>
+              
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
+                <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    color: 'var(--text-primary)',
+                    fontSize: 15,
+                  }}
+                />
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: 20,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                  }}
+                />
+              </div>
+              {threadsLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div className="spinner" style={{ margin: '0 auto' }}></div>
+                </div>
+              ) : filteredThreads.length > 0 ? (
+                filteredThreads.map((thread) => (
+                  <ThreadItem
+                    key={thread.id}
+                    thread={thread}
+                    isActive={false}
+                    onSelect={() => handleSelectThread(thread.id)}
+                  />
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <MessageSquare size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
+                  <p style={{ color: 'var(--muted)', fontSize: 15 }}>No conversations yet</p>
+                </div>
+                )}
+              </div>
+            </div>
+          ) : currentThread ? (
             <>
               <div
                 style={{
@@ -581,14 +666,14 @@ export default function ParentMessagesPage() {
                   top: isDesktop ? 'auto' : 0,
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
-                  padding: isDesktop ? '16px 20px' : '16px 12px 12px 12px',
+                  zIndex: isDesktop ? 'auto' : 100,
+                  padding: isDesktop ? '16px 20px' : '16px 8px 12px 8px',
                   borderBottom: isDesktop ? '1px solid var(--border)' : 'none',
                   background: 'var(--surface-1)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: isDesktop ? 12 : 8,
-                  zIndex: isDesktop ? 'auto' : 100,
+                  gap: isDesktop ? 16 : 12,
                 }}
               >
                 {!isDesktop && (
@@ -634,6 +719,25 @@ export default function ParentMessagesPage() {
                     </p>
                   )}
                 </div>
+                {isDesktop && (
+                  <button
+                    onClick={handleClearSelection}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 999,
+                      padding: '6px 12px',
+                      background: 'transparent',
+                      color: 'var(--muted)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <ArrowLeft size={16} />
+                    Clear chat
+                  </button>
+                )}
               </div>
 
               <div
@@ -642,7 +746,7 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '24px' : '76px',
+                  paddingTop: isDesktop ? '24px' : '104px',
                   paddingBottom: isDesktop ? 120 : 80,
                   background: 'var(--background)',
                   backgroundImage:
@@ -702,6 +806,11 @@ export default function ParentMessagesPage() {
                         ? `${message.sender.first_name} ${message.sender.last_name}`
                         : 'Unknown';
 
+                      // Get other participant IDs (excluding current user) for read status
+                      const otherParticipantIds = (currentThread?.message_participants || [])
+                        .filter((p: any) => p.user_id !== userId)
+                        .map((p: any) => p.user_id);
+
                       return (
                         <ChatMessageBubble
                           key={message.id}
@@ -710,6 +819,7 @@ export default function ParentMessagesPage() {
                           isDesktop={isDesktop}
                           formattedTime={formatMessageTime(message.created_at)}
                           senderName={!isOwn ? senderName : undefined}
+                          otherParticipantIds={otherParticipantIds}
                         />
                       );
                     })}
@@ -1030,7 +1140,7 @@ export default function ParentMessagesPage() {
             </>
           ) : (
             isDesktop && (
-              <div
+            <div
               style={{
                 flex: 1,
                 display: 'flex',
@@ -1045,18 +1155,31 @@ export default function ParentMessagesPage() {
                   maxWidth: 360,
                   padding: 40,
                   borderRadius: 20,
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--border)',
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
                   boxShadow: '0 20px 80px rgba(15, 23, 42, 0.25)',
                 }}
               >
-                <div style={{ width: 96, height: 96, margin: '0 auto 24px' }}>
-                  <img src="/dash-web-placeholder.svg" alt="Messages" style={{ width: '100%' }} />
+                <div style={{ 
+                  width: 120, 
+                  height: 120, 
+                  margin: '0 auto 24px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3)'
+                }}>
+                  <svg width="60" height="60" viewBox="0 0 100 100" fill="none">
+                    <path d="M20 30L50 60L80 30" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M20 50L50 80L80 50" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity="0.7"/>
+                  </svg>
                 </div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-                  EduDash Messages
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 12, textAlign: 'center' }}>
+                  EduDash Pro Messages
                 </h2>
-                <p style={{ color: 'var(--muted)', fontSize: 15, lineHeight: 1.5 }}>
+                <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 15, lineHeight: 1.5, textAlign: 'center' }}>
                   Send private, secure messages between parents and teachers.
                 </p>
               </div>

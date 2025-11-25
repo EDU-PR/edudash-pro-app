@@ -242,10 +242,7 @@ export default function TeacherMessagesPage() {
     threadId: selectedThreadId,
     userId,
     onRefresh: () => {
-      if (selectedThreadId) {
-        fetchMessages(selectedThreadId);
-        fetchThreads();
-      }
+      setRefreshTrigger(prev => prev + 1);
     },
     onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
   });
@@ -277,11 +274,11 @@ export default function TeacherMessagesPage() {
   const markThreadAsRead = useCallback(async (threadId: string) => {
     if (!userId) return;
     try {
-      await supabase
-        .from('message_participants')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('thread_id', threadId)
-        .eq('user_id', userId);
+      // Call the database function to mark all messages as read
+      await supabase.rpc('mark_thread_messages_as_read', {
+        thread_id: threadId,
+        reader_id: userId,
+      });
     } catch (err) {
       console.error('Error marking thread as read:', err);
     }
@@ -315,6 +312,7 @@ export default function TeacherMessagesPage() {
           sender_id,
           content,
           created_at,
+          read_by,
           sender:profiles(first_name, last_name, role)
         `)
         .eq('thread_id', threadId)
@@ -481,6 +479,16 @@ export default function TeacherMessagesPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
+  // Early return for loading states
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Regular functions and computed values after hooks and early returns
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !selectedThreadId || !userId) return;
@@ -504,10 +512,7 @@ export default function TeacherMessagesPage() {
         .eq('id', selectedThreadId);
 
       setMessageText('');
-      if (selectedThreadId) {
-        fetchMessages(selectedThreadId);
-        fetchThreads();
-      }
+      setRefreshTrigger(prev => prev + 1);
     } catch (err: any) {
       console.error('Error sending message:', err);
       alert('Failed to send message. Please try again.');
@@ -516,6 +521,7 @@ export default function TeacherMessagesPage() {
     }
   };
 
+  // Compute derived values
   const filteredThreads = threads.filter((thread) => {
     if (!searchQuery) return true;
 
@@ -538,14 +544,6 @@ export default function TeacherMessagesPage() {
     );
   });
 
-  if (authLoading || profileLoading) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
   const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
@@ -559,9 +557,8 @@ export default function TeacherMessagesPage() {
     // Refresh threads to update unread counts
     fetchThreads();
 
-    if (!isDesktop) {
-      router.back();
-    }
+    // On mobile, don't use router.back() - just clear selection to show contact list
+    // Router navigation is not needed since we're staying on the same page
   };
 
   return (
@@ -581,6 +578,7 @@ export default function TeacherMessagesPage() {
           height: '100vh',
           overflow: 'hidden',
           width: '100%',
+          margin: 0,
           boxSizing: 'border-box',
         }}
       >
@@ -593,7 +591,90 @@ export default function TeacherMessagesPage() {
             overflow: 'hidden',
           }}
         >
-          {selectedThread ? (
+          {/* Mobile: Show thread list when no selection, otherwise show chat */}
+          {!isDesktop && !selectedThread ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Mobile contacts header with back arrow */}
+              <div style={{ 
+                padding: '16px 12px', 
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <button
+                  onClick={() => router.push('/dashboard/teacher')}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    padding: 0,
+                  }}
+                >
+                  <ArrowLeft size={22} />
+                </button>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  Messages
+                </h2>
+              </div>
+              
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
+                <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    color: 'var(--text-primary)',
+                    fontSize: 15,
+                  }}
+                />
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: 20,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                  }}
+                />
+              </div>
+              {threadsLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div className="spinner" style={{ margin: '0 auto' }}></div>
+                </div>
+              ) : filteredThreads.length > 0 ? (
+                filteredThreads.map((thread) => (
+                  <ThreadItem
+                    key={thread.id}
+                    thread={thread}
+                    isActive={false}
+                    onSelect={() => setSelectedThreadId(thread.id)}
+                  />
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <MessageCircle size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
+                  <p style={{ color: 'var(--muted)', fontSize: 15 }}>No conversations yet</p>
+                </div>
+                )}
+              </div>
+            </div>
+          ) : selectedThread ? (
             <>
               <div
                 style={{
@@ -681,7 +762,7 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '24px' : '80px',
+                  paddingTop: isDesktop ? '24px' : '116px',
                   paddingBottom: isDesktop ? 120 : 80,
                   background: 'var(--background)',
                   backgroundImage:
@@ -738,6 +819,11 @@ export default function TeacherMessagesPage() {
                       const senderName = message.sender
                         ? `${message.sender.first_name} ${message.sender.last_name}`
                         : 'Unknown';
+                      
+                      // Get other participant IDs (excluding current user) for read status
+                      const otherParticipantIds = selectedParticipants
+                        .filter((p: any) => p.user_id !== userId)
+                        .map((p: any) => p.user_id);
 
                       return (
                         <ChatMessageBubble
@@ -747,6 +833,7 @@ export default function TeacherMessagesPage() {
                           isDesktop={isDesktop}
                           formattedTime={formatMessageTime(message.created_at)}
                           senderName={!isOwn ? senderName : undefined}
+                          otherParticipantIds={otherParticipantIds}
                         />
                       );
                     })}
@@ -1065,6 +1152,7 @@ export default function TeacherMessagesPage() {
               </div>
             </>
           ) : (
+            isDesktop && (
             <div
               style={{
                 flex: 1,
@@ -1109,6 +1197,7 @@ export default function TeacherMessagesPage() {
                 </p>
               </div>
             </div>
+            )
           )}
         </div>
 

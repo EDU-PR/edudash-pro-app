@@ -32,6 +32,7 @@ export interface ChatMessage {
   sender_id: string;
   content: string;
   created_at: string;
+  read_by?: string[];
   sender?: {
     first_name: string;
     last_name: string;
@@ -45,6 +46,7 @@ interface ChatMessageBubbleProps {
   isDesktop: boolean;
   formattedTime: string;
   senderName?: string;
+  otherParticipantIds?: string[];
 }
 
 export const ChatMessageBubble = ({
@@ -53,8 +55,14 @@ export const ChatMessageBubble = ({
   isDesktop,
   formattedTime,
   senderName,
+  otherParticipantIds = [],
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
+  
+  // Check if message is read by other participants
+  const isRead = isOwn && message.read_by && otherParticipantIds.length > 0
+    ? otherParticipantIds.some(id => message.read_by?.includes(id))
+    : false;
 
   const bubbleBackground = isOwn
     ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)'
@@ -160,7 +168,17 @@ export const ChatMessageBubble = ({
         >
           {!isOwn && senderName && <span>{senderName}</span>}
           <span>{formattedTime}</span>
-          {isOwn && <span style={{ fontSize: 14 }}>✓✓</span>}
+          {isOwn && (
+            <span 
+              style={{ 
+                fontSize: 14,
+                color: isRead ? 'rgb(139, 92, 246)' : 'currentColor',
+                transition: 'color 0.3s ease'
+              }}
+            >
+              ✓✓
+            </span>
+          )}
         </div>
       </div>
     </div>
