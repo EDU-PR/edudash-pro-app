@@ -101,13 +101,13 @@ export const ChatMessageBubble = ({
         display: 'flex',
         justifyContent: isOwn ? 'flex-end' : 'flex-start',
         width: '100%',
-        paddingLeft: isDesktop ? 32 : 12,
-        paddingRight: isDesktop ? 32 : 12,
+        paddingLeft: isDesktop ? 20 : 0,
+        paddingRight: isDesktop ? 8 : 0,
       }}
     >
       <div
         style={{
-          maxWidth: isDesktop ? '62%' : '72%',
+          maxWidth: isDesktop ? '70%' : '80%',
           width: 'fit-content',
           padding: '14px 18px',
           borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
