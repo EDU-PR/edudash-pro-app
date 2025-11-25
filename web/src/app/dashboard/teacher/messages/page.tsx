@@ -574,30 +574,40 @@ export default function TeacherMessagesPage() {
             <>
               <div
                 style={{
-                  padding: '16px 20px',
-                  borderBottom: '1px solid var(--border)',
+                  padding: isDesktop ? '16px 20px' : '16px 12px 12px 12px',
+                  borderBottom: isDesktop ? '1px solid var(--border)' : 'none',
                   background: 'var(--surface-1)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 16,
+                  gap: isDesktop ? 16 : 8,
                 }}
               >
                 {!isDesktop && (
                   <button
                     onClick={handleClearSelection}
-                    className="iconBtn"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      background: 'transparent',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                      padding: 0,
+                    }}
                   >
-                    <CloseIcon size={18} />
-                    Close
+                    <CloseIcon size={22} />
                   </button>
                 )}
                 <div
                   style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 28,
+                    width: isDesktop ? 56 : 44,
+                    height: isDesktop ? 56 : 44,
+                    borderRadius: isDesktop ? 28 : 22,
                     background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
                     display: 'flex',
                     alignItems: 'center',
@@ -606,12 +616,12 @@ export default function TeacherMessagesPage() {
                     boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
                   }}
                 >
-                  <User size={28} color="white" />
+                  <User size={isDesktop ? 28 : 22} color="white" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{parentName}</h2>
+                  <h2 style={{ margin: 0, fontSize: isDesktop ? 20 : 17, fontWeight: 700, color: 'var(--text-primary)' }}>{parentName}</h2>
                   {selectedThread.student && (
-                    <p style={{ margin: '6px 0 0', fontSize: 14, color: 'var(--muted)', fontWeight: 500 }}>
+                    <p style={{ margin: '6px 0 0', fontSize: isDesktop ? 14 : 12, color: 'var(--muted)', fontWeight: 500 }}>
                       📚 About: {selectedThread.student.first_name} {selectedThread.student.last_name}
                     </p>
                   )}
@@ -642,9 +652,8 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: '24px 20px',
-                  paddingRight: isDesktop ? CONTACT_PANEL_WIDTH + 24 : 20,
-                  paddingBottom: 120,
+                  padding: isDesktop ? '24px 0px' : '16px 8px',
+                  paddingBottom: isDesktop ? 120 : 80,
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
@@ -719,14 +728,14 @@ export default function TeacherMessagesPage() {
 
               <div
                 style={{
-                  position: 'absolute',
+                  position: isDesktop ? 'absolute' : 'fixed',
                   bottom: 0,
                   left: 0,
-                  right: isDesktop ? CONTACT_PANEL_WIDTH : 0,
-                  padding: '12px 16px',
+                  right: 0,
+                  padding: isDesktop ? '12px 16px' : '10px 12px',
                   background: 'var(--background)',
-                  borderTop: '1px solid var(--border)',
-                  boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.2)',
+                  borderTop: isDesktop ? '1px solid var(--border)' : 'none',
+                  boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
                   zIndex: 10,
                 }}
               >
