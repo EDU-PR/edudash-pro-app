@@ -50,7 +50,26 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
     setError(null);
     
     try {
-      // Build query to get students
+      // First, get the teacher's classes
+      const { data: teacherClasses, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', teacherId)
+        .eq('preschool_id', preschoolId);
+      
+      if (classesError) throw classesError;
+      
+      const teacherClassIds = teacherClasses?.map((c: any) => c.id) || [];
+      console.log('Teacher class IDs:', teacherClassIds);
+      
+      if (teacherClassIds.length === 0) {
+        console.log('Teacher has no classes assigned');
+        setParents([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Build query to get students ONLY from teacher's classes
       let studentsQuery = supabase
         .from('students')
         .select(`
@@ -62,11 +81,13 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
           parent_id
         `)
         .eq('preschool_id', preschoolId)
+        .in('class_id', teacherClassIds)
         .not('parent_id', 'is', null);
       
-      // Filter by class if specified
+      // Additional filter by specific classes if provided
       if (classIds && classIds.length > 0) {
-        studentsQuery = studentsQuery.in('class_id', classIds);
+        const filteredClassIds = teacherClassIds.filter((id: any) => classIds.includes(id));
+        studentsQuery = studentsQuery.in('class_id', filteredClassIds);
       }
       
       const { data: students, error: studentsError } = await studentsQuery;
@@ -352,9 +373,9 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
           <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 8 }}>
             {searchQuery ? 'No matching parents found' : 'No parent contacts yet'}
           </p>
-          {!searchQuery && !classIds && (
+          {!searchQuery && (
             <p style={{ color: 'var(--muted-light)', fontSize: 12 }}>
-              Students need to be assigned to classes to appear here
+              {!classIds ? 'You need to be assigned to classes, or students need to be enrolled in your classes' : 'No students in these classes'}
             </p>
           )}
         </div>
