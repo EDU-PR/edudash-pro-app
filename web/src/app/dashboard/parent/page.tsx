@@ -376,4 +376,7 @@ export default function ParentDashboard() {
             />
           </div>
         </div>
-      )}\n    </ParentShell>\n    </>\n  );\n}
+      )}
+    </ParentShell>
+  );
+}
