@@ -810,11 +810,15 @@ serve(async (req: Request) => {
     // PayFast indicates recurring payments through:
     // 1. token_payment_type: 'recurring' - Standard PayFast recurring payment indicator
     // 2. subscription_id - Present when payment is part of a subscription
-    // 3. item_name containing 'Renewal' - Fallback for manually tagged items
+    // 3. item_name containing specific renewal patterns - Fallback for manually tagged items
     // We prioritize explicit PayFast fields over item_name matching for reliability
     const hasRecurringToken = payload.token_payment_type === 'recurring';
     const hasSubscriptionId = Boolean(payload.subscription_id);
-    const hasRenewalTag = payload.item_name?.toLowerCase().includes('renewal');
+    // Match specific renewal patterns: '[RENEWAL]', 'Renewal:', or standalone 'Renewal' at word boundary
+    const itemNameLower = (payload.item_name || '').toLowerCase();
+    const hasRenewalTag = itemNameLower.includes('[renewal]') || 
+                         itemNameLower.startsWith('renewal:') ||
+                         /\brenewal\b/.test(itemNameLower);
     const isRecurring = hasRecurringToken || hasSubscriptionId || hasRenewalTag;
     
     if (newStatus === 'completed' && isRecurring) {

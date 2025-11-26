@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { getMondayBasedDayIndex, getWeekLabels } from '@/lib/utils/dateUtils';
 import { useAIUserLimits, useAIRecentUsage } from '@/hooks/useAI';
 import { track } from '@/lib/analytics';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
@@ -189,14 +190,12 @@ export const QuotaUsageAnalytics: React.FC<QuotaUsageAnalyticsProps> = ({
       return { data: [0, 0, 0, 0, 0, 0, 0], labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'] };
     }
     
-    const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekLabels = getWeekLabels('short');
     const weekData = [0, 0, 0, 0, 0, 0, 0];
     
     recentUsage.usage_logs.forEach((log: any) => {
       const date = new Date(log.created_at);
-      // Convert JavaScript's Sunday-based day (0=Sun, 6=Sat) to Monday-based index (0=Mon, 6=Sun)
-      // Formula: (dayOfWeek + 6) % 7 shifts Sunday (0) to position 6, and Monday (1) to position 0
-      const dayIndex = (date.getDay() + 6) % 7;
+      const dayIndex = getMondayBasedDayIndex(date);
       weekData[dayIndex]++;
     });
     
