@@ -1110,7 +1110,7 @@ export default function TeacherMessagesPage() {
                         rows={1}
                         style={{
                           width: '100%',
-                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 18px' : '14px 54px 14px 48px'),
+                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 22px' : '14px 54px 14px 48px'),
                           borderRadius: 26,
                           border: '1px solid rgba(148, 163, 184, 0.15)',
                           background: 'rgba(30, 41, 59, 0.6)',

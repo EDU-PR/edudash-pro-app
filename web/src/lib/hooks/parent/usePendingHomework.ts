@@ -50,7 +50,7 @@ export function usePendingHomework(userId: string | undefined) {
             due_date,
             subject,
             class:classes(name),
-            submissions:homework_submissions(id, status)
+            homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)
           `)
           .in('class_id', children.map((c: any) => c.class_id))
           .gte('due_date', new Date().toISOString())
@@ -60,7 +60,7 @@ export function usePendingHomework(userId: string | undefined) {
 
         // Filter to only show homework without submissions from these students
         const pending = homework?.filter((hw: any) => {
-          const submissions = hw.submissions || [];
+          const submissions = hw.homework_submissions || [];
           // Check if any of the parent's children have submitted
           return !submissions.some((sub: any) => 
             studentIds.includes(sub.student_id) && sub.status !== 'draft'
