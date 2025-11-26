@@ -112,7 +112,7 @@ export default function HomeworkPage() {
         // Fetch homework assignments
         const { data, error: hwError } = await supabase
           .from('homework_assignments')
-          .select('*, submissions(*)')
+          .select('*, homework_submissions(*)')
           .eq('child_id', activeChildId)
           .order('due_date', { ascending: true });
         
@@ -140,8 +140,8 @@ export default function HomeworkPage() {
         setHomework(data || []);
         
         // Calculate stats
-        const pending = data?.filter((hw: any) => !hw.submissions || hw.submissions.length === 0).length || 0;
-        const completed = data?.filter((hw: any) => hw.submissions && hw.submissions.length > 0).length || 0;
+        const pending = data?.filter((hw: any) => !hw.homework_submissions || hw.homework_submissions.length === 0).length || 0;
+        const completed = data?.filter((hw: any) => hw.homework_submissions && hw.homework_submissions.length > 0).length || 0;
         setStats({ pending, completed, total: data?.length || 0 });
       } catch (err: any) {
         setError(err.message);
