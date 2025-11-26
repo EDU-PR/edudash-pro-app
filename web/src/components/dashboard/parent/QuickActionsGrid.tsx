@@ -20,15 +20,17 @@ interface QuickActionsGridProps {
   activeChildGrade?: number;
   isExamEligible?: boolean;
   unreadCount?: number;
+  homeworkCount?: number;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0 }: QuickActionsGridProps) {
+export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0 }: QuickActionsGridProps) {
   const router = useRouter();
 
   const getQuickActions = (): QuickAction[] => {
     // Organization-linked actions (common for all with organization)
     const organizationActions: QuickAction[] = hasOrganization ? [
       { icon: MessageCircle, label: 'Messages', href: '/dashboard/parent/messages', color: '#8b5cf6' },
+      { icon: FileText, label: 'Homework', href: '/dashboard/parent/homework', color: '#f59e0b' },
       { icon: Calendar, label: 'Calendar', href: '/dashboard/parent/calendar', color: '#06b6d4' },
       { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#10b981' },
       { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#3b82f6' },
@@ -89,7 +91,11 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
           const Icon = action.icon;
           const isChatWithDash = action.label === 'Chat with Dash';
           const isMessages = action.label === 'Messages';
+          const isHomework = action.label === 'Homework';
           const hasUnread = isMessages && unreadCount > 0;
+          const hasPendingHomework = isHomework && homeworkCount > 0;
+          const badgeCount = isMessages ? unreadCount : isHomework ? homeworkCount : 0;
+          const showBadge = hasUnread || hasPendingHomework;
           return (
             <button
               key={action.href}
@@ -99,7 +105,9 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 background: isChatWithDash 
                   ? 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)'
                   : 'var(--surface-1)',
-                border: isChatWithDash
+                border: (hasUnread || hasPendingHomework)
+                  ? '2px solid #8b5cf6'
+                  : isChatWithDash
                   ? '2px solid #ec4899'
                   : '1px solid var(--border)',
                 borderRadius: 12,
@@ -112,13 +120,13 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 transition: 'all 0.2s',
                 textAlign: 'center',
                 minHeight: '120px',
-                boxShadow: hasUnread
+                boxShadow: (hasUnread || hasPendingHomework)
                   ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
                   : isChatWithDash 
                   ? '0 4px 20px rgba(236, 72, 153, 0.5)' 
                   : 'none',
                 position: 'relative',
-                animation: hasUnread ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+                animation: (hasUnread || hasPendingHomework) ? 'pulse-glow 2s ease-in-out infinite' : 'none',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -139,7 +147,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 }
               }}
             >
-              {hasUnread && (
+              {(hasUnread || hasPendingHomework) && (
                 <div style={{
                   position: 'absolute',
                   top: 8,
@@ -153,7 +161,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                   boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
                   zIndex: 1,
                 }}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </div>
               )}
               <div style={{
