@@ -692,10 +692,10 @@ export default function TeacherMessagesPage() {
                   style={{
                     width: '100%',
                     padding: '10px 12px 10px 40px',
-                    borderRadius: 12,
+                    borderRadius: 'var(--radius-lg)',
                     border: '1px solid var(--border)',
                     background: 'var(--surface-2)',
-                    color: 'var(--text-primary)',
+                    color: 'var(--text)',
                     fontSize: 15,
                   }}
                 />
@@ -852,9 +852,7 @@ export default function TeacherMessagesPage() {
                   paddingTop: isDesktop ? '32px' : '128px',
                   paddingBottom: isDesktop ? 100 : 80,
                   paddingRight: isDesktop ? 340 : 0,
-                  background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
-                  backgroundImage:
-                    'radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.04) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.04) 0%, transparent 45%)',
+                  background: 'var(--bg)',
                 }}
               >
                 {messagesLoading ? (
@@ -875,10 +873,10 @@ export default function TeacherMessagesPage() {
                     <div
                       style={{
                         padding: '40px 32px',
-                        borderRadius: 20,
-                        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                        borderRadius: 'var(--radius-xl)',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        boxShadow: 'var(--shadow-lg)',
                       }}
                     >
                       <div
@@ -1112,9 +1110,9 @@ export default function TeacherMessagesPage() {
                           width: '100%',
                           padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 22px' : '14px 54px 14px 48px'),
                           borderRadius: 26,
-                          border: '1px solid rgba(148, 163, 184, 0.15)',
-                          background: 'rgba(30, 41, 59, 0.6)',
-                          color: '#e2e8f0',
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-2)',
+                          color: 'var(--text)',
                           fontSize: 15,
                           outline: 'none',
                           resize: 'none',
