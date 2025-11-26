@@ -28,7 +28,7 @@ Split immediately if ANY apply:
 - Always use RBAC helpers from `lib/rbac/types.ts`; never hardcode role checks
 - Example:
 ```typescript
-import { roleHasPermission } from './lib/rbac/types';
+import { roleHasPermission } from '@/lib/rbac/types';
 if (roleHasPermission(user.role, 'manage_courses')) { /* ... */ }
 ```
 
