@@ -693,6 +693,9 @@ serve(async (req: Request) => {
     
     // Handle failed/cancelled payments
     else if (newStatus === 'cancelled' || newStatus === 'failed') {
+      const scope = payload.custom_str2 || '';
+      const ownerId = payload.custom_str3 || '';
+      
       if (existingTx.school_id) {
         const invoiceNumber = (existingTx.metadata as TransactionMetadata)?.invoice_number;
         if (invoiceNumber) {
@@ -702,13 +705,203 @@ serve(async (req: Request) => {
             .eq('invoice_number', invoiceNumber)
             .eq('school_id', existingTx.school_id);
         }
+        
+        // Update subscription status to cancelled/failed for school subscriptions
+        const { error: subUpdateError } = await supabase
+          .from('subscriptions')
+          .update({ 
+            status: newStatus === 'cancelled' ? 'cancelled' : 'payment_failed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('school_id', existingTx.school_id)
+          .eq('status', 'active');
+        
+        if (subUpdateError) {
+          console.error('Error updating subscription status:', subUpdateError);
+        }
+      }
+      
+      // Handle user-scope failed payments
+      if (scope === 'user' && ownerId) {
+        // Update user's subscription status
+        const { data: userSchool } = await supabase
+          .from('preschools')
+          .select('id')
+          .eq('owner_user_id', ownerId)
+          .eq('is_personal', true)
+          .maybeSingle();
+        
+        if (userSchool) {
+          await supabase
+            .from('subscriptions')
+            .update({ 
+              status: newStatus === 'cancelled' ? 'cancelled' : 'payment_failed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('school_id', userSchool.id)
+            .eq('status', 'active');
+        }
+        
+        // Downgrade user to free tier on cancellation
+        if (newStatus === 'cancelled') {
+          const { error: tierDowngradeError } = await supabase
+            .from('user_ai_tiers')
+            .update({ tier: 'free' })
+            .eq('user_id', ownerId);
+          
+          if (tierDowngradeError) {
+            console.error('Error downgrading user tier:', tierDowngradeError);
+          }
+          
+          // Also update user_ai_usage
+          await supabase
+            .from('user_ai_usage')
+            .update({ current_tier: 'free' })
+            .eq('user_id', ownerId);
+          
+          console.log('User downgraded to free tier due to cancellation:', ownerId);
+        }
+      }
+      
+      // Send notification email for failed payments
+      try {
+        const emailAddress = payload.email_address;
+        if (emailAddress && newStatus === 'failed') {
+          const emailSubject = '⚠️ Payment Failed - Action Required';
+          const emailBody = `
+            <h2>Payment Failed</h2>
+            <p>We were unable to process your payment.</p>
+            <h3>What to do next:</h3>
+            <ul>
+              <li>Please check your payment details are correct</li>
+              <li>Ensure sufficient funds are available</li>
+              <li>Try the payment again or use a different payment method</li>
+            </ul>
+            <p>If you need assistance, please contact support@edudashpro.org.za</p>
+            <p style="color: #666; font-size: 0.9em;">Transaction ID: ${m_payment_id}</p>
+          `;
+          
+          await supabase.from('notification_queue').insert({
+            notification_type: 'email',
+            recipient: emailAddress,
+            subject: emailSubject,
+            body: emailBody,
+            metadata: {
+              payment_id: m_payment_id,
+              status: newStatus,
+              mode: PAYFAST_MODE
+            }
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to queue failed payment notification:', emailError);
       }
       
       console.log('Payment failed/cancelled:', {
         m_payment_id,
         status: newStatus,
-        payment_status
+        payment_status,
+        scope,
+        ownerId
       });
+    }
+    
+    // Handle subscription renewal (recurring payments)
+    // PayFast sends payment_status: 'COMPLETE' with token_payment_type: 'recurring'
+    const isRecurring = payload.token_payment_type === 'recurring' || 
+                       payload.subscription_id || 
+                       payload.item_name?.includes('Renewal');
+    
+    if (newStatus === 'completed' && isRecurring) {
+      const scope = payload.custom_str2 || '';
+      const ownerId = payload.custom_str3 || '';
+      
+      console.log('Processing subscription renewal:', { m_payment_id, scope, ownerId });
+      
+      // Extend subscription end date
+      if (existingTx.school_id) {
+        const { data: currentSub } = await supabase
+          .from('subscriptions')
+          .select('id, end_date, billing_frequency')
+          .eq('school_id', existingTx.school_id)
+          .in('status', ['active', 'pending'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (currentSub) {
+          const endDate = new Date(currentSub.end_date || new Date());
+          const newEndDate = new Date(endDate);
+          
+          if (currentSub.billing_frequency === 'annual') {
+            newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+          } else {
+            newEndDate.setMonth(newEndDate.getMonth() + 1);
+          }
+          
+          await supabase
+            .from('subscriptions')
+            .update({
+              end_date: newEndDate.toISOString(),
+              next_billing_date: newEndDate.toISOString(),
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentSub.id);
+          
+          console.log('Subscription renewed:', {
+            school_id: existingTx.school_id,
+            new_end_date: newEndDate.toISOString()
+          });
+        }
+      }
+      
+      // Handle user-scope renewals
+      if (scope === 'user' && ownerId) {
+        const { data: userSchool } = await supabase
+          .from('preschools')
+          .select('id')
+          .eq('owner_user_id', ownerId)
+          .eq('is_personal', true)
+          .maybeSingle();
+        
+        if (userSchool) {
+          const { data: userSub } = await supabase
+            .from('subscriptions')
+            .select('id, end_date, billing_frequency')
+            .eq('school_id', userSchool.id)
+            .in('status', ['active', 'pending'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (userSub) {
+            const endDate = new Date(userSub.end_date || new Date());
+            const newEndDate = new Date(endDate);
+            
+            if (userSub.billing_frequency === 'annual') {
+              newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+            } else {
+              newEndDate.setMonth(newEndDate.getMonth() + 1);
+            }
+            
+            await supabase
+              .from('subscriptions')
+              .update({
+                end_date: newEndDate.toISOString(),
+                next_billing_date: newEndDate.toISOString(),
+                status: 'active',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', userSub.id);
+            
+            console.log('User subscription renewed:', {
+              user_id: ownerId,
+              new_end_date: newEndDate.toISOString()
+            });
+          }
+        }
+      }
     }
 
     console.log('PayFast ITN processed successfully:', {
