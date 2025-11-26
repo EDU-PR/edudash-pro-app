@@ -18,7 +18,9 @@ import {
   X,
   Sparkles,
   BookOpen,
+  Clipboard,
 } from 'lucide-react';
+import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 
 interface ParentShellProps {
   tenantSlug?: string;
@@ -42,6 +44,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [hasOrganization, setHasOrganization] = useState(hasOrganizationProp || false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // Get pending homework count
+  const { count: homeworkCount } = usePendingHomework(userId || undefined);
 
   // Show sidebar navigation for parent dashboard
   const showSidebar = true;
@@ -124,6 +129,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
+        { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
         { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
@@ -134,13 +140,14 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/dashboard/parent/ai-help', label: 'AI Help', icon: Sparkles },
+        { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
         { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },
       ];
     }
-  }, [hasOrganization, unreadCount]);
+  }, [hasOrganization, unreadCount, homeworkCount]);
 
   return (
     <div className="app">
