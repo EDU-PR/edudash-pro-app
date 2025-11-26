@@ -36,6 +36,7 @@
 - **SQL Scripts**: Source of truth for schema/security. Never edit DB manually.
 - **Feature Flags & AI Quotas**: Managed in DB, not code.
 - **SuperAdmin**: Always `superadmin@edudashpro.org.za` with 2FA enabled.
+- **Fix Unrelated Errors**: When working on a task, if you encounter unrelated errors or issues in the codebase, fix them as part of your changes to improve overall code quality.
 
 ## Integration Points
 
