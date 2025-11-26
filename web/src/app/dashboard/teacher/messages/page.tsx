@@ -83,60 +83,92 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
   const hasUnread = (thread.unread_count || 0) > 0;
+  
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name[0]?.toUpperCase() || '?';
+  };
 
   return (
     <div
       onClick={onSelect}
       style={{
-        padding: '10px 12px',
-        marginBottom: 6,
-        borderRadius: 10,
+        padding: '14px 16px',
+        marginBottom: 8,
+        borderRadius: 14,
         cursor: 'pointer',
-        background: isActive ? 'var(--primary-subtle)' : 'transparent',
-        border: isActive ? '1px solid var(--primary-subtle)' : '1px solid transparent',
+        background: isActive 
+          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
+          : 'transparent',
+        border: isActive 
+          ? '1px solid rgba(59, 130, 246, 0.3)' 
+          : '1px solid transparent',
         display: 'flex',
-        gap: 10,
+        gap: 14,
         alignItems: 'center',
-        transition: 'background 0.2s ease, border 0.2s ease',
+        transition: 'all 0.2s ease',
+        boxShadow: isActive ? '0 2px 8px rgba(59, 130, 246, 0.1)' : 'none',
       }}
       onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.background = 'var(--surface-2)';
+        if (!isActive) {
+          e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+          e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.1)';
+        }
       }}
       onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.background = 'transparent';
+        if (!isActive) {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.border = '1px solid transparent';
+        }
       }}
     >
       <div
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+          width: 46,
+          height: 46,
+          borderRadius: 23,
+          background: isActive 
+            ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
+            : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
           color: '#fff',
+          fontSize: 15,
+          fontWeight: 600,
+          boxShadow: isActive ? '0 2px 10px rgba(59, 130, 246, 0.3)' : '0 2px 6px rgba(0, 0, 0, 0.15)',
+          transition: 'all 0.2s ease',
         }}
       >
-        <User size={18} />
+        {getInitials(parentName)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <span
             style={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: hasUnread ? 700 : 600,
-              color: 'var(--text-primary)',
+              color: hasUnread ? '#f1f5f9' : '#e2e8f0',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              letterSpacing: '0.01em',
             }}
           >
             {parentName}
           </span>
           {thread.last_message?.created_at && (
-            <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>
+            <span style={{ 
+              fontSize: 11, 
+              color: hasUnread ? '#a78bfa' : '#64748b', 
+              marginLeft: 8,
+              fontWeight: hasUnread ? 600 : 400,
+            }}>
               {formatMessageTime(thread.last_message.created_at)}
             </span>
           )}
@@ -144,25 +176,27 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
         {studentName && (
           <p
             style={{
-              margin: '2px 0',
-              fontSize: 11,
-              color: 'var(--primary)',
+              margin: '0 0 4px 0',
+              fontSize: 12,
+              color: '#a78bfa',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              fontWeight: 500,
             }}
           >
-            RE: {studentName}
+            📚 {studentName}
           </p>
         )}
         <p
           style={{
             margin: 0,
-            fontSize: 12,
-            color: hasUnread ? 'var(--text-primary)' : 'var(--muted)',
+            fontSize: 13,
+            color: hasUnread ? '#cbd5e1' : '#64748b',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            lineHeight: 1.4,
           }}
         >
           {thread.last_message?.content || 'No messages yet'}
@@ -171,17 +205,18 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
       {hasUnread && (
         <div
           style={{
-            minWidth: 20,
-            height: 20,
-            borderRadius: 10,
-            background: 'var(--primary)',
+            minWidth: 22,
+            height: 22,
+            borderRadius: 11,
+            background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '0 6px',
+            padding: '0 7px',
+            boxShadow: '0 2px 6px rgba(59, 130, 246, 0.4)',
           }}
         >
-          <span style={{ color: '#fff', fontSize: 11, fontWeight: 600 }}>
+          <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>
             {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
           </span>
         </div>
@@ -704,34 +739,35 @@ export default function TeacherMessagesPage() {
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 1000,
-                  padding: isDesktop ? '16px 20px' : '16px 8px 12px 8px',
-                  borderBottom: isDesktop ? '1px solid var(--border)' : '1px solid rgba(255, 255, 255, 0.1)',
-                  background: isDesktop ? 'var(--surface-1)' : '#111827',
-                  backdropFilter: isDesktop ? 'none' : 'blur(12px)',
-                  boxShadow: isDesktop ? 'none' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  padding: isDesktop ? '20px 28px' : '16px 12px',
+                  borderBottom: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  background: isDesktop
+                    ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%)'
+                    : '#111827',
+                  backdropFilter: 'blur(12px)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: isDesktop ? 12 : 10,
-                  width: '100%',
-                  boxSizing: 'border-box',
+                  gap: isDesktop ? 18 : 12,
+                  boxShadow: isDesktop ? '0 2px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
                 }}
               >
                 {!isDesktop && (
                   <button
                     onClick={handleClearSelection}
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      background: 'transparent',
-                      border: 'none',
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      background: 'rgba(100, 116, 139, 0.1)',
+                      border: '1px solid rgba(148, 163, 184, 0.1)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      color: 'var(--text-primary)',
+                      color: '#e2e8f0',
                       padding: 0,
+                      transition: 'all 0.2s ease',
                     }}
                   >
                     <ArrowLeft size={20} />
@@ -739,24 +775,46 @@ export default function TeacherMessagesPage() {
                 )}
                 <div
                   style={{
-                    width: isDesktop ? 40 : 36,
-                    height: isDesktop ? 40 : 36,
-                    borderRadius: isDesktop ? 20 : 18,
-                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                    width: isDesktop ? 52 : 44,
+                    height: isDesktop ? 52 : 44,
+                    borderRadius: isDesktop ? 26 : 22,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
+                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                    fontSize: isDesktop ? 17 : 14,
+                    fontWeight: 600,
+                    color: '#fff',
                   }}
                 >
-                  <User size={isDesktop ? 20 : 18} color="white" />
+                  {parentName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h2 style={{ margin: 0, fontSize: isDesktop ? 16 : 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{parentName}</h2>
+                  <h2 style={{ 
+                    margin: 0, 
+                    fontSize: isDesktop ? 18 : 16, 
+                    fontWeight: 700, 
+                    color: '#f1f5f9',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {parentName}
+                  </h2>
                   {selectedThread.student && (
-                    <p style={{ margin: '2px 0 0', fontSize: isDesktop ? 12 : 11, color: 'var(--muted)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      📚 About: {selectedThread.student.first_name} {selectedThread.student.last_name}
+                    <p style={{ 
+                      margin: '4px 0 0', 
+                      fontSize: isDesktop ? 13 : 12, 
+                      color: '#a78bfa', 
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                      <span>📚</span>
+                      <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
                     </p>
                   )}
                 </div>
@@ -764,17 +822,18 @@ export default function TeacherMessagesPage() {
                   <button
                     onClick={handleClearSelection}
                     style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 999,
-                      padding: '4px 10px',
-                      background: 'transparent',
-                      color: 'var(--muted)',
+                      border: '1px solid rgba(148, 163, 184, 0.2)',
+                      borderRadius: 10,
+                      padding: '8px 14px',
+                      background: 'rgba(100, 116, 139, 0.1)',
+                      color: '#94a3b8',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 4,
+                      gap: 8,
                       cursor: 'pointer',
                       fontSize: 13,
-                      flexShrink: 0,
+                      fontWeight: 500,
+                      transition: 'all 0.2s ease',
                     }}
                   >
                     <ArrowLeft size={14} />
@@ -788,14 +847,13 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-<<<<<<< HEAD
-<<<<<<< HEAD
-                  padding: isDesktop ? '24px 0px' : '16px 8px',
+                  padding: isDesktop ? '28px 0px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : '128px',
-                  paddingBottom: isDesktop ? 0 : '80px',
-                  background: 'var(--background)',
+                  paddingBottom: isDesktop ? 100 : 80,
+                  paddingRight: isDesktop ? 340 : 0,
+                  background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
                   backgroundImage:
-                    'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
+                    'radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.04) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.04) 0%, transparent 45%)',
                 }}
               >
                 {messagesLoading ? (
@@ -815,34 +873,36 @@ export default function TeacherMessagesPage() {
                   >
                     <div
                       style={{
-                        padding: '32px 24px',
-                        borderRadius: 16,
-                        background: 'var(--surface-2)',
-                        border: '2px dashed var(--border)',
+                        padding: '40px 32px',
+                        borderRadius: 20,
+                        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                        border: '1px solid rgba(148, 163, 184, 0.1)',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
                       }}
                     >
                       <div
                         style={{
-                          width: 64,
-                          height: 64,
-                          margin: '0 auto 16px',
-                          borderRadius: 32,
-                          background: 'linear-gradient(135deg, var(--primary-subtle) 0%, rgba(139, 92, 246, 0.1) 100%)',
+                          width: 72,
+                          height: 72,
+                          margin: '0 auto 20px',
+                          borderRadius: 36,
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          boxShadow: '0 4px 16px rgba(99, 102, 241, 0.2)',
                         }}
                       >
-                        <Send size={28} color="var(--primary)" />
+                        <Send size={30} color="#818cf8" />
                       </div>
-                      <p style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 16, fontWeight: 600 }}>No messages yet</p>
-                      <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 280, lineHeight: 1.5 }}>
-                        Start the conversation below to reach this parent.
+                      <p style={{ color: '#f1f5f9', marginBottom: 10, fontSize: 17, fontWeight: 600 }}>Start a conversation</p>
+                      <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
+                        Send a message below to connect with this parent.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: isDesktop ? 20 : 16 }}>
                     {messages.map((message) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
@@ -876,13 +936,15 @@ export default function TeacherMessagesPage() {
                   position: isDesktop ? 'absolute' : 'fixed',
                   bottom: 0,
                   left: 0,
-                  right: 0,
-                  padding: isDesktop ? '12px 16px' : '10px 12px',
-                  background: 'var(--background)',
-                  borderTop: isDesktop ? '1px solid var(--border)' : 'none',
-                  boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
+                  right: isDesktop ? 320 : 0,
+                  padding: isDesktop ? '16px 28px' : '12px 12px',
+                  background: isDesktop 
+                    ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)'
+                    : 'rgba(15, 23, 42, 0.98)',
+                  backdropFilter: 'blur(12px)',
+                  borderTop: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : 'none',
+                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.15)',
                   zIndex: 50,
-                  marginBottom: 0,
                 }}
               >
                 <input
@@ -900,13 +962,14 @@ export default function TeacherMessagesPage() {
                         position: 'absolute',
                         bottom: 70,
                         left: 12,
-                        background: 'var(--surface-2)',
-                        borderRadius: 12,
-                        padding: 8,
-                        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        borderRadius: 16,
+                        padding: 12,
+                        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)',
                         display: 'grid',
                         gridTemplateColumns: 'repeat(5, 1fr)',
-                        gap: 6,
+                        gap: 8,
                         zIndex: 20,
                       }}
                     >
@@ -916,12 +979,17 @@ export default function TeacherMessagesPage() {
                           type="button"
                           onClick={() => handleEmojiSelect(emoji)}
                           style={{
-                            fontSize: 20,
+                            fontSize: 22,
                             lineHeight: 1,
                             border: 'none',
                             background: 'transparent',
                             cursor: 'pointer',
+                            padding: 6,
+                            borderRadius: 8,
+                            transition: 'background 0.15s ease',
                           }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(100, 116, 139, 0.2)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                           {emoji}
                         </button>
@@ -929,7 +997,7 @@ export default function TeacherMessagesPage() {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', maxWidth: 900, margin: '0 auto', position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', maxWidth: isDesktop ? 800 : 900, margin: '0 auto', position: 'relative' }}>
                     {/* Desktop: Icons outside input */}
                     {isDesktop && (
                       <div style={{ display: 'flex', gap: 8 }}>
@@ -938,16 +1006,16 @@ export default function TeacherMessagesPage() {
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker((prev) => !prev)}
                           style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 20,
-                            background: 'transparent',
-                            border: '1px solid var(--border)',
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            background: 'rgba(100, 116, 139, 0.1)',
+                            border: '1px solid rgba(148, 163, 184, 0.15)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
-                            color: 'var(--muted)',
+                            color: '#94a3b8',
                             transition: 'all 0.2s ease',
                           }}
                         >
@@ -957,16 +1025,16 @@ export default function TeacherMessagesPage() {
                           type="button"
                           onClick={triggerFilePicker}
                           style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 20,
-                            background: 'transparent',
-                            border: '1px solid var(--border)',
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            background: 'rgba(100, 116, 139, 0.1)',
+                            border: '1px solid rgba(148, 163, 184, 0.15)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
-                            color: 'var(--muted)',
+                            color: '#94a3b8',
                             transition: 'all 0.2s ease',
                           }}
                         >
@@ -982,16 +1050,16 @@ export default function TeacherMessagesPage() {
                         ref={emojiButtonRef}
                         onClick={() => setShowEmojiPicker((prev) => !prev)}
                         style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 20,
-                          background: 'transparent',
-                          border: '1px solid var(--border)',
+                          width: 42,
+                          height: 42,
+                          borderRadius: 21,
+                          background: 'rgba(100, 116, 139, 0.1)',
+                          border: '1px solid rgba(148, 163, 184, 0.15)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          color: 'var(--muted)',
+                          color: '#94a3b8',
                           flexShrink: 0,
                         }}
                       >
@@ -1005,7 +1073,7 @@ export default function TeacherMessagesPage() {
                       {!isDesktop && !messageText.trim() && (
                         <div style={{ 
                           position: 'absolute', 
-                          left: 12, 
+                          left: 14, 
                           top: '50%', 
                           transform: 'translateY(-50%)',
                           zIndex: 1,
@@ -1024,7 +1092,7 @@ export default function TeacherMessagesPage() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               cursor: 'pointer',
-                              color: 'var(--muted)',
+                              color: '#64748b',
                               padding: 0,
                             }}
                           >
@@ -1041,16 +1109,17 @@ export default function TeacherMessagesPage() {
                         rows={1}
                         style={{
                           width: '100%',
-                          padding: isDesktop ? '12px 16px' : (messageText.trim() ? '12px 52px 12px 16px' : '12px 52px 12px 44px'),
-                          borderRadius: 24,
-                          border: '1px solid var(--border)',
-                          background: 'var(--surface-1)',
-                          color: 'var(--text-primary)',
+                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 18px' : '14px 54px 14px 48px'),
+                          borderRadius: 26,
+                          border: '1px solid rgba(148, 163, 184, 0.15)',
+                          background: 'rgba(30, 41, 59, 0.6)',
+                          color: '#e2e8f0',
                           fontSize: 15,
                           outline: 'none',
                           resize: 'none',
                           maxHeight: 120,
                           fontFamily: 'inherit',
+                          transition: 'border-color 0.2s ease',
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
@@ -1074,18 +1143,18 @@ export default function TeacherMessagesPage() {
                               type="submit"
                               disabled={sending || attachmentUploading}
                               style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 18,
+                                width: 38,
+                                height: 38,
+                                borderRadius: 19,
                                 background: sending || attachmentUploading
-                                  ? 'var(--muted)'
-                                  : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                                  ? '#475569'
+                                  : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                                 border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
-                                boxShadow: sending || attachmentUploading ? 'none' : '0 2px 8px rgba(59, 130, 246, 0.3)',
+                                boxShadow: sending || attachmentUploading ? 'none' : '0 3px 10px rgba(59, 130, 246, 0.35)',
                                 transition: 'all 0.2s ease',
                               }}
                             >
@@ -1100,17 +1169,21 @@ export default function TeacherMessagesPage() {
                               type="button"
                               onClick={handleMicClick}
                               style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 18,
-                                background: isRecording ? '#D97706' : '#25D366',
+                                width: 38,
+                                height: 38,
+                                borderRadius: 19,
+                                background: isRecording 
+                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                                  : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                                 border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 cursor: 'pointer',
                                 transition: 'all 0.2s ease',
-                                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.2)',
+                                boxShadow: isRecording 
+                                  ? '0 3px 10px rgba(245, 158, 11, 0.35)' 
+                                  : '0 3px 10px rgba(34, 197, 94, 0.35)',
                               }}
                             >
                               <Mic size={20} color="white" />
@@ -1127,20 +1200,20 @@ export default function TeacherMessagesPage() {
                           type="submit"
                           disabled={sending || attachmentUploading}
                           style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 24,
+                            width: 50,
+                            height: 50,
+                            borderRadius: 25,
                             background:
                               sending || attachmentUploading
-                                ? 'var(--muted)'
-                                : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                                ? '#475569'
+                                : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                             border: 'none',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
                             boxShadow:
-                              sending || attachmentUploading ? 'none' : '0 2px 8px rgba(59, 130, 246, 0.3)',
+                              sending || attachmentUploading ? 'none' : '0 4px 14px rgba(59, 130, 246, 0.4)',
                             transition: 'all 0.2s ease',
                             flexShrink: 0,
                           }}
@@ -1156,10 +1229,12 @@ export default function TeacherMessagesPage() {
                           type="button"
                           onClick={handleMicClick}
                           style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 24,
-                            background: isRecording ? '#D97706' : '#25D366',
+                            width: 50,
+                            height: 50,
+                            borderRadius: 25,
+                            background: isRecording 
+                              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                              : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                             border: 'none',
                             display: 'flex',
                             alignItems: 'center',
@@ -1167,7 +1242,9 @@ export default function TeacherMessagesPage() {
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
                             flexShrink: 0,
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                            boxShadow: isRecording 
+                              ? '0 4px 14px rgba(245, 158, 11, 0.4)' 
+                              : '0 4px 14px rgba(34, 197, 94, 0.4)',
                           }}
                         >
                           <Mic size={22} color="white" />
@@ -1177,7 +1254,7 @@ export default function TeacherMessagesPage() {
                   </div>
                 </form>
                 {statusMessage && (
-                  <p style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', textAlign: 'center' }}>{statusMessage}</p>
+                  <p style={{ marginTop: 10, fontSize: 13, color: '#f87171', textAlign: 'center' }}>{statusMessage}</p>
                 )}
               </div>
             </>
@@ -1190,7 +1267,8 @@ export default function TeacherMessagesPage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                background: 'var(--background)',
+                paddingRight: 320,
+                background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
               }}
             >
               <div
@@ -1238,53 +1316,90 @@ export default function TeacherMessagesPage() {
               right: 0,
               top: 'var(--topnav-h)',
               bottom: 0,
-              width: 280,
-              paddingRight: 16,
-              borderLeft: '1px solid var(--border)',
-              background: 'var(--surface-1)',
+              width: 320,
+              borderLeft: '1px solid rgba(148, 163, 184, 0.1)',
+              background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
               display: 'flex',
               flexDirection: 'column',
               zIndex: 20,
+              boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.15)',
             }}
           >
-            <div style={{ padding: '16px 12px', borderBottom: '1px solid var(--border)' }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-                Conversations {totalUnread > 0 && `• ${totalUnread}`}
-              </h3>
-              <div style={{ position: 'relative', marginTop: 10 }}>
+            <div style={{ 
+              padding: '20px 16px 16px', 
+              borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+              background: 'rgba(15, 23, 42, 0.5)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: 18, 
+                  fontWeight: 700, 
+                  color: '#f1f5f9',
+                  letterSpacing: '-0.01em',
+                }}>
+                  Conversations
+                </h3>
+                {totalUnread > 0 && (
+                  <span style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 12,
+                    boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)',
+                  }}>
+                    {totalUnread} new
+                  </span>
+                )}
+              </div>
+              <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search conversations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px 10px 8px 32px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-2)',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
+                    padding: '12px 14px 12px 42px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    color: '#e2e8f0',
+                    fontSize: 14,
                     outline: 'none',
+                    transition: 'all 0.2s ease',
                   }}
                 />
                 <Search
-                  size={14}
-                  color="var(--muted)"
-                  style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}
+                  size={18}
+                  color="#64748b"
+                  style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }}
                 />
               </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 10px' }}>
               {threadsLoading ? (
-                <div style={{ textAlign: 'center', padding: 30 }}>
+                <div style={{ textAlign: 'center', padding: 40 }}>
                   <div className="spinner" style={{ margin: '0 auto' }}></div>
                 </div>
               ) : error ? (
-                <div style={{ textAlign: 'center', padding: 24 }}>
-                  <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>Failed to load messages</p>
-                  <button className="btn btnSecondary" onClick={fetchThreads}>
+                <div style={{ textAlign: 'center', padding: 32 }}>
+                  <p style={{ color: '#f87171', fontSize: 14, marginBottom: 16 }}>Failed to load messages</p>
+                  <button 
+                    className="btn btnSecondary" 
+                    onClick={fetchThreads}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      color: '#60a5fa',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
                     Try Again
                   </button>
                 </div>
@@ -1298,9 +1413,21 @@ export default function TeacherMessagesPage() {
                   />
                 ))
               ) : (
-                <div style={{ textAlign: 'center', padding: 30 }}>
-                  <MessageCircle size={40} color="var(--muted)" style={{ margin: '0 auto 10px' }} />
-                  <p style={{ color: 'var(--muted)', fontSize: 13 }}>No conversations yet</p>
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div style={{
+                    width: 64,
+                    height: 64,
+                    margin: '0 auto 16px',
+                    borderRadius: 32,
+                    background: 'rgba(100, 116, 139, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <MessageCircle size={28} color="#64748b" />
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: 15, fontWeight: 500 }}>No conversations yet</p>
+                  <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Messages will appear here</p>
                 </div>
               )}
             </div>
