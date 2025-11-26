@@ -81,11 +81,12 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   
   // Get initials for avatar
   const getInitials = (name: string) => {
-    const parts = name.split(' ');
+    if (!name || name.trim() === '') return '?';
+    const parts = name.trim().split(' ').filter(part => part.length > 0);
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
-    return name[0]?.toUpperCase() || '?';
+    return parts[0]?.[0]?.toUpperCase() || '?';
   };
 
   return (
@@ -814,7 +815,7 @@ export default function ParentMessagesPage() {
                     color: '#fff',
                   }}
                 >
-                  {educatorName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  {educatorName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h2 style={{ 

@@ -83,12 +83,12 @@ export const ChatMessageBubble = ({
 
   // Get sender initials for avatar
   const getInitials = (name?: string) => {
-    if (!name) return '?';
-    const parts = name.split(' ');
+    if (!name || name.trim() === '') return '?';
+    const parts = name.trim().split(' ').filter(part => part.length > 0);
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
-    return name[0]?.toUpperCase() || '?';
+    return parts[0]?.[0]?.toUpperCase() || '?';
   };
 
   const renderBody = () => {
