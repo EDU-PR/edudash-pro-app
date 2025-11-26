@@ -2,12 +2,43 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 interface UseUnreadMessagesReturn {
   unreadCount: number;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+}
+
+interface ThreadParticipant {
+  user_id: string;
+  role: string;
+  last_read_at: string | null;
+}
+
+interface MessageThread {
+  id: string;
+  message_participants: ThreadParticipant[];
+}
+
+interface MessagePayload {
+  id: string;
+  thread_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+}
+
+interface ThreadData {
+  threadId: string;
+  lastReadAt: string;
+}
+
+interface MessageRecord {
+  id: string;
+  thread_id: string;
+  created_at: string;
 }
 
 /**
@@ -33,7 +64,7 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
 
       const supabase = supabaseRef.current;
 
-      // Get all threads the user is a participant in
+      // Get all threads the user is a participant in with their last_read_at
       const { data: threads, error: threadsError } = await supabase
         .from('message_threads')
         .select(`
@@ -52,34 +83,53 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
         return;
       }
 
-      // Filter to threads where user is a participant
-      const userThreads = threads.filter((thread: any) =>
-        thread.message_participants?.some((p: any) => p.user_id === userId)
-      );
+      // Filter to threads where user is a participant and get their last_read_at
+      const userThreadsData = threads
+        .filter((thread: MessageThread) =>
+          thread.message_participants?.some((p: ThreadParticipant) => p.user_id === userId)
+        )
+        .map((thread: MessageThread) => {
+          const userParticipant = thread.message_participants?.find(
+            (p: ThreadParticipant) => p.user_id === userId
+          );
+          return {
+            threadId: thread.id,
+            lastReadAt: userParticipant?.last_read_at || '2000-01-01',
+          };
+        });
 
-      if (userThreads.length === 0) {
+      if (userThreadsData.length === 0) {
         setUnreadCount(0);
         return;
       }
 
-      // Count unread messages across all threads
+      // Build a single query to count all unread messages across all threads
+      // Using an OR condition for each thread with its specific last_read_at
       let totalUnread = 0;
 
-      for (const thread of userThreads) {
-        const userParticipant = thread.message_participants?.find(
-          (p: any) => p.user_id === userId
-        );
-        
-        if (userParticipant) {
-          const { count } = await supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('thread_id', thread.id)
-            .neq('sender_id', userId)
-            .gt('created_at', userParticipant.last_read_at || '2000-01-01');
-          
-          totalUnread += count || 0;
-        }
+      // Count unread messages for all threads in one query using RPC
+      // Since we can't easily do this with complex filters, we batch by groups
+      const threadIds = userThreadsData.map((t: ThreadData) => t.threadId);
+      
+      // Get all messages from user's threads that they didn't send
+      const { data: unreadMessages, error: countError } = await supabase
+        .from('messages')
+        .select('id, thread_id, created_at')
+        .in('thread_id', threadIds)
+        .neq('sender_id', userId);
+
+      if (countError) {
+        console.error('Error counting unread messages:', countError);
+        setUnreadCount(0);
+        return;
+      }
+
+      // Filter messages by checking if they're newer than the user's last_read_at for that thread
+      if (unreadMessages) {
+        totalUnread = unreadMessages.filter((msg: MessageRecord) => {
+          const threadData = userThreadsData.find((t: ThreadData) => t.threadId === msg.thread_id);
+          return threadData && new Date(msg.created_at) > new Date(threadData.lastReadAt);
+        }).length;
       }
 
       setUnreadCount(totalUnread);
@@ -113,14 +163,15 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
           schema: 'public',
           table: 'messages',
         },
-        async (payload: any) => {
+        async (payload: RealtimePostgresChangesPayload<MessagePayload>) => {
+          const newMessage = payload.new as MessagePayload;
           // Check if this message is in a thread the user participates in
           // and the user is not the sender
-          if (payload.new.sender_id !== userId) {
+          if (newMessage.sender_id !== userId) {
             const { data: participant } = await supabase
               .from('message_participants')
               .select('user_id')
-              .eq('thread_id', payload.new.thread_id)
+              .eq('thread_id', newMessage.thread_id)
               .eq('user_id', userId)
               .maybeSingle();
 
