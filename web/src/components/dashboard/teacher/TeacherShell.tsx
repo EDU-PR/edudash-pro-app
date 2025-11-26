@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -60,6 +60,45 @@ export function TeacherShell({
   const avatarLetter = useMemo(() => (userName?.[0] || userEmail?.[0] || 'T').toUpperCase(), [userName, userEmail]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileWidgetsOpen, setMobileWidgetsOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchNotificationCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+      
+      setNotificationCount(count || 0);
+    };
+
+    fetchNotificationCount();
+
+    // Subscribe to real-time notification changes
+    const channel = supabase
+      .channel(`teacher-notification-changes-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          fetchNotificationCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, supabase]);
   
   // Count pending notifications/activity
   const activityCount = useMemo(() => {
@@ -99,7 +138,36 @@ export function TeacherShell({
                 <div className="chip">Young Eagles</div>
               )}
             </div>
-            <div className="rightGroup" style={{ marginLeft: 'auto' }}>
+            <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                className="iconBtn"
+                aria-label="Notifications"
+                onClick={() => router.push('/dashboard/teacher/notifications')}
+                style={{ position: 'relative' }}
+              >
+                <Bell className="icon20" />
+                {notificationCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      backgroundColor: 'var(--danger)',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 16,
+                      height: 16,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
+              </button>
               {rightSidebar && (
                 <button 
                   className="iconBtn" 
