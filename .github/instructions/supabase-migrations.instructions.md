@@ -37,4 +37,4 @@ supabase db diff
 
 ## SuperAdmin
 - SuperAdmin must exist before running enhancement migrations
-- Always `superadmin@edudashpro.org.za` with 2FA enabled
+- Always ensure `superadmin@edudashpro.org.za` exists with 2FA enabled
