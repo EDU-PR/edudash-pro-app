@@ -43,7 +43,7 @@ export function usePendingHomework(userId: string | undefined) {
 
         // Get pending homework for all children
         const { data: homework, error: homeworkError } = await supabase
-          .from('homework')
+          .from('homework_assignments')
           .select(`
             id,
             title,
@@ -90,7 +90,7 @@ export function usePendingHomework(userId: string | undefined) {
     const channel = supabase
       .channel('pending-homework-changes')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'homework' }, 
+        { event: '*', schema: 'public', table: 'homework_assignments' }, 
         () => fetchPendingHomework()
       )
       .on('postgres_changes', 

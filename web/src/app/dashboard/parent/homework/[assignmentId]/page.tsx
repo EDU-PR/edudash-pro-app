@@ -177,7 +177,7 @@ export default function ParentHomeworkDetailPage() {
 
         const [assignmentRow, targetRes, submissionRes] = await Promise.all([
           supabase
-            .from('homework')
+            .from('homework_assignments')
             .select('*')
             .eq('id', assignmentParam)
             .single()
