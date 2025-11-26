@@ -13,6 +13,7 @@ import { EmptyChildrenState } from '@/components/dashboard/parent/EmptyChildrenS
 import { QuickActionsGrid } from '@/components/dashboard/parent/QuickActionsGrid';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
+import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
@@ -241,6 +242,11 @@ export default function ParentDashboard() {
             isExamEligible={isExamEligible}
             unreadCount={unreadCount}
           />
+        )}
+
+        {/* Homework Card - Show if organization-linked */}
+        {hasOrganization && userId && (
+          <HomeworkCard userId={userId} />
         )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}

@@ -8,6 +8,43 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
 import { FileText, Sparkles, CheckCircle2, Clock, AlertCircle, Calendar, BookOpen } from 'lucide-react';
 
+// Skeleton Component
+const HomeworkSkeleton = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+    {[1, 2, 3].map((i) => (
+      <div
+        key={i}
+        className="card"
+        style={{
+          padding: '20px',
+          background: 'var(--surface)',
+          borderRadius: '12px',
+          animation: 'pulse 1.5s ease-in-out infinite',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+          <div style={{ width: '48px', height: '48px', background: 'var(--surface-2)', borderRadius: '12px' }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ height: '20px', width: '60%', background: 'var(--surface-2)', borderRadius: '4px', marginBottom: '8px' }} />
+            <div style={{ height: '14px', width: '40%', background: 'var(--surface-2)', borderRadius: '4px' }} />
+          </div>
+        </div>
+        <div style={{ height: '14px', width: '80%', background: 'var(--surface-2)', borderRadius: '4px' }} />
+      </div>
+    ))}
+    <style jsx>{`
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+    `}</style>
+  </div>
+);
+
 // Disable static generation for this page
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
@@ -198,8 +235,11 @@ export default function HomeworkPage() {
           </div>
         )}
 
+        {/* Loading State */}
+        {homeworkLoading && <HomeworkSkeleton />}
+
         {/* Stats Cards */}
-        {hasOrganization && stats && (
+        {hasOrganization && stats && !homeworkLoading && (
           <div className="section">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <div className="card" style={{ padding: 16, textAlign: 'center' }}>
