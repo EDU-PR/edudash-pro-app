@@ -206,7 +206,11 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
                 current_tier: tier,
               });
               
-              // Call cancellation endpoint (to be implemented)
+              // Subscription cancellation is handled via support to prevent accidental cancellations
+              // and to provide opportunity for customer retention.
+              // TODO: [SUBSCRIPTION-CANCEL] Implement self-service cancellation endpoint in payfast-webhook
+              // when business requirements allow for automated cancellation flow.
+              // Current behavior: Direct users to support for manual processing.
               Alert.alert(
                 'Contact Support',
                 'To cancel your subscription, please contact support@edudashpro.org.za. We\'ll process your request within 24 hours.',

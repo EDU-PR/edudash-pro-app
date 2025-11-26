@@ -194,7 +194,9 @@ export const QuotaUsageAnalytics: React.FC<QuotaUsageAnalyticsProps> = ({
     
     recentUsage.usage_logs.forEach((log: any) => {
       const date = new Date(log.created_at);
-      const dayIndex = (date.getDay() + 6) % 7; // Monday = 0
+      // Convert JavaScript's Sunday-based day (0=Sun, 6=Sat) to Monday-based index (0=Mon, 6=Sun)
+      // Formula: (dayOfWeek + 6) % 7 shifts Sunday (0) to position 6, and Monday (1) to position 0
+      const dayIndex = (date.getDay() + 6) % 7;
       weekData[dayIndex]++;
     });
     

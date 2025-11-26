@@ -807,16 +807,26 @@ serve(async (req: Request) => {
     }
     
     // Handle subscription renewal (recurring payments)
-    // PayFast sends payment_status: 'COMPLETE' with token_payment_type: 'recurring'
-    const isRecurring = payload.token_payment_type === 'recurring' || 
-                       payload.subscription_id || 
-                       payload.item_name?.includes('Renewal');
+    // PayFast indicates recurring payments through:
+    // 1. token_payment_type: 'recurring' - Standard PayFast recurring payment indicator
+    // 2. subscription_id - Present when payment is part of a subscription
+    // 3. item_name containing 'Renewal' - Fallback for manually tagged items
+    // We prioritize explicit PayFast fields over item_name matching for reliability
+    const hasRecurringToken = payload.token_payment_type === 'recurring';
+    const hasSubscriptionId = Boolean(payload.subscription_id);
+    const hasRenewalTag = payload.item_name?.toLowerCase().includes('renewal');
+    const isRecurring = hasRecurringToken || hasSubscriptionId || hasRenewalTag;
     
     if (newStatus === 'completed' && isRecurring) {
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       
-      console.log('Processing subscription renewal:', { m_payment_id, scope, ownerId });
+      console.log('Processing subscription renewal:', { 
+        m_payment_id, 
+        scope, 
+        ownerId,
+        recurring_indicators: { hasRecurringToken, hasSubscriptionId, hasRenewalTag }
+      });
       
       // Extend subscription end date
       if (existingTx.school_id) {

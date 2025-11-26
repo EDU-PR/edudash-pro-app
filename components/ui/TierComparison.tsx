@@ -179,7 +179,13 @@ const TierCard: React.FC<{
 }> = ({ tier, isCurrentTier, isAnnual, theme, onSelect }) => {
   const price = isAnnual && tier.priceAnnual ? tier.priceAnnual : tier.price;
   const period = isAnnual ? '/year' : '/month';
-  const savings = tier.priceAnnual ? Math.round((1 - (tier.priceAnnual / (tier.price * 12))) * 100) : 0;
+  // Calculate savings: annual price vs 12 monthly payments
+  // Only show savings if annual pricing is available and represents a discount
+  const MONTHS_IN_YEAR = 12;
+  const monthlyEquivalent = tier.price * MONTHS_IN_YEAR;
+  const savings = (tier.priceAnnual && monthlyEquivalent > tier.priceAnnual) 
+    ? Math.round((1 - (tier.priceAnnual / monthlyEquivalent)) * 100) 
+    : 0;
   
   return (
     <View style={[

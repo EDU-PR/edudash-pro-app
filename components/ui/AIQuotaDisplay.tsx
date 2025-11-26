@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAIQuota, useAIUserLimits } from '@/hooks/useAI';
 import { track } from '@/lib/analytics';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
@@ -121,6 +122,7 @@ export const AIQuotaDisplay: React.FC<AIQuotaDisplayProps> = ({
 }) => {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
+  const { tier: currentTier } = useSubscription();
   
   // Fetch quota data using React Query hook
   const { 
@@ -147,16 +149,19 @@ export const AIQuotaDisplay: React.FC<AIQuotaDisplayProps> = ({
   
   // Handle upgrade button press
   const handleUpgradePress = useCallback(() => {
+    // Determine target tier based on current tier
+    const targetTier = currentTier === 'free' ? 'parent_starter' : 'parent_plus';
+    
     track('edudash.ai.upsell.shown', {
       trigger: 'quota_display_upgrade_button',
-      current_tier: 'free', // Will be enriched by context
-      target_tier: 'pro',
+      current_tier: currentTier || 'free',
+      target_tier: targetTier,
       quota_percentage: usageStats.percentage,
       service_type: serviceType,
     });
     
     router.push('/pricing');
-  }, [usageStats.percentage, serviceType]);
+  }, [usageStats.percentage, serviceType, currentTier]);
   
   // Notify parent when quota is exceeded
   React.useEffect(() => {
