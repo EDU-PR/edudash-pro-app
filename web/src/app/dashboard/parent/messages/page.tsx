@@ -807,22 +807,7 @@ export default function ParentMessagesPage() {
 <<<<<<< HEAD
                   padding: isDesktop ? '24px 0px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : '104px',
-                  paddingBottom: 0,
-=======
-                  padding: isDesktop ? '16px 16px' : '12px 8px',
-                  paddingTop: isDesktop ? '16px' : '72px',
-                  paddingBottom: isDesktop ? '80px' : '80px',
->>>>>>> 295834e (Fix messages chat UI: reduce header height, fix right padding, ensure scrolling shows last message)
-=======
-                  padding: isDesktop ? '16px 16px' : '12px 8px',
-                  paddingTop: isDesktop ? '16px' : '72px',
-                  paddingBottom: isDesktop ? '80px' : '80px',
-=======
-                  padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 92px)',
-                  paddingBottom: 0,
->>>>>>> 5b082aa (Fix messages page layout to show header by using calc(100vh - var(--topnav-h)))
->>>>>>> fcc3947 (UI/UX FIXES)
+                  paddingBottom: isDesktop ? 0 : '80px',
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
