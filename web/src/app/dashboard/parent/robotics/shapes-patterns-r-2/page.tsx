@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
-import { Shapes, Circle, Square, Triangle, Star, CheckCircle, ArrowRight } from 'lucide-react';
+import { Shapes, Circle, Square, Triangle, Star, CheckCircle, ArrowRight, Sparkles, Trophy } from 'lucide-react';
 
 export default function ShapesPatternsRoboticsPage() {
   const [completedActivities, setCompletedActivities] = useState<number[]>([]);
   const [currentActivity, setCurrentActivity] = useState(1);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const activities = [
     {
@@ -42,10 +43,22 @@ export default function ShapesPatternsRoboticsPage() {
       if (currentActivity === id && id < activities.length) {
         setCurrentActivity(id + 1);
       }
+      // Show celebration if all activities completed
+      if (completedActivities.length + 1 === activities.length) {
+        setTimeout(() => setShowCelebration(true), 300);
+      }
     }
   };
 
   const progress = (completedActivities.length / activities.length) * 100;
+
+  // Auto-hide celebration after 5 seconds
+  useEffect(() => {
+    if (showCelebration) {
+      const timer = setTimeout(() => setShowCelebration(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showCelebration]);
 
   return (
     <ParentShell>
@@ -273,6 +286,109 @@ export default function ShapesPatternsRoboticsPage() {
             </ul>
           </div>
         </div>
+
+        {/* Floating Celebration Animation */}
+        {showCelebration && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              animation: 'fadeIn 0.3s ease-in'
+            }}
+            onClick={() => setShowCelebration(false)}
+          >
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                borderRadius: 24,
+                padding: 48,
+                maxWidth: 500,
+                textAlign: 'center',
+                animation: 'scaleIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+                boxShadow: '0 20px 60px rgba(16, 185, 129, 0.4)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Trophy size={80} color="white" style={{ marginBottom: 24 }} />
+              <h2 style={{ fontSize: 32, fontWeight: 700, marginBottom: 16, color: 'white' }}>
+                🎊 Congratulations! 🎊
+              </h2>
+              <p style={{ fontSize: 18, marginBottom: 24, color: 'rgba(255,255,255,0.95)' }}>
+                You've mastered all Shapes & Patterns activities!
+              </p>
+              <div style={{
+                display: 'flex',
+                gap: 12,
+                justifyContent: 'center',
+                marginBottom: 24
+              }}>
+                {[1, 2, 3, 4].map((i) => (
+                  <Star key={i} size={32} fill="gold" color="gold" style={{
+                    animation: `bounce 0.6s ease-in-out ${i * 0.1}s infinite`
+                  }} />
+                ))}
+              </div>
+              <button
+                onClick={() => setShowCelebration(false)}
+                style={{
+                  background: 'white',
+                  color: '#10b981',
+                  border: 'none',
+                  padding: '12px 32px',
+                  borderRadius: 12,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <Sparkles size={20} />
+                Continue Learning
+              </button>
+            </div>
+          </div>
+        )}
+
+        <style jsx>{`
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+
+          @keyframes scaleIn {
+            from {
+              transform: scale(0.5);
+              opacity: 0;
+            }
+            to {
+              transform: scale(1);
+              opacity: 1;
+            }
+          }
+
+          @keyframes bounce {
+            0%, 100% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(-10px);
+            }
+          }
+        `}</style>
       </div>
     </ParentShell>
   );
