@@ -671,7 +671,7 @@ export default function ParentMessagesPage() {
                 alignItems: 'center',
                 gap: 12,
                 position: 'fixed',
-                top: 'var(--topnav-h)',
+                top: 0,
                 left: 0,
                 right: 0,
                 background: '#111827',
@@ -698,21 +698,20 @@ export default function ParentMessagesPage() {
                   <ArrowLeft size={22} />
                 </button>
                 <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  Messages
+                  Contacts
                 </h2>
               </div>
               
               {/* Search bar fixed below header */}
               <div style={{ 
                 position: 'fixed',
-                top: 'calc(var(--topnav-h) + 60px)',
+                top: '68px',
                 left: 0,
                 right: 0,
-                padding: '8px 16px',
+                padding: '12px 16px',
                 background: '#111827',
                 backdropFilter: 'blur(12px)',
                 zIndex: 999,
-                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               }}>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -743,7 +742,7 @@ export default function ParentMessagesPage() {
                 </div>
               </div>
               
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: 'calc(var(--topnav-h) + 124px)' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '136px' }}>
               {threadsLoading ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <div className="spinner" style={{ margin: '0 auto' }}></div>
