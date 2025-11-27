@@ -134,7 +134,7 @@ export default function HomeworkPage() {
         if (hwError) throw hwError;
 
         // Fetch submissions for this student
-        const assignmentIds = assignments?.map(a => a.id) || [];
+        const assignmentIds = assignments?.map((a: { id: string }) => a.id) || [];
         const { data: submissions } = assignmentIds.length > 0 ? await supabase
           .from('homework_submissions')
           .select('*')
@@ -143,10 +143,10 @@ export default function HomeworkPage() {
           .in('assignment_id', assignmentIds) : { data: [] };
 
         // Attach submissions to assignments
-        const enrichedAssignments = assignments?.map(assignment => ({
+        const enrichedAssignments = assignments?.map((assignment: any) => ({
           ...assignment,
-          homework_submissions: submissions?.filter(s => s.assignment_id === assignment.id) || [],
-          submissions: submissions?.filter(s => s.assignment_id === assignment.id) || []
+          homework_submissions: submissions?.filter((s: any) => s.assignment_id === assignment.id) || [],
+          submissions: submissions?.filter((s: any) => s.assignment_id === assignment.id) || []
         })) || [];
         
         const data = enrichedAssignments;
