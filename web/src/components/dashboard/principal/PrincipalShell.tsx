@@ -114,7 +114,7 @@ export function PrincipalShell({
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                   fontSize: 14
-                }}>{preschoolName.replace('Young Eagles ', '')}</span>
+                }}>{preschoolName.replace('Young Eagles ', '').replace('EduDash Pro ', '')}</span>
               </div>
             ) : (
               <div className="chip">{tenantSlug ? `/${tenantSlug}` : 'Young Eagles'}</div>
