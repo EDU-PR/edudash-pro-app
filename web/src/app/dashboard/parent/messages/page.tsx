@@ -9,6 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
+import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical } from 'lucide-react';
 
 interface ParticipantProfile {
@@ -282,6 +283,9 @@ export default function ParentMessagesPage() {
     },
     onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
   });
+
+  // Call interface hook
+  const { callState, startVoiceCall, startVideoCall, closeCall } = useCallInterface();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -879,7 +883,7 @@ export default function ParentMessagesPage() {
                   ) : (
                     <>
                       <button
-                        onClick={() => educator?.user_id && console.log('Voice call')}
+                        onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
                         title="Voice call"
                         style={{
                           width: 40,
@@ -898,7 +902,7 @@ export default function ParentMessagesPage() {
                         <Phone size={18} />
                       </button>
                       <button
-                        onClick={() => educator?.user_id && console.log('Video call')}
+                        onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
                         title="Video call"
                         style={{
                           width: 40,
@@ -1506,6 +1510,13 @@ export default function ParentMessagesPage() {
           </div>
         )}
       </div>
+      <CallInterface
+        isOpen={callState.isOpen}
+        onClose={closeCall}
+        callType={callState.callType}
+        remoteUserId={callState.remoteUserId}
+        remoteUserName={callState.remoteUserName}
+      />
     </ParentShell>
   );
 }
