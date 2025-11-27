@@ -579,7 +579,7 @@ export default function TeacherMessagesPage() {
         preschoolId={profile?.preschoolId}
         userId={userId}
         unreadCount={totalUnread}
-        contentStyle={{ padding: 0, overflow: 'hidden' }}
+        contentStyle={{ padding: 0, overflow: 'hidden', gridColumn: '2 / -1' }}
       >
         <div
           className="teacher-messages-page"
@@ -589,7 +589,6 @@ export default function TeacherMessagesPage() {
           overflow: 'hidden',
           width: '100%',
           margin: 0,
-          paddingRight: isDesktop ? CONTACT_PANEL_WIDTH : 0,
           boxSizing: 'border-box',
           background: 'rgba(17, 24, 39, 0.98)',
         }}
