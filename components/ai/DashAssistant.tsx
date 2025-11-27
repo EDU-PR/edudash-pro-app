@@ -40,6 +40,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useAuth } from '@/contexts/AuthContext';
 // VOICETODO: VoiceUI archived for production build
 // import { useVoiceUI } from '@/components/voice/VoiceUIController';
 import { assertSupabase } from '@/lib/supabase';
@@ -53,6 +54,9 @@ import {
 } from '@/services/AttachmentService';
 import { track } from '@/lib/analytics';
 import { renderCAPSResults } from '@/lib/caps/parseCAPSResults';
+// AI Quota checking
+import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
+import type { AIQuotaFeature } from '@/lib/ai/limits';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -89,6 +93,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const prevLengthRef = useRef<number>(0);
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
+  const { user } = useAuth();
   // VOICETODO: voiceUI hook removed (archived)
 
   const flashListRef = useRef<FlashList<DashMessage>>(null);
@@ -384,9 +389,44 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
   };
 
+  // The service type for Dash AI assistant - used for quota tracking
+  // Dash primarily provides homework help for parents and conversation for all users
+  const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
+  
   // Public sendMessage - handles queueing and concurrency
   const sendMessage = async (text: string = inputText.trim()) => {
     if ((!text && selectedAttachments.length === 0) || !dashInstance) return;
+    
+    // Check AI quota before sending message
+    if (user?.id) {
+      try {
+        const quotaCheck = await checkAIQuota(DASH_AI_SERVICE_TYPE, user.id, 1);
+        
+        if (!quotaCheck.allowed) {
+          // Show quota exceeded alert with upgrade option
+          track('edudash.ai.quota.blocked', {
+            service_type: DASH_AI_SERVICE_TYPE,
+            quota_used: quotaCheck.quotaInfo?.used,
+            quota_limit: quotaCheck.quotaInfo?.limit,
+            user_tier: tier || 'free',
+            upgrade_shown: true,
+          });
+          
+          showQuotaExceededAlert(DASH_AI_SERVICE_TYPE, quotaCheck.quotaInfo, {
+            customMessages: {
+              title: 'AI Chat Limit Reached',
+              message: 'You\'ve used all your AI chat messages for this month. Upgrade to continue chatting with Dash.',
+            },
+          });
+          
+          return; // Don't send message if quota exceeded
+        }
+      } catch (quotaError) {
+        // If quota check fails, allow the request to proceed
+        // Server-side quota enforcement will catch it if needed
+        console.warn('[DashAssistant] Quota check failed, proceeding with message:', quotaError);
+      }
+    }
     
     // Check if already processing a request
     if (isProcessingRef.current) {

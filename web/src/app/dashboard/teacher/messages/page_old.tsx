@@ -1,37 +1,45 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
-import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft } from 'lucide-react';
-
-interface ParticipantProfile {
-  first_name: string;
-  last_name: string;
-  role: string;
-}
 
 interface MessageThread {
   id: string;
   type: string;
   subject: string;
-  student_id?: string | null;
-  last_message_at?: string;
+  student_id: string | null;
+  last_message_at: string;
   student?: {
+    id: string;
     first_name: string;
     last_name: string;
   };
+  participants?: Array<{
+    user_id: string;
+    role: string;
+    user_profile?: {
+      first_name: string;
+      last_name: string;
+      role: string;
+    };
+  }>;
   message_participants?: Array<{
     user_id: string;
     role: string;
     last_read_at?: string;
-    profiles?: ParticipantProfile;
+    user_profile?: {
+      first_name: string;
+      last_name: string;
+      role: string;
+    };
   }>;
   last_message?: {
     content: string;
@@ -41,24 +49,22 @@ interface MessageThread {
   unread_count?: number;
 }
 
-const CONTACT_PANEL_WIDTH = 296;
+const CONTACT_PANEL_WIDTH = 296; // 280 rail + 16px gutter
 
 const formatMessageTime = (timestamp: string): string => {
-  const date = new Date(timestamp);
   const now = new Date();
-  const diffInHours = Math.abs(now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
+  const messageTime = new Date(timestamp);
+  const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
+  
   if (diffInHours < 1) {
     return 'Just now';
   } else if (diffInHours < 24) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffInHours < 168) {
+    return messageTime.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
-  return date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 };
 
 interface ThreadItemProps {
@@ -68,18 +74,16 @@ interface ThreadItemProps {
 }
 
 const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
-  const participants = thread.message_participants || [];
-  const educator = participants.find((p) => p.role !== 'parent');
-  const educatorName = educator?.profiles
-    ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.trim()
-    : 'Teacher';
-  const educatorRole = educator?.profiles?.role || 'teacher';
+  const participants = thread.message_participants || thread.participants || [];
+  const parentParticipant = participants.find((p) => p.role === 'parent');
+  const parentName = parentParticipant?.user_profile
+    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
+    : 'Parent';
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
   const hasUnread = (thread.unread_count || 0) > 0;
   
-  // Get initials for avatar
   const getInitials = (name: string) => {
     if (!name || name.trim() === '') return '?';
     const parts = name.trim().split(' ').filter(part => part.length > 0);
@@ -92,131 +96,42 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   return (
     <div
       onClick={onSelect}
-      style={{
-        padding: '14px 16px',
-        marginBottom: 8,
-        borderRadius: 14,
-        cursor: 'pointer',
-        background: isActive 
-          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
-          : 'transparent',
-        border: isActive 
-          ? '1px solid rgba(59, 130, 246, 0.3)' 
-          : '1px solid transparent',
-        display: 'flex',
-        gap: 14,
-        alignItems: 'center',
-        transition: 'all 0.2s ease',
-        boxShadow: isActive ? '0 2px 8px rgba(59, 130, 246, 0.1)' : 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
-          e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.1)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.border = '1px solid transparent';
-        }
-      }}
+      className={`flex items-center gap-3 p-3 mb-2 rounded-xl cursor-pointer transition-all ${
+        isActive 
+          ? 'bg-surface-2 border border-primary/30 shadow-md' 
+          : 'hover:bg-surface/50 border border-transparent'
+      }`}
     >
       <div
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: 23,
-          background: isActive 
-            ? educatorRole === 'principal' 
-              ? 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)' 
-              : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
-            : educatorRole === 'principal'
-              ? 'linear-gradient(135deg, #6d28d9 0%, #581c87 100%)'
-              : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          color: '#fff',
-          fontSize: 15,
-          fontWeight: 600,
-          boxShadow: isActive ? '0 2px 10px rgba(59, 130, 246, 0.3)' : '0 2px 6px rgba(0, 0, 0, 0.15)',
-          transition: 'all 0.2s ease',
-        }}
+        className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 ${
+          isActive ? 'bg-primary shadow-lg' : 'bg-surface-2'
+        }`}
       >
-        {educatorRole === 'principal' ? <School size={20} /> : getInitials(educatorName)}
+        {getInitials(parentName)}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: hasUnread ? 700 : 600,
-              color: hasUnread ? '#f1f5f9' : '#e2e8f0',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              letterSpacing: '0.01em',
-            }}
-          >
-            {educatorName}
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-center mb-1">
+          <span className={`text-sm font-semibold truncate ${hasUnread ? 'text-primary' : 'text-white'}`}>
+            {parentName}
           </span>
           {thread.last_message?.created_at && (
-            <span style={{ 
-              fontSize: 11, 
-              color: hasUnread ? '#a78bfa' : '#64748b', 
-              marginLeft: 8,
-              fontWeight: hasUnread ? 600 : 400,
-            }}>
+            <span className={`text-xs ml-2 ${hasUnread ? 'text-primary font-medium' : 'text-muted'}`}>
               {formatMessageTime(thread.last_message.created_at)}
             </span>
           )}
         </div>
         {studentName && (
-          <p
-            style={{
-              margin: '0 0 4px 0',
-              fontSize: 12,
-              color: '#a78bfa',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontWeight: 500,
-            }}
-          >
+          <p className="text-xs text-cyan mb-1 truncate">
             📚 {studentName}
           </p>
         )}
-        <p
-          style={{
-            margin: 0,
-            fontSize: 13,
-            color: hasUnread ? '#cbd5e1' : '#64748b',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            lineHeight: 1.4,
-          }}
-        >
+        <p className={`text-xs truncate ${hasUnread ? 'text-white/80' : 'text-muted'}`}>
           {thread.last_message?.content || 'No messages yet'}
         </p>
       </div>
       {hasUnread && (
-        <div
-          style={{
-            minWidth: 22,
-            height: 22,
-            borderRadius: 11,
-            background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '0 7px',
-            boxShadow: '0 2px 6px rgba(59, 130, 246, 0.4)',
-          }}
-        >
-          <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>
+        <div className="min-w-[22px] h-[22px] rounded-full bg-primary flex items-center justify-center px-2 shadow-md">
+          <span className="text-white text-xs font-bold">
             {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
           </span>
         </div>
@@ -225,16 +140,12 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   );
 };
 
-export default function ParentMessagesPage() {
-  useBodyScrollLock(true);
+export default function TeacherMessagesPage() {
   const router = useRouter();
+  useBodyScrollLock(true);
   const supabase = createClient();
-  const [userEmail, setUserEmail] = useState<string>();
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
-  const { slug } = useTenantSlug(userId);
-  const { profile, loading: profileLoading } = useUserProfile(userId);
-
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -248,7 +159,11 @@ export default function ParentMessagesPage() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { profile, loading: profileLoading } = useUserProfile(userId);
+  const { slug: tenantSlug } = useTenantSlug(userId);
 
+  // Keep ref in sync with state
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
@@ -257,6 +172,7 @@ export default function ParentMessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Call useComposerEnhancements early to satisfy Rules of Hooks
   const {
     emojiButtonRef,
@@ -283,20 +199,14 @@ export default function ParentMessagesPage() {
 
   useEffect(() => {
     const initAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/sign-in');
         return;
       }
-
-      setUserEmail(session.user.email);
       setUserId(session.user.id);
       setAuthLoading(false);
     };
-
     initAuth();
   }, [router, supabase]);
 
@@ -341,87 +251,6 @@ export default function ParentMessagesPage() {
     }
   }, [selectedThreadId, userId, markThreadAsRead]);
 
-  const fetchThreads = useCallback(async () => {
-    if (!userId) return;
-
-    setThreadsLoading(true);
-    setError(null);
-
-    try {
-      const { data, error: threadsError } = await supabase
-        .from('message_threads')
-        .select(`
-          id,
-          type,
-          subject,
-          student_id,
-          last_message_at,
-          student:students(id, first_name, last_name),
-          message_participants!inner(
-            user_id,
-            role,
-            last_read_at,
-            profiles(first_name, last_name, role)
-          )
-        `)
-        .order('last_message_at', { ascending: false });
-
-      if (threadsError) throw threadsError;
-
-      const parentThreads = (data || []).filter((thread: any) =>
-        thread.message_participants?.some((participant: any) => participant.user_id === userId && participant.role === 'parent')
-      );
-
-      const threadsWithDetails = await Promise.all(
-        parentThreads.map(async (thread: any) => {
-          const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('content, created_at, sender_id')
-            .eq('thread_id', thread.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          const parentParticipant = thread.message_participants?.find(
-            (p: any) => p.user_id === userId && p.role === 'parent'
-          );
-
-          let unreadCount = 0;
-          if (parentParticipant) {
-            const { count } = await supabase
-              .from('messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('thread_id', thread.id)
-              .neq('sender_id', userId)
-              .gt('created_at', parentParticipant.last_read_at || '2000-01-01');
-            unreadCount = count || 0;
-          }
-
-          return {
-            ...thread,
-            last_message: lastMessage || thread.last_message,
-            unread_count: unreadCount,
-          } as MessageThread;
-        })
-      );
-
-      setThreads(threadsWithDetails);
-      // Don't auto-select threads - let user choose
-      // Only ensure selection is still valid if one exists
-      if (selectedThreadId) {
-        const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
-        if (!stillSelected) {
-          setSelectedThreadId(null);
-        }
-      }
-    } catch (err: any) {
-      console.error('Error fetching threads:', err);
-      setError(err.message);
-    } finally {
-      setThreadsLoading(false);
-    }
-  }, [selectedThreadId, supabase, userId]);
-
   const fetchMessages = useCallback(async (threadId: string) => {
     setMessagesLoading(true);
     try {
@@ -450,15 +279,107 @@ export default function ParentMessagesPage() {
     }
   }, [markThreadAsRead, supabase]);
 
-  const refreshConversation = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
-  }, []);
+  const fetchThreads = useCallback(async () => {
+    if (!userId || !profile?.preschoolId) return;
+    
+    setThreadsLoading(true);
+    setError(null);
+    
+    try {
+      const { data: threads, error: threadsError } = await supabase
+        .from('message_threads')
+        .select(`
+          id,
+          type,
+          subject,
+          student_id,
+          last_message_at,
+          student:students(id, first_name, last_name),
+          message_participants!inner(
+            user_id,
+            role,
+            last_read_at,
+            user_profile:profiles(first_name, last_name, role)
+          )
+        `)
+        .eq('preschool_id', profile.preschoolId)
+        .order('last_message_at', { ascending: false });
+      
+      if (threadsError) throw threadsError;
+      
+      // Filter threads where teacher is a participant
+      const teacherThreads = (threads || []).filter((thread: any) => 
+        thread.message_participants?.some((p: any) => 
+          p.user_id === userId && p.role === 'teacher'
+        )
+      );
+      
+      // Get last message and unread count for each thread
+      const threadsWithDetails = await Promise.all(
+        teacherThreads.map(async (thread: any) => {
+          // Get last message
+          const { data: lastMessage } = await supabase
+            .from('messages')
+            .select('content, created_at, sender_id')
+            .eq('thread_id', thread.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          
+          // Get unread count
+          const teacherParticipant = thread.message_participants?.find(
+            (p: any) => p.user_id === userId && p.role === 'teacher'
+          );
+          
+          let unreadCount = 0;
+          if (teacherParticipant) {
+            const { count } = await supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('thread_id', thread.id)
+              .neq('sender_id', userId)
+              .gt('created_at', teacherParticipant.last_read_at || '2000-01-01');
+            
+            unreadCount = count || 0;
+          }
+          
+          return {
+            ...thread,
+            last_message: lastMessage,
+            unread_count: unreadCount,
+          };
+        })
+      );
+      
+      setThreads(threadsWithDetails);
+      // Don't auto-select threads - let user choose
+      // Only ensure selection is still valid if one exists
+      if (selectedThreadId) {
+        const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
+        if (!stillSelected) {
+          setSelectedThreadId(null);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching threads:', err);
+      setError(err.message);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [profile?.preschoolId, selectedThreadId, supabase, userId]);
 
-  useEffect(() => {
-    if (userId) {
+  const refreshConversation = useCallback(() => {
+    if (selectedThreadId) {
+      fetchMessages(selectedThreadId);
       fetchThreads();
     }
-  }, [userId, fetchThreads, refreshTrigger]);
+  }, [fetchMessages, fetchThreads, selectedThreadId]);
+
+  useEffect(() => {
+    if (userId && profile?.preschoolId) {
+      fetchThreads();
+    }
+  }, [userId, profile?.preschoolId, fetchThreads, refreshTrigger]);
 
   useEffect(() => {
     if (selectedThreadId) {
@@ -470,7 +391,7 @@ export default function ParentMessagesPage() {
     if (!selectedThreadId) return;
 
     const channel = supabase
-      .channel(`parent-thread-${selectedThreadId}`)
+      .channel(`teacher-messages:${selectedThreadId}`)
       .on(
         'postgres_changes',
         {
@@ -479,30 +400,11 @@ export default function ParentMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        async (payload: any) => {
-          // Fetch the complete message with sender info
-          const { data: newMessage } = await supabase
-            .from('messages')
-            .select(`
-              id,
-              thread_id,
-              sender_id,
-              content,
-              created_at,
-              read_by,
-              sender:profiles(first_name, last_name, role)
-            `)
-            .eq('id', payload.new.id)
-            .single();
-
-          if (newMessage) {
-            // Add new message to state immediately
-            setMessages((prev) => [...prev, newMessage]);
-            // Refresh thread list to update last message
-            fetchThreads();
-            // Scroll to bottom
-            setTimeout(() => scrollToBottom(), 100);
-          }
+        () => {
+          fetchMessages(selectedThreadId);
+          fetchThreads(); // Refresh thread list to update unread counts
+          // Scroll to bottom after a brief delay to allow DOM update
+          setTimeout(() => scrollToBottom(), 100);
         }
       )
       .subscribe();
@@ -510,7 +412,7 @@ export default function ParentMessagesPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchThreads]);
+  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
 
   // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {
@@ -532,31 +434,7 @@ export default function ParentMessagesPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  // Compute derived values BEFORE early return (hooks must always be called)
-  const filteredThreads = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return threads.filter((thread) => {
-      if (!query) return true;
-      const participants = thread.message_participants || [];
-      const educator = participants.find((p) => p.role !== 'parent');
-      const educatorName = educator?.profiles
-        ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.toLowerCase()
-        : '';
-      const studentName = thread.student
-        ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
-        : '';
-      const lastMessage = thread.last_message?.content?.toLowerCase() || '';
-
-      return (
-        educatorName.includes(query) ||
-        studentName.includes(query) ||
-        lastMessage.includes(query) ||
-        thread.subject.toLowerCase().includes(query)
-      );
-    });
-  }, [threads, searchQuery]);
-
-  // Early return for loading states (AFTER all hooks)
+  // Early return for loading states
   if (authLoading || profileLoading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -565,18 +443,21 @@ export default function ParentMessagesPage() {
     );
   }
 
+  // Regular functions and computed values after hooks and early returns
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !selectedThreadId || !userId) return;
 
     setSending(true);
     try {
-      const { error } = await supabase.from('messages').insert({
-        thread_id: selectedThreadId,
-        sender_id: userId,
-        content: messageText.trim(),
-        content_type: 'text',
-      });
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          thread_id: selectedThreadId,
+          sender_id: userId,
+          content: messageText.trim(),
+          content_type: 'text',
+        });
 
       if (error) throw error;
 
@@ -598,18 +479,36 @@ export default function ParentMessagesPage() {
     }
   };
 
-  const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
-  const currentThread = selectedThreadId
-    ? threads.find((thread) => thread.id === selectedThreadId)
-    : null;
-  const educator = currentThread?.message_participants?.find((p) => p.role !== 'parent');
-  const educatorName = educator?.profiles
-    ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.trim()
-    : 'Teacher';
+  // Compute derived values
+  const filteredThreads = threads.filter((thread) => {
+    if (!searchQuery) return true;
 
-  const handleSelectThread = (threadId: string) => {
-    setSelectedThreadId(threadId);
-  };
+    const query = searchQuery.toLowerCase();
+    const participants = thread.message_participants || thread.participants || [];
+    const participant = participants.find((p: any) => p.role === 'parent');
+    const participantName = participant?.user_profile
+      ? `${participant.user_profile.first_name} ${participant.user_profile.last_name}`.toLowerCase()
+      : '';
+    const studentName = thread.student
+      ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
+      : '';
+    const lastMessage = thread.last_message?.content.toLowerCase() || '';
+
+    return (
+      participantName.includes(query) ||
+      studentName.includes(query) ||
+      lastMessage.includes(query) ||
+      thread.subject.toLowerCase().includes(query)
+    );
+  });
+
+  const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
+  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
+  const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
+  const parentParticipant = selectedParticipants?.find((p: any) => p.role === 'parent');
+  const parentName = parentParticipant?.user_profile
+    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
+    : 'Parent';
 
   const handleClearSelection = () => {
     setSelectedThreadId(null);
@@ -621,24 +520,38 @@ export default function ParentMessagesPage() {
   };
 
   return (
-    <ParentShell
-      tenantSlug={slug}
-      userEmail={userEmail}
-      userName={profile?.firstName}
-      preschoolName={profile?.preschoolName}
-      unreadCount={totalUnread}
-      contentStyle={{ padding: 0, overflow: 'hidden', height: 'calc(100vh - var(--topnav-h))' }}
-    >
-      <div
-        className="parent-messages-page"
-        style={{
-          display: 'flex',
-          height: 'calc(100vh - var(--topnav-h))',
+    <>
+      <style jsx global>{`
+        /* Hide the header on teacher messages page */
+        body:has(.teacher-messages-page) .topbar,
+        body:has(.teacher-messages-page) header.topbar {
+          display: none !important;
+        }
+        .teacher-messages-page {
+          background: rgba(17, 24, 39, 0.98) !important;
+          position: relative;
+          z-index: 10;
+        }
+      `}</style>
+      <TeacherShell
+        tenantSlug={tenantSlug}
+        userEmail={profile?.email}
+        userName={profile?.firstName}
+        preschoolName={profile?.preschoolName}
+        preschoolId={profile?.preschoolId}
+        userId={userId}
+        unreadCount={totalUnread}
+        contentStyle={{ padding: 0, overflow: 'hidden' }}
+      >
+        <div
+          className="teacher-messages-page"
+          style={{
+            display: 'flex',
+          height: '100vh',
           overflow: 'hidden',
           width: '100%',
           margin: 0,
           boxSizing: 'border-box',
-          background: 'rgba(17, 24, 39, 0.98)',
         }}
       >
         <div
@@ -648,11 +561,10 @@ export default function ParentMessagesPage() {
             flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
-            marginRight: isDesktop ? 280 : 0,
           }}
         >
           {/* Mobile: Show thread list when no selection, otherwise show chat */}
-          {!isDesktop && !currentThread ? (
+          {!isDesktop && !selectedThread ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* Mobile contacts header with back arrow */}
               <div style={{ 
@@ -662,7 +574,7 @@ export default function ParentMessagesPage() {
                 alignItems: 'center',
                 gap: 12,
                 position: 'fixed',
-                top: 'var(--topnav-h)',
+                top: 0,
                 left: 0,
                 right: 0,
                 background: '#111827',
@@ -671,7 +583,7 @@ export default function ParentMessagesPage() {
                 zIndex: 1000,
               }}>
                 <button
-                  onClick={() => router.push('/dashboard/parent')}
+                  onClick={() => router.push('/dashboard/teacher')}
                   style={{
                     width: 36,
                     height: 36,
@@ -693,48 +605,34 @@ export default function ParentMessagesPage() {
                 </h2>
               </div>
               
-              {/* Search bar fixed below header */}
-              <div style={{ 
-                position: 'fixed',
-                top: 'calc(var(--topnav-h) + 60px)',
-                left: 0,
-                right: 0,
-                padding: '8px 16px',
-                background: '#111827',
-                backdropFilter: 'blur(12px)',
-                zIndex: 999,
-                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-              }}>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px 10px 40px',
-                      borderRadius: 12,
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface-2)',
-                      color: 'var(--text-primary)',
-                      fontSize: 15,
-                    }}
-                  />
-                  <Search
-                    size={18}
-                    style={{
-                      position: 'absolute',
-                      left: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'var(--muted)',
-                    }}
-                  />
-                </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '80px' }}>
+                <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    color: 'var(--text)',
+                    fontSize: 15,
+                  }}
+                />
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: 20,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                  }}
+                />
               </div>
-              
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: 'calc(var(--topnav-h) + 124px)' }}>
               {threadsLoading ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <div className="spinner" style={{ margin: '0 auto' }}></div>
@@ -745,23 +643,23 @@ export default function ParentMessagesPage() {
                     key={thread.id}
                     thread={thread}
                     isActive={false}
-                    onSelect={() => handleSelectThread(thread.id)}
+                    onSelect={() => setSelectedThreadId(thread.id)}
                   />
                 ))
               ) : (
                 <div style={{ textAlign: 'center', padding: 40 }}>
-                  <MessageSquare size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
+                  <MessageCircle size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
                   <p style={{ color: 'var(--muted)', fontSize: 15 }}>No conversations yet</p>
                 </div>
                 )}
               </div>
             </div>
-          ) : currentThread ? (
+          ) : selectedThread ? (
             <>
               <div
                 style={{
                   position: isDesktop ? 'relative' : 'fixed',
-                  top: isDesktop ? 'auto' : 'var(--topnav-h)',
+                  top: isDesktop ? 'auto' : 0,
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 1000,
@@ -815,7 +713,7 @@ export default function ParentMessagesPage() {
                     color: '#fff',
                   }}
                 >
-                  {educatorName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                  {parentName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h2 style={{ 
@@ -827,9 +725,9 @@ export default function ParentMessagesPage() {
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}>
-                    {educatorName}
+                    {parentName}
                   </h2>
-                  {currentThread.student && (
+                  {selectedThread.student && (
                     <p style={{ 
                       margin: '4px 0 0', 
                       fontSize: isDesktop ? 13 : 12, 
@@ -840,7 +738,7 @@ export default function ParentMessagesPage() {
                       gap: 6,
                     }}>
                       <span>📚</span>
-                      <span>{currentThread.student.first_name} {currentThread.student.last_name}</span>
+                      <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
                     </p>
                   )}
                 </div>
@@ -862,8 +760,8 @@ export default function ParentMessagesPage() {
                       transition: 'all 0.2s ease',
                     }}
                   >
-                    <ArrowLeft size={14} />
-                    Clear
+                    <ArrowLeft size={16} />
+                    Clear chat
                   </button>
                 )}
               </div>
@@ -874,12 +772,10 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '28px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '104px',
+                  paddingTop: isDesktop ? '32px' : '128px',
                   paddingBottom: isDesktop ? 100 : 80,
                   paddingRight: isDesktop ? 340 : 0,
-                  background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
-                  backgroundImage:
-                    'radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.04) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.04) 0%, transparent 45%)',
+                  background: 'var(--bg)',
                 }}
               >
                 {messagesLoading ? (
@@ -900,10 +796,10 @@ export default function ParentMessagesPage() {
                     <div
                       style={{
                         padding: '40px 32px',
-                        borderRadius: 20,
-                        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                        borderRadius: 'var(--radius-xl)',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        boxShadow: 'var(--shadow-lg)',
                       }}
                     >
                       <div
@@ -921,11 +817,9 @@ export default function ParentMessagesPage() {
                       >
                         <Send size={30} color="#818cf8" />
                       </div>
-                      <p style={{ color: '#f1f5f9', marginBottom: 10, fontSize: 17, fontWeight: 600 }}>
-                        Start a conversation
-                      </p>
+                      <p style={{ color: '#f1f5f9', marginBottom: 10, fontSize: 17, fontWeight: 600 }}>Start a conversation</p>
                       <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
-                        Send a message below to connect with your educator.
+                        Send a message below to connect with this parent.
                       </p>
                     </div>
                   </div>
@@ -936,9 +830,9 @@ export default function ParentMessagesPage() {
                       const senderName = message.sender
                         ? `${message.sender.first_name} ${message.sender.last_name}`
                         : 'Unknown';
-
+                      
                       // Get other participant IDs (excluding current user) for read status
-                      const otherParticipantIds = (currentThread?.message_participants || [])
+                      const otherParticipantIds = selectedParticipants
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
 
@@ -1071,34 +965,33 @@ export default function ParentMessagesPage() {
                       </div>
                     )}
 
-                    {/* Mobile & Desktop: Input field with embedded icons on mobile */}
-                    <div style={{ position: 'relative', flex: 1, display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {/* Mobile: Emoji button outside input (always visible) */}
-                      {!isDesktop && (
-                        <button
-                          type="button"
-                          ref={emojiButtonRef}
-                          onClick={() => setShowEmojiPicker((prev) => !prev)}
-                          style={{
-                            width: 42,
-                            height: 42,
-                            borderRadius: 21,
-                            background: 'rgba(100, 116, 139, 0.1)',
-                            border: '1px solid rgba(148, 163, 184, 0.15)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: '#94a3b8',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Smile size={20} />
-                        </button>
-                      )}
+                    {/* Mobile: Emoji button next to input */}
+                    {!isDesktop && (
+                      <button
+                        type="button"
+                        ref={emojiButtonRef}
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 21,
+                          background: 'rgba(100, 116, 139, 0.1)',
+                          border: '1px solid rgba(148, 163, 184, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#94a3b8',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Smile size={20} />
+                      </button>
+                    )}
 
-                      <div style={{ position: 'relative', flex: 1 }}>
-                      {/* Mobile: Attachment icon inside input (only when no text) */}
+                    {/* Input field with attachment icon inside on mobile */}
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      {/* Mobile: Attachment icon inside input when no text */}
                       {!isDesktop && !messageText.trim() && (
                         <div style={{ 
                           position: 'absolute', 
@@ -1138,11 +1031,11 @@ export default function ParentMessagesPage() {
                         rows={1}
                         style={{
                           width: '100%',
-                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 18px' : '14px 54px 14px 48px'),
+                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 22px' : '14px 54px 14px 48px'),
                           borderRadius: 26,
-                          border: '1px solid rgba(148, 163, 184, 0.15)',
-                          background: 'rgba(30, 41, 59, 0.6)',
-                          color: '#e2e8f0',
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-2)',
+                          color: 'var(--text)',
                           fontSize: 15,
                           outline: 'none',
                           resize: 'none',
@@ -1280,7 +1173,6 @@ export default function ParentMessagesPage() {
                         </button>
                       )
                     )}
-                  </div>
                   </div>
                 </form>
                 {statusMessage && (
@@ -1439,7 +1331,7 @@ export default function ParentMessagesPage() {
                     key={thread.id}
                     thread={thread}
                     isActive={thread.id === selectedThreadId}
-                    onSelect={() => handleSelectThread(thread.id)}
+                    onSelect={() => setSelectedThreadId(thread.id)}
                   />
                 ))
               ) : (
@@ -1454,7 +1346,7 @@ export default function ParentMessagesPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}>
-                    <MessageSquare size={28} color="#64748b" />
+                    <MessageCircle size={28} color="#64748b" />
                   </div>
                   <p style={{ color: '#94a3b8', fontSize: 15, fontWeight: 500 }}>No conversations yet</p>
                   <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Messages will appear here</p>
@@ -1464,6 +1356,7 @@ export default function ParentMessagesPage() {
           </div>
         )}
       </div>
-    </ParentShell>
+    </TeacherShell>
+    </>
   );
 }

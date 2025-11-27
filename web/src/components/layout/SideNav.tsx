@@ -103,14 +103,14 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
         {!collapsed && (
           <div className="px-6 py-12 border-b border-slate-700/60">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ring-2 ring-blue-500/30">
-                <GraduationCap className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 via-purple-600 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ring-2 ring-purple-500/30 text-2xl">
+                🦅
               </div>
               <div className="overflow-hidden">
                 <div className="text-base font-bold text-white truncate leading-tight">
                   {preschoolName}
                 </div>
-                <div className="text-sm text-blue-400 capitalize font-semibold">{userRole}</div>
+                <div className="text-sm text-purple-400 capitalize font-semibold">{userRole}</div>
               </div>
             </div>
           </div>
@@ -118,8 +118,8 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
 
         {collapsed && (
           <div className="px-4 py-6 border-b border-slate-700/60 flex justify-center">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 via-purple-600 to-blue-600 rounded-lg flex items-center justify-center shadow-lg text-xl">
+              🦅
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
         <div className="px-4 py-5 border-t border-slate-700/60">
           {!collapsed && (
             <div className="text-xs text-slate-500 text-center mb-4 font-medium">
-              Powered by EduDash Pro
+              Powered by Young Eagles
             </div>
           )}
           <button
@@ -184,14 +184,14 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
           <div className="absolute left-0 top-0 bottom-0 w-80 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-r border-slate-700/60 shadow-2xl rounded-r-2xl flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <GraduationCap className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 via-purple-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg text-xl">
+                  🦅
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white truncate max-w-[160px]">
                     {preschoolName}
                   </div>
-                  <div className="text-xs text-blue-400 capitalize font-semibold">{userRole}</div>
+                  <div className="text-xs text-purple-400 capitalize font-semibold">{userRole}</div>
                 </div>
               </div>
               <button

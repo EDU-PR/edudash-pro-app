@@ -13,6 +13,8 @@ import { EmptyChildrenState } from '@/components/dashboard/parent/EmptyChildrenS
 import { QuickActionsGrid } from '@/components/dashboard/parent/QuickActionsGrid';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
+import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
+import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
@@ -55,6 +57,9 @@ export default function ParentDashboard() {
   const [aiLanguage, setAILanguage] = useState('en-ZA');
   const [aiInteractive, setAIInteractive] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('children'); // Auto-open My Children by default
+
+  // Get pending homework count for badge
+  const { count: homeworkCount } = usePendingHomework(userId || undefined);
 
   // Set greeting based on time of day
   useEffect(() => {
@@ -240,7 +245,13 @@ export default function ParentDashboard() {
             activeChildGrade={activeChildGrade}
             isExamEligible={isExamEligible}
             unreadCount={unreadCount}
+            homeworkCount={homeworkCount}
           />
+        )}
+
+        {/* Homework Card - Show if organization-linked */}
+        {hasOrganization && userId && (
+          <HomeworkCard userId={userId} />
         )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}

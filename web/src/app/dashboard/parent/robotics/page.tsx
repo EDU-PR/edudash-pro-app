@@ -159,12 +159,12 @@ export default function RoboticsLessonsPage() {
     // Load user tier from user_ai_tiers table
     const { data: tierData } = await supabase
       .from('user_ai_tiers')
-      .select('current_tier')
+      .select('tier')
       .eq('user_id', user.id)
       .single();
 
     if (tierData) {
-      setUserTier(tierData.current_tier || 'free');
+      setUserTier(tierData.tier || 'free');
     } else {
       // Fallback to free if no tier record exists
       setUserTier('free');

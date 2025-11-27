@@ -59,23 +59,23 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
         // Silently ignore errors for community users
         const { data: registrationRequests, error: regError } = await supabase
           .from('registration_requests')
-          .select('id, child_first_name, child_last_name, created_at, preschool_id, preschools(name)')
-          .eq('parent_id', userId)
+          .select('id, student_first_name, student_last_name, created_at, organization_id, organizations(name)')
+          .eq('guardian_email', profile?.email)
           .eq('status', 'pending')
           .order('created_at', { ascending: false });
 
         // Silently handle expected errors (table doesn't exist, RLS denial, etc.)
         if (!regError && registrationRequests) {
           registrationRequests.forEach((req: any) => {
-            const requestName = `${req.child_first_name} ${req.child_last_name}`.toLowerCase().trim();
+            const requestName = `${req.student_first_name} ${req.student_last_name}`.toLowerCase().trim();
             
             // Only show if child is NOT already linked
             if (!linkedStudentNames.has(requestName)) {
               allRequests.push({
                 id: req.id,
                 type: 'registration',
-                childName: `${req.child_first_name} ${req.child_last_name}`,
-                schoolName: req.preschools?.name,
+                childName: `${req.student_first_name} ${req.student_last_name}`,
+                schoolName: req.organizations?.name,
                 requestedDate: new Date(req.created_at).toLocaleDateString('en-ZA', {
                   day: '2-digit',
                   month: 'short',

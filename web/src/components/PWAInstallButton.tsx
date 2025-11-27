@@ -79,7 +79,7 @@ export function PWAInstallButton() {
     <button
       onClick={handleInstallClick}
       className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-cyan-500/30"
-      aria-label="Install EduDash Pro"
+      aria-label="Install Young Eagles"
     >
       <Download className="w-4 h-4" />
       Install App

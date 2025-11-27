@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
-interface UseUnreadMessagesReturn {
+interface UseTeacherUnreadMessagesReturn {
   unreadCount: number;
   loading: boolean;
   error: string | null;
@@ -42,17 +42,20 @@ interface MessageRecord {
 }
 
 /**
- * Hook to get and track unread message count for a parent user.
+ * Hook to get and track unread message count for a teacher user.
  * Subscribes to real-time updates to show new message indicators immediately.
  */
-export function useUnreadMessages(userId: string | undefined, childId: string | null): UseUnreadMessagesReturn {
+export function useTeacherUnreadMessages(
+  userId: string | undefined,
+  preschoolId: string | undefined
+): UseTeacherUnreadMessagesReturn {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
 
   const loadUnreadCount = useCallback(async () => {
-    if (!userId) {
+    if (!userId || !preschoolId) {
       setLoading(false);
       setUnreadCount(0);
       return;
@@ -64,16 +67,17 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
 
       const supabase = supabaseRef.current;
 
-      // Get all threads the user is a participant in with their last_read_at
+      // Get all threads the teacher is a participant in within their preschool
       const { data: threads, error: threadsError } = await supabase
         .from('message_threads')
         .select(`
           id,
           message_participants!inner(user_id, role, last_read_at)
-        `);
+        `)
+        .eq('preschool_id', preschoolId);
 
       if (threadsError) {
-        console.error('Error fetching threads:', threadsError);
+        console.error('Error fetching teacher threads:', threadsError);
         setUnreadCount(0);
         return;
       }
@@ -83,35 +87,31 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
         return;
       }
 
-      // Filter to threads where user is a participant and get their last_read_at
-      const userThreadsData = threads
+      // Filter to threads where user is a participant with role 'teacher' and get their last_read_at
+      const teacherThreadsData = threads
         .filter((thread: MessageThread) =>
-          thread.message_participants?.some((p: ThreadParticipant) => p.user_id === userId)
+          thread.message_participants?.some(
+            (p: ThreadParticipant) => p.user_id === userId && p.role === 'teacher'
+          )
         )
         .map((thread: MessageThread) => {
-          const userParticipant = thread.message_participants?.find(
-            (p: ThreadParticipant) => p.user_id === userId
+          const teacherParticipant = thread.message_participants?.find(
+            (p: ThreadParticipant) => p.user_id === userId && p.role === 'teacher'
           );
           return {
             threadId: thread.id,
-            lastReadAt: userParticipant?.last_read_at || '2000-01-01',
+            lastReadAt: teacherParticipant?.last_read_at || '2000-01-01',
           };
         });
 
-      if (userThreadsData.length === 0) {
+      if (teacherThreadsData.length === 0) {
         setUnreadCount(0);
         return;
       }
 
-      // Build a single query to count all unread messages across all threads
-      // Using an OR condition for each thread with its specific last_read_at
-      let totalUnread = 0;
-
-      // Count unread messages for all threads in one query using RPC
-      // Since we can't easily do this with complex filters, we batch by groups
-      const threadIds = userThreadsData.map((t: ThreadData) => t.threadId);
+      // Get all messages from teacher's threads that they didn't send in a single query
+      const threadIds = teacherThreadsData.map((t: ThreadData) => t.threadId);
       
-      // Get all messages from user's threads that they didn't send
       const { data: unreadMessages, error: countError } = await supabase
         .from('messages')
         .select('id, thread_id, created_at')
@@ -119,28 +119,29 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
         .neq('sender_id', userId);
 
       if (countError) {
-        console.error('Error counting unread messages:', countError);
+        console.error('Error counting teacher unread messages:', countError);
         setUnreadCount(0);
         return;
       }
 
-      // Filter messages by checking if they're newer than the user's last_read_at for that thread
+      // Filter messages by checking if they're newer than the teacher's last_read_at for that thread
+      let totalUnread = 0;
       if (unreadMessages) {
         totalUnread = unreadMessages.filter((msg: MessageRecord) => {
-          const threadData = userThreadsData.find((t: ThreadData) => t.threadId === msg.thread_id);
+          const threadData = teacherThreadsData.find((t: ThreadData) => t.threadId === msg.thread_id);
           return threadData && new Date(msg.created_at) > new Date(threadData.lastReadAt);
         }).length;
       }
 
       setUnreadCount(totalUnread);
     } catch (err) {
-      console.error('Failed to load unread messages:', err);
+      console.error('Failed to load teacher unread messages:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
       setUnreadCount(0);
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, preschoolId]);
 
   // Initial load
   useEffect(() => {
@@ -149,13 +150,13 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
 
   // Real-time subscription for new messages
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !preschoolId) return;
 
     const supabase = supabaseRef.current;
 
     // Subscribe to new messages across all threads user participates in
     const channel = supabase
-      .channel(`unread-messages-${userId}`)
+      .channel(`teacher-unread-messages-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -165,18 +166,19 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
         },
         async (payload: RealtimePostgresChangesPayload<MessagePayload>) => {
           const newMessage = payload.new as MessagePayload;
-          // Check if this message is in a thread the user participates in
-          // and the user is not the sender
+          // Check if this message is in a thread the teacher participates in
+          // and the teacher is not the sender
           if (newMessage.sender_id !== userId) {
             const { data: participant } = await supabase
               .from('message_participants')
-              .select('user_id')
+              .select('user_id, role')
               .eq('thread_id', newMessage.thread_id)
               .eq('user_id', userId)
+              .eq('role', 'teacher')
               .maybeSingle();
 
             if (participant) {
-              // User is a participant, refresh unread count
+              // Teacher is a participant, refresh unread count
               loadUnreadCount();
             }
           }
@@ -191,7 +193,7 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          // User's participant record was updated (likely last_read_at)
+          // Teacher's participant record was updated (likely last_read_at)
           loadUnreadCount();
         }
       )
@@ -200,7 +202,7 @@ export function useUnreadMessages(userId: string | undefined, childId: string | 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, loadUnreadCount]);
+  }, [userId, preschoolId, loadUnreadCount]);
 
   return {
     unreadCount,

@@ -15,15 +15,28 @@ export type TierBadgeProps = {
 }
 
 function getTierMeta(t?: string) {
-  const tt = String(t || 'free').toLowerCase()
+  // Normalize tier name (handle both underscore and dash formats)
+  const tt = String(t || 'free').toLowerCase().replace(/_/g, '-')
   switch (tt) {
-    case 'starter': return { label: 'Starter', color: '#059669' }
-    case 'premium': return { label: 'Premium', color: '#7C3AED' }
-    case 'enterprise': return { label: 'Enterprise', color: '#DC2626' }
-    case 'parent-starter': return { label: 'Parent Starter', color: '#06B6D4' }
-    case 'parent-plus': return { label: 'Parent Plus', color: '#22C55E' }
+    case 'starter':
+    case 'school-starter': 
+      return { label: 'Starter', color: '#059669' }
+    case 'premium':
+    case 'school-premium':
+    case 'pro':
+    case 'school-pro':
+      return { label: 'Premium', color: '#7C3AED' }
+    case 'enterprise': 
+      return { label: 'Enterprise', color: '#DC2626' }
+    case 'parent-starter': 
+      return { label: 'Parent Starter', color: '#06B6D4' }
+    case 'parent-plus': 
+      return { label: 'Parent Plus', color: '#22C55E' }
+    case 'trial':
+      return { label: 'Trial', color: '#F59E0B' }
     case 'free':
-    default: return { label: 'Free', color: '#6B7280' }
+    default: 
+      return { label: 'Free', color: '#6B7280' }
   }
 }
 

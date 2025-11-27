@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useTeacherDashboard } from '@/lib/hooks/teacher/useTeacherDashboard';
+import { useTeacherUnreadMessages } from '@/lib/hooks/teacher/useTeacherUnreadMessages';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { MetricCard } from '@/components/dashboard/parent/MetricCard';
 import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
@@ -71,6 +72,9 @@ export default function TeacherDashboard() {
 
   // Load dashboard data
   const { metrics, classes, loading: dashboardLoading, refetch } = useTeacherDashboard(userId);
+  
+  // Load unread message count with real-time updates
+  const { unreadCount } = useTeacherUnreadMessages(userId, preschoolId);
 
   const loading = authLoading || profileLoading || dashboardLoading;
 
@@ -83,6 +87,7 @@ export default function TeacherDashboard() {
         preschoolName={preschoolName}
         preschoolId={preschoolId}
         userId={userId}
+        unreadCount={unreadCount}
       >
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading...</p>
@@ -110,6 +115,7 @@ export default function TeacherDashboard() {
         preschoolName={preschoolName}
         preschoolId={preschoolId}
         userId={userId}
+        unreadCount={unreadCount}
       >
       {/* Search Bar */}
       <div style={{ marginTop: 0, marginBottom: 'var(--space-3)' }}>

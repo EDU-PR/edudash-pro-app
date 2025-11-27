@@ -113,7 +113,7 @@ export function LoadingScreen() {
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text'
         }}>
-          EduDash Pro
+          Young Eagles
         </h1>
         <p style={{
           fontSize: 16,

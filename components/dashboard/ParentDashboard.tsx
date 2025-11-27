@@ -35,6 +35,9 @@ import { InteractiveLessonsWidget } from '@/components/parent/InteractiveLessons
 import { PendingLinkRequests } from './PendingLinkRequests';
 import { PendingParentLinkRequests } from './PendingParentLinkRequests';
 
+// AI Quota display component
+import { AIQuotaOverview } from '@/components/ui/AIQuotaDisplay';
+
 // Extracted helpers
 import { 
   getMockWhatsAppConnection, 
@@ -1218,6 +1221,13 @@ case 'homework':
             />
           </View>
         )}
+
+        {/* AI Quota Overview */}
+        <View style={styles.section}>
+          <AIQuotaOverview 
+            showUpgradePrompt={tier === 'free'}
+          />
+        </View>
 
         {/* Enhanced Usage Stats */}
         <EnhancedStatsRow
