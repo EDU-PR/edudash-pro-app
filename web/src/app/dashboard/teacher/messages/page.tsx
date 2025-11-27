@@ -855,7 +855,7 @@ export default function TeacherMessagesPage() {
 
               <div
                 style={{
-                  position: isDesktop ? 'absolute' : 'fixed',
+                  position: isDesktop ? 'relative' : 'fixed',
                   bottom: 0,
                   left: 0,
                   right: 0,
@@ -864,7 +864,7 @@ export default function TeacherMessagesPage() {
                   borderTop: isDesktop ? '1px solid var(--border)' : 'none',
                   boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
                   zIndex: 50,
-                  marginBottom: 0,
+                  flexShrink: 0,
                 }}
               >
                 <input
