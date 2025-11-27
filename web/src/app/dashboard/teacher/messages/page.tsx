@@ -6,10 +6,13 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical } from 'lucide-react';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
+import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
+import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
+import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 
 interface MessageThread {
   id: string;
@@ -76,10 +79,10 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
   const hasUnread = (thread.unread_count || 0) > 0;
-  
+
   const getInitials = (name: string) => {
     if (!name || name.trim() === '') return '?';
-    const parts = name.trim().split(' ').filter(part => part.length > 0);
+    const parts = name.trim().split(' ').filter(Boolean);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return parts[0]?.[0]?.toUpperCase() || '?';
   };
@@ -87,114 +90,34 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   return (
     <div
       onClick={onSelect}
-      style={{
-        padding: '12px',
-        marginBottom: '8px',
-        borderRadius: '12px',
-        cursor: 'pointer',
-        background: isActive ? 'var(--surface-2)' : 'transparent',
-        border: `1px solid ${isActive ? 'var(--primary)' : 'transparent'}`,
-        display: 'flex',
-        gap: '12px',
-        alignItems: 'center',
-        transition: 'all 0.2s ease',
-        boxShadow: isActive ? '0 2px 12px rgba(124, 58, 237, 0.15)' : 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'var(--surface)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'transparent';
-        }
-      }}
+      className={`p-3 mb-2 rounded-[12px] cursor-pointer flex gap-3 items-center transition ${isActive ? 'bg-[var(--surface-2)] border border-[var(--primary)] shadow-[0_2px_12px_rgba(124,58,237,0.15)]' : 'border border-transparent hover:bg-[var(--surface)]'}`}
     >
       <div
-        style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          background: isActive ? 'var(--primary)' : 'var(--surface-2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontSize: '14px',
-          fontWeight: '600',
-          flexShrink: 0,
-          boxShadow: isActive ? '0 4px 12px rgba(124, 58, 237, 0.3)' : 'none',
-        }}
+        className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0 ${isActive ? 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.3)]' : 'bg-[var(--surface-2)]'}`}
       >
         {getInitials(parentName)}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: hasUnread ? '700' : '600',
-              color: hasUnread ? 'var(--text)' : 'var(--text)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-1">
+          <span className={`text-[14px] ${hasUnread ? 'font-bold' : 'font-semibold'} truncate text-[var(--text)]`}>
             {parentName}
           </span>
           {thread.last_message?.created_at && (
-            <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '8px', flexShrink: 0 }}>
+            <span className="text-[11px] text-[var(--muted)] ml-2 flex-shrink-0">
               {formatMessageTime(thread.last_message.created_at)}
             </span>
           )}
         </div>
         {studentName && (
-          <p
-            style={{
-              margin: '0 0 4px 0',
-              fontSize: '12px',
-              color: 'var(--cyan)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontWeight: '500',
-            }}
-          >
-            📚 {studentName}
-          </p>
+          <p className="m-0 mb-1 text-[12px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
         )}
-        <p
-          style={{
-            margin: 0,
-            fontSize: '13px',
-            color: hasUnread ? 'var(--text)' : 'var(--muted)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <p className={`m-0 text-[13px] truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'}`}>
           {thread.last_message?.content || 'No messages yet'}
         </p>
       </div>
       {hasUnread && (
-        <div
-          style={{
-            minWidth: '22px',
-            height: '22px',
-            borderRadius: '11px',
-            background: 'var(--primary)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '0 7px',
-            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.4)',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ color: 'white', fontSize: '11px', fontWeight: '700' }}>
-            {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
-          </span>
+        <div className="min-w-[22px] h-[22px] rounded-[11px] bg-[var(--primary)] text-white text-[11px] font-bold px-1.5 flex items-center justify-center shadow-[0_2px_8px_rgba(124,58,237,0.4)] flex-shrink-0">
+          {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
         </div>
       )}
     </div>
@@ -223,6 +146,28 @@ export default function TeacherMessagesPage() {
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
+
+  // Typing indicator and calling
+  const { typingText, startTyping, stopTyping } = useTypingIndicator({ supabase, threadId: selectedThreadId, userId });
+  const { callState, startVoiceCall, startVideoCall, closeCall } = useCallInterface();
+
+  // Chat wallpaper state
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const [wallpaperCss, setWallpaperCss] = useState<string | null>(null);
+
+  const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
+    if (sel.type === 'url') {
+      setWallpaperCss(`url(${sel.value}) center/cover no-repeat, linear-gradient(180deg, #0f172a 0%, #1e293b 100%)`);
+      return;
+    }
+    // Presets mapping (mirror of ChatWallpaperPicker presets)
+    const presetMap: Record<string, string> = {
+      'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%), radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.08) 0%, transparent 45%)',
+      'midnight': 'linear-gradient(135deg, #0b1020 0%, #151a2f 100%)',
+      'deep-space': 'radial-gradient(1000px 600px at 10% 10%, rgba(124, 58, 237, 0.08), transparent), radial-gradient(1000px 600px at 90% 90%, rgba(236, 72, 153, 0.08), transparent), #0a0f1e',
+    };
+    setWallpaperCss(presetMap[sel.value] || presetMap['purple-glow']);
+  };
 
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
@@ -327,6 +272,21 @@ export default function TeacherMessagesPage() {
     }
   }, [markThreadAsRead, supabase]);
 
+  const getThreadContactKey = (thread: MessageThread) => {
+    const participants = thread.message_participants || thread.participants || [];
+    const parentParticipant = participants.find((p) => p.role === 'parent');
+    if (!parentParticipant?.user_id) {
+      return `thread:${thread.id}`;
+    }
+    const studentKey = thread.student_id || 'no-student';
+    return `${parentParticipant.user_id}:${studentKey}`;
+  };
+
+  const getThreadRecencyValue = (thread: MessageThread) => {
+    const rawTimestamp = thread.last_message?.created_at || thread.last_message_at;
+    return rawTimestamp ? new Date(rawTimestamp).getTime() : 0;
+  };
+
   const fetchThreads = useCallback(async () => {
     if (!userId || !profile?.preschoolId) return;
     
@@ -355,7 +315,34 @@ export default function TeacherMessagesPage() {
       
       if (threadsError) throw threadsError;
       
-      const teacherThreads = (threads || []).filter((thread: any) => 
+      const uniqueThreadMap = new Map<string, any>();
+      (threads || []).forEach((thread: any) => {
+        if (!thread?.id) return;
+        const existing = uniqueThreadMap.get(thread.id);
+        if (!existing) {
+          uniqueThreadMap.set(thread.id, thread);
+          return;
+        }
+        const mergedParticipants = [
+          ...(existing.message_participants || []),
+          ...(thread.message_participants || []),
+        ];
+        const uniqueParticipants = Array.from(
+          new Map(
+            mergedParticipants
+              .filter((participant) => participant?.user_id)
+              .map((participant) => [participant.user_id, participant])
+          ).values()
+        );
+        uniqueThreadMap.set(thread.id, {
+          ...existing,
+          ...thread,
+          message_participants: uniqueParticipants,
+        });
+      });
+      const dedupedThreads = Array.from(uniqueThreadMap.values());
+      
+      const teacherThreads = dedupedThreads.filter((thread: any) => 
         thread.message_participants?.some((p: any) => 
           p.user_id === userId && p.role === 'teacher'
         )
@@ -369,7 +356,7 @@ export default function TeacherMessagesPage() {
             .eq('thread_id', thread.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
           
           const teacherParticipant = thread.message_participants?.find(
             (p: any) => p.user_id === userId && p.role === 'teacher'
@@ -395,10 +382,34 @@ export default function TeacherMessagesPage() {
         })
       );
       
-      setThreads(threadsWithDetails);
+      // Collapse duplicates so each parent/student pair only shows a single conversation entry.
+      const uniqueParentThreadMap = new Map<string, MessageThread>();
+      threadsWithDetails.forEach((thread) => {
+        const key = getThreadContactKey(thread);
+        const existing = uniqueParentThreadMap.get(key);
+        if (!existing || getThreadRecencyValue(thread) >= getThreadRecencyValue(existing)) {
+          uniqueParentThreadMap.set(key, thread);
+        }
+      });
+
+      const uniqueThreads = Array.from(uniqueParentThreadMap.values()).sort(
+        (a, b) => getThreadRecencyValue(b) - getThreadRecencyValue(a)
+      );
+
+      setThreads(uniqueThreads);
+
       if (selectedThreadId) {
-        const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
-        if (!stillSelected) setSelectedThreadId(null);
+        const stillSelected = uniqueThreads.some((t) => t.id === selectedThreadId);
+        if (!stillSelected) {
+          const originalSelected = threadsWithDetails.find((t) => t.id === selectedThreadId);
+          if (originalSelected) {
+            const replacementKey = getThreadContactKey(originalSelected);
+            const replacement = uniqueParentThreadMap.get(replacementKey);
+            setSelectedThreadId(replacement?.id || null);
+          } else {
+            setSelectedThreadId(null);
+          }
+        }
       }
     } catch (err: any) {
       console.error('Error fetching threads:', err);
@@ -537,19 +548,10 @@ export default function TeacherMessagesPage() {
 
   return (
     <>
+      {/* Hide global header on small screens for a focused messaging UI */}
       <style jsx global>{`
-        /* Hide the header on teacher messages page */
-        body:has(.teacher-messages-page) .topbar,
-        body:has(.teacher-messages-page) header.topbar {
-          display: none !important;
-        }
-        .teacher-messages-page {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          z-index: 999;
+        @media (max-width: 1023px) {
+          header.topbar { display: none !important; }
         }
       `}</style>
       <TeacherShell
@@ -562,116 +564,60 @@ export default function TeacherMessagesPage() {
         unreadCount={totalUnread}
         contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100%', position: 'relative' }}
       >
-        <div className="teacher-messages-page" style={{ 
-          display: 'flex', 
-          height: '100%', 
-          width: '100%',
-          overflow: 'hidden', 
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'var(--bg)',
-        }}>
+        <div className="flex h-[calc(100vh-var(--topnav-h))] w-full overflow-hidden bg-[var(--bg)]">
           {/* Collapsible Sidebar */}
           <div
             style={{
+              order: isDesktop ? 2 : 0,
               width: isDesktop ? '340px' : '100%',
               height: '100%',
               display: (!isDesktop && selectedThread) ? 'none' : 'flex',
               flexDirection: 'column',
               background: 'var(--surface)',
-              borderRight: isDesktop ? '1px solid var(--border)' : 'none',
-              boxShadow: isDesktop ? '2px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
+              borderLeft: isDesktop ? '1px solid var(--border)' : 'none',
+              boxShadow: isDesktop ? '-2px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
               position: isDesktop ? 'relative' : 'fixed',
               top: isDesktop ? 0 : 0,
-              left: isDesktop ? 0 : 0,
+              right: isDesktop ? 0 : 'auto',
+              left: isDesktop ? 'auto' : 0,
               bottom: isDesktop ? 0 : 0,
               zIndex: isDesktop ? 1 : 1000,
               flexShrink: 0,
             }}
           >
           {/* Sidebar Header */}
-          <div style={{
-            padding: '16px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface-2)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
+            <div className="flex items-center justify-between mb-4">
               {!isDesktop && (
                 <button
                   onClick={() => router.push('/dashboard/teacher')}
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    color: 'var(--text)',
-                  }}
+                  className="w-9 h-9 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center cursor-pointer text-[var(--text)]"
                 >
                   <ArrowLeft size={20} />
                 </button>
               )}
-              <h3 style={{
-                margin: 0,
-                fontSize: '18px',
-                fontWeight: '700',
-                color: 'var(--text)',
-                flex: 1,
-                textAlign: !isDesktop ? 'center' : 'left',
-              }}>
+              <h3 className={`m-0 text-[18px] font-bold text-[var(--text)] flex-1 ${!isDesktop ? 'text-center' : 'text-left'}`}>
                 Messages
               </h3>
               {totalUnread > 0 && (
-                <span style={{
-                  background: 'var(--primary)',
-                  color: 'white',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  padding: '4px 10px',
-                  borderRadius: '12px',
-                  boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)',
-                }}>
+                <span className="bg-[var(--primary)] text-white text-[12px] font-bold px-2.5 py-1 rounded-[12px] shadow-[0_2px_8px_rgba(124,58,237,0.3)]">
                   {totalUnread}
                 </span>
               )}
             </div>
 
             {/* Search */}
-            <div style={{ position: 'relative' }}>
+            <div className="relative">
               <input
                 type="text"
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px 10px 38px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  color: 'var(--text)',
-                  fontSize: '14px',
-                  outline: 'none',
-                  transition: 'all 0.2s ease',
-                }}
+                className="w-full pl-9 pr-3 py-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-[14px] outline-none transition"
               />
               <Search
                 size={18}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--muted)',
-                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
               />
             </div>
           </div>
@@ -744,10 +690,11 @@ export default function TeacherMessagesPage() {
 
         {/* Main Chat Area */}
         <div style={{
+          order: 1,
           flex: 1,
           display: (!isDesktop && !selectedThread) ? 'none' : 'flex',
           flexDirection: 'column',
-          background: 'var(--bg)',
+          background: wallpaperCss || 'var(--bg)',
           position: 'relative',
           height: '100%',
           overflow: 'hidden',
@@ -804,102 +751,99 @@ export default function TeacherMessagesPage() {
             /* Chat View */
             <>
               {/* Chat Header */}
-              <div style={{
-                padding: isDesktop ? '20px 28px' : '16px',
-                borderBottom: '1px solid var(--border)',
-                background: 'var(--surface)',
-                backdropFilter: 'blur(12px)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
-              }}>
+              <div className={`${isDesktop ? 'py-5 px-7' : 'p-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
                 {!isDesktop && (
                   <button
                     onClick={() => setSelectedThreadId(null)}
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '10px',
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      color: 'var(--text)',
-                    }}
+                    className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center cursor-pointer text-[var(--text)]"
                   >
                     <ArrowLeft size={20} />
                   </button>
                 )}
                 <div
-                  style={{
-                    width: isDesktop ? '52px' : '44px',
-                    height: isDesktop ? '52px' : '44px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--cyan) 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: isDesktop ? '18px' : '16px',
-                    fontWeight: '700',
-                    boxShadow: '0 4px 16px rgba(124, 58, 237, 0.3)',
-                    flexShrink: 0,
-                  }}
+                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-9 h-9 text-[13px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
                 >
                   {parentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{
-                    margin: 0,
-                    fontSize: isDesktop ? '18px' : '16px',
-                    fontWeight: '700',
-                    color: 'var(--text)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`${isDesktop ? 'text-[18px]' : 'text-[16px]'} m-0 font-bold text-[var(--text)] truncate`}>
                     {parentName}
                   </h3>
                   {selectedThread.student && (
-                    <p style={{
-                      margin: '4px 0 0',
-                      fontSize: '13px',
-                      color: 'var(--cyan)',
-                      fontWeight: '500',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}>
+                    <p className="mt-1 text-[13px] text-[var(--cyan)] font-medium flex items-center gap-1.5">
                       <span>📚</span>
                       <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
                     </p>
                   )}
                 </div>
-                {isDesktop && (
-                  <button
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '10px',
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      color: 'var(--muted)',
-                    }}
-                  >
-                    <MoreVertical size={20} />
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {isDesktop ? (
+                    <>
+                      <button
+                        onClick={() => setWallpaperOpen(true)}
+                        title="Chat wallpaper"
+                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <ImageIcon size={18} />
+                      </button>
+                      <button
+                        onClick={() => parentParticipant?.user_id && startVoiceCall(parentParticipant.user_id, parentName)}
+                        title="Start voice call"
+                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <Phone size={18} />
+                      </button>
+                      <button
+                        onClick={() => parentParticipant?.user_id && startVideoCall(parentParticipant.user_id, parentName)}
+                        title="Start video call"
+                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <Video size={18} />
+                      </button>
+                      <button
+                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => parentParticipant?.user_id && startVoiceCall(parentParticipant.user_id, parentName)}
+                        title="Voice call"
+                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <Phone size={18} />
+                      </button>
+                      <button
+                        onClick={() => parentParticipant?.user_id && startVideoCall(parentParticipant.user_id, parentName)}
+                        title="Video call"
+                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                      >
+                        <Video size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                        title="More"
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* Typing indicator */}
+              {typingText && (
+                <div style={{
+                  padding: '8px 16px',
+                  color: 'var(--muted)',
+                  fontSize: '12px'
+                }}>
+                  {typingText}
+                </div>
+              )}
 
               {/* Messages Area */}
               <div
@@ -910,8 +854,10 @@ export default function TeacherMessagesPage() {
                   padding: isDesktop ? '24px 28px' : '16px',
                   display: 'flex',
                   flexDirection: 'column',
+                  paddingBottom: isDesktop ? undefined : '60px',
                 }}
               >
+                <div className={`w-full ${isDesktop ? 'max-w-[860px] mx-auto px-3' : 'px-1'}`}>
                 {messagesLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
                     <div className="spinner"></div>
@@ -953,7 +899,7 @@ export default function TeacherMessagesPage() {
                     </div>
                   </div>
                 ) : (
-                  <>
+                  <div className="flex flex-col gap-4">
                     {messages.map((message) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
@@ -972,63 +918,38 @@ export default function TeacherMessagesPage() {
                           formattedTime={formatMessageTime(message.created_at)}
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
+                          hideAvatars={!isDesktop}
                         />
                       );
                     })}
                     <div ref={messagesEndRef} />
-                  </>
+                  </div>
                 )}
+                </div>
               </div>
 
               {/* Message Composer */}
-              <div style={{
-                padding: isDesktop ? '12px 28px 14px' : '8px 12px 10px',
-                background: 'var(--surface)',
-                borderTop: '1px solid var(--border)',
-                boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.08)',
-              }}>
+              <div className={`${isDesktop ? 'py-3 px-7 border-t border-[var(--border)]' : 'fixed bottom-0 left-0 right-0 px-3 py-2.5'} bg-[var(--surface)] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-40`}>
+                <div className={`w-full ${isDesktop ? 'max-w-[860px] mx-auto' : ''}`}>
                 <input
                   type="file"
                   accept="image/*,audio/*,video/*"
                   ref={fileInputRef}
-                  style={{ display: 'none' }}
+                  className="hidden"
                   onChange={handleAttachmentChange}
                 />
-                <form onSubmit={handleSendMessage} style={{ position: 'relative' }}>
+                <form onSubmit={handleSendMessage} className="relative">
                   {showEmojiPicker && (
                     <div
                       ref={emojiPickerRef}
-                      style={{
-                        position: 'absolute',
-                        bottom: '70px',
-                        left: '12px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '16px',
-                        padding: '12px',
-                        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2)',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(5, 1fr)',
-                        gap: '8px',
-                        zIndex: 20,
-                      }}
+                      className="absolute bottom-[70px] left-3 bg-[var(--surface)] border border-[var(--border)] rounded-[16px] p-3 shadow-[0_12px_32px_rgba(0,0,0,0.2)] grid grid-cols-5 gap-2 z-20"
                     >
                       {EMOJI_OPTIONS.map((emoji) => (
                         <button
                           key={emoji}
                           type="button"
                           onClick={() => handleEmojiSelect(emoji)}
-                          style={{
-                            fontSize: '22px',
-                            border: 'none',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            padding: '6px',
-                            borderRadius: '8px',
-                            transition: 'background 0.15s ease',
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          className="text-[22px] p-1.5 rounded hover:bg-[var(--surface-2)] transition"
                         >
                           {emoji}
                         </button>
@@ -1036,26 +957,14 @@ export default function TeacherMessagesPage() {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                  <div className={`flex gap-2.5 ${isDesktop ? 'items-end' : 'items-center'}`}>
                     {isDesktop && (
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                          style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '12px',
-                            background: 'var(--surface-2)',
-                            border: '1px solid var(--border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: 'var(--muted)',
-                            transition: 'all 0.2s ease',
-                          }}
+                          className="w-11 h-11 rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center cursor-pointer text-[var(--muted)] transition"
                         >
                           <Smile size={22} />
                         </button>
@@ -1063,20 +972,7 @@ export default function TeacherMessagesPage() {
                           type="button"
                           onClick={triggerFilePicker}
                           disabled={attachmentUploading}
-                          style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '12px',
-                            background: 'var(--surface-2)',
-                            border: '1px solid var(--border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: attachmentUploading ? 'not-allowed' : 'pointer',
-                            color: 'var(--muted)',
-                            transition: 'all 0.2s ease',
-                            opacity: attachmentUploading ? 0.5 : 1,
-                          }}
+                          className={`w-11 h-11 rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] transition ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                         >
                           <Paperclip size={20} />
                         </button>
@@ -1084,152 +980,96 @@ export default function TeacherMessagesPage() {
                     )}
 
                     {!isDesktop && (
-                      <button
-                        type="button"
-                        ref={emojiButtonRef}
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        style={{
-                          width: '42px',
-                          height: '42px',
-                          borderRadius: '12px',
-                          background: 'var(--surface-2)',
-                          border: '1px solid var(--border)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: 'var(--muted)',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Smile size={20} />
-                      </button>
-                    )}
-
-                    <div style={{ position: 'relative', flex: 1 }}>
-                      {!isDesktop && !messageText.trim() && (
+                      <>
+                        {/* Emoji outside on the left */}
                         <button
                           type="button"
-                          onClick={triggerFilePicker}
-                          disabled={attachmentUploading}
-                          style={{
-                            position: 'absolute',
-                            left: '14px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: attachmentUploading ? 'not-allowed' : 'pointer',
-                            color: 'var(--muted)',
-                            zIndex: 1,
-                            opacity: attachmentUploading ? 0.5 : 1,
-                          }}
+                          ref={emojiButtonRef}
+                          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end mb-[2px]"
+                          aria-label="Emoji"
                         >
-                          <Paperclip size={18} />
+                          <Smile size={20} />
                         </button>
-                      )}
-                      <textarea
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        placeholder="Type a message..."
-                        disabled={sending || attachmentUploading}
-                        rows={1}
-                        style={{
-                          width: '100%',
-                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 20px' : '14px 54px 14px 48px'),
-                          borderRadius: '14px',
-                          border: '1px solid var(--border)',
-                          background: 'var(--bg)',
-                          color: 'var(--text)',
-                          fontSize: '15px',
-                          outline: 'none',
-                          resize: 'none',
-                          maxHeight: '120px',
-                          fontFamily: 'inherit',
-                          transition: 'border-color 0.2s ease',
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage(e);
-                          }
-                        }}
-                        onFocus={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
-                        onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-                      />
-
-                      {!isDesktop && (
-                        <div style={{
-                          position: 'absolute',
-                          right: '8px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                        }}>
-                          {messageText.trim() ? (
-                            <button
-                              type="submit"
-                              disabled={sending || attachmentUploading}
-                              style={{
-                                width: '38px',
-                                height: '38px',
-                                borderRadius: '50%',
-                                background: (sending || attachmentUploading) ? 'var(--muted)' : 'var(--primary)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: (sending || attachmentUploading) ? 'not-allowed' : 'pointer',
-                                boxShadow: (sending || attachmentUploading) ? 'none' : '0 4px 12px rgba(124, 58, 237, 0.4)',
-                              }}
-                            >
-                              {sending || attachmentUploading ? (
-                                <Loader2 size={18} className="animate-spin" color="white" />
-                              ) : (
-                                <Send size={18} color="white" />
-                              )}
-                            </button>
-                          ) : (
+                        <div className="flex flex-row items-end flex-1 gap-2 px-3 py-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg)]">
+                          {/* Textarea */}
+                          <textarea
+                            value={messageText}
+                            onChange={(e) => { 
+                              setMessageText(e.target.value); 
+                              startTyping();
+                              const ta = e.target as HTMLTextAreaElement;
+                              ta.style.height = 'auto';
+                              ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+                            }}
+                            onBlur={() => { try { stopTyping(); } catch {} }}
+                            placeholder="Type a message"
+                            disabled={sending || attachmentUploading}
+                            rows={1}
+                            className="flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none"
+                            style={{ height: '28px' }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendMessage(e);
+                                (e.currentTarget as HTMLTextAreaElement).style.height = '28px';
+                              }
+                            }}
+                          />
+                          {/* Camera (auto-hides when typing) */}
+                          {!messageText.trim() && (
                             <button
                               type="button"
-                              onClick={handleMicClick}
-                              style={{
-                                width: '38px',
-                                height: '38px',
-                                borderRadius: '50%',
-                                background: isRecording ? 'var(--warning)' : 'var(--cyan)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                boxShadow: `0 4px 12px ${isRecording ? 'rgba(245, 158, 11, 0.4)' : 'rgba(0, 245, 255, 0.4)'}`,
-                              }}
+                              className="text-[var(--muted)] shrink-0 mb-0.5"
+                              aria-label="Camera"
                             >
-                              <Mic size={20} color="white" />
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                              </svg>
                             </button>
                           )}
+                          {/* Clip */}
+                          <button
+                            type="button"
+                            onClick={triggerFilePicker}
+                            disabled={attachmentUploading}
+                            className={`text-[var(--muted)] shrink-0 mb-0.5 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            aria-label="Attach file"
+                          >
+                            <Paperclip size={20} />
+                          </button>
                         </div>
-                      )}
-                    </div>
+                        {messageText.trim() ? (
+                          <button
+                            type="submit"
+                            disabled={sending || attachmentUploading}
+                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                          >
+                            {sending || attachmentUploading ? (
+                              <Loader2 size={16} className="animate-spin" color="white" />
+                            ) : (
+                              <Send size={16} color="white" />
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleMicClick}
+                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                          >
+                            <Mic size={18} color="white" />
+                          </button>
+                        )}
+                      </>
+                    )}
 
                     {isDesktop && (
                       messageText.trim() ? (
                         <button
                           type="submit"
                           disabled={sending || attachmentUploading}
-                          style={{
-                            width: '50px',
-                            height: '50px',
-                            borderRadius: '14px',
-                            background: (sending || attachmentUploading) ? 'var(--muted)' : 'var(--primary)',
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: (sending || attachmentUploading) ? 'not-allowed' : 'pointer',
-                            boxShadow: (sending || attachmentUploading) ? 'none' : '0 4px 16px rgba(124, 58, 237, 0.4)',
-                            flexShrink: 0,
-                          }}
+                          className={`w-[50px] h-[50px] rounded-[14px] border-0 flex items-center justify-center flex-shrink-0 ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_16px_rgba(124,58,237,0.4)]'}`}
                         >
                           {sending || attachmentUploading ? (
                             <Loader2 size={20} className="animate-spin" color="white" />
@@ -1241,19 +1081,7 @@ export default function TeacherMessagesPage() {
                         <button
                           type="button"
                           onClick={handleMicClick}
-                          style={{
-                            width: '50px',
-                            height: '50px',
-                            borderRadius: '14px',
-                            background: isRecording ? 'var(--warning)' : 'var(--cyan)',
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            boxShadow: `0 4px 16px ${isRecording ? 'rgba(245, 158, 11, 0.4)' : 'rgba(0, 245, 255, 0.4)'}`,
-                            flexShrink: 0,
-                          }}
+                          className={`w-[50px] h-[50px] rounded-[14px] border-0 flex items-center justify-center flex-shrink-0 ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_16px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_16px_rgba(0,245,255,0.4)]'}`}
                         >
                           <Mic size={22} color="white" />
                         </button>
@@ -1262,16 +1090,31 @@ export default function TeacherMessagesPage() {
                   </div>
                 </form>
                 {statusMessage && (
-                  <p style={{ marginTop: '10px', fontSize: '13px', color: 'var(--danger)', textAlign: 'center' }}>
+                  <p className="mt-2.5 text-[13px] text-[var(--danger)] text-center">
                     {statusMessage}
                   </p>
                 )}
+                </div>
               </div>
             </>
           )}
         </div>
       </div>
-    </TeacherShell>
+        {/* Call overlay */}
+        <CallInterface
+          isOpen={callState.isOpen}
+          onClose={closeCall}
+          callType={callState.callType}
+          remoteUserId={callState.remoteUserId}
+          remoteUserName={callState.remoteUserName}
+        />
+        <ChatWallpaperPicker
+          isOpen={wallpaperOpen}
+          onClose={() => setWallpaperOpen(false)}
+          userId={userId || ''}
+          onSelect={applyWallpaper}
+        />
+      </TeacherShell>
     </>
   );
 }

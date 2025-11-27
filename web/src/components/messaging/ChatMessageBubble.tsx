@@ -48,6 +48,7 @@ interface ChatMessageBubbleProps {
   formattedTime: string;
   senderName?: string;
   otherParticipantIds?: string[];
+  hideAvatars?: boolean;
 }
 
 export const ChatMessageBubble = ({
@@ -57,6 +58,7 @@ export const ChatMessageBubble = ({
   formattedTime,
   senderName,
   otherParticipantIds = [],
+  hideAvatars = false,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
   
@@ -159,7 +161,7 @@ export const ChatMessageBubble = ({
       }}
     >
       {/* Avatar for received messages */}
-      {!isOwn && (
+      {!hideAvatars && !isOwn && (
         <div
           style={{
             width: isDesktop ? 36 : 32,
@@ -183,29 +185,6 @@ export const ChatMessageBubble = ({
           )}
         </div>
       )}
-      
-      <div
-        style={{
-          width: isDesktop ? 36 : 32,
-          height: isDesktop ? 36 : 32,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
-          marginBottom: 2,
-        }}
-      >
-        {senderName ? (
-          <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
-            {getInitials(senderName)}
-          </span>
-        ) : (
-          <User size={isDesktop ? 18 : 16} color="#fff" />
-        )}
-      </div>
       
       <div
         style={{
@@ -266,7 +245,7 @@ export const ChatMessageBubble = ({
       </div>
 
       {/* Spacer for sent messages (to maintain alignment) */}
-      {isOwn && (
+      {isOwn && !hideAvatars && (
         <div style={{ width: isDesktop ? 36 : 32, flexShrink: 0 }} />
       )}
     </div>
