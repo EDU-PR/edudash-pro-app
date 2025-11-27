@@ -589,6 +589,7 @@ export default function TeacherMessagesPage() {
           overflow: 'hidden',
           width: '100%',
           margin: 0,
+          paddingRight: isDesktop ? CONTACT_PANEL_WIDTH : 0,
           boxSizing: 'border-box',
           background: 'rgba(17, 24, 39, 0.98)',
         }}
@@ -774,7 +775,7 @@ export default function TeacherMessagesPage() {
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 128px)',
-                  paddingBottom: 0,
+                  paddingBottom: isDesktop ? 100 : 80,
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
