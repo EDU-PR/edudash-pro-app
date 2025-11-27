@@ -17,7 +17,7 @@ if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styl
     @media (max-width: 1024px) {
       @keyframes pulse-glow {
         0%, 100% {
-          box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12), 0 3px 10px rgba(15, 23, 42, 0.08), 0 0 3px rgba(139, 92, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+          box-shadow: 0 3px 8px rgba(17, 30, 61, 0.18), 0 6px 16px rgba(15, 23, 42, 0.12), 0 0 6px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
         50% {
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15), 0 4px 12px rgba(15, 23, 42, 0.1), 0 0 6px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -151,12 +151,11 @@ export const ChatMessageBubble = ({
       style={{
         display: 'flex',
         justifyContent: isOwn ? 'flex-end' : 'flex-start',
+        maxWidth: '100%',
+        paddingLeft: isDesktop ? 8 : 0,
+        paddingRight: isDesktop ? 280 : 0,
+        gap: 8,
         alignItems: 'flex-end',
-        width: '100%',
-        paddingLeft: isDesktop ? 4 : 8,
-        paddingRight: isDesktop ? 32 : 12,
-        marginBottom: isDesktop ? 8 : 4,
-        gap: 12,
       }}
     >
       {/* Avatar for received messages */}
@@ -184,6 +183,29 @@ export const ChatMessageBubble = ({
           )}
         </div>
       )}
+      
+      <div
+        style={{
+          width: isDesktop ? 36 : 32,
+          height: isDesktop ? 36 : 32,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+          marginBottom: 2,
+        }}
+      >
+        {senderName ? (
+          <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
+            {getInitials(senderName)}
+          </span>
+        ) : (
+          <User size={isDesktop ? 18 : 16} color="#fff" />
+        )}
+      </div>
       
       <div
         style={{
