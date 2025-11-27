@@ -601,6 +601,7 @@ export default function TeacherMessagesPage() {
             flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
+            marginRight: isDesktop ? 280 : 0,
           }}
         >
           {/* Mobile: Show thread list when no selection, otherwise show chat */}
@@ -695,22 +696,24 @@ export default function TeacherMessagesPage() {
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 100,
-                  padding: isDesktop ? '16px 20px' : '16px 8px 12px 8px',
+                  padding: isDesktop ? '10px 16px' : '12px 8px 10px 8px',
                   borderBottom: isDesktop ? '1px solid var(--border)' : 'none',
                   background: 'var(--surface-1)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: isDesktop ? 16 : 12,
+                  gap: isDesktop ? 12 : 10,
+                  width: '100%',
+                  boxSizing: 'border-box',
                 }}
               >
                 {!isDesktop && (
                   <button
                     onClick={handleClearSelection}
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
                       background: 'transparent',
                       border: 'none',
                       display: 'flex',
@@ -721,28 +724,28 @@ export default function TeacherMessagesPage() {
                       padding: 0,
                     }}
                   >
-                    <ArrowLeft size={22} />
+                    <ArrowLeft size={20} />
                   </button>
                 )}
                 <div
                   style={{
-                    width: isDesktop ? 56 : 44,
-                    height: isDesktop ? 56 : 44,
-                    borderRadius: isDesktop ? 28 : 22,
+                    width: isDesktop ? 40 : 36,
+                    height: isDesktop ? 40 : 36,
+                    borderRadius: isDesktop ? 20 : 18,
                     background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                    boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
                   }}
                 >
-                  <User size={isDesktop ? 28 : 22} color="white" />
+                  <User size={isDesktop ? 20 : 18} color="white" />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <h2 style={{ margin: 0, fontSize: isDesktop ? 20 : 17, fontWeight: 700, color: 'var(--text-primary)' }}>{parentName}</h2>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ margin: 0, fontSize: isDesktop ? 16 : 15, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{parentName}</h2>
                   {selectedThread.student && (
-                    <p style={{ margin: '6px 0 0', fontSize: isDesktop ? 14 : 12, color: 'var(--muted)', fontWeight: 500 }}>
+                    <p style={{ margin: '2px 0 0', fontSize: isDesktop ? 12 : 11, color: 'var(--muted)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       📚 About: {selectedThread.student.first_name} {selectedThread.student.last_name}
                     </p>
                   )}
@@ -753,17 +756,19 @@ export default function TeacherMessagesPage() {
                     style={{
                       border: '1px solid var(--border)',
                       borderRadius: 999,
-                      padding: '6px 12px',
+                      padding: '4px 10px',
                       background: 'transparent',
                       color: 'var(--muted)',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 6,
+                      gap: 4,
                       cursor: 'pointer',
+                      fontSize: 13,
+                      flexShrink: 0,
                     }}
                   >
-                    <ArrowLeft size={16} />
-                    Clear chat
+                    <ArrowLeft size={14} />
+                    Clear
                   </button>
                 )}
               </div>
@@ -773,9 +778,15 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
+<<<<<<< HEAD
                   padding: isDesktop ? '24px 0px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 128px)',
-                  paddingBottom: isDesktop ? 100 : 80,
+                  paddingBottom: 0,
+=======
+                  padding: isDesktop ? '16px 16px' : '12px 8px',
+                  paddingTop: isDesktop ? '16px' : '72px',
+                  paddingBottom: isDesktop ? '80px' : '80px',
+>>>>>>> 295834e (Fix messages chat UI: reduce header height, fix right padding, ensure scrolling shows last message)
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
