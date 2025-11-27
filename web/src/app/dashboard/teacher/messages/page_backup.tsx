@@ -560,36 +560,23 @@ export default function TeacherMessagesPage() {
         preschoolId={profile?.preschoolId}
         userId={userId}
         unreadCount={totalUnread}
-        contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100%', position: 'relative' }}
+        contentStyle={{ padding: 0, overflow: 'hidden', height: '100vh' }}
       >
-        <div className="teacher-messages-page" style={{ 
-          display: 'flex', 
-          height: '100%', 
-          width: '100%',
-          overflow: 'hidden', 
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'var(--bg)',
-        }}>
-          {/* Collapsible Sidebar */}
+        <div className="teacher-messages-page" style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative', background: 'var(--bg)' }}>
+          {/* Sidebar - Always visible on desktop, toggleable on mobile */}
           <div
             style={{
-              width: isDesktop ? '340px' : '100%',
-              height: '100%',
+              width: isDesktop ? '320px' : '100%',
               display: (!isDesktop && selectedThread) ? 'none' : 'flex',
               flexDirection: 'column',
               background: 'var(--surface)',
               borderRight: isDesktop ? '1px solid var(--border)' : 'none',
               boxShadow: isDesktop ? '2px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
               position: isDesktop ? 'relative' : 'fixed',
-              top: isDesktop ? 0 : 0,
-              left: isDesktop ? 0 : 0,
-              bottom: isDesktop ? 0 : 0,
+              top: 0,
+              left: 0,
+              bottom: 0,
               zIndex: isDesktop ? 1 : 1000,
-              flexShrink: 0,
             }}
           >
           {/* Sidebar Header */}
@@ -745,12 +732,11 @@ export default function TeacherMessagesPage() {
         {/* Main Chat Area */}
         <div style={{
           flex: 1,
-          display: (!isDesktop && !selectedThread) ? 'none' : 'flex',
+          display: 'flex',
           flexDirection: 'column',
           background: 'var(--bg)',
           position: 'relative',
-          height: '100%',
-          overflow: 'hidden',
+          marginLeft: isDesktop ? '0' : '0',
         }}>
           {!selectedThread ? (
             /* Empty State */
@@ -982,7 +968,7 @@ export default function TeacherMessagesPage() {
 
               {/* Message Composer */}
               <div style={{
-                padding: isDesktop ? '12px 28px 14px' : '8px 12px 10px',
+                padding: isDesktop ? '16px 28px 20px' : '12px 16px 16px',
                 background: 'var(--surface)',
                 borderTop: '1px solid var(--border)',
                 boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.08)',

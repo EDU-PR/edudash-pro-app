@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import "./globals.css";
 import "./design.css";
 import { PWARegister } from "@/components/PWARegister";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";

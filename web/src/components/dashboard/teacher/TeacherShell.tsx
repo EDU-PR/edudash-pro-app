@@ -61,6 +61,8 @@ export function TeacherShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileWidgetsOpen, setMobileWidgetsOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
 
   // Fetch unread notification count
   useEffect(() => {
@@ -99,7 +101,7 @@ export function TeacherShell({
       supabase.removeChannel(channel);
     };
   }, [userId, supabase]);
-  
+
   // Count pending notifications/activity
   const activityCount = useMemo(() => {
     return unreadCount > 0 ? unreadCount : 0;
@@ -197,18 +199,50 @@ export function TeacherShell({
       )}
 
       <div className="frame">
-        <aside className="sidenav sticky" aria-label="Sidebar">
+        <aside 
+          className="sidenav sticky" 
+          aria-label="Sidebar"
+          onMouseEnter={() => setSidebarHovered(true)}
+          onMouseLeave={() => setSidebarHovered(false)}
+          style={{
+            width: (sidebarCollapsed && !sidebarHovered) ? '64px' : '240px',
+            transition: 'width 0.3s ease',
+            overflow: 'hidden',
+          }}
+        >
           <div className="sidenavCol">
             <nav className="nav">
               {nav.map((it) => {
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
+                const isExpanded = !sidebarCollapsed || sidebarHovered;
                 return (
-                  <Link key={it.href} href={it.href} className={`navItem ${active ? 'navItemActive' : ''}`} aria-current={active ? 'page' : undefined}>
+                  <Link 
+                    key={it.href} 
+                    href={it.href} 
+                    className={`navItem ${active ? 'navItemActive' : ''}`} 
+                    aria-current={active ? 'page' : undefined}
+                    style={{
+                      justifyContent: isExpanded ? 'flex-start' : 'center',
+                      padding: isExpanded ? undefined : '12px',
+                    }}
+                    title={!isExpanded ? it.label : undefined}
+                  >
                     <Icon className="navIcon" />
-                    <span>{it.label}</span>
-                    {typeof it.badge === 'number' && it.badge > 0 && (
+                    {isExpanded && <span>{it.label}</span>}
+                    {isExpanded && typeof it.badge === 'number' && it.badge > 0 && (
                       <span className="navItemBadge badgeNumber">{it.badge}</span>
+                    )}
+                    {!isExpanded && typeof it.badge === 'number' && it.badge > 0 && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: 'var(--danger)',
+                      }} />
                     )}
                   </Link>
                 );
@@ -218,11 +252,18 @@ export function TeacherShell({
               <button
                 className="navItem"
                 onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+                style={{
+                  justifyContent: (!sidebarCollapsed || sidebarHovered) ? 'flex-start' : 'center',
+                  padding: (!sidebarCollapsed || sidebarHovered) ? undefined : '12px',
+                }}
+                title={sidebarCollapsed && !sidebarHovered ? 'Sign out' : undefined}
               >
                 <LogOut className="navIcon" />
-                <span>Sign out</span>
+                {(!sidebarCollapsed || sidebarHovered) && <span>Sign out</span>}
               </button>
-              <div className="brandPill w-full text-center">Powered by Young Eagles</div>
+              {(!sidebarCollapsed || sidebarHovered) && (
+                <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
+              )}
             </div>
           </div>
         </aside>
