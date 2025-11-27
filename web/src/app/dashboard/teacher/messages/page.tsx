@@ -13,6 +13,7 @@ import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useCompo
 import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
+import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 
 interface MessageThread {
   id: string;
@@ -154,6 +155,11 @@ export default function TeacherMessagesPage() {
   // Chat wallpaper state
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [wallpaperCss, setWallpaperCss] = useState<string | null>(null);
+
+  // Message options menu state
+  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
+  const [optionsMenuAnchor, setOptionsMenuAnchor] = useState<HTMLElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     if (sel.type === 'url') {
@@ -546,6 +552,44 @@ export default function TeacherMessagesPage() {
     ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
     : 'Parent';
 
+  // Message options menu handlers
+  const handleDeleteThread = async () => {
+    if (!selectedThreadId || !confirm('Are you sure you want to delete this conversation? This cannot be undone.')) return;
+    try {
+      await supabase.from('message_threads').delete().eq('id', selectedThreadId);
+      setSelectedThreadId(null);
+      setRefreshTrigger(prev => prev + 1);
+      alert('Conversation deleted successfully.');
+    } catch (err) {
+      console.error('Error deleting thread:', err);
+      alert('Failed to delete conversation.');
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (!selectedThreadId || !confirm('Are you sure you want to clear all messages in this conversation?')) return;
+    try {
+      await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
+      setRefreshTrigger(prev => prev + 1);
+      alert('Conversation cleared successfully.');
+    } catch (err) {
+      console.error('Error clearing conversation:', err);
+      alert('Failed to clear conversation.');
+    }
+  };
+
+  const handleBlockUser = () => {
+    alert('Block/Unblock functionality coming soon!');
+  };
+
+  const handleExportChat = () => {
+    alert('Export chat functionality coming soon!');
+  };
+
+  const handleReportIssue = () => {
+    alert('Report issue functionality coming soon!');
+  };
+
   return (
     <>
       {/* Hide global header on small screens for a focused messaging UI */}
@@ -801,6 +845,11 @@ export default function TeacherMessagesPage() {
                         <Video size={18} />
                       </button>
                       <button
+                        ref={moreButtonRef}
+                        onClick={() => {
+                          setOptionsMenuAnchor(moreButtonRef.current);
+                          setOptionsMenuOpen(true);
+                        }}
                         className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
                       >
                         <MoreVertical size={20} />
@@ -823,7 +872,12 @@ export default function TeacherMessagesPage() {
                         <Video size={18} />
                       </button>
                       <button
+                        ref={moreButtonRef}
                         type="button"
+                        onClick={() => {
+                          setOptionsMenuAnchor(moreButtonRef.current);
+                          setOptionsMenuOpen(true);
+                        }}
                         className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
                         title="More"
                       >
@@ -1124,6 +1178,16 @@ export default function TeacherMessagesPage() {
           onClose={() => setWallpaperOpen(false)}
           userId={userId || ''}
           onSelect={applyWallpaper}
+        />
+        <MessageOptionsMenu
+          isOpen={optionsMenuOpen}
+          onClose={() => setOptionsMenuOpen(false)}
+          onDeleteThread={handleDeleteThread}
+          onClearConversation={handleClearConversation}
+          onBlockUser={handleBlockUser}
+          onExportChat={handleExportChat}
+          onReportIssue={handleReportIssue}
+          anchorEl={optionsMenuAnchor}
         />
       </TeacherShell>
     </>
