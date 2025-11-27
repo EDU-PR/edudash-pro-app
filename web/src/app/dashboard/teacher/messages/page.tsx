@@ -571,18 +571,6 @@ export default function TeacherMessagesPage() {
 
   return (
     <>
-      <style jsx global>{`
-        /* Hide the header on teacher messages page */
-        body:has(.teacher-messages-page) .topbar,
-        body:has(.teacher-messages-page) header.topbar {
-          display: none !important;
-        }
-        .teacher-messages-page {
-          background: rgba(17, 24, 39, 0.98) !important;
-          position: relative;
-          z-index: 10;
-        }
-      `}</style>
       <TeacherShell
         tenantSlug={tenantSlug}
         userEmail={profile?.email}
@@ -597,11 +585,12 @@ export default function TeacherMessagesPage() {
           className="teacher-messages-page"
           style={{
             display: 'flex',
-          height: '100vh',
+          height: 'calc(100vh - var(--topnav-h))',
           overflow: 'hidden',
           width: '100%',
           margin: 0,
           boxSizing: 'border-box',
+          background: 'rgba(17, 24, 39, 0.98)',
         }}
       >
         <div
@@ -701,7 +690,7 @@ export default function TeacherMessagesPage() {
               <div
                 style={{
                   position: isDesktop ? 'relative' : 'fixed',
-                  top: isDesktop ? 'auto' : 0,
+                  top: isDesktop ? 'auto' : 'var(--topnav-h)',
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 100,
@@ -784,7 +773,7 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '128px',
+                  paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 128px)',
                   paddingBottom: 0,
                   background: 'var(--background)',
                   backgroundImage:
