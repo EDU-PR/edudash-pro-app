@@ -110,7 +110,7 @@ export function PWAInstallPrompt() {
               </svg>
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-lg mb-1">Install EduDash Pro</h3>
+              <h3 className="font-bold text-lg mb-1">Install Young Eagles</h3>
               <p className="text-sm text-blue-100 mb-2">
                 Install this app on your iPhone: tap{' '}
                 <span className="inline-flex items-center mx-1">
@@ -150,7 +150,7 @@ export function PWAInstallPrompt() {
               </div>
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-lg">Install EduDash Pro</h3>
+              <h3 className="font-bold text-lg">Install Young Eagles</h3>
               <p className="text-sm text-blue-100">
                 Get quick access and work offline
               </p>

@@ -62,7 +62,7 @@ export function HeroSection({ reduceMotion = false }: HeroSectionProps) {
             >
               <IconSymbol name="graduationcap" size={24} color={marketingTokens.colors.fg.inverse} />
             </LinearGradient>
-            <Text style={styles.logoText}>EduDash Pro</Text>
+            <Text style={styles.logoText}>Young Eagles</Text>
           </View>
 
           <Animated.View style={[styles.heroContent, animatedStyle]}>

@@ -92,11 +92,11 @@ export function TeacherShell({
               </button>
               {preschoolName ? (
                 <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 16 }}>🎓</span>
+                  <span style={{ fontSize: 16 }}>🦅</span>
                   <span style={{ fontWeight: 600 }}>{preschoolName}</span>
                 </div>
               ) : (
-                <div className="chip">EduDash Pro</div>
+                <div className="chip">Young Eagles</div>
               )}
             </div>
             <div className="rightGroup" style={{ marginLeft: 'auto' }}>
@@ -154,7 +154,7 @@ export function TeacherShell({
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
               </button>
-              <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
+              <div className="brandPill w-full text-center">Powered by Young Eagles</div>
             </div>
           </div>
         </aside>
@@ -250,7 +250,7 @@ export function TeacherShell({
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
               </button>
-              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by EduDash Pro</div>
+              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by Young Eagles</div>
             </div>
           </div>
         </>

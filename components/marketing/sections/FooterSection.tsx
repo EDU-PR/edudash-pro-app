@@ -22,7 +22,7 @@ export function FooterSection() {
         >
           <IconSymbol name="graduationcap" size={24} color={marketingTokens.colors.fg.inverse} />
         </LinearGradient>
-        <Text style={styles.brandName}>EduDash Pro</Text>
+        <Text style={styles.brandName}>Young Eagles</Text>
         <Text style={styles.tagline}>AI-Powered Education Platform</Text>
       </View>
 
@@ -81,7 +81,7 @@ export function FooterSection() {
 
       {/* Copyright */}
       <Text style={styles.copyright}>
-        © {new Date().getFullYear()} EduDash Pro. All rights reserved.
+        © {new Date().getFullYear()} Young Eagles. All rights reserved.
       </Text>
     </View>
   );

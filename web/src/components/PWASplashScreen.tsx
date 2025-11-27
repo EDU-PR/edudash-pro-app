@@ -179,7 +179,7 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
             backgroundClip: 'text',
             letterSpacing: '-0.02em'
           }}>
-            EduDash Pro
+            Young Eagles
           </h1>
           <p style={{
             fontSize: '16px',

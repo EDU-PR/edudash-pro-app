@@ -20,7 +20,7 @@ export function ParentOnboarding({ userName = 'Parent' }: ParentOnboardingProps)
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>👋</div>
         <h2 style={{ margin: 0, marginBottom: 8, fontSize: 24, fontWeight: 700 }}>
-          Welcome to EduDash Pro, {userName}!
+          Welcome to Young Eagles, {userName}!
         </h2>
         <p style={{ margin: 0, marginBottom: 24, fontSize: 16, opacity: 0.9 }}>
           To get started, you need to link your account to your child's school.
@@ -167,7 +167,7 @@ export function ParentOnboarding({ userName = 'Parent' }: ParentOnboardingProps)
           backdropFilter: 'blur(10px)',
           fontSize: 13
         }}>
-          <strong>💡 Tip:</strong> If your child is already enrolled at a preschool using EduDash Pro, 
+          <strong>💡 Tip:</strong> If your child is already enrolled at a preschool using Young Eagles, 
           use "Link My Child". If registering for the first time, use "Register New Child".
         </div>
       </div>

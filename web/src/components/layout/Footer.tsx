@@ -12,7 +12,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* About */}
           <div>
-            <h3 className="text-white font-semibold mb-4">EduDash Pro</h3>
+            <h3 className="text-white font-semibold mb-4">Young Eagles</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
               Empowering South African preschools with AI-powered educational tools.
             </p>
@@ -95,7 +95,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-gray-700 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-gray-400 text-sm text-center md:text-left">
-            © {currentYear} EduDash Pro. All rights reserved.
+            © {currentYear} Young Eagles. All rights reserved.
           </p>
           <p className="text-gray-400 text-sm flex items-center gap-1">
             Made with <Heart className="w-4 h-4 text-red-500 fill-current" /> in South Africa 🇿🇦

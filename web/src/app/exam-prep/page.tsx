@@ -44,7 +44,7 @@ export default function ExamPrepPage() {
           justifyContent: 'space-between'
         }}>
           <Link href="/" style={{ fontSize: '18px', fontWeight: 700, textDecoration: 'none', color: 'inherit' }}>
-            🎓 EduDash Pro
+            🦅 Young Eagles
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Link href="/sign-in" style={{ color: '#00f5ff', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}>
@@ -320,7 +320,7 @@ export default function ExamPrepPage() {
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px' }}>
-              🎓 <span style={{ color: 'var(--cyan)' }}>EduDash Pro</span>
+              🦅 <span style={{ color: 'var(--cyan)' }}>Young Eagles</span>
             </h3>
             <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '13px' }}>
               Built with ❤️ for South African students
@@ -348,7 +348,7 @@ export default function ExamPrepPage() {
           </div>
           <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '24px' }}>
             <p style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '13px' }}>
-              © {new Date().getFullYear()} EduDash Pro. All rights reserved.
+              © {new Date().getFullYear()} Young Eagles. All rights reserved.
             </p>
           </div>
         </div>

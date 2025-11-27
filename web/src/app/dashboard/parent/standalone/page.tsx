@@ -175,7 +175,7 @@ export default function StandaloneParentDashboard() {
     return (
       <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', color: '#e2e8f0' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🎓</div>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🦅</div>
           <p>Loading your dashboard...</p>
         </div>
       </div>
@@ -189,7 +189,7 @@ export default function StandaloneParentDashboard() {
         <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Link href="/" style={{ fontSize: 20, fontWeight: 700, color: '#06b6d4', textDecoration: 'none' }}>
-              🎓 EduDash Pro
+              🦅 Young Eagles
             </Link>
             {subscriptionTier !== 'free' && (
               <div style={{ 

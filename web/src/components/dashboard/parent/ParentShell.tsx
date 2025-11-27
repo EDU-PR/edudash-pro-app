@@ -159,14 +159,14 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
               
               {preschoolName ? (
                 <div className="chip" style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '200px' }}>
-                  <span style={{ fontSize: 16 }}>🎓</span>
+                  <span style={{ fontSize: 16 }}>🦅</span>
                   <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {preschoolName}
                   </span>
                 </div>
               ) : (
                 <div className="chip" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  EduDash Pro
+                  Young Eagles
                 </div>
               )}
             </div>
@@ -233,7 +233,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   <LogOut className="navIcon" />
                   <span>Sign out</span>
                 </button>
-                <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
+                <div className="brandPill w-full text-center">Powered by Young Eagles</div>
               </div>
             </div>
           </aside>
@@ -324,7 +324,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
               </button>
-              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by EduDash Pro</div>
+              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by Young Eagles</div>
             </div>
           </div>
         </>
