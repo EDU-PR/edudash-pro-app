@@ -1,10 +1,6 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-<<<<<<< HEAD
-const SW_VERSION = 'v20251127083753';
-=======
 const SW_VERSION = 'v20251127073429';
->>>>>>> 0e434f5 (Initial plan for UI/UX messaging system fixes)
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
