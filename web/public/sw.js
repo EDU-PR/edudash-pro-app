@@ -1,7 +1,7 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
 <<<<<<< HEAD
-const SW_VERSION = 'v20251127124549';
+const SW_VERSION = 'v20251127124731';
 =======
 const SW_VERSION = 'v20251127112646';
 >>>>>>> main
