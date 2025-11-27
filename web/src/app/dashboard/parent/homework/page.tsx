@@ -109,11 +109,26 @@ export default function HomeworkPage() {
     const fetchHomework = async () => {
       setHomeworkLoading(true);
       try {
-        // Fetch homework assignments
-        const { data, error: hwError } = await supabase
+        // Get student data first
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('preschool_id, class_id')
+          .eq('id', activeChildId)
+          .single();
+
+        if (!studentData || !studentData.class_id) {
+          setHomework([]);
+          setStats({ pending: 0, completed: 0, total: 0 });
+          setHomeworkLoading(false);
+          return;
+        }
+
+        // Fetch homework assignments for the class
+        const { data: assignments, error: hwError } = await supabase
           .from('homework_assignments')
-          .select('*, homework_submissions(*)')
-          .eq('child_id', activeChildId)
+          .select('*')
+          .eq('class_id', studentData.class_id)
+          .eq('preschool_id', studentData.preschool_id)
           .order('due_date', { ascending: true });
         
         if (hwError) throw hwError;
