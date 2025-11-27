@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { encodeMediaContent } from './messageContent';
-import { uploadMessageAttachment } from './attachmentUploader';
+import { uploadMessageAttachment, validateAttachment, AttachmentValidationError, AttachmentUploadError } from './attachmentUploader';
 import { useVoiceRecorder } from './useVoiceRecorder';
 
 export const EMOJI_OPTIONS = [
@@ -48,10 +48,15 @@ export const useComposerEnhancements = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const refresh = useCallback(() => {
     onRefresh?.();
   }, [onRefresh]);
+
+  const clearError = useCallback(() => {
+    setAttachmentError(null);
+  }, []);
 
   const sendMediaMessage = useCallback(
     async (payload: Parameters<typeof encodeMediaContent>[0]) => {
@@ -83,7 +88,7 @@ export const useComposerEnhancements = ({
 
   const triggerFilePicker = () => {
     if (!threadId || !userId) {
-      setAttachmentError('Select a conversation before sharing media.');
+      setAttachmentError('Please select a conversation before sharing media.');
       return;
     }
     fileInputRef.current?.click();
@@ -95,18 +100,34 @@ export const useComposerEnhancements = ({
 
     if (!file) return;
     if (!threadId || !userId) {
-      setAttachmentError('Select a conversation before sharing media.');
+      setAttachmentError('Please select a conversation before sharing media.');
+      return;
+    }
+
+    // Validate file before upload
+    try {
+      validateAttachment(file);
+    } catch (error) {
+      if (error instanceof AttachmentValidationError) {
+        setAttachmentError(error.message);
+      } else {
+        setAttachmentError('Invalid file. Please try a different file.');
+      }
       return;
     }
 
     setAttachmentUploading(true);
     setAttachmentError(null);
+    setUploadProgress(0);
 
     try {
       const uploaded = await uploadMessageAttachment(file, {
         filenameHint: file.name,
         contentType: file.type,
         pathPrefix: file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'images' : 'files',
+        onProgress: (progress) => {
+          setUploadProgress(progress.percentage);
+        },
       });
 
       const mediaType = file.type.startsWith('image/')
@@ -122,22 +143,42 @@ export const useComposerEnhancements = ({
         mimeType: uploaded.mimeType,
         size: file.size,
       });
+
+      // Clear any previous errors on success
+      setAttachmentError(null);
     } catch (error) {
       console.error('Attachment upload failed', error);
-      setAttachmentError('Failed to upload media. Please try again.');
+      
+      if (error instanceof AttachmentValidationError) {
+        setAttachmentError(error.message);
+      } else if (error instanceof AttachmentUploadError) {
+        setAttachmentError(error.message);
+      } else if (error instanceof Error) {
+        setAttachmentError(`Upload failed: ${error.message}`);
+      } else {
+        setAttachmentError('Failed to upload media. Please check your connection and try again.');
+      }
     } finally {
       setAttachmentUploading(false);
+      setUploadProgress(null);
     }
   };
 
-  const { isRecording, toggleRecording, recorderError } = useVoiceRecorder({
+  const { isRecording, toggleRecording, recorderError, recordingDuration } = useVoiceRecorder({
     onRecordingComplete: async (blob, durationMs) => {
       if (!threadId || !userId) return;
+      
       setAttachmentUploading(true);
+      setAttachmentError(null);
+      setUploadProgress(0);
+      
       try {
         const uploaded = await uploadMessageAttachment(blob, {
           contentType: blob.type || 'audio/webm',
           pathPrefix: 'voice-notes',
+          onProgress: (progress) => {
+            setUploadProgress(progress.percentage);
+          },
         });
 
         await sendMediaMessage({
@@ -147,19 +188,37 @@ export const useComposerEnhancements = ({
           mimeType: uploaded.mimeType,
           durationMs,
         });
+
+        // Clear any previous errors on success
+        setAttachmentError(null);
       } catch (error) {
         console.error('Voice note upload failed', error);
-        setAttachmentError('Failed to send voice note. Please try again.');
+        
+        if (error instanceof AttachmentValidationError) {
+          setAttachmentError(error.message);
+        } else if (error instanceof AttachmentUploadError) {
+          setAttachmentError(error.message);
+        } else if (error instanceof Error) {
+          setAttachmentError(`Voice note failed: ${error.message}`);
+        } else {
+          setAttachmentError('Failed to send voice note. Please check your connection and try again.');
+        }
       } finally {
         setAttachmentUploading(false);
+        setUploadProgress(null);
       }
     },
   });
 
   const handleMicClick = async () => {
     if (!threadId || !userId) {
-      setAttachmentError('Select a conversation before recording.');
+      setAttachmentError('Please select a conversation before recording.');
       return;
+    }
+
+    // Clear previous errors when starting a new recording
+    if (!isRecording) {
+      setAttachmentError(null);
     }
 
     await toggleRecording();
@@ -183,6 +242,16 @@ export const useComposerEnhancements = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showEmojiPicker]);
 
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (attachmentError) {
+      const timer = setTimeout(() => {
+        setAttachmentError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [attachmentError]);
+
   const statusMessage = attachmentError || recorderError || null;
 
   return {
@@ -198,5 +267,8 @@ export const useComposerEnhancements = ({
     isRecording,
     handleMicClick,
     statusMessage,
+    uploadProgress,
+    recordingDuration,
+    clearError,
   };
 };
