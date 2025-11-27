@@ -769,7 +769,7 @@ export default function TeacherMessagesPage() {
                   <h3 className={`${isDesktop ? 'text-[18px]' : 'text-[16px]'} m-0 font-bold text-[var(--text)] truncate`}>
                     {parentName}
                   </h3>
-                  {selectedThread.student && (
+                  {isDesktop && selectedThread.student && (
                     <p className="mt-1 text-[13px] text-[var(--cyan)] font-medium flex items-center gap-1.5">
                       <span>📚</span>
                       <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
@@ -834,6 +834,16 @@ export default function TeacherMessagesPage() {
                 </div>
               </div>
 
+              {/* Mobile: Fixed student name subtitle */}
+              {!isDesktop && selectedThread.student && (
+                <div className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2 flex items-center justify-center gap-1.5">
+                  <span className="text-[13px] text-[var(--cyan)] font-medium">📚</span>
+                  <span className="text-[13px] text-[#cbd5e1] font-medium">
+                    {selectedThread.student.first_name} {selectedThread.student.last_name}
+                  </span>
+                </div>
+              )}
+
               {/* Typing indicator */}
               {typingText && (
                 <div style={{
@@ -852,9 +862,10 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 28px' : '16px',
+                  paddingTop: !isDesktop ? (selectedThread.student ? '116px' : '88px') : undefined,
                   display: 'flex',
                   flexDirection: 'column',
-                  paddingBottom: isDesktop ? undefined : '60px',
+                  paddingBottom: isDesktop ? undefined : selectedThread.student ? '70px' : '60px',
                 }}
               >
                 <div className={`w-full ${isDesktop ? 'max-w-[860px] mx-auto px-3' : 'px-1'}`}>
@@ -938,7 +949,7 @@ export default function TeacherMessagesPage() {
                   className="hidden"
                   onChange={handleAttachmentChange}
                 />
-                <form onSubmit={handleSendMessage} className="relative">
+                <form onSubmit={handleSendMessage} className="relative" style={{ marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div
                       ref={emojiPickerRef}
@@ -991,7 +1002,7 @@ export default function TeacherMessagesPage() {
                         >
                           <Smile size={20} />
                         </button>
-                        <div className="flex flex-row items-end flex-1 gap-2 px-3 py-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg)]">
+                        <div className="flex flex-row items-end flex-1 gap-3 px-4 py-4 rounded-[24px] border-0 bg-[var(--surface-2)]">
                           {/* Textarea */}
                           <textarea
                             value={messageText}
@@ -1006,8 +1017,8 @@ export default function TeacherMessagesPage() {
                             placeholder="Type a message"
                             disabled={sending || attachmentUploading}
                             rows={1}
-                            className="flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none"
-                            style={{ height: '28px' }}
+                            className="flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none focus:ring-0 focus:border-0"
+                            style={{ height: '28px', border: 'none', outline: 'none' }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
@@ -1020,7 +1031,7 @@ export default function TeacherMessagesPage() {
                           {!messageText.trim() && (
                             <button
                               type="button"
-                              className="text-[var(--muted)] shrink-0 mb-0.5"
+                              className="text-[var(--muted)] shrink-0 mb-1"
                               aria-label="Camera"
                             >
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1034,7 +1045,7 @@ export default function TeacherMessagesPage() {
                             type="button"
                             onClick={triggerFilePicker}
                             disabled={attachmentUploading}
-                            className={`text-[var(--muted)] shrink-0 mb-0.5 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             aria-label="Attach file"
                           >
                             <Paperclip size={20} />
