@@ -581,14 +581,13 @@ export default function ParentMessagesPage() {
       userName={profile?.firstName}
       preschoolName={profile?.preschoolName}
       unreadCount={totalUnread}
-      contentStyle={{ padding: 0, overflow: 'hidden', height: '100vh' }}
-      hideHeader={true}
+      contentStyle={{ padding: 0, overflow: 'hidden', height: 'calc(100vh - var(--topnav-h))' }}
     >
       <div
         className="parent-messages-page"
         style={{
           display: 'flex',
-          height: '100vh',
+          height: 'calc(100vh - var(--topnav-h))',
           overflow: 'hidden',
           width: '100%',
           margin: 0,
@@ -616,7 +615,7 @@ export default function ParentMessagesPage() {
                 alignItems: 'center',
                 gap: 12,
                 position: 'fixed',
-                top: 0,
+                top: 'var(--topnav-h)',
                 left: 0,
                 right: 0,
                 background: 'var(--background)',
@@ -648,7 +647,7 @@ export default function ParentMessagesPage() {
               {/* Search bar fixed below header */}
               <div style={{ 
                 position: 'fixed',
-                top: 60,
+                top: 'calc(var(--topnav-h) + 60px)',
                 left: 0,
                 right: 0,
                 padding: '8px 16px',
@@ -685,7 +684,7 @@ export default function ParentMessagesPage() {
                 </div>
               </div>
               
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '124px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: 'calc(var(--topnav-h) + 124px)' }}>
               {threadsLoading ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
                   <div className="spinner" style={{ margin: '0 auto' }}></div>
@@ -712,7 +711,7 @@ export default function ParentMessagesPage() {
               <div
                 style={{
                   position: isDesktop ? 'relative' : 'fixed',
-                  top: isDesktop ? 'auto' : 0,
+                  top: isDesktop ? 'auto' : 'var(--topnav-h)',
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 100,
@@ -795,7 +794,7 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '92px',
+                  paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 92px)',
                   paddingBottom: 0,
                   background: 'var(--background)',
                   backgroundImage:
