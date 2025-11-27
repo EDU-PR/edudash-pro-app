@@ -772,7 +772,7 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: isDesktop ? '24px 0px' : '16px 8px',
+                  padding: isDesktop ? '24px 16px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 128px)',
                   paddingBottom: isDesktop ? 100 : 80,
                   background: 'var(--background)',
