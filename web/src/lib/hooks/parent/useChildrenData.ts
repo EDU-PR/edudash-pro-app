@@ -67,13 +67,27 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
     let upcomingEvents = 0;
     if (child.class_id) {
       try {
-        const { count: hwCount } = await supabase
+        // Fetch assignments for the class
+        const { data: assignments } = await supabase
           .from('homework_assignments')
-          .select('*', { count: 'exact', head: true })
+          .select('id')
           .eq('class_id', child.class_id)
           .eq('preschool_id', child.preschool_id)
           .gte('due_date', today);
-        homeworkPending = hwCount || 0;
+
+        if (assignments && assignments.length > 0) {
+          const assignmentIds = assignments.map(a => a.id);
+          // Check which ones have been submitted
+          const { data: submissions } = await supabase
+            .from('homework_submissions')
+            .select('assignment_id')
+            .eq('student_id', child.id)
+            .eq('preschool_id', child.preschool_id)
+            .in('assignment_id', assignmentIds);
+
+          const submittedIds = new Set(submissions?.map(s => s.assignment_id) || []);
+          homeworkPending = assignmentIds.filter(id => !submittedIds.has(id)).length;
+        }
       } catch {}
       try {
         const { count: evCount } = await supabase
