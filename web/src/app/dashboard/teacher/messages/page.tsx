@@ -571,18 +571,6 @@ export default function TeacherMessagesPage() {
 
   return (
     <>
-      <style jsx global>{`
-        /* Hide the header on teacher messages page */
-        body:has(.teacher-messages-page) .topbar,
-        body:has(.teacher-messages-page) header.topbar {
-          display: none !important;
-        }
-        .teacher-messages-page {
-          background: rgba(17, 24, 39, 0.98) !important;
-          position: relative;
-          z-index: 10;
-        }
-      `}</style>
       <TeacherShell
         tenantSlug={tenantSlug}
         userEmail={profile?.email}
@@ -591,17 +579,18 @@ export default function TeacherMessagesPage() {
         preschoolId={profile?.preschoolId}
         userId={userId}
         unreadCount={totalUnread}
-        contentStyle={{ padding: 0, overflow: 'hidden' }}
+        contentStyle={{ padding: 0, overflow: 'hidden', gridColumn: '2 / -1' }}
       >
         <div
           className="teacher-messages-page"
           style={{
             display: 'flex',
-          height: '100vh',
+          height: 'calc(100vh - var(--topnav-h))',
           overflow: 'hidden',
           width: '100%',
           margin: 0,
           boxSizing: 'border-box',
+          background: 'rgba(17, 24, 39, 0.98)',
         }}
       >
         <div
@@ -701,7 +690,7 @@ export default function TeacherMessagesPage() {
               <div
                 style={{
                   position: isDesktop ? 'relative' : 'fixed',
-                  top: isDesktop ? 'auto' : 0,
+                  top: isDesktop ? 'auto' : 'var(--topnav-h)',
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
                   zIndex: isDesktop ? 'auto' : 100,
@@ -783,9 +772,9 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: isDesktop ? '24px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '128px',
-                  paddingBottom: 0,
+                  padding: isDesktop ? '24px 16px' : '16px 8px',
+                  paddingTop: isDesktop ? '32px' : 'calc(var(--topnav-h) + 128px)',
+                  paddingBottom: isDesktop ? 100 : 80,
                   background: 'var(--background)',
                   backgroundImage:
                     'radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%)',
@@ -866,7 +855,7 @@ export default function TeacherMessagesPage() {
 
               <div
                 style={{
-                  position: isDesktop ? 'absolute' : 'fixed',
+                  position: isDesktop ? 'relative' : 'fixed',
                   bottom: 0,
                   left: 0,
                   right: 0,
@@ -875,7 +864,7 @@ export default function TeacherMessagesPage() {
                   borderTop: isDesktop ? '1px solid var(--border)' : 'none',
                   boxShadow: isDesktop ? '0 -2px 10px rgba(0, 0, 0, 0.2)' : 'none',
                   zIndex: 50,
-                  marginBottom: 0,
+                  flexShrink: 0,
                 }}
               >
                 <input

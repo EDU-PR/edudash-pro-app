@@ -16,7 +16,7 @@ if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styl
     @media (max-width: 1024px) {
       @keyframes pulse-glow {
         0%, 100% {
-          box-shadow: 0 3px 8px rgba(15, 23, 42, 0.18), 0 6px 16px rgba(15, 23, 42, 0.12), 0 0 6px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          box-shadow: 0 3px 8px rgba(17, 30, 61, 0.18), 0 6px 16px rgba(15, 23, 42, 0.12), 0 0 6px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
         50% {
           box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22), 0 8px 20px rgba(15, 23, 42, 0.15), 0 0 12px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -135,16 +135,16 @@ export const ChatMessageBubble = ({
       style={{
         display: 'flex',
         justifyContent: isOwn ? 'flex-end' : 'flex-start',
-        width: '100%',
-        paddingLeft: isDesktop ? 20 : 0,
-        paddingRight: isDesktop ? 8 : 0,
+        maxWidth: '100%',
+        paddingLeft: isDesktop ? 8 : 0,
+        paddingRight: isDesktop ? 280 : 0,
       }}
     >
       <div
         style={{
-          maxWidth: isDesktop ? '70%' : '80%',
+          maxWidth: isDesktop ? '80%' : '80%',
           width: 'fit-content',
-          padding: '14px 18px',
+          padding: '14px 28px',
           borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
           background: bubbleBackground,
           color: bubbleColor,
