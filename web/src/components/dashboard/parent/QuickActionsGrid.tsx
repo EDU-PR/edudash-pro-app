@@ -112,8 +112,13 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 transition: 'all 0.2s',
                 textAlign: 'center',
                 minHeight: '120px',
-                boxShadow: isChatWithDash ? '0 4px 20px rgba(236, 72, 153, 0.5)' : 'none',
+                boxShadow: hasUnread
+                  ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
+                  : isChatWithDash 
+                  ? '0 4px 20px rgba(236, 72, 153, 0.5)' 
+                  : 'none',
                 position: 'relative',
+                animation: hasUnread ? 'pulse-glow 2s ease-in-out infinite' : 'none',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -175,6 +180,15 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
       </div>
 
       <style jsx>{`
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.3), 0 6px 30px rgba(139, 92, 246, 0.6);
+          }
+        }
+        
         @media (min-width: 640px) {
           .quick-actions-grid {
             grid-template-columns: repeat(3, 1fr) !important;

@@ -39,7 +39,7 @@ export function usePendingHomework(userId: string | undefined) {
           return;
         }
 
-        const studentIds = children.map(c => c.id);
+        const studentIds = children.map((c: any) => c.id);
 
         // Get pending homework for all children
         const { data: homework, error: homeworkError } = await supabase
@@ -52,20 +52,20 @@ export function usePendingHomework(userId: string | undefined) {
             class:classes(name),
             submissions:homework_submissions(id, status)
           `)
-          .in('class_id', children.map(c => c.class_id))
+          .in('class_id', children.map((c: any) => c.class_id))
           .gte('due_date', new Date().toISOString())
           .order('due_date', { ascending: true });
 
         if (homeworkError) throw homeworkError;
 
         // Filter to only show homework without submissions from these students
-        const pending = homework?.filter(hw => {
+        const pending = homework?.filter((hw: any) => {
           const submissions = hw.submissions || [];
           // Check if any of the parent's children have submitted
           return !submissions.some((sub: any) => 
             studentIds.includes(sub.student_id) && sub.status !== 'draft'
           );
-        }).map(hw => ({
+        }).map((hw: any) => ({
           id: hw.id,
           title: hw.title,
           due_date: hw.due_date,
