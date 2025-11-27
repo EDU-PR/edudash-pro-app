@@ -840,10 +840,10 @@ export default function ParentMessagesPage() {
                   }}>
                     {educatorName}
                   </h2>
-                  {currentThread.student && (
+                  {isDesktop && currentThread.student && (
                     <p style={{ 
                       margin: '4px 0 0', 
-                      fontSize: isDesktop ? 13 : 12, 
+                      fontSize: 13, 
                       color: '#a78bfa', 
                       fontWeight: 500,
                       display: 'flex',
@@ -940,6 +940,29 @@ export default function ParentMessagesPage() {
                 </div>
               </div>
 
+              {/* Mobile: Fixed student name subtitle */}
+              {!isDesktop && currentThread.student && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 68,
+                    left: 0,
+                    right: 0,
+                    zIndex: 999,
+                    padding: '8px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: '#a78bfa', fontWeight: 500 }}>📚</span>
+                  <span style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 500 }}>
+                    {currentThread.student.first_name} {currentThread.student.last_name}
+                  </span>
+                </div>
+              )}
+
               <div
                 className="hide-scrollbar"
                 style={{
@@ -947,8 +970,8 @@ export default function ParentMessagesPage() {
                   overflowY: 'auto',
                   minHeight: 0,
                   padding: isDesktop ? '28px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : '104px',
-                  paddingBottom: isDesktop ? 100 : 80,
+                  paddingTop: isDesktop ? '32px' : currentThread.student ? '116px' : '88px',
+                  paddingBottom: isDesktop ? 100 : currentThread.student ? 110 : 100,
                   paddingRight: isDesktop ? 340 : 0,
                   background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
                   backgroundImage:
@@ -1054,7 +1077,7 @@ export default function ParentMessagesPage() {
                   style={{ display: 'none' }}
                   onChange={handleAttachmentChange}
                 />
-                <form onSubmit={handleSendMessage} style={{ position: 'relative' }}>
+                <form onSubmit={handleSendMessage} style={{ position: 'relative', marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div
                       ref={emojiPickerRef}
@@ -1158,7 +1181,7 @@ export default function ParentMessagesPage() {
                       )}
 
                       {/* Flex row container for mobile */}
-                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 gap-2 px-3 py-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg)]' : ''}>
+                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 gap-3 px-4 py-4 rounded-[24px] border-0 bg-[var(--surface-2)]' : ''}>
                         <textarea
                           value={messageText}
                           onChange={(e) => {
@@ -1172,7 +1195,7 @@ export default function ParentMessagesPage() {
                           placeholder="Type a message"
                           disabled={sending || attachmentUploading}
                           rows={1}
-                          className={!isDesktop ? 'flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none' : ''}
+                          className={!isDesktop ? 'flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none focus:ring-0 focus:border-0' : ''}
                           style={isDesktop ? {
                             width: '100%',
                             padding: '14px 20px',
@@ -1184,7 +1207,7 @@ export default function ParentMessagesPage() {
                             outline: 'none',
                             resize: 'none',
                             maxHeight: 120,
-                          } : { height: '28px' }}
+                          } : { height: '28px', border: 'none', outline: 'none' }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
@@ -1197,7 +1220,7 @@ export default function ParentMessagesPage() {
                         {!isDesktop && (
                           <>
                             {!messageText.trim() && (
-                              <button type="button" className="text-[var(--muted)] shrink-0 mb-0.5">
+                              <button type="button" className="text-[var(--muted)] shrink-0 mb-1">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                                   <circle cx="12" cy="13" r="4"/>
@@ -1208,7 +1231,7 @@ export default function ParentMessagesPage() {
                               type="button"
                               onClick={triggerFilePicker}
                               disabled={attachmentUploading}
-                              className={`text-[var(--muted)] shrink-0 mb-0.5 ${attachmentUploading ? 'opacity-50' : ''}`}
+                              className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50' : ''}`}
                             >
                               <Paperclip size={20} />
                             </button>
