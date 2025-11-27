@@ -72,12 +72,47 @@ export default function HomeworkPage() {
     const fetchHomework = async () => {
       setHomeworkLoading(true);
       try {
-        // Fetch homework assignments
-        const { data, error: hwError } = await supabase
-          .from('homework')
-          .select('*, submissions(*)')
-          .eq('child_id', activeChildId)
+        // Get student data first
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('preschool_id, class_id')
+          .eq('id', activeChildId)
+          .single();
+
+        if (!studentData || !studentData.class_id) {
+          setHomework([]);
+          setStats({ pending: 0, completed: 0, total: 0 });
+          setHomeworkLoading(false);
+          return;
+        }
+
+        // Fetch homework assignments for the class
+        const { data: assignments, error: hwError } = await supabase
+          .from('homework_assignments')
+          .select('*')
+          .eq('class_id', studentData.class_id)
+          .eq('preschool_id', studentData.preschool_id)
           .order('due_date', { ascending: true });
+        
+        if (hwError) throw hwError;
+
+        // Fetch submissions for this student
+        const assignmentIds = assignments?.map(a => a.id) || [];
+        const { data: submissions } = assignmentIds.length > 0 ? await supabase
+          .from('homework_submissions')
+          .select('*')
+          .eq('student_id', activeChildId)
+          .eq('preschool_id', studentData.preschool_id)
+          .in('assignment_id', assignmentIds) : { data: [] };
+
+        // Attach submissions to assignments
+        const enrichedAssignments = assignments?.map(assignment => ({
+          ...assignment,
+          homework_submissions: submissions?.filter(s => s.assignment_id === assignment.id) || [],
+          submissions: submissions?.filter(s => s.assignment_id === assignment.id) || []
+        })) || [];
+        
+        const data = enrichedAssignments;
         
         if (hwError) throw hwError;
         setHomework(data || []);
