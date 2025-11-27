@@ -9,7 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
-import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical } from 'lucide-react';
 
 interface ParticipantProfile {
   first_name: string;
@@ -65,9 +65,10 @@ interface ThreadItemProps {
   thread: MessageThread;
   isActive: boolean;
   onSelect: () => void;
+  isDesktop: boolean;
 }
 
-const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
+const ThreadItem = ({ thread, isActive, onSelect, isDesktop }: ThreadItemProps) => {
   const participants = thread.message_participants || [];
   const educator = participants.find((p) => p.role !== 'parent');
   const educatorName = educator?.profiles
@@ -181,7 +182,8 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
               color: '#a78bfa',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              paddingRight: isDesktop ? 320 : 0,
+              minHeight: 0,
               fontWeight: 500,
             }}
           >
@@ -629,6 +631,13 @@ export default function ParentMessagesPage() {
       unreadCount={totalUnread}
       contentStyle={{ padding: 0, overflow: 'hidden', height: 'calc(100vh - var(--topnav-h))' }}
     >
+      <style>{`
+        @media (max-width: 1023px) {
+          header.topbar {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div
         className="parent-messages-page"
         style={{
@@ -746,6 +755,7 @@ export default function ParentMessagesPage() {
                     thread={thread}
                     isActive={false}
                     onSelect={() => handleSelectThread(thread.id)}
+                    isDesktop={isDesktop}
                   />
                 ))
               ) : (
@@ -760,22 +770,23 @@ export default function ParentMessagesPage() {
             <>
               <div
                 style={{
-                  position: isDesktop ? 'relative' : 'fixed',
-                  top: isDesktop ? 'auto' : 'var(--topnav-h)',
+                  position: 'fixed',
+                  top: isDesktop ? 'auto' : 0,
                   left: isDesktop ? 'auto' : 0,
                   right: isDesktop ? 'auto' : 0,
+                  width: isDesktop ? 'auto' : '100%',
                   zIndex: isDesktop ? 'auto' : 1000,
                   padding: isDesktop ? '20px 28px' : '16px 12px',
-                  borderBottom: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  borderBottom: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : 'none',
                   background: isDesktop
                     ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%)'
-                    : '#111827',
+                    : 'var(--surface)',
                   backdropFilter: 'blur(12px)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
                   gap: isDesktop ? 18 : 12,
-                  boxShadow: isDesktop ? '0 2px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  boxShadow: isDesktop ? '0 2px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.08)',
                 }}
               >
                 {!isDesktop && (
@@ -785,8 +796,8 @@ export default function ParentMessagesPage() {
                       width: 40,
                       height: 40,
                       borderRadius: 20,
-                      background: 'rgba(100, 116, 139, 0.1)',
-                      border: '1px solid rgba(148, 163, 184, 0.1)',
+                      background: 'transparent',
+                      border: 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -801,16 +812,16 @@ export default function ParentMessagesPage() {
                 )}
                 <div
                   style={{
-                    width: isDesktop ? 52 : 44,
-                    height: isDesktop ? 52 : 44,
-                    borderRadius: isDesktop ? 26 : 22,
+                    width: isDesktop ? 52 : 36,
+                    height: isDesktop ? 52 : 36,
+                    borderRadius: isDesktop ? 26 : 18,
                     background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                     boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
-                    fontSize: isDesktop ? 17 : 14,
+                    fontSize: isDesktop ? 17 : 13,
                     fontWeight: 600,
                     color: '#fff',
                   }}
@@ -844,28 +855,89 @@ export default function ParentMessagesPage() {
                     </p>
                   )}
                 </div>
-                {isDesktop && (
-                  <button
-                    onClick={handleClearSelection}
-                    style={{
-                      border: '1px solid rgba(148, 163, 184, 0.2)',
-                      borderRadius: 10,
-                      padding: '8px 14px',
-                      background: 'rgba(100, 116, 139, 0.1)',
-                      color: '#94a3b8',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <ArrowLeft size={14} />
-                    Clear
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: isDesktop ? 10 : 8 }}>
+                  {isDesktop ? (
+                    <button
+                      onClick={handleClearSelection}
+                      style={{
+                        border: '1px solid rgba(148, 163, 184, 0.2)',
+                        borderRadius: 10,
+                        padding: '8px 14px',
+                        background: 'rgba(100, 116, 139, 0.1)',
+                        color: '#94a3b8',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      Clear
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => educator?.user_id && console.log('Voice call')}
+                        title="Voice call"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#e2e8f0',
+                          padding: 0,
+                        }}
+                      >
+                        <Phone size={18} />
+                      </button>
+                      <button
+                        onClick={() => educator?.user_id && console.log('Video call')}
+                        title="Video call"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#e2e8f0',
+                          padding: 0,
+                        }}
+                      >
+                        <Video size={18} />
+                      </button>
+                      <button
+                        title="More"
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          background: 'transparent',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#e2e8f0',
+                          padding: 0,
+                        }}
+                      >
+                        <MoreVertical size={20} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div
@@ -873,6 +945,7 @@ export default function ParentMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
+                  minHeight: 0,
                   padding: isDesktop ? '28px 0px' : '16px 8px',
                   paddingTop: isDesktop ? '32px' : '104px',
                   paddingBottom: isDesktop ? 100 : 80,
@@ -951,6 +1024,7 @@ export default function ParentMessagesPage() {
                           formattedTime={formatMessageTime(message.created_at)}
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
+                          hideAvatars={!isDesktop}
                         />
                       );
                     })}
@@ -965,13 +1039,11 @@ export default function ParentMessagesPage() {
                   bottom: 0,
                   left: 0,
                   right: isDesktop ? 320 : 0,
-                  padding: isDesktop ? '16px 28px' : '12px 12px',
-                  background: isDesktop 
-                    ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)'
-                    : 'rgba(15, 23, 42, 0.98)',
+                  padding: isDesktop ? '16px 28px' : '12px',
+                  background: 'var(--surface)',
                   backdropFilter: 'blur(12px)',
-                  borderTop: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : 'none',
-                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.15)',
+                  borderTop: isDesktop ? '1px solid var(--border)' : 'none',
+                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.08)',
                   zIndex: 50,
                 }}
               >
@@ -1025,7 +1097,7 @@ export default function ParentMessagesPage() {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', maxWidth: isDesktop ? 800 : 900, margin: '0 auto', position: 'relative' }}>
+                  <div style={{ display: 'flex', gap: isDesktop ? 10 : 8, alignItems: isDesktop ? 'flex-end' : 'center', maxWidth: isDesktop ? 800 : 'none', margin: isDesktop ? '0 auto' : 0, position: 'relative' }}>
                     {/* Desktop: Icons outside input */}
                     {isDesktop && (
                       <div style={{ display: 'flex', gap: 8 }}>
@@ -1071,154 +1143,102 @@ export default function ParentMessagesPage() {
                       </div>
                     )}
 
-                    {/* Mobile & Desktop: Input field with embedded icons on mobile */}
+                    {/* Mobile & Desktop: Input field */}
                     <div style={{ position: 'relative', flex: 1, display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {/* Mobile: Emoji button outside input (always visible) */}
+                      {/* Mobile: Emoji button outside left */}
                       {!isDesktop && (
                         <button
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker((prev) => !prev)}
-                          style={{
-                            width: 42,
-                            height: 42,
-                            borderRadius: 21,
-                            background: 'rgba(100, 116, 139, 0.1)',
-                            border: '1px solid rgba(148, 163, 184, 0.15)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: '#94a3b8',
-                            flexShrink: 0,
-                          }}
+                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end"
                         >
                           <Smile size={20} />
                         </button>
                       )}
 
-                      <div style={{ position: 'relative', flex: 1 }}>
-                      {/* Mobile: Attachment icon inside input (only when no text) */}
-                      {!isDesktop && !messageText.trim() && (
-                        <div style={{ 
-                          position: 'absolute', 
-                          left: 14, 
-                          top: '50%', 
-                          transform: 'translateY(-50%)',
-                          zIndex: 1,
-                          pointerEvents: 'auto'
-                        }}>
-                          <button
-                            type="button"
-                            onClick={triggerFilePicker}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              background: 'transparent',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: '#64748b',
-                              padding: 0,
-                            }}
-                          >
-                            <Paperclip size={18} />
-                          </button>
-                        </div>
-                      )}
-
-                      <textarea
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        placeholder="Type a message..."
-                        disabled={sending || attachmentUploading}
-                        rows={1}
-                        style={{
-                          width: '100%',
-                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 18px' : '14px 54px 14px 48px'),
-                          borderRadius: 26,
-                          border: '1px solid rgba(148, 163, 184, 0.15)',
-                          background: 'rgba(30, 41, 59, 0.6)',
-                          color: '#e2e8f0',
-                          fontSize: 15,
-                          outline: 'none',
-                          resize: 'none',
-                          maxHeight: 120,
-                          fontFamily: 'inherit',
-                          transition: 'border-color 0.2s ease',
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage(e);
-                          }
-                        }}
-                      />
-
-                      {/* Mobile: Right icon inside input (mic or send) */}
-                      {!isDesktop && (
-                        <div style={{
-                          position: 'absolute',
-                          right: 8,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          zIndex: 1,
-                        }}>
-                          {messageText.trim() ? (
+                      {/* Flex row container for mobile */}
+                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 gap-2 px-3 py-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg)]' : ''}>
+                        <textarea
+                          value={messageText}
+                          onChange={(e) => {
+                            setMessageText(e.target.value);
+                            if (!isDesktop) {
+                              const ta = e.target as HTMLTextAreaElement;
+                              ta.style.height = 'auto';
+                              ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+                            }
+                          }}
+                          placeholder="Type a message"
+                          disabled={sending || attachmentUploading}
+                          rows={1}
+                          className={!isDesktop ? 'flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none' : ''}
+                          style={isDesktop ? {
+                            width: '100%',
+                            padding: '14px 20px',
+                            borderRadius: 26,
+                            border: '1px solid var(--border)',
+                            background: 'var(--bg)',
+                            color: 'var(--text)',
+                            fontSize: 15,
+                            outline: 'none',
+                            resize: 'none',
+                            maxHeight: 120,
+                          } : { height: '28px' }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage(e);
+                              if (!isDesktop) (e.currentTarget as HTMLTextAreaElement).style.height = '28px';
+                            }
+                          }}
+                        />
+                        {/* Mobile: Camera (autohides), Clip */}
+                        {!isDesktop && (
+                          <>
+                            {!messageText.trim() && (
+                              <button type="button" className="text-[var(--muted)] shrink-0 mb-0.5">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                  <circle cx="12" cy="13" r="4"/>
+                                </svg>
+                              </button>
+                            )}
                             <button
-                              type="submit"
-                              disabled={sending || attachmentUploading}
-                              style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: 19,
-                                background: sending || attachmentUploading
-                                  ? '#475569'
-                                  : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
-                                boxShadow: sending || attachmentUploading ? 'none' : '0 3px 10px rgba(59, 130, 246, 0.35)',
-                                transition: 'all 0.2s ease',
-                              }}
+                              type="button"
+                              onClick={triggerFilePicker}
+                              disabled={attachmentUploading}
+                              className={`text-[var(--muted)] shrink-0 mb-0.5 ${attachmentUploading ? 'opacity-50' : ''}`}
                             >
-                              {sending || attachmentUploading ? (
-                                <Loader2 size={18} className="animate-spin" color="#fff" />
-                              ) : (
-                                <Send size={18} color="#fff" />
-                              )}
+                              <Paperclip size={20} />
                             </button>
-                          ) : (
+                          </>
+                        )}
+                      </div>
+
+                      {/* Mobile: Send/Mic outside right */}
+                      {!isDesktop && (
+                        messageText.trim() ? (
+                          <button
+                            type="submit"
+                            disabled={sending || attachmentUploading}
+                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                          >
+                            {sending || attachmentUploading ? (
+                              <Loader2 size={16} className="animate-spin" color="white" />
+                            ) : (
+                              <Send size={16} color="white" />
+                            )}
+                          </button>
+                        ) : (
                             <button
                               type="button"
                               onClick={handleMicClick}
-                              style={{
-                                width: 38,
-                                height: 38,
-                                borderRadius: 19,
-                                background: isRecording 
-                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
-                                  : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                boxShadow: isRecording 
-                                  ? '0 3px 10px rgba(245, 158, 11, 0.35)' 
-                                  : '0 3px 10px rgba(34, 197, 94, 0.35)',
-                              }}
+                              className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                             >
-                              <Mic size={20} color="white" />
+                              <Mic size={18} color="white" />
                             </button>
-                          )}
-                        </div>
+                          )
                       )}
                     </div>
 
@@ -1280,7 +1300,6 @@ export default function ParentMessagesPage() {
                         </button>
                       )
                     )}
-                  </div>
                   </div>
                 </form>
                 {statusMessage && (
@@ -1440,6 +1459,7 @@ export default function ParentMessagesPage() {
                     thread={thread}
                     isActive={thread.id === selectedThreadId}
                     onSelect={() => handleSelectThread(thread.id)}
+                    isDesktop={isDesktop}
                   />
                 ))
               ) : (
