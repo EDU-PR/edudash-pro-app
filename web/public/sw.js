@@ -1,7 +1,7 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
 <<<<<<< HEAD
-const SW_VERSION = 'v20251127073429';
+const SW_VERSION = 'v20251127075948';
 =======
 const SW_VERSION = 'v20251125215742';
 >>>>>>> 76a28be (Fix messaging UI/UX: header transparency, input alignment, voice recording, and upload handling)
