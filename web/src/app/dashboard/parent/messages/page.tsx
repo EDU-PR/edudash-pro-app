@@ -1574,7 +1574,7 @@ export default function ParentMessagesPage() {
                       )}
 
                       {/* Flex row container for mobile */}
-                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 min-w-0 gap-2 px-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]' : ''}>
+                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 min-w-0 gap-2 pl-2 pr-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]' : ''}>
                         <textarea
                           value={messageText}
                           onChange={(e) => {
@@ -1657,7 +1657,7 @@ export default function ParentMessagesPage() {
                             <button
                               type="button"
                               onClick={handleMicClick}
-                              className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                              className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 mr-[5px] self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                             >
                               <Mic size={18} color="white" />
                             </button>

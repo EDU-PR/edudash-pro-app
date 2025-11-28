@@ -1046,17 +1046,17 @@ function TeacherMessagesPage() {
             /* Chat View */
             <>
               {/* Chat Header */}
-              <div className={`${isDesktop ? 'py-7 px-7' : 'py-15 px-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
+              <div className={`${isDesktop ? 'py-7 px-7' : 'py-15 px-2'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
                 {!isDesktop && (
                   <button
                     onClick={() => setSelectedThreadId(null)}
-                    className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center cursor-pointer text-[var(--text)]"
+                    className="w-9 h-9 rounded-[10px] bg-transparent border-none flex items-center justify-center cursor-pointer text-[var(--text)] -ml-1"
                   >
                     <ArrowLeft size={20} />
                   </button>
                 )}
                 <div
-                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-9 h-9 text-[13px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
+                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-8 h-8 text-[12px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
                 >
                   {contactName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                 </div>
@@ -1324,7 +1324,7 @@ function TeacherMessagesPage() {
                         >
                           <Smile size={20} />
                         </button>
-                        <div className="flex flex-row items-end flex-1 min-w-0 gap-2 px-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
+                        <div className="flex flex-row items-end flex-1 min-w-0 gap-2 pl-2 pr-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
                           {/* Textarea */}
                           <textarea
                             value={messageText}
@@ -1391,7 +1391,7 @@ function TeacherMessagesPage() {
                           <button
                             type="button"
                             onClick={handleMicClick}
-                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 mr-[5px] self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                           >
                             <Mic size={18} color="white" />
                           </button>

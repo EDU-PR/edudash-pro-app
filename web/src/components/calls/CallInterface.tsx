@@ -11,6 +11,8 @@ import {
   MicOff,
   Minimize2,
   X,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed';
@@ -53,6 +55,7 @@ export const CallInterface = ({
   const [callState, setCallState] = useState<CallState>('idle');
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialCallType === 'video');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -347,6 +350,14 @@ export const CallInterface = ({
     }
   }, []);
 
+  // Toggle speaker/loudspeaker
+  const toggleSpeaker = useCallback(() => {
+    setIsSpeakerEnabled((prev) => !prev);
+    // Note: Web Audio API doesn't have native speaker toggle like mobile
+    // This is a UI state that can be used for future implementation
+    // On mobile apps, this would route audio to speaker vs earpiece
+  }, []);
+
   // Start call when opened
   useEffect(() => {
     if (isOpen && callState === 'idle') {
@@ -603,7 +614,7 @@ export const CallInterface = ({
           padding: '24px 20px 40px',
           display: 'flex',
           justifyContent: 'center',
-          gap: 20,
+          gap: 16,
         }}
       >
         {/* Mute */}
@@ -625,6 +636,29 @@ export const CallInterface = ({
             <Mic size={24} color="white" />
           ) : (
             <MicOff size={24} color="white" />
+          )}
+        </button>
+
+        {/* Speaker/Loudspeaker toggle */}
+        <button
+          onClick={toggleSpeaker}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: isSpeakerEnabled ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+            border: isSpeakerEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+          title={isSpeakerEnabled ? 'Speaker on' : 'Speaker off'}
+        >
+          {isSpeakerEnabled ? (
+            <Volume2 size={24} color="#22c55e" />
+          ) : (
+            <VolumeX size={24} color="white" />
           )}
         </button>
 
