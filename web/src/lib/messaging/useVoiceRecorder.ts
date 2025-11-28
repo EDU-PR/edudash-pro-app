@@ -90,6 +90,27 @@ export const useVoiceRecorder = ({ onRecordingComplete }: UseVoiceRecorderOption
     cleanupRecording();
   }, [cleanupRecording]);
 
+  // Cancel recording without sending
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current) {
+      // Stop all tracks to release microphone
+      const stream = mediaRecorderRef.current.stream;
+      stream?.getTracks().forEach(track => track.stop());
+      
+      // Prevent onstop handler from processing the recording
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      mediaRecorderRef.current = null;
+    }
+    chunksRef.current = [];
+    cleanupRecording();
+    setIsRecording(false);
+  }, [cleanupRecording]);
+
   const toggleRecording = useCallback(async () => {
     // If currently recording, stop
     if (isRecording) {
@@ -225,6 +246,7 @@ export const useVoiceRecorder = ({ onRecordingComplete }: UseVoiceRecorderOption
   return {
     isRecording,
     toggleRecording,
+    cancelRecording,
     recorderError,
     recordingDuration,
   };
