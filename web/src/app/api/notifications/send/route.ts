@@ -175,33 +175,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-/**
- * Utility: Send notification to a single user
- */
-export async function sendToUser(
-  userId: string,
-  notification: Omit<SendNotificationRequest, 'userId' | 'userIds' | 'preschoolId' | 'topic'>
-) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notifications/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, ...notification }),
-  });
-  return response.json();
-}
-
-/**
- * Utility: Send notification to all users in a preschool
- */
-export async function sendToPreschool(
-  preschoolId: string,
-  notification: Omit<SendNotificationRequest, 'userId' | 'userIds' | 'preschoolId' | 'topic'>
-) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notifications/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ preschoolId, ...notification }),
-  });
-  return response.json();
-}
