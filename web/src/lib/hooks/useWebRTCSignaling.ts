@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'incoming' | 'connected' | 'ended' | 'failed' | 'rejected';
@@ -42,7 +42,7 @@ const ICE_SERVERS: RTCConfiguration = {
 };
 
 export function useWebRTCSignaling(options: UseWebRTCSignalingOptions = {}) {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
@@ -82,8 +82,8 @@ export function useWebRTCSignaling(options: UseWebRTCSignalingOptions = {}) {
           table: 'active_calls',
           filter: `callee_id=eq.${currentUserId}`,
         },
-        (payload) => {
-          const call = payload.new as ActiveCall;
+        (payload: { new: Record<string, unknown> }) => {
+          const call = payload.new as unknown as ActiveCall;
           if (call.status === 'ringing') {
             setIncomingCall(call);
             setCallState('incoming');
@@ -99,8 +99,8 @@ export function useWebRTCSignaling(options: UseWebRTCSignalingOptions = {}) {
           table: 'active_calls',
           filter: `callee_id=eq.${currentUserId}`,
         },
-        (payload) => {
-          const call = payload.new as ActiveCall;
+        (payload: { new: Record<string, unknown> }) => {
+          const call = payload.new as unknown as ActiveCall;
           if (call.status === 'ended' || call.status === 'rejected' || call.status === 'missed') {
             setIncomingCall(null);
             if (callState === 'incoming') {
@@ -132,8 +132,8 @@ export function useWebRTCSignaling(options: UseWebRTCSignalingOptions = {}) {
           table: 'call_signals',
           filter: `to_user_id=eq.${currentUserId}`,
         },
-        async (payload) => {
-          const signal = payload.new as CallSignal;
+        async (payload: { new: Record<string, unknown> }) => {
+          const signal = payload.new as unknown as CallSignal;
           if (signal.call_id !== currentCallId) return;
 
           await handleSignal(signal);
