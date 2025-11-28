@@ -14,6 +14,7 @@ import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
+import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 
 interface MessageThread {
   id: string;
@@ -161,6 +162,11 @@ export default function TeacherMessagesPage() {
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
   const [optionsMenuAnchor, setOptionsMenuAnchor] = useState<HTMLElement | null>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Message actions menu state
+  const [messageActionsOpen, setMessageActionsOpen] = useState(false);
+  const [messageActionsPosition, setMessageActionsPosition] = useState({ x: 0, y: 0 });
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     if (sel.type === 'url') {
@@ -592,6 +598,74 @@ export default function TeacherMessagesPage() {
     alert('Report issue functionality coming soon!');
   };
 
+  // Message action handlers
+  const handleMessageContextMenu = (e: React.MouseEvent | React.TouchEvent, messageId: string) => {
+    const x = 'clientX' in e ? e.clientX : e.touches?.[0]?.clientX || 0;
+    const y = 'clientY' in e ? e.clientY : e.touches?.[0]?.clientY || 0;
+    setMessageActionsPosition({ x, y });
+    setSelectedMessageId(messageId);
+    setMessageActionsOpen(true);
+  };
+
+  const handleReplyMessage = () => {
+    const msg = messages.find(m => m.id === selectedMessageId);
+    if (msg) {
+      alert(`Reply to: "${msg.content}"\n\n(Reply functionality coming soon)`);
+    }
+  };
+
+  const handleForwardMessage = () => {
+    alert('Forward message functionality coming soon!');
+  };
+
+  const handleEditMessage = () => {
+    const msg = messages.find(m => m.id === selectedMessageId);
+    if (msg) {
+      const newContent = prompt('Edit message:', msg.content);
+      if (newContent && newContent.trim()) {
+        supabase
+          .from('messages')
+          .update({ content: newContent.trim() })
+          .eq('id', selectedMessageId)
+          .then(() => {
+            setRefreshTrigger(prev => prev + 1);
+            alert('Message updated!');
+          })
+          .catch((err) => {
+            console.error('Error editing message:', err);
+            alert('Failed to edit message.');
+          });
+      }
+    }
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!selectedMessageId || !confirm('Delete this message? This cannot be undone.')) return;
+    try {
+      await supabase.from('messages').delete().eq('id', selectedMessageId);
+      setRefreshTrigger(prev => prev + 1);
+      alert('Message deleted.');
+    } catch (err) {
+      console.error('Error deleting message:', err);
+      alert('Failed to delete message.');
+    }
+  };
+
+  const handleCopyMessage = () => {
+    const msg = messages.find(m => m.id === selectedMessageId);
+    if (msg) {
+      navigator.clipboard.writeText(msg.content).then(() => {
+        alert('Message copied to clipboard!');
+      }).catch(() => {
+        alert('Failed to copy message.');
+      });
+    }
+  };
+
+  const handleReactToMessage = () => {
+    alert('Message reactions coming soon!');
+  };
+
   return (
     <>
       {/* Hide global header on small screens for a focused messaging UI */}
@@ -986,6 +1060,7 @@ export default function TeacherMessagesPage() {
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
                           hideAvatars={!isDesktop}
+                          onContextMenu={handleMessageContextMenu}
                         />
                       );
                     })}
@@ -1214,6 +1289,18 @@ export default function TeacherMessagesPage() {
           onExportChat={handleExportChat}
           onReportIssue={handleReportIssue}
           anchorEl={optionsMenuAnchor}
+        />
+        <MessageActionsMenu
+          isOpen={messageActionsOpen}
+          onClose={() => setMessageActionsOpen(false)}
+          position={messageActionsPosition}
+          isOwnMessage={messages.find(m => m.id === selectedMessageId)?.sender_id === userId}
+          onReply={() => selectedMessageId && handleReplyMessage(selectedMessageId)}
+          onForward={() => selectedMessageId && handleForwardMessage(selectedMessageId)}
+          onEdit={() => selectedMessageId && handleEditMessage(selectedMessageId)}
+          onDelete={() => selectedMessageId && handleDeleteMessage(selectedMessageId)}
+          onCopy={() => selectedMessageId && handleCopyMessage(selectedMessageId)}
+          onReact={() => selectedMessageId && handleReactToMessage(selectedMessageId)}
         />
       </TeacherShell>
     </>

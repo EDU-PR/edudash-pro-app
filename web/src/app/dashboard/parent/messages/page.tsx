@@ -10,6 +10,7 @@ import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
 import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
+import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical } from 'lucide-react';
 
 interface ParticipantProfile {
@@ -252,6 +253,9 @@ export default function ParentMessagesPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [messageActionsOpen, setMessageActionsOpen] = useState(false);
+  const [messageActionsPosition, setMessageActionsPosition] = useState({ x: 0, y: 0 });
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
@@ -604,6 +608,85 @@ export default function ParentMessagesPage() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleMessageContextMenu = (messageId: string, x: number, y: number) => {
+    setSelectedMessageId(messageId);
+    setMessageActionsPosition({ x, y });
+    setMessageActionsOpen(true);
+  };
+
+  const handleReplyMessage = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      alert('Reply feature coming soon!');
+    }
+    setMessageActionsOpen(false);
+  };
+
+  const handleForwardMessage = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      alert('Forward feature coming soon!');
+    }
+    setMessageActionsOpen(false);
+  };
+
+  const handleEditMessage = async (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message || message.sender_id !== userId) return;
+
+    const newContent = prompt('Edit message:', message.content);
+    if (newContent && newContent.trim() && newContent !== message.content) {
+      try {
+        const { error } = await supabase
+          .from('messages')
+          .update({ content: newContent.trim() })
+          .eq('id', messageId);
+
+        if (error) throw error;
+        setRefreshTrigger(prev => prev + 1);
+      } catch (err) {
+        console.error('Error editing message:', err);
+        alert('Failed to edit message.');
+      }
+    }
+    setMessageActionsOpen(false);
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message || message.sender_id !== userId) return;
+
+    if (confirm('Are you sure you want to delete this message?')) {
+      try {
+        const { error } = await supabase
+          .from('messages')
+          .delete()
+          .eq('id', messageId);
+
+        if (error) throw error;
+        setRefreshTrigger(prev => prev + 1);
+      } catch (err) {
+        console.error('Error deleting message:', err);
+        alert('Failed to delete message.');
+      }
+    }
+    setMessageActionsOpen(false);
+  };
+
+  const handleCopyMessage = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId);
+    if (message) {
+      navigator.clipboard.writeText(message.content);
+      alert('Message copied to clipboard!');
+    }
+    setMessageActionsOpen(false);
+  };
+
+  const handleReactToMessage = (messageId: string) => {
+    alert('Reactions feature coming soon!');
+    setMessageActionsOpen(false);
   };
 
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
@@ -1053,6 +1136,7 @@ export default function ParentMessagesPage() {
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
                           hideAvatars={!isDesktop}
+                          onContextMenu={handleMessageContextMenu}
                         />
                       );
                     })}
@@ -1550,6 +1634,18 @@ export default function ParentMessagesPage() {
         callType={callState.callType}
         remoteUserId={callState.remoteUserId}
         remoteUserName={callState.remoteUserName}
+      />
+      <MessageActionsMenu
+        isOpen={messageActionsOpen}
+        onClose={() => setMessageActionsOpen(false)}
+        position={messageActionsPosition}
+        isOwnMessage={messages.find(m => m.id === selectedMessageId)?.sender_id === userId}
+        onReply={() => selectedMessageId && handleReplyMessage(selectedMessageId)}
+        onForward={() => selectedMessageId && handleForwardMessage(selectedMessageId)}
+        onEdit={() => selectedMessageId && handleEditMessage(selectedMessageId)}
+        onDelete={() => selectedMessageId && handleDeleteMessage(selectedMessageId)}
+        onCopy={() => selectedMessageId && handleCopyMessage(selectedMessageId)}
+        onReact={() => selectedMessageId && handleReactToMessage(selectedMessageId)}
       />
     </ParentShell>
   );

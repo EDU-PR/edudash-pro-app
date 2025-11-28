@@ -49,6 +49,7 @@ interface ChatMessageBubbleProps {
   senderName?: string;
   otherParticipantIds?: string[];
   hideAvatars?: boolean;
+  onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
 }
 
 export const ChatMessageBubble = ({
@@ -59,6 +60,7 @@ export const ChatMessageBubble = ({
   senderName,
   otherParticipantIds = [],
   hideAvatars = false,
+  onContextMenu,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
   
@@ -198,6 +200,27 @@ export const ChatMessageBubble = ({
           boxShadow: elevation,
           animation: !isOwn ? 'pulse-glow 4s ease-in-out infinite' : 'none',
           transform: 'translateZ(0)',
+          cursor: 'pointer',
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContextMenu?.(e, message.id);
+        }}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          const timer = setTimeout(() => {
+            e.preventDefault();
+            onContextMenu?.(e, message.id);
+          }, 500); // Long press duration
+          
+          const clearTimer = () => {
+            clearTimeout(timer);
+            e.currentTarget.removeEventListener('touchend', clearTimer);
+            e.currentTarget.removeEventListener('touchmove', clearTimer);
+          };
+          
+          e.currentTarget.addEventListener('touchend', clearTimer, { once: true });
+          e.currentTarget.addEventListener('touchmove', clearTimer, { once: true });
         }}
       >
         {/* Sender name for received messages */}
