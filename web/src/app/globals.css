@@ -54,6 +54,164 @@
   }
 }
 
+/* ============================================
+   DYNAMIC SCALING SYSTEM
+   Scales UI elements based on viewport width
+   ============================================ */
+
+/* Base scaling unit - uses clamp for fluid scaling */
+:root {
+  /* Fluid spacing scale (min, preferred, max) */
+  --scale-xs: clamp(4px, 1vw, 6px);
+  --scale-sm: clamp(6px, 1.5vw, 10px);
+  --scale-md: clamp(8px, 2vw, 14px);
+  --scale-lg: clamp(12px, 2.5vw, 18px);
+  --scale-xl: clamp(16px, 3vw, 24px);
+  
+  /* Fluid font sizes */
+  --font-xs: clamp(10px, 2.5vw, 12px);
+  --font-sm: clamp(12px, 3vw, 14px);
+  --font-md: clamp(14px, 3.5vw, 16px);
+  --font-lg: clamp(16px, 4vw, 20px);
+  --font-xl: clamp(18px, 4.5vw, 24px);
+  
+  /* Fluid icon/button sizes */
+  --icon-sm: clamp(16px, 4vw, 20px);
+  --icon-md: clamp(20px, 5vw, 26px);
+  --icon-lg: clamp(28px, 6vw, 36px);
+  
+  /* Fluid touch targets */
+  --touch-sm: clamp(32px, 8vw, 40px);
+  --touch-md: clamp(36px, 9vw, 44px);
+  --touch-lg: clamp(44px, 10vw, 56px);
+  
+  /* Fluid border radius */
+  --radius-sm: clamp(6px, 1.5vw, 10px);
+  --radius-md: clamp(10px, 2.5vw, 16px);
+  --radius-lg: clamp(16px, 3.5vw, 24px);
+  --radius-full: 9999px;
+  
+  /* Composer specific */
+  --composer-height: clamp(44px, 11vw, 56px);
+  --composer-radius: clamp(22px, 5.5vw, 28px);
+  --composer-icon: clamp(22px, 5.5vw, 28px);
+  --composer-button: clamp(36px, 9vw, 44px);
+}
+
+/* Container query support for component-level scaling */
+@supports (container-type: inline-size) {
+  .scale-container {
+    container-type: inline-size;
+  }
+  
+  /* Scale elements based on container width */
+  @container (max-width: 400px) {
+    .scale-text { font-size: var(--font-sm); }
+    .scale-icon { width: var(--icon-sm); height: var(--icon-sm); }
+    .scale-button { width: var(--touch-sm); height: var(--touch-sm); }
+  }
+  
+  @container (min-width: 401px) and (max-width: 600px) {
+    .scale-text { font-size: var(--font-md); }
+    .scale-icon { width: var(--icon-md); height: var(--icon-md); }
+    .scale-button { width: var(--touch-md); height: var(--touch-md); }
+  }
+  
+  @container (min-width: 601px) {
+    .scale-text { font-size: var(--font-lg); }
+    .scale-icon { width: var(--icon-lg); height: var(--icon-lg); }
+    .scale-button { width: var(--touch-lg); height: var(--touch-lg); }
+  }
+}
+
+/* WhatsApp-style composer base styles */
+.wa-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--scale-md, 12px);
+  padding: var(--scale-sm);
+  width: 100%;
+}
+
+.wa-composer-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--scale-sm, 10px);
+  background: rgba(30, 41, 59, 0.95);
+  border-radius: var(--composer-radius);
+  padding: var(--scale-sm, 10px) var(--scale-md, 14px);
+  backdrop-filter: blur(12px);
+  min-height: var(--composer-height);
+  border: none;
+}
+
+.wa-composer-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  line-height: 1.4;
+  resize: none;
+  max-height: 120px;
+  padding: var(--scale-xs) 0;
+}
+
+.wa-composer-input:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+.wa-composer-input::placeholder {
+  color: var(--muted);
+}
+
+.wa-composer-btn {
+  width: var(--composer-button);
+  height: var(--composer-button);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wa-composer-btn svg {
+  width: var(--composer-icon);
+  height: var(--composer-icon);
+}
+
+.wa-composer-btn-icon {
+  background: transparent;
+  color: var(--muted);
+  padding-bottom: 6px;
+}
+
+.wa-composer-btn-icon:hover {
+  color: var(--text-primary);
+}
+
+.wa-composer-btn-send {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+}
+
+.wa-composer-btn-mic {
+  background: linear-gradient(135deg, #00d4ff 0%, #00a3cc 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.4);
+}
+
+/* ============================================ */
+
 html,
 body {
   max-width: 100vw;

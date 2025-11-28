@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   Phone,
   PhoneOff,
@@ -10,13 +11,19 @@ import {
   MicOff,
   Minimize2,
   X,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed';
 
-// Demo mode: Simulates call connection after this delay
-// In production, this would be replaced with actual WebRTC signaling
-const DEMO_CONNECTION_DELAY_MS = 2000;
+const ICE_SERVERS: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+  ],
+};
 
 interface CallInterfaceProps {
   isOpen: boolean;
@@ -26,6 +33,9 @@ interface CallInterfaceProps {
   remoteUserName?: string;
   onCallStart?: () => void;
   onCallEnd?: () => void;
+  // New props for answering incoming calls
+  isIncoming?: boolean;
+  incomingCallId?: string;
 }
 
 export const CallInterface = ({
@@ -36,10 +46,16 @@ export const CallInterface = ({
   remoteUserName,
   onCallStart,
   onCallEnd,
+  isIncoming = false,
+  incomingCallId,
 }: CallInterfaceProps) => {
+  const supabase = createClientComponentClient();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(incomingCallId || null);
   const [callState, setCallState] = useState<CallState>('idle');
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialCallType === 'video');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +65,16 @@ export const CallInterface = ({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([]);
+
+  // Get current user
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
 
   // Format call duration
   const formatDuration = useCallback((seconds: number): string => {
@@ -84,21 +110,31 @@ export const CallInterface = ({
     }
   }, [isVideoEnabled]);
 
-  // Create peer connection
-  const createPeerConnection = useCallback(() => {
-    const config: RTCConfiguration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
-    };
+  // Send signaling message via Supabase
+  const sendSignal = useCallback(async (
+    toUserId: string,
+    signalType: string,
+    payload: any,
+    callId: string
+  ) => {
+    if (!currentUserId) return;
+    
+    await supabase.from('call_signals').insert({
+      call_id: callId,
+      from_user_id: currentUserId,
+      to_user_id: toUserId,
+      signal_type: signalType,
+      payload,
+    });
+  }, [currentUserId, supabase]);
 
-    const pc = new RTCPeerConnection(config);
+  // Create peer connection with signaling
+  const createPeerConnection = useCallback((callId: string, targetUserId: string) => {
+    const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        // In a real implementation, send this to the signaling server
-        console.log('ICE candidate:', event.candidate);
+      if (event.candidate && targetUserId) {
+        sendSignal(targetUserId, 'ice-candidate', event.candidate.toJSON(), callId);
       }
     };
 
@@ -113,9 +149,11 @@ export const CallInterface = ({
       if (pc.iceConnectionState === 'connected') {
         setCallState('connected');
         // Start call timer
-        callTimerRef.current = setInterval(() => {
-          setCallDuration((prev) => prev + 1);
-        }, 1000);
+        if (!callTimerRef.current) {
+          callTimerRef.current = setInterval(() => {
+            setCallDuration((prev) => prev + 1);
+          }, 1000);
+        }
       } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
         setCallState('failed');
         setError('Connection lost');
@@ -124,48 +162,179 @@ export const CallInterface = ({
 
     peerConnectionRef.current = pc;
     return pc;
-  }, []);
+  }, [sendSignal]);
 
-  // Start call
+  // Handle incoming signaling messages
+  const handleSignal = useCallback(async (signal: any) => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !remoteUserId || !currentCallId) return;
+
+    switch (signal.signal_type) {
+      case 'answer':
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
+          setCallState('connected');
+          // Process pending ICE candidates
+          for (const candidate of pendingIceCandidatesRef.current) {
+            await pc.addIceCandidate(candidate);
+          }
+          pendingIceCandidatesRef.current = [];
+        } catch (err) {
+          console.error('Error handling answer:', err);
+        }
+        break;
+
+      case 'ice-candidate':
+        const candidate = new RTCIceCandidate(signal.payload);
+        if (pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(candidate);
+          } catch (err) {
+            console.error('Error adding ICE candidate:', err);
+          }
+        } else {
+          pendingIceCandidatesRef.current.push(candidate);
+        }
+        break;
+
+      case 'call-ended':
+      case 'call-rejected':
+        endCall();
+        break;
+    }
+  }, [remoteUserId, currentCallId]);
+
+  // Subscribe to signaling channel
+  useEffect(() => {
+    if (!currentUserId || !currentCallId) return;
+
+    const channel = supabase
+      .channel(`call-signals-${currentCallId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_signals',
+          filter: `to_user_id=eq.${currentUserId}`,
+        },
+        (payload) => {
+          if (payload.new.call_id === currentCallId) {
+            handleSignal(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, currentCallId, supabase, handleSignal]);
+
+  // Start outgoing call
   const startCall = useCallback(async () => {
+    if (!currentUserId || !remoteUserId) {
+      setError('Missing user information');
+      return;
+    }
+
     try {
       setCallState('connecting');
       setError(null);
 
+      // Generate call ID
+      const callId = crypto.randomUUID();
+      setCurrentCallId(callId);
+
+      // Get caller's name for notification
+      const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', currentUserId)
+        .single();
+      
+      const callerName = callerProfile 
+        ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+        : 'Someone';
+
+      // Create call record in database
+      await supabase.from('active_calls').insert({
+        call_id: callId,
+        caller_id: currentUserId,
+        callee_id: remoteUserId,
+        call_type: initialCallType,
+        status: 'ringing',
+        caller_name: callerName,
+      });
+
+      // Send push notification to callee (for when app is closed)
+      try {
+        await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: remoteUserId,
+            title: `Incoming ${initialCallType} call`,
+            body: `${callerName} is calling...`,
+            tag: `call-${callId}`,
+            type: 'call',
+            requireInteraction: true,
+            data: {
+              url: '/dashboard/parent/messages',
+              callId,
+              callType: initialCallType,
+              callerId: currentUserId,
+              callerName,
+            },
+          }),
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send call push notification:', notifErr);
+      }
+
+      // Initialize media
       const stream = await initializeLocalStream();
-      const pc = createPeerConnection();
+      const pc = createPeerConnection(callId, remoteUserId);
 
       // Add local tracks to peer connection
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
-      // Create and set local description
+      // Create and send offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      // In a real implementation, send the offer to the remote peer via signaling
-      console.log('Offer created:', offer);
+      await sendSignal(remoteUserId, 'offer', offer, callId);
 
       setCallState('ringing');
       onCallStart?.();
 
-      // Demo mode: Simulate call connection
-      // In production, this would be replaced with actual WebRTC signaling server integration
+      // Timeout: End call if not answered in 45 seconds
       setTimeout(() => {
-        setCallState('connected');
-        callTimerRef.current = setInterval(() => {
-          setCallDuration((prev) => prev + 1);
-        }, 1000);
-      }, DEMO_CONNECTION_DELAY_MS);
+        if (callState === 'ringing') {
+          endCall();
+          setError('No answer');
+        }
+      }, 45000);
     } catch (err) {
       console.error('Error starting call:', err);
       setCallState('failed');
     }
-  }, [initializeLocalStream, createPeerConnection, onCallStart]);
+  }, [currentUserId, remoteUserId, initialCallType, supabase, initializeLocalStream, createPeerConnection, sendSignal, onCallStart, callState]);
 
   // End call
-  const endCall = useCallback(() => {
+  const endCall = useCallback(async () => {
+    // Signal the other party
+    if (currentCallId && remoteUserId && currentUserId) {
+      await sendSignal(remoteUserId, 'call-ended', { reason: 'ended' }, currentCallId);
+      
+      // Update call status in database
+      await supabase
+        .from('active_calls')
+        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .eq('call_id', currentCallId);
+    }
+
     // Stop local stream
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -184,6 +353,8 @@ export const CallInterface = ({
       callTimerRef.current = null;
     }
 
+    pendingIceCandidatesRef.current = [];
+    setCurrentCallId(null);
     setCallState('ended');
     setCallDuration(0);
     onCallEnd?.();
@@ -191,7 +362,7 @@ export const CallInterface = ({
     setTimeout(() => {
       onClose();
     }, 1000);
-  }, [onCallEnd, onClose]);
+  }, [currentCallId, remoteUserId, currentUserId, supabase, sendSignal, onCallEnd, onClose]);
 
   // Toggle video
   const toggleVideo = useCallback(() => {
@@ -213,6 +384,14 @@ export const CallInterface = ({
         setIsAudioEnabled(audioTrack.enabled);
       }
     }
+  }, []);
+
+  // Toggle speaker/loudspeaker
+  const toggleSpeaker = useCallback(() => {
+    setIsSpeakerEnabled((prev) => !prev);
+    // Note: Web Audio API doesn't have native speaker toggle like mobile
+    // This is a UI state that can be used for future implementation
+    // On mobile apps, this would route audio to speaker vs earpiece
   }, []);
 
   // Start call when opened
@@ -417,21 +596,71 @@ export const CallInterface = ({
             }}
           />
         ) : (
-          <div
-            style={{
-              width: 160,
-              height: 160,
-              borderRadius: 80,
-              background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 64,
-              fontWeight: 600,
-              color: 'white',
-            }}
-          >
-            {(remoteUserName || 'U').charAt(0).toUpperCase()}
+          <div style={{ position: 'relative' }}>
+            {/* Pulsing ring animation for connecting/ringing states */}
+            {(callState === 'connecting' || callState === 'ringing') && (
+              <>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 200,
+                    height: 200,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.4)',
+                    animation: 'pulse-ring 1.5s ease-out infinite',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 240,
+                    height: 240,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.2)',
+                    animation: 'pulse-ring 1.5s ease-out infinite 0.3s',
+                  }}
+                />
+                <style>{`
+                  @keyframes pulse-ring {
+                    0% {
+                      transform: translate(-50%, -50%) scale(0.8);
+                      opacity: 1;
+                    }
+                    100% {
+                      transform: translate(-50%, -50%) scale(1.4);
+                      opacity: 0;
+                    }
+                  }
+                `}</style>
+              </>
+            )}
+            <div
+              style={{
+                width: 160,
+                height: 160,
+                borderRadius: 80,
+                background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 64,
+                fontWeight: 600,
+                color: 'white',
+                position: 'relative',
+                zIndex: 1,
+                boxShadow: (callState === 'connecting' || callState === 'ringing') 
+                  ? '0 0 40px rgba(124, 58, 237, 0.5)' 
+                  : 'none',
+              }}
+            >
+              {(remoteUserName || 'U').charAt(0).toUpperCase()}
+            </div>
           </div>
         )}
 
@@ -471,7 +700,7 @@ export const CallInterface = ({
           padding: '24px 20px 40px',
           display: 'flex',
           justifyContent: 'center',
-          gap: 20,
+          gap: 16,
         }}
       >
         {/* Mute */}
@@ -493,6 +722,29 @@ export const CallInterface = ({
             <Mic size={24} color="white" />
           ) : (
             <MicOff size={24} color="white" />
+          )}
+        </button>
+
+        {/* Speaker/Loudspeaker toggle */}
+        <button
+          onClick={toggleSpeaker}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: isSpeakerEnabled ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+            border: isSpeakerEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+          title={isSpeakerEnabled ? 'Speaker on' : 'Speaker off'}
+        >
+          {isSpeakerEnabled ? (
+            <Volume2 size={24} color="#22c55e" />
+          ) : (
+            <VolumeX size={24} color="white" />
           )}
         </button>
 

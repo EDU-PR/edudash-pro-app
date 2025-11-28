@@ -51,6 +51,8 @@ interface MessageThread {
     content: string;
     created_at: string;
     sender_id: string;
+    read_at?: string | null;
+    delivered_at?: string | null;
   };
   unread_count?: number;
 }
@@ -98,6 +100,18 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
     return parts[0]?.[0]?.toUpperCase() || '?';
   };
 
+  // Get message status ticks for own messages
+  const getMessageStatus = () => {
+    if (!thread.last_message || thread.last_message.sender_id !== currentUserId) return null;
+    const msg = thread.last_message;
+    // read = double tick blue, delivered = double tick gray, sent = single tick
+    if (msg.read_at) return { ticks: '✓✓', color: '#34b7f1' }; // Blue double tick
+    if (msg.delivered_at) return { ticks: '✓✓', color: 'var(--muted)' }; // Gray double tick
+    return { ticks: '✓', color: 'var(--muted)' }; // Single gray tick
+  };
+
+  const messageStatus = getMessageStatus();
+
   return (
     <div
       onClick={onSelect}
@@ -122,13 +136,20 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
         {studentName && (
           <p className="m-0 mb-1.5 text-[13px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
         )}
-        <p className={`m-0 text-[14px] truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'} leading-relaxed`}>
-          {thread.last_message?.content 
-            ? thread.last_message.content.startsWith('__media__') 
-              ? '📷 Photo' 
-              : thread.last_message.content 
-            : 'No messages yet'}
-        </p>
+        <div className={`m-0 text-[14px] flex items-center gap-1.5 truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'} leading-relaxed`}>
+          {messageStatus && (
+            <span style={{ color: messageStatus.color, fontSize: '12px', flexShrink: 0 }}>
+              {messageStatus.ticks}
+            </span>
+          )}
+          <span className="truncate">
+            {thread.last_message?.content 
+              ? thread.last_message.content.startsWith('__media__') 
+                ? '📷 Photo' 
+                : thread.last_message.content 
+              : 'No messages yet'}
+          </span>
+        </div>
       </div>
       {hasUnread && (
         <div className="min-w-[22px] h-[22px] rounded-[11px] bg-[var(--primary)] text-white text-[11px] font-bold px-1.5 flex items-center justify-center shadow-[0_2px_8px_rgba(124,58,237,0.4)] flex-shrink-0">
@@ -169,9 +190,36 @@ function TeacherMessagesPage() {
   const { typingText, startTyping, stopTyping } = useTypingIndicator({ supabase, threadId: selectedThreadId, userId });
   const { callState, startVoiceCall, startVideoCall, closeCall } = useCallInterface();
 
-  // Chat wallpaper state
+  // Chat wallpaper state with localStorage persistence
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [wallpaperCss, setWallpaperCss] = useState<string | null>(null);
+
+  // Presets mapping (shared)
+  const presetMapTeacher: Record<string, string> = {
+    'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
+    'midnight': 'linear-gradient(180deg, #0a0f1e 0%, #1a1a2e 50%, #0a0f1e 100%)',
+    'ocean-deep': 'linear-gradient(180deg, #0c4a6e 0%, #164e63 50%, #0f172a 100%)',
+    'forest-night': 'linear-gradient(180deg, #14532d 0%, #1e3a3a 50%, #0f172a 100%)',
+    'sunset-warm': 'linear-gradient(180deg, #7c2d12 0%, #4a1d1d 50%, #0f172a 100%)',
+    'dark-slate': 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+  };
+
+  // Load wallpaper from localStorage on mount
+  useEffect(() => {
+    const savedWallpaper = localStorage.getItem('edudash-chat-wallpaper');
+    if (savedWallpaper) {
+      try {
+        const parsed = JSON.parse(savedWallpaper);
+        if (parsed.type === 'url') {
+          setWallpaperCss(`url(${parsed.value}) center/cover no-repeat fixed`);
+        } else if (parsed.type === 'preset' && presetMapTeacher[parsed.value]) {
+          setWallpaperCss(presetMapTeacher[parsed.value]);
+        }
+      } catch (e) {
+        console.error('Failed to load wallpaper:', e);
+      }
+    }
+  }, []);
 
   // Message options menu state
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
@@ -187,6 +235,9 @@ function TeacherMessagesPage() {
   const [showContactsWidget, setShowContactsWidget] = useState(false);
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
+    // Save to localStorage for persistence
+    localStorage.setItem('edudash-chat-wallpaper', JSON.stringify(sel));
+    
     if (sel.type === 'url') {
       setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);
       return;
@@ -918,6 +969,54 @@ function TeacherMessagesPage() {
             padding: '12px',
             paddingTop: !isDesktop ? '136px' : '12px'
           }}>
+            {/* Dash AI Assistant - Always at top like Meta AI in WhatsApp */}
+            <div
+              onClick={() => router.push('/dashboard/teacher/dash-ai')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--scale-md, 12px)',
+                padding: 'var(--scale-md, 14px)',
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-md, 12px)',
+                marginBottom: 'var(--scale-sm, 8px)',
+                background: 'linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, rgba(0, 212, 255, 0.06) 100%)',
+                border: '1px solid rgba(124, 58, 237, 0.2)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <div style={{
+                width: 'var(--touch-md, 48px)',
+                height: 'var(--touch-md, 48px)',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #06b6d4 50%, #ec4899 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 16px rgba(124, 58, 237, 0.4)',
+                flexShrink: 0,
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.5"/>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="4" fill="white" fillOpacity="0.3"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 'var(--font-md, 16px)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Dash AI
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                </div>
+                <p style={{ fontSize: 'var(--font-sm, 13px)', color: 'var(--muted)', marginTop: 2 }}>
+                  AI assistant for lesson planning & grading
+                </p>
+              </div>
+            </div>
+            
             {threadsLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
                 <div className="spinner"></div>
@@ -1046,17 +1145,17 @@ function TeacherMessagesPage() {
             /* Chat View */
             <>
               {/* Chat Header */}
-              <div className={`${isDesktop ? 'py-7 px-7' : 'py-15 px-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
+              <div className={`${isDesktop ? 'py-7 px-7' : 'py-15 px-2'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
                 {!isDesktop && (
                   <button
                     onClick={() => setSelectedThreadId(null)}
-                    className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center cursor-pointer text-[var(--text)]"
+                    className="w-9 h-9 rounded-[10px] bg-transparent border-none flex items-center justify-center cursor-pointer text-[var(--text)] -ml-1"
                   >
                     <ArrowLeft size={20} />
                   </button>
                 )}
                 <div
-                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-9 h-9 text-[13px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
+                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-8 h-8 text-[12px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
                 >
                   {contactName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                 </div>
@@ -1074,13 +1173,6 @@ function TeacherMessagesPage() {
                 <div className="flex items-center gap-2">
                   {isDesktop ? (
                     <>
-                      <button
-                        onClick={() => setWallpaperOpen(true)}
-                        title="Chat wallpaper"
-                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
-                      >
-                        <ImageIcon size={18} />
-                      </button>
                       <button
                         onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
                         title="Start voice call"
@@ -1313,19 +1405,20 @@ function TeacherMessagesPage() {
                     )}
 
                     {!isDesktop && (
-                      <>
-                        {/* Emoji outside on the left */}
+                      <div className="wa-composer">
+                        {/* Emoji button */}
                         <button
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
+                          className="wa-composer-btn bg-[var(--surface-2)] border border-[var(--border)] text-[var(--muted)]"
                           aria-label="Emoji"
                         >
-                          <Smile size={20} />
+                          <Smile className="wa-icon-sm" />
                         </button>
-                        <div className="flex flex-row items-end flex-1 gap-4 px-5 py-4 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
-                          {/* Textarea */}
+                        
+                        {/* Input container */}
+                        <div className="wa-composer-input-wrap">
                           <textarea
                             value={messageText}
                             onChange={(e) => { 
@@ -1339,13 +1432,13 @@ function TeacherMessagesPage() {
                             placeholder="Type a message"
                             disabled={sending || attachmentUploading}
                             rows={1}
-                            className="flex-1 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0"
-                            style={{ height: '36px', border: 'none', outline: 'none', paddingBottom: '10px' }}
+                            className="flex-1 min-w-0 min-h-[var(--composer-btn)] py-2 px-2 bg-transparent text-[var(--text)] wa-text outline-none resize-none max-h-[120px] leading-relaxed placeholder:text-[var(--muted)] focus:outline-none focus:ring-0 focus:border-0"
+                            style={{ border: 'none', outline: 'none' }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 handleSendMessage(e);
-                                (e.currentTarget as HTMLTextAreaElement).style.height = '36px';
+                                (e.currentTarget as HTMLTextAreaElement).style.height = 'auto';
                               }
                             }}
                           />
@@ -1358,7 +1451,7 @@ function TeacherMessagesPage() {
                               className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                               aria-label="Camera"
                             >
-                              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ paddingBottom: '10px' }}>
+                              <svg className="wa-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                                 <circle cx="12" cy="13" r="4"/>
                               </svg>
@@ -1372,31 +1465,42 @@ function TeacherMessagesPage() {
                             className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             aria-label="Attach file"
                           >
-                            <Paperclip size={28} style={{ paddingBottom: '10px', paddingRight: '5' }} />
+                            <Paperclip className="wa-icon" />
                           </button>
                         </div>
+                        
+                        {/* Send/Mic button */}
                         {messageText.trim() ? (
                           <button
                             type="submit"
                             disabled={sending || attachmentUploading}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                            className={`wa-composer-btn ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
                           >
                             {sending || attachmentUploading ? (
-                              <Loader2 size={16} className="animate-spin" color="white" />
+                              <Loader2 className="wa-icon-sm animate-spin" color="white" />
                             ) : (
-                              <Send size={16} color="white" />
+                              <Send className="wa-icon-sm" color="white" />
                             )}
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={handleMicClick}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                            className="wa-composer-btn"
+                            style={{
+                              background: isRecording 
+                                ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                                : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                              boxShadow: isRecording
+                                ? '0 4px 16px rgba(245, 158, 11, 0.5), 0 0 20px rgba(245, 158, 11, 0.3)'
+                                : '0 4px 16px rgba(0, 212, 255, 0.4), 0 0 20px rgba(0, 212, 255, 0.25)',
+                              border: '1px solid rgba(0, 212, 255, 0.3)',
+                            }}
                           >
-                            <Mic size={18} color="white" />
+                            <Mic className="wa-icon-sm" color={isRecording ? 'white' : '#00d4ff'} />
                           </button>
                         )}
-                      </>
+                      </div>
                     )}
 
                     {isDesktop && (
