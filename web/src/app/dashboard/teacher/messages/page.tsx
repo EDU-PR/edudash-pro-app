@@ -410,6 +410,10 @@ export default function TeacherMessagesPage() {
         (a, b) => getThreadRecencyValue(b) - getThreadRecencyValue(a)
       );
 
+      console.log('Threads before dedup:', threadsWithDetails.length);
+      console.log('Threads after dedup:', uniqueThreads.length);
+      console.log('Thread keys:', Array.from(uniqueParentThreadMap.keys()));
+
       setThreads(uniqueThreads);
 
       if (selectedThreadId) {
@@ -926,7 +930,7 @@ export default function TeacherMessagesPage() {
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
-                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] cursor-pointer hover:bg-[var(--surface)] transition-colors"
                       >
                         <MoreVertical size={20} />
                       </button>
@@ -954,7 +958,7 @@ export default function TeacherMessagesPage() {
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
-                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)] cursor-pointer"
                         title="More"
                       >
                         <MoreVertical size={20} />
@@ -966,9 +970,12 @@ export default function TeacherMessagesPage() {
 
               {/* Mobile: Fixed student name subtitle */}
               {!isDesktop && selectedThread.student && (
-                <div className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2 flex items-center justify-center gap-1.5">
+                <div 
+                  className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2 flex items-center justify-center gap-1.5 [backdrop-filter:blur(8px)] border-b border-[var(--border)]/30"
+                  style={{ background: wallpaperCss || 'var(--surface)' }}
+                >
                   <span className="text-[13px] text-[var(--cyan)] font-medium">📚</span>
-                  <span className="text-[13px] text-[#cbd5e1] font-medium">
+                  <span className="text-[13px] text-white/90 font-medium drop-shadow-sm">
                     {selectedThread.student.first_name} {selectedThread.student.last_name}
                   </span>
                 </div>
