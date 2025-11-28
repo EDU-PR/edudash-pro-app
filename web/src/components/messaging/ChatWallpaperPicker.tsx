@@ -15,19 +15,32 @@ const PRESETS: { key: string; label: string; css: string }[] = [
   {
     key: "purple-glow",
     label: "Purple Glow",
-    css:
-      "linear-gradient(180deg, #0f172a 0%, #1e293b 100%), radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.08) 0%, transparent 45%)",
+    css: "linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)",
   },
   {
     key: "midnight",
     label: "Midnight",
-    css: "linear-gradient(135deg, #0b1020 0%, #151a2f 100%)",
+    css: "linear-gradient(180deg, #0a0f1e 0%, #1a1a2e 50%, #0a0f1e 100%)",
   },
   {
-    key: "deep-space",
-    label: "Deep Space",
-    css:
-      "radial-gradient(1000px 600px at 10% 10%, rgba(124, 58, 237, 0.08), transparent), radial-gradient(1000px 600px at 90% 90%, rgba(236, 72, 153, 0.08), transparent), #0a0f1e",
+    key: "ocean-deep",
+    label: "Ocean Deep",
+    css: "linear-gradient(180deg, #0c4a6e 0%, #164e63 50%, #0f172a 100%)",
+  },
+  {
+    key: "forest-night",
+    label: "Forest Night",
+    css: "linear-gradient(180deg, #14532d 0%, #1e3a3a 50%, #0f172a 100%)",
+  },
+  {
+    key: "sunset-warm",
+    label: "Sunset Warm",
+    css: "linear-gradient(180deg, #7c2d12 0%, #4a1d1d 50%, #0f172a 100%)",
+  },
+  {
+    key: "dark-slate",
+    label: "Dark Slate",
+    css: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
   },
 ];
 
@@ -45,20 +58,19 @@ export const ChatWallpaperPicker = ({ isOpen, onClose, userId, onSelect }: ChatW
     setError(null);
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const objectPath = `${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-      const { error: upErr } = await supabase.storage
-        .from("chat-wallpapers")
-        .upload(objectPath, file, { upsert: false, cacheControl: "3600" });
-
-      if (upErr) throw upErr;
-
-      const { data } = supabase.storage.from("chat-wallpapers").getPublicUrl(objectPath);
-      const publicUrl = data.publicUrl;
-
-      onSelect({ type: "url", value: publicUrl });
-      onClose();
+      // Convert to base64 data URL for local storage (avoids bucket issues)
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl) {
+          onSelect({ type: "url", value: dataUrl });
+          onClose();
+        }
+      };
+      reader.onerror = () => {
+        setError("Failed to read image file");
+      };
+      reader.readAsDataURL(file);
     } catch (e: any) {
       setError(e?.message || "Upload failed");
     } finally {

@@ -29,15 +29,17 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
         const supabase = createClient();
         const allRequests: PendingRequest[] = [];
 
-        // First, get parent's internal ID and linked students to filter out duplicates
+        // First, get parent's internal ID, email, role, and linked students to filter out duplicates
         const { data: profile } = await supabase
           .from('profiles')
-          .select('id, preschool_id')
+          .select('id, preschool_id, email, role')
           .eq('id', userId)
           .maybeSingle();
 
         const parentInternalId = profile?.id;
         const preschoolId = profile?.preschool_id;
+        const userEmail = profile?.email;
+        const userRole = profile?.role;
 
         // Get already-linked students (approved children)
         const { data: linkedStudents } = await supabase
@@ -56,13 +58,21 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
 
         // Fetch pending child registration requests
         // Note: registration_requests table may not exist in all EduDashPro instances
-        // Silently ignore errors for community users
-        const { data: registrationRequests, error: regError } = await supabase
-          .from('registration_requests')
-          .select('id, student_first_name, student_last_name, created_at, organization_id, organizations(name)')
-          .eq('guardian_email', profile?.email)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
+        // Only query if we have a valid email - skip for parents to avoid 400 errors
+        let registrationRequests: any[] | null = null;
+        let regError: any = null;
+        
+        // Only fetch registration_requests if user has email (avoid undefined query)
+        if (userEmail && userRole && ['principal', 'admin', 'superadmin'].includes(userRole)) {
+          const result = await supabase
+            .from('registration_requests')
+            .select('id, student_first_name, student_last_name, created_at, organization_id, organizations(name)')
+            .eq('guardian_email', userEmail)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+          registrationRequests = result.data;
+          regError = result.error;
+        }
 
         // Silently handle expected errors (table doesn't exist, RLS denial, etc.)
         if (!regError && registrationRequests) {

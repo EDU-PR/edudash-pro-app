@@ -39,12 +39,13 @@ export function TrialBanner({ trialStatus }: TrialBannerProps) {
         background: backgroundColor,
         color: 'white',
         marginBottom: 16,
-        padding: '10px 14px',
+        padding: '12px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 12,
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        border: 'none'
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>

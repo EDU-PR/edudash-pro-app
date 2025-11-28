@@ -27,16 +27,14 @@ interface TypingIndicatorRow {
   thread_id: string;
   user_id: string;
   is_typing: boolean;
-  last_updated: string;
+  last_updated_at: string;
 }
 
-// Type for fetched typing indicator data with profile join
-// Supabase returns related records as arrays
+// Type for fetched typing indicator data
 interface FetchedTypingIndicator {
   user_id: string;
   is_typing: boolean;
-  last_updated: string;
-  profiles: Array<{ first_name?: string; last_name?: string }> | null;
+  last_updated_at: string;
 }
 
 export const useTypingIndicator = ({
@@ -128,8 +126,7 @@ export const useTypingIndicator = ({
         .select(`
           user_id,
           is_typing,
-          last_updated,
-          profiles:user_id(first_name, last_name)
+          last_updated_at
         `)
         .eq('thread_id', threadId)
         .eq('is_typing', true);
@@ -144,21 +141,17 @@ export const useTypingIndicator = ({
       const now = new Date();
       const activeTypers = (data || [] as FetchedTypingIndicator[])
         .filter((t: FetchedTypingIndicator) => {
-          const lastUpdated = new Date(t.last_updated);
+          const lastUpdated = new Date(t.last_updated_at);
           const ageMs = now.getTime() - lastUpdated.getTime();
           return ageMs < TYPING_TIMEOUT_MS + 2000; // Give 2s grace period
         })
         .filter((t: FetchedTypingIndicator) => t.user_id !== userId) // Exclude self
         .map((t: FetchedTypingIndicator): TypingUser => {
-          // Handle profiles being an array (Supabase join result)
-          const profile = t.profiles && t.profiles.length > 0 ? t.profiles[0] : null;
           return {
             userId: t.user_id,
-            userName: profile 
-              ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() 
-              : undefined,
+            userName: undefined, // Will be resolved elsewhere if needed
             isTyping: t.is_typing,
-            lastUpdated: t.last_updated,
+            lastUpdated: t.last_updated_at,
           };
         });
 
@@ -204,7 +197,7 @@ export const useTypingIndicator = ({
 
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (eventData.is_typing) {
-              const lastUpdated = eventData.last_updated || new Date().toISOString();
+              const lastUpdated = eventData.last_updated_at || new Date().toISOString();
               setTypingUsers((prev) => {
                 // Update or add typing user
                 const existing = prev.find((u) => u.userId === typingUserId);

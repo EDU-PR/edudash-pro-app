@@ -202,9 +202,10 @@ export default function ParentDashboard() {
                   key={child.id}
                   className="card card-interactive"
                   style={{
-                    border: activeChildId === child.id ? '2px solid var(--primary)' : undefined,
+                    border: activeChildId === child.id ? '2px solid var(--primary)' : '1px solid var(--border)',
                     minWidth: '280px',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    padding: '16px'
                   }}
                   onClick={() => setActiveChildId(child.id)}
                 >
