@@ -52,6 +52,7 @@ export const useComposerEnhancements = ({
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [recordingLocked, setRecordingLocked] = useState(false);
 
   const refresh = useCallback(() => {
     onRefresh?.();
@@ -167,7 +168,7 @@ export const useComposerEnhancements = ({
     }
   };
 
-  const { isRecording, toggleRecording, recorderError, recordingDuration } = useVoiceRecorder({
+  const { isRecording, toggleRecording, cancelRecording, recorderError, recordingDuration } = useVoiceRecorder({
     onRecordingComplete: async (blob, durationMs) => {
       if (!threadId || !userId) return;
       
@@ -222,9 +223,28 @@ export const useComposerEnhancements = ({
     // Clear previous errors when starting a new recording
     if (!isRecording) {
       setAttachmentError(null);
+      setRecordingLocked(false);
     }
 
     await toggleRecording();
+  };
+
+  const handleRecordingLock = () => {
+    setRecordingLocked(true);
+  };
+
+  const handleRecordingCancel = async () => {
+    setRecordingLocked(false);
+    if (isRecording) {
+      await cancelRecording();
+    }
+  };
+
+  const handleRecordingSend = async () => {
+    setRecordingLocked(false);
+    if (isRecording) {
+      await toggleRecording(); // This will stop and send
+    }
   };
 
   useEffect(() => {
@@ -272,6 +292,10 @@ export const useComposerEnhancements = ({
     statusMessage,
     uploadProgress,
     recordingDuration,
+    recordingLocked,
+    handleRecordingLock,
+    handleRecordingCancel,
+    handleRecordingSend,
     clearError,
   };
 };

@@ -1,6 +1,7 @@
 import { parseMessageContent } from '@/lib/messaging/messageContent';
 import { User } from 'lucide-react';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
+import { VoiceNotePlayer } from './VoiceNotePlayer';
 
 // Add CSS animation for pulsing glow
 if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styles')) {
@@ -201,10 +202,10 @@ export const ChatMessageBubble = ({
 
       if (content.mediaType === 'audio') {
         return (
-          <audio
-            controls
-            style={{ width: '100%', maxWidth: 280, marginBottom: 8 }}
-            src={content.url}
+          <VoiceNotePlayer 
+            url={content.url} 
+            duration={content.durationMs}
+            isOwn={isOwn}
           />
         );
       }

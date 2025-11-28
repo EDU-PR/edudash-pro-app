@@ -18,6 +18,8 @@ import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
+import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
+import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
 
 interface MessageThread {
   id: string;
@@ -438,8 +440,8 @@ function TeacherMessagesPage() {
     }
   }, [threadFromUrl]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
   const {
@@ -456,6 +458,11 @@ function TeacherMessagesPage() {
     handleMicClick,
     statusMessage,
     uploadProgress,
+    recordingDuration,
+    recordingLocked,
+    handleRecordingLock,
+    handleRecordingCancel,
+    handleRecordingSend,
   } = useComposerEnhancements({
     supabase,
     threadId: selectedThreadId,
@@ -484,9 +491,20 @@ function TeacherMessagesPage() {
     return () => window.removeEventListener('resize', checkDesktop);
   }, []);
 
+  // Initial scroll to bottom when messages load - use instant scroll
+  const initialScrollDone = useRef(false);
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > 0) {
+      // Use instant scroll for initial load, smooth for new messages
+      scrollToBottom(!initialScrollDone.current);
+      initialScrollDone.current = true;
+    }
   }, [messages]);
+
+  // Reset initial scroll flag when thread changes
+  useEffect(() => {
+    initialScrollDone.current = false;
+  }, [selectedThreadId]);
 
   const markThreadAsRead = useCallback(async (threadId: string) => {
     if (!userId) return;
@@ -1637,17 +1655,6 @@ function TeacherMessagesPage() {
                 </div>
               )}
 
-              {/* Typing indicator */}
-              {typingText && (
-                <div style={{
-                  padding: '8px 16px',
-                  color: 'var(--muted)',
-                  fontSize: '12px'
-                }}>
-                  {typingText}
-                </div>
-              )}
-
               {/* Messages Area */}
               <div
                 className="hide-scrollbar"
@@ -1731,6 +1738,15 @@ function TeacherMessagesPage() {
                         />
                       );
                     })}
+                    
+                    {/* Typing indicator - shows at bottom as a chat bubble */}
+                    {typingText && !isDashAISelected && (
+                      <TypingIndicatorBubble 
+                        senderName={contactName}
+                        isDesktop={isDesktop}
+                      />
+                    )}
+                    
                     {/* Dash AI typing indicator */}
                     {isDashAISelected && dashAILoading && (
                       <div style={{
@@ -1738,21 +1754,23 @@ function TeacherMessagesPage() {
                         alignItems: 'flex-start',
                         gap: '12px',
                         marginTop: '8px',
+                        paddingLeft: isDesktop ? 8 : 10,
                       }}>
-                        <div style={{ width: 36, height: 36, flexShrink: 0 }}>
-                          <DashAIAvatar size={36} />
+                        <div style={{ width: isDesktop ? 36 : 32, height: isDesktop ? 36 : 32, flexShrink: 0 }}>
+                          <DashAIAvatar size={isDesktop ? 36 : 32} />
                         </div>
                         <div style={{
-                          background: 'rgba(139, 92, 246, 0.15)',
-                          borderRadius: '16px',
+                          background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(236, 72, 153, 0.1) 100%)',
+                          border: '1px solid rgba(168, 85, 247, 0.3)',
+                          borderRadius: '16px 16px 16px 4px',
                           padding: '12px 16px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          gap: '5px',
                         }}>
-                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0s' }} />
-                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0.2s' }} />
-                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0.4s' }} />
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing-bounce 1.2s ease-in-out infinite', animationDelay: '0s' }} />
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing-bounce 1.2s ease-in-out infinite', animationDelay: '0.15s' }} />
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing-bounce 1.2s ease-in-out infinite', animationDelay: '0.3s' }} />
                         </div>
                       </div>
                     )}
@@ -2042,6 +2060,16 @@ function TeacherMessagesPage() {
           onClose={() => setShowInviteModal(false)}
           inviterName={profile?.firstName || 'A teacher'}
           preschoolName={profile?.preschoolName}
+        />
+        
+        {/* Voice Recording Overlay */}
+        <VoiceRecordingOverlay
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          onCancel={handleRecordingCancel}
+          onSend={handleRecordingSend}
+          onLock={handleRecordingLock}
+          isLocked={recordingLocked}
         />
       </TeacherShell>
     </>
