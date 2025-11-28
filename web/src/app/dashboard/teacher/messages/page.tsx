@@ -83,13 +83,48 @@ interface ThreadItemProps {
   currentUserId?: string;
 }
 
+// Dash AI Virtual Contact Constants (same as parent page)
+const DASH_AI_THREAD_ID = 'dash-ai-assistant';
+const DASH_AI_USER_ID = 'dash-ai-system';
+
+// Create virtual Dash AI thread that appears as a contact
+const createDashAIThread = (lastMessage?: string, lastMessageAt?: string): MessageThread => ({
+  id: DASH_AI_THREAD_ID,
+  type: 'dash_ai',
+  subject: 'Dash AI',
+  student_id: null,
+  last_message_at: lastMessageAt || new Date().toISOString(),
+  message_participants: [
+    {
+      user_id: DASH_AI_USER_ID,
+      role: 'ai_assistant',
+      user_profile: {
+        first_name: 'Dash',
+        last_name: 'AI',
+        role: 'ai_assistant',
+      },
+    },
+  ],
+  last_message: lastMessage ? {
+    content: lastMessage,
+    created_at: lastMessageAt || new Date().toISOString(),
+    sender_id: DASH_AI_USER_ID,
+  } : {
+    content: 'Hi! I\'m Dash, your AI teaching assistant. I can help with lesson plans, activities, and more! 🎓',
+    created_at: new Date().toISOString(),
+    sender_id: DASH_AI_USER_ID,
+  },
+  unread_count: 0,
+});
+
 const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemProps) => {
+  const isDashAI = thread.id === DASH_AI_THREAD_ID || thread.type === 'dash_ai';
   const participants = thread.message_participants || thread.participants || [];
   // Find the OTHER participant (the contact, not the current user)
   const otherParticipant = participants.find((p) => p.user_id !== currentUserId) || participants.find((p) => p.role === 'parent');
-  const contactName = otherParticipant?.user_profile
+  const contactName = isDashAI ? 'Dash AI' : (otherParticipant?.user_profile
     ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-    : 'Contact';
+    : 'Contact');
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
@@ -107,9 +142,9 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
     if (!thread.last_message || thread.last_message.sender_id !== currentUserId) return null;
     const msg = thread.last_message;
     // read = double tick blue, delivered = double tick gray, sent = single tick
-    if (msg.read_at) return { ticks: '✓✓', color: '#34b7f1' }; // Blue double tick
-    if (msg.delivered_at) return { ticks: '✓✓', color: 'var(--muted)' }; // Gray double tick
-    return { ticks: '✓', color: 'var(--muted)' }; // Single gray tick
+    if (msg.read_at) return { ticks: '✓✓', color: '#34d399' }; // Green double tick for read
+    if (msg.delivered_at) return { ticks: '✓✓', color: 'rgba(148, 163, 184, 0.6)' }; // Gray double tick
+    return { ticks: '✓', color: 'rgba(148, 163, 184, 0.6)' }; // Single gray tick
   };
 
   const messageStatus = getMessageStatus();
@@ -117,45 +152,174 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
   return (
     <div
       onClick={onSelect}
-      className={`p-4 mb-3 rounded-[14px] cursor-pointer flex gap-4 items-center transition ${isActive ? 'bg-[var(--surface-2)] border border-[var(--primary)] shadow-[0_2px_12px_rgba(124,58,237,0.15)]' : 'border border-transparent hover:bg-[var(--surface)]'}`}
+      style={{
+        padding: '14px 16px',
+        marginBottom: 12,
+        borderRadius: 16,
+        cursor: 'pointer',
+        display: 'flex',
+        gap: 14,
+        alignItems: 'center',
+        transition: 'all 0.2s ease',
+        background: isActive 
+          ? isDashAI 
+            ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
+          : 'rgba(30, 41, 59, 0.4)',
+        border: isActive 
+          ? isDashAI
+            ? '1px solid rgba(168, 85, 247, 0.3)'
+            : '1px solid rgba(99, 102, 241, 0.3)'
+          : '1px solid rgba(255, 255, 255, 0.06)',
+        boxShadow: isActive 
+          ? isDashAI
+            ? '0 4px 20px rgba(168, 85, 247, 0.2)'
+            : '0 4px 16px rgba(99, 102, 241, 0.15)'
+          : 'none',
+      }}
     >
-      <div
-        className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0 ${isActive ? 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.3)]' : 'bg-[var(--surface-2)]'}`}
-      >
-        {getInitials(contactName)}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className={`text-[15px] ${hasUnread ? 'font-bold' : 'font-semibold'} truncate text-[var(--text)]`}>
-            {contactName}
-          </span>
+      {/* Avatar - Dash AI gets special avatar */}
+      {isDashAI ? (
+        <DashAIAvatar size={48} showStars={true} animated={isActive} />
+      ) : (
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            background: isActive 
+              ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+              : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontSize: 16,
+            fontWeight: 600,
+            flexShrink: 0,
+            boxShadow: isActive ? '0 4px 14px rgba(99, 102, 241, 0.35)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {getInitials(contactName)}
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: hasUnread ? 700 : 600,
+                color: isDashAI ? '#e879f9' : (hasUnread ? '#f1f5f9' : '#e2e8f0'),
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.01em',
+              }}
+            >
+              {contactName}
+            </span>
+            {isDashAI && (
+              <span style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: '#a855f7',
+                background: 'rgba(168, 85, 247, 0.15)',
+                padding: '2px 6px',
+                borderRadius: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}>
+                AI
+              </span>
+            )}
+          </div>
           {thread.last_message?.created_at && (
-            <span className="text-[11px] text-[var(--muted)] ml-2 flex-shrink-0">
+            <span style={{ 
+              fontSize: 11, 
+              color: hasUnread ? '#a78bfa' : '#64748b', 
+              fontWeight: hasUnread ? 600 : 400,
+              flexShrink: 0,
+              marginLeft: 8,
+            }}>
               {formatMessageTime(thread.last_message.created_at)}
             </span>
           )}
         </div>
-        {studentName && (
-          <p className="m-0 mb-1.5 text-[13px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
+        {isDashAI ? (
+          <p style={{
+            margin: '0 0 4px 0',
+            fontSize: 12,
+            color: '#22d3ee',
+            fontWeight: 500,
+          }}>
+            ✨ AI Assistant for lesson planning & grading
+          </p>
+        ) : studentName && (
+          <p style={{
+            margin: '0 0 4px 0',
+            fontSize: 12,
+            color: '#a78bfa',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontWeight: 500,
+          }}>
+            📚 {studentName}
+          </p>
         )}
-        <div className={`m-0 text-[14px] flex items-center gap-1.5 truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'} leading-relaxed`}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {messageStatus && (
-            <span style={{ color: messageStatus.color, fontSize: '12px', flexShrink: 0 }}>
+            <span style={{ 
+              fontSize: 13, 
+              fontWeight: 600,
+              color: messageStatus.color,
+              letterSpacing: '-3px',
+              marginRight: 4,
+              flexShrink: 0,
+            }}>
               {messageStatus.ticks}
             </span>
           )}
-          <span className="truncate">
+          <p
+            style={{
+              margin: 0,
+              fontSize: 13,
+              color: hasUnread ? '#cbd5e1' : '#64748b',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.4,
+              flex: 1,
+            }}
+          >
             {thread.last_message?.content 
               ? thread.last_message.content.startsWith('__media__') 
                 ? '📷 Photo' 
                 : thread.last_message.content 
               : 'No messages yet'}
-          </span>
+          </p>
         </div>
       </div>
       {hasUnread && (
-        <div className="min-w-[22px] h-[22px] rounded-[11px] bg-[var(--primary)] text-white text-[11px] font-bold px-1.5 flex items-center justify-center shadow-[0_2px_8px_rgba(124,58,237,0.4)] flex-shrink-0">
-          {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
+        <div
+          style={{
+            minWidth: 22,
+            height: 22,
+            borderRadius: 11,
+            background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 6px',
+            boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>
+            {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
+          </span>
         </div>
       )}
     </div>
@@ -236,6 +400,12 @@ function TeacherMessagesPage() {
   // New Chat modal state
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Dash AI state
+  const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
+  const [dashAILastMessage, setDashAILastMessage] = useState<string>('Hi! I\'m Dash, your AI teaching assistant. I can help with lesson plans, activities, and more! 🎓');
+  const [dashAILastMessageAt, setDashAILastMessageAt] = useState<string>(new Date().toISOString());
+  const [dashAILoading, setDashAILoading] = useState(false);
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     // Save to localStorage for persistence
@@ -699,9 +869,153 @@ function TeacherMessagesPage() {
     );
   }
 
+  // Dash AI message handling
+  const loadDashAIMessages = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('teacher-dash-ai-messages');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setDashAIMessages(parsed);
+        if (parsed.length > 0) {
+          const lastMsg = parsed[parsed.length - 1];
+          setDashAILastMessage(lastMsg.content);
+          setDashAILastMessageAt(lastMsg.created_at);
+        }
+      } else {
+        // Create welcome message
+        const welcomeMessage: ChatMessage = {
+          id: 'dash-welcome',
+          thread_id: DASH_AI_THREAD_ID,
+          sender_id: DASH_AI_USER_ID,
+          content: 'Hi! I\'m Dash, your AI teaching assistant. I can help with lesson plans, activities, parent communication templates, and more! 🎓',
+          created_at: new Date().toISOString(),
+          sender: {
+            first_name: 'Dash',
+            last_name: 'AI',
+            role: 'ai_assistant',
+          },
+        };
+        setDashAIMessages([welcomeMessage]);
+      }
+    } catch (e) {
+      console.error('Failed to load Dash AI messages:', e);
+      setDashAIMessages([]);
+    }
+  }, []);
+
+  const saveDashAIMessages = useCallback((msgs: ChatMessage[]) => {
+    try {
+      localStorage.setItem('teacher-dash-ai-messages', JSON.stringify(msgs));
+      if (msgs.length > 0) {
+        const lastMsg = msgs[msgs.length - 1];
+        setDashAILastMessage(lastMsg.content);
+        setDashAILastMessageAt(lastMsg.created_at);
+      }
+    } catch (e) {
+      console.error('Failed to save Dash AI messages:', e);
+    }
+  }, []);
+
+  const sendDashAIMessage = useCallback(async (content: string) => {
+    if (!content.trim() || !userId) return;
+
+    // Add user message
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      thread_id: DASH_AI_THREAD_ID,
+      sender_id: userId,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      sender: {
+        first_name: profile?.firstName || 'Teacher',
+        last_name: profile?.lastName || '',
+        role: 'teacher',
+      },
+    };
+
+    const updatedMessages = [...dashAIMessages, userMsg];
+    setDashAIMessages(updatedMessages);
+    saveDashAIMessages(updatedMessages);
+    setDashAILoading(true);
+    setTimeout(() => scrollToBottom(), 100);
+
+    try {
+      // Call the AI proxy
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: content.trim(),
+          context: 'teacher_assistant',
+          history: dashAIMessages.slice(-10).map(m => ({
+            role: m.sender_id === DASH_AI_USER_ID ? 'assistant' : 'user',
+            content: m.content,
+          })),
+        }),
+      });
+
+      if (!response.ok) throw new Error('AI request failed');
+
+      const data = await response.json();
+      const aiResponse = data.response || data.message || 'I apologize, I couldn\'t process that request. Please try again.';
+
+      const aiMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: aiResponse,
+        created_at: new Date().toISOString(),
+        sender: {
+          first_name: 'Dash',
+          last_name: 'AI',
+          role: 'ai_assistant',
+        },
+      };
+
+      const finalMessages = [...updatedMessages, aiMsg];
+      setDashAIMessages(finalMessages);
+      saveDashAIMessages(finalMessages);
+    } catch (err) {
+      console.error('Dash AI error:', err);
+      const errorMsg: ChatMessage = {
+        id: `error-${Date.now()}`,
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: 'I\'m having trouble connecting right now. Please try again in a moment. 🔄',
+        created_at: new Date().toISOString(),
+        sender: {
+          first_name: 'Dash',
+          last_name: 'AI',
+          role: 'ai_assistant',
+        },
+      };
+      const errorMessages = [...updatedMessages, errorMsg];
+      setDashAIMessages(errorMessages);
+      saveDashAIMessages(errorMessages);
+    } finally {
+      setDashAILoading(false);
+      setTimeout(() => scrollToBottom(), 100);
+    }
+  }, [dashAIMessages, userId, profile, saveDashAIMessages]);
+
+  // Load Dash AI messages when thread is selected
+  useEffect(() => {
+    if (selectedThreadId === DASH_AI_THREAD_ID) {
+      loadDashAIMessages();
+    }
+  }, [selectedThreadId, loadDashAIMessages]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !selectedThreadId || !userId) return;
+
+    // Handle Dash AI messages separately
+    if (selectedThreadId === DASH_AI_THREAD_ID) {
+      const content = messageText.trim();
+      setMessageText('');
+      await sendDashAIMessage(content);
+      return;
+    }
 
     setSending(true);
     try {
@@ -732,35 +1046,60 @@ function TeacherMessagesPage() {
     }
   };
 
-  const filteredThreads = threads.filter((thread) => {
-    if (!searchQuery) return true;
+  const filteredThreads = (() => {
     const query = searchQuery.toLowerCase();
-    const participants = thread.message_participants || thread.participants || [];
-    const participant = participants.find((p: any) => p.role === 'parent');
-    const participantName = participant?.user_profile
-      ? `${participant.user_profile.first_name} ${participant.user_profile.last_name}`.toLowerCase()
-      : '';
-    const studentName = thread.student
-      ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
-      : '';
-    const lastMessage = thread.last_message?.content.toLowerCase() || '';
+    
+    // Create the Dash AI virtual thread
+    const dashAIThread = createDashAIThread(dashAILastMessage, dashAILastMessageAt);
+    
+    // Filter regular threads
+    const filtered = threads.filter((thread) => {
+      if (!query) return true;
+      const participants = thread.message_participants || thread.participants || [];
+      const participant = participants.find((p: any) => p.role === 'parent');
+      const participantName = participant?.user_profile
+        ? `${participant.user_profile.first_name} ${participant.user_profile.last_name}`.toLowerCase()
+        : '';
+      const studentName = thread.student
+        ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
+        : '';
+      const lastMessage = thread.last_message?.content.toLowerCase() || '';
 
-    return (
-      participantName.includes(query) ||
-      studentName.includes(query) ||
-      lastMessage.includes(query) ||
-      thread.subject.toLowerCase().includes(query)
-    );
-  });
+      return (
+        participantName.includes(query) ||
+        studentName.includes(query) ||
+        lastMessage.includes(query) ||
+        thread.subject.toLowerCase().includes(query)
+      );
+    });
+    
+    // Check if Dash AI matches search
+    const dashAIMatches = !query || 
+      'dash ai'.includes(query) || 
+      'ai assistant'.includes(query) ||
+      'teaching assistant'.includes(query) ||
+      dashAIThread.last_message?.content?.toLowerCase().includes(query);
+    
+    // Always put Dash AI at the top if it matches the search
+    return dashAIMatches ? [dashAIThread, ...filtered] : filtered;
+  })();
 
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
-  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
+  const isDashAISelected = selectedThreadId === DASH_AI_THREAD_ID;
+  const selectedThread = isDashAISelected 
+    ? createDashAIThread(dashAILastMessage, dashAILastMessageAt)
+    : threads.find((thread) => thread.id === selectedThreadId);
   const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
   // Find the other participant (the contact) for the chat header
   const contactParticipant = selectedParticipants?.find((p: any) => p.user_id !== userId) || selectedParticipants?.find((p: any) => p.role === 'parent');
-  const contactName = contactParticipant?.user_profile
-    ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
-    : 'Contact';
+  const contactName = isDashAISelected 
+    ? 'Dash AI' 
+    : contactParticipant?.user_profile
+      ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
+      : 'Contact';
+  
+  // Display messages - use Dash AI messages when that thread is selected
+  const displayMessages = isDashAISelected ? dashAIMessages : messages;
 
   // Message options menu handlers
   const handleDeleteThread = async () => {
@@ -1195,22 +1534,34 @@ function TeacherMessagesPage() {
                     <ArrowLeft size={20} />
                   </button>
                 )}
-                <div
-                  className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-8 h-8 text-[12px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
-                >
-                  {contactName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
-                </div>
+                {isDashAISelected ? (
+                  <div className={`${isDesktop ? 'w-[52px] h-[52px]' : 'w-8 h-8'} flex-shrink-0`}>
+                    <DashAIAvatar size={isDesktop ? 52 : 32} />
+                  </div>
+                ) : (
+                  <div
+                    className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-8 h-8 text-[12px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
+                  >
+                    {contactName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <h3 className={`${isDesktop ? 'text-[18px]' : 'text-[16px]'} m-0 font-bold text-[var(--text)] truncate`}>
                     {contactName}
                   </h3>
-                  {isDesktop && selectedThread.student && (
+                  {isDashAISelected ? (
+                    <p className="mt-1 text-[13px] text-[#8b5cf6] font-medium flex items-center gap-1.5">
+                      <Sparkles size={12} />
+                      <span>AI Teaching Assistant</span>
+                    </p>
+                  ) : isDesktop && selectedThread.student && (
                     <p className="mt-1 text-[13px] text-[var(--cyan)] font-medium flex items-center gap-1.5">
                       <span>📚</span>
                       <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
                     </p>
                   )}
                 </div>
+                {!isDashAISelected && (
                 <div className="flex items-center gap-2">
                   {isDesktop ? (
                     <>
@@ -1270,6 +1621,7 @@ function TeacherMessagesPage() {
                     </>
                   )}
                 </div>
+                )}
               </div>
 
               {/* Mobile: Fixed student name subtitle */}
@@ -1310,11 +1662,11 @@ function TeacherMessagesPage() {
                 }}
               >
                 <div className={`w-full ${isDesktop ? 'max-w-[860px] mx-auto px-3' : 'px-1'}`}>
-                {messagesLoading ? (
+                {(messagesLoading || (isDashAISelected && dashAILoading && dashAIMessages.length === 0)) ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
                     <div className="spinner"></div>
                   </div>
-                ) : messages.length === 0 ? (
+                ) : displayMessages.length === 0 ? (
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1334,25 +1686,29 @@ function TeacherMessagesPage() {
                         width: '72px',
                         height: '72px',
                         borderRadius: '50%',
-                        background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(0, 245, 255, 0.15) 100%)',
+                        background: isDashAISelected 
+                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)'
+                          : 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(0, 245, 255, 0.15) 100%)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         margin: '0 auto 20px',
                       }}>
-                        <Send size={32} color="var(--primary)" />
+                        {isDashAISelected ? <Sparkles size={32} color="#8b5cf6" /> : <Send size={32} color="var(--primary)" />}
                       </div>
                       <p style={{ color: 'var(--text)', fontSize: '17px', fontWeight: '600', marginBottom: '8px' }}>
-                        Start a conversation
+                        {isDashAISelected ? 'Ask Dash anything!' : 'Start a conversation'}
                       </p>
                       <p style={{ color: 'var(--muted)', fontSize: '14px', lineHeight: '1.5' }}>
-                        Send your first message to connect with this parent
+                        {isDashAISelected 
+                          ? 'I can help with lesson plans, activity ideas, parent communication, and more! 🎓'
+                          : 'Send your first message to connect with this parent'}
                       </p>
                     </div>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4">
-                    {messages.map((message) => {
+                    {displayMessages.map((message) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
                         ? `${message.sender.first_name} ${message.sender.last_name}`
@@ -1371,10 +1727,35 @@ function TeacherMessagesPage() {
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
                           hideAvatars={!isDesktop}
-                          onContextMenu={handleMessageContextMenu}
+                          onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
                         />
                       );
                     })}
+                    {/* Dash AI typing indicator */}
+                    {isDashAISelected && dashAILoading && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        marginTop: '8px',
+                      }}>
+                        <div style={{ width: 36, height: 36, flexShrink: 0 }}>
+                          <DashAIAvatar size={36} />
+                        </div>
+                        <div style={{
+                          background: 'rgba(139, 92, 246, 0.15)',
+                          borderRadius: '16px',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}>
+                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0s' }} />
+                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0.2s' }} />
+                          <div className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', animation: 'typing 1.4s infinite', animationDelay: '0.4s' }} />
+                        </div>
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
