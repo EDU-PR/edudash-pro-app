@@ -610,7 +610,9 @@ export default function ParentMessagesPage() {
     }
   };
 
-  const handleMessageContextMenu = (messageId: string, x: number, y: number) => {
+  const handleMessageContextMenu = (e: React.MouseEvent | React.TouchEvent, messageId: string) => {
+    const x = 'clientX' in e ? e.clientX : e.touches?.[0]?.clientX || 0;
+    const y = 'clientY' in e ? e.clientY : e.touches?.[0]?.clientY || 0;
     setSelectedMessageId(messageId);
     setMessageActionsPosition({ x, y });
     setMessageActionsOpen(true);
