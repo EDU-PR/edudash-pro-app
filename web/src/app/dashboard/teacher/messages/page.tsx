@@ -416,7 +416,7 @@ export default function TeacherMessagesPage() {
       console.log('Detailed threads:', threadsWithDetails.map(t => ({
         id: t.id,
         key: getThreadContactKey(t),
-        parent: t.message_participants?.find(p => p.role === 'parent')?.user_profile,
+        parent: t.message_participants?.find((p: any) => p.role === 'parent')?.user_profile,
         student: t.student
       })));
 
@@ -703,7 +703,7 @@ export default function TeacherMessagesPage() {
               height: '100%',
               display: (!isDesktop && selectedThread) ? 'none' : 'flex',
               flexDirection: 'column',
-              background: 'var(--surface)',
+              background: isDesktop ? '#0f172a' : '#0f172a',
               borderLeft: isDesktop ? '1px solid var(--border)' : 'none',
               boxShadow: isDesktop ? '-2px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
               position: isDesktop ? 'relative' : 'fixed',
@@ -720,7 +720,6 @@ export default function TeacherMessagesPage() {
             padding: !isDesktop ? '16px 12px' : '16px',
             borderBottom: !isDesktop ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
-            alignItems: 'center',
             gap: 12,
             position: !isDesktop ? 'fixed' : 'relative',
             top: !isDesktop ? 0 : 'auto',
@@ -937,7 +936,7 @@ export default function TeacherMessagesPage() {
             /* Chat View */
             <>
               {/* Chat Header */}
-              <div className={`${isDesktop ? 'py-7 px-7' : 'py-5 px-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
+              <div className={`${isDesktop ? 'py-7 px-7' : 'py-15 px-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
                 {!isDesktop && (
                   <button
                     onClick={() => setSelectedThreadId(null)}
@@ -1035,11 +1034,11 @@ export default function TeacherMessagesPage() {
               {/* Mobile: Fixed student name subtitle */}
               {!isDesktop && selectedThread.student && (
                 <div 
-                  className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2.5 flex items-center justify-center gap-1.5"
+                  className="fixed top-[40px]  left-0 right-0 z-[999] px-4 py-8 flex items-center justify-center gap-1.5"
                   style={{ background: 'var(--surface)' }}
                 >
                   <span className="text-[13px] text-[var(--cyan)] font-medium">📚</span>
-                  <span className="text-[13px] text-[#cbd5e1] font-medium">
+                  <span className="text-[13px] text-[#cbd5e1] font-medium padding-[8px]">
                     {selectedThread.student.first_name} {selectedThread.student.last_name}
                   </span>
                 </div>
@@ -1063,7 +1062,7 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 28px' : '0px',
-                  paddingTop: !isDesktop ? (selectedThread.student ? '110px' : '80px') : undefined,
+                  paddingTop: !isDesktop ? (selectedThread.student ? '100px' : '80px') : undefined,
                   display: 'flex',
                   flexDirection: 'column',
                   paddingBottom: isDesktop ? undefined : selectedThread.student ? '70px' : '60px',

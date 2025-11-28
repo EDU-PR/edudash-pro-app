@@ -134,7 +134,11 @@ export const useTypingIndicator = ({
         .eq('thread_id', threadId)
         .eq('is_typing', true);
 
-      if (error) throw error;
+      if (error) {
+        console.warn('Error fetching typing users:', error);
+        setTypingUsers([]);
+        return;
+      }
 
       // Filter out stale typing indicators (older than 5 seconds)
       const now = new Date();
@@ -160,7 +164,8 @@ export const useTypingIndicator = ({
 
       setTypingUsers(activeTypers);
     } catch (err) {
-      console.error('Error fetching typing users:', err);
+      console.warn('Caught error in fetchTypingUsers:', err);
+      setTypingUsers([]);
     }
   }, [supabase, threadId, userId]);
 
