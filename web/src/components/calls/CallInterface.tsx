@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 import {
   Phone,
   PhoneOff,
@@ -49,7 +49,7 @@ export const CallInterface = ({
   isIncoming = false,
   incomingCallId,
 }: CallInterfaceProps) => {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentCallId, setCurrentCallId] = useState<string | null>(incomingCallId || null);
   const [callState, setCallState] = useState<CallState>('idle');
@@ -218,7 +218,7 @@ export const CallInterface = ({
           table: 'call_signals',
           filter: `to_user_id=eq.${currentUserId}`,
         },
-        (payload) => {
+        (payload: { new: { call_id: string; [key: string]: unknown } }) => {
           if (payload.new.call_id === currentCallId) {
             handleSignal(payload.new);
           }

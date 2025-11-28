@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 import { CallInterface } from './CallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
 
@@ -38,7 +38,7 @@ interface CallProviderProps {
 }
 
 export function CallProvider({ children }: CallProviderProps) {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [incomingCall, setIncomingCall] = useState<ActiveCall | null>(null);
   const [isCallInterfaceOpen, setIsCallInterfaceOpen] = useState(false);
@@ -57,7 +57,7 @@ export function CallProvider({ children }: CallProviderProps) {
     };
     getUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: { user?: { id: string } } | null) => {
       setCurrentUserId(session?.user?.id || null);
     });
 
@@ -78,7 +78,7 @@ export function CallProvider({ children }: CallProviderProps) {
           table: 'active_calls',
           filter: `callee_id=eq.${currentUserId}`,
         },
-        async (payload) => {
+        async (payload: { new: ActiveCall }) => {
           const call = payload.new as ActiveCall;
           if (call.status === 'ringing') {
             // Fetch caller name from profiles
@@ -104,7 +104,7 @@ export function CallProvider({ children }: CallProviderProps) {
           table: 'active_calls',
           filter: `callee_id=eq.${currentUserId}`,
         },
-        (payload) => {
+        (payload: { new: ActiveCall }) => {
           const call = payload.new as ActiveCall;
           if (call.status === 'ended' || call.status === 'rejected' || call.status === 'missed') {
             if (incomingCall?.call_id === call.call_id) {
