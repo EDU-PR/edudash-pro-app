@@ -392,13 +392,21 @@ export default function ParentMessagesPage() {
     const educatorUserId = educator?.user_id;
     const studentKey = thread.student_id || 'no-student';
     
+    console.log('🔍 Thread dedup key:', {
+      threadId: thread.id,
+      participants: participants.map(p => ({ role: p.role, userId: p.user_id })),
+      educatorUserId,
+      studentKey,
+      finalKey: educatorUserId ? `${educatorUserId}:${studentKey}` : `thread:${thread.id}`
+    });
+    
     // Use educator user_id + student_id as key for proper deduplication
     if (educatorUserId) {
       return `${educatorUserId}:${studentKey}`;
     }
     
     // Fallback only if no educator found
-    console.warn('No educator found in thread:', thread.id, participants);
+    console.warn('⚠️  No educator found in thread:', thread.id, participants);
     return `thread:${thread.id}`;
   };
 
@@ -659,6 +667,16 @@ export default function ParentMessagesPage() {
 
       if (messagesError) throw messagesError;
 
+      // Delete message_participants
+      const { error: participantsError } = await supabase
+        .from('message_participants')
+        .delete()
+        .eq('thread_id', threadId);
+
+      if (participantsError) {
+        console.warn('Error deleting participants (may not exist):', participantsError);
+      }
+
       // Then delete the thread itself
       const { error: threadError } = await supabase
         .from('message_threads')
@@ -675,7 +693,7 @@ export default function ParentMessagesPage() {
         setSelectedThreadId(null);
       }
 
-      console.log('✅ Thread and messages deleted:', threadId);
+      console.log('✅ Thread, messages, and participants deleted:', threadId);
     } catch (err: any) {
       console.error('Error deleting thread:', err);
       alert('Failed to delete conversation. Please try again.');
