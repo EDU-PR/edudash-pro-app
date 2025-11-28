@@ -15,7 +15,10 @@ import {
   VolumeX,
 } from 'lucide-react';
 
-type CallState = 'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed';
+type CallState = 'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed' | 'no-answer';
+
+// Call timeout in milliseconds (30 seconds)
+const CALL_TIMEOUT_MS = 30000;
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -65,6 +68,8 @@ export const CallInterface = ({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([]);
 
   // Get current user
@@ -75,6 +80,32 @@ export const CallInterface = ({
     };
     getUser();
   }, [supabase]);
+
+  // Play/stop ringback tone when ringing
+  useEffect(() => {
+    if (callState === 'ringing' && !isIncoming) {
+      // Play ringback tone for outgoing calls
+      if (!ringbackAudioRef.current) {
+        ringbackAudioRef.current = new Audio('/sounds/ringback.mp3');
+        ringbackAudioRef.current.loop = true;
+        ringbackAudioRef.current.volume = 0.5;
+      }
+      ringbackAudioRef.current.play().catch(console.warn);
+    } else {
+      // Stop ringback tone
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current.currentTime = 0;
+      }
+    }
+
+    return () => {
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current.currentTime = 0;
+      }
+    };
+  }, [callState, isIncoming]);
 
   // Format call duration
   const formatDuration = useCallback((seconds: number): string => {
@@ -309,21 +340,96 @@ export const CallInterface = ({
       setCallState('ringing');
       onCallStart?.();
 
-      // Timeout: End call if not answered in 45 seconds
-      setTimeout(() => {
-        if (callState === 'ringing') {
-          endCall();
-          setError('No answer');
-        }
-      }, 45000);
+      // Note: Call timeout is handled in a separate useEffect to properly track state
     } catch (err) {
       console.error('Error starting call:', err);
       setCallState('failed');
     }
-  }, [currentUserId, remoteUserId, initialCallType, supabase, initializeLocalStream, createPeerConnection, sendSignal, onCallStart, callState]);
+  }, [currentUserId, remoteUserId, initialCallType, supabase, initializeLocalStream, createPeerConnection, sendSignal, onCallStart]);
+
+  // Call timeout handler - tracks state properly
+  useEffect(() => {
+    if (callState === 'ringing' && !isIncoming && currentCallId && remoteUserId && currentUserId) {
+      // Set timeout for unanswered call
+      callTimeoutRef.current = setTimeout(async () => {
+        console.log('Call timeout - no answer');
+        
+        // Update call status to missed
+        await supabase
+          .from('active_calls')
+          .update({ status: 'missed', ended_at: new Date().toISOString() })
+          .eq('call_id', currentCallId);
+
+        // Get caller name for notification
+        const { data: callerProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', currentUserId)
+          .single();
+        
+        const callerName = callerProfile 
+          ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+          : 'Someone';
+
+        // Send missed call notification
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: remoteUserId,
+              title: 'Missed Call',
+              body: `You missed a call from ${callerName}`,
+              tag: `missed-call-${currentCallId}`,
+              type: 'message',
+              data: {
+                url: '/dashboard/parent/messages',
+                callId: currentCallId,
+                callerId: currentUserId,
+                callerName,
+              },
+            }),
+          });
+        } catch (err) {
+          console.warn('Failed to send missed call notification:', err);
+        }
+
+        setCallState('no-answer');
+        setError('No answer');
+        
+        // Cleanup
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach((track) => track.stop());
+          localStreamRef.current = null;
+        }
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close();
+          peerConnectionRef.current = null;
+        }
+        
+        // Close interface after showing no-answer state
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      }, CALL_TIMEOUT_MS);
+
+      return () => {
+        if (callTimeoutRef.current) {
+          clearTimeout(callTimeoutRef.current);
+          callTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [callState, isIncoming, currentCallId, remoteUserId, currentUserId, supabase, onClose]);
 
   // End call
   const endCall = useCallback(async () => {
+    // Clear call timeout if active
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+
     // Signal the other party
     if (currentCallId && remoteUserId && currentUserId) {
       await sendSignal(remoteUserId, 'call-ended', { reason: 'ended' }, currentCallId);
@@ -333,6 +439,12 @@ export const CallInterface = ({
         .from('active_calls')
         .update({ status: 'ended', ended_at: new Date().toISOString() })
         .eq('call_id', currentCallId);
+    }
+
+    // Stop ringback audio
+    if (ringbackAudioRef.current) {
+      ringbackAudioRef.current.pause();
+      ringbackAudioRef.current.currentTime = 0;
     }
 
     // Stop local stream
@@ -412,6 +524,13 @@ export const CallInterface = ({
       }
       if (callTimerRef.current) {
         clearInterval(callTimerRef.current);
+      }
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+      }
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current = null;
       }
     };
   }, []);
@@ -550,6 +669,7 @@ export const CallInterface = ({
             {callState === 'ringing' && 'Ringing...'}
             {callState === 'connected' && formatDuration(callDuration)}
             {callState === 'ended' && 'Call ended'}
+            {callState === 'no-answer' && 'No answer'}
             {callState === 'failed' && (error || 'Call failed')}
           </p>
         </div>

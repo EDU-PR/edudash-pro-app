@@ -19,14 +19,27 @@ export function IncomingCallOverlay({
   isVisible,
 }: IncomingCallOverlayProps) {
   const [ringCount, setRingCount] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
 
   // Play ringtone and vibrate
   useEffect(() => {
     if (!isVisible) {
       setRingCount(0);
+      // Stop ringtone
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
       return;
     }
+
+    // Play ringtone
+    if (!ringtoneRef.current) {
+      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
+      ringtoneRef.current.loop = true;
+      ringtoneRef.current.volume = 0.7;
+    }
+    ringtoneRef.current.play().catch(console.warn);
 
     // Try to vibrate (mobile devices)
     if ('vibrate' in navigator) {
@@ -38,8 +51,19 @@ export function IncomingCallOverlay({
       return () => {
         clearInterval(interval);
         navigator.vibrate(0);
+        if (ringtoneRef.current) {
+          ringtoneRef.current.pause();
+          ringtoneRef.current.currentTime = 0;
+        }
       };
     }
+
+    return () => {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
+    };
   }, [isVisible]);
 
   // Visual pulse effect counter
