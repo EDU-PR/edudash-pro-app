@@ -22,6 +22,7 @@ import {
   BookMarked,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 
 interface TeacherShellProps {
   tenantSlug?: string;
@@ -120,7 +121,7 @@ export function TeacherShell({
   return (
     <div className="app">
       {!hideHeader && (
-        <header className="topbar">
+        <header className="topbar" style={{ paddingTop: 5, paddingBottom: 5 }}>
           <div className="topbarRow topbarEdge">
             <div className="leftGroup">
               <button 
@@ -432,6 +433,9 @@ export function TeacherShell({
           </div>
         </>
       )}
+
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt />
 
       <style jsx>{`
         @media (max-width: 1023px) {
