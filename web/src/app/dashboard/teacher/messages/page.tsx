@@ -631,7 +631,7 @@ export default function TeacherMessagesPage() {
             setRefreshTrigger(prev => prev + 1);
             alert('Message updated!');
           })
-          .catch((err) => {
+          .catch((err: any) => {
             console.error('Error editing message:', err);
             alert('Failed to edit message.');
           });
