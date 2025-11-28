@@ -92,7 +92,7 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   return (
     <div
       onClick={onSelect}
-      className={`p-3 mb-2 rounded-[12px] cursor-pointer flex gap-3 items-center transition ${isActive ? 'bg-[var(--surface-2)] border border-[var(--primary)] shadow-[0_2px_12px_rgba(124,58,237,0.15)]' : 'border border-transparent hover:bg-[var(--surface)]'}`}
+      className={`p-4 mb-3 rounded-[14px] cursor-pointer flex gap-4 items-center transition ${isActive ? 'bg-[var(--surface-2)] border border-[var(--primary)] shadow-[0_2px_12px_rgba(124,58,237,0.15)]' : 'border border-transparent hover:bg-[var(--surface)]'}`}
     >
       <div
         className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0 ${isActive ? 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.3)]' : 'bg-[var(--surface-2)]'}`}
@@ -100,8 +100,8 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
         {getInitials(parentName)}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className={`text-[14px] ${hasUnread ? 'font-bold' : 'font-semibold'} truncate text-[var(--text)]`}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className={`text-[15px] ${hasUnread ? 'font-bold' : 'font-semibold'} truncate text-[var(--text)]`}>
             {parentName}
           </span>
           {thread.last_message?.created_at && (
@@ -111,9 +111,9 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
           )}
         </div>
         {studentName && (
-          <p className="m-0 mb-1 text-[12px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
+          <p className="m-0 mb-1.5 text-[13px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
         )}
-        <p className={`m-0 text-[13px] truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'}`}>
+        <p className={`m-0 text-[14px] truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'} leading-relaxed`}>
           {thread.last_message?.content || 'No messages yet'}
         </p>
       </div>
@@ -289,11 +289,11 @@ export default function TeacherMessagesPage() {
   const getThreadContactKey = (thread: MessageThread) => {
     const participants = thread.message_participants || thread.participants || [];
     const parentParticipant = participants.find((p) => p.role === 'parent');
-    if (!parentParticipant?.user_id) {
+    if (!parentParticipant?.user_profile) {
       return `thread:${thread.id}`;
     }
-    const studentKey = thread.student_id || 'no-student';
-    return `${parentParticipant.user_id}:${studentKey}`;
+    // Use parent email as the unique identifier for deduplication
+    return `parent:${parentParticipant.user_id}`;
   };
 
   const getThreadRecencyValue = (thread: MessageThread) => {
@@ -413,6 +413,12 @@ export default function TeacherMessagesPage() {
       console.log('Threads before dedup:', threadsWithDetails.length);
       console.log('Threads after dedup:', uniqueThreads.length);
       console.log('Thread keys:', Array.from(uniqueParentThreadMap.keys()));
+      console.log('Detailed threads:', threadsWithDetails.map(t => ({
+        id: t.id,
+        key: getThreadContactKey(t),
+        parent: t.message_participants?.find(p => p.role === 'parent')?.user_profile,
+        student: t.student
+      })));
 
       setThreads(uniqueThreads);
 
@@ -710,19 +716,55 @@ export default function TeacherMessagesPage() {
             }}
           >
           {/* Sidebar Header */}
-          <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-2)] shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center justify-between mb-4">
+          <div style={{
+            padding: !isDesktop ? '16px 12px' : '16px',
+            borderBottom: !isDesktop ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            position: !isDesktop ? 'fixed' : 'relative',
+            top: !isDesktop ? 0 : 'auto',
+            left: !isDesktop ? 0 : 'auto',
+            right: !isDesktop ? 0 : 'auto',
+            background: !isDesktop ? '#111827' : 'var(--surface-2)',
+            backdropFilter: !isDesktop ? 'blur(12px)' : 'none',
+            boxShadow: !isDesktop ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0_2px_8px_rgba(0,0,0,0.05)',
+            zIndex: !isDesktop ? 1000 : 'auto',
+            flexDirection: 'column',
+            alignItems: 'stretch'
+          }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
               {!isDesktop && (
                 <button
                   onClick={() => router.push('/dashboard/teacher')}
-                  className="w-9 h-9 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center cursor-pointer text-[var(--text)]"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    padding: 0,
+                  }}
                 >
-                  <ArrowLeft size={20} />
+                  <ArrowLeft size={22} />
                 </button>
               )}
-              <h3 className={`m-0 text-[18px] font-bold text-[var(--text)] flex-1 ${!isDesktop ? 'text-center' : 'text-left'}`}>
-                Messages
-              </h3>
+              <h2 style={{ 
+                fontSize: 20, 
+                fontWeight: 700, 
+                color: 'var(--text-primary)', 
+                margin: 0,
+                flex: 1,
+                textAlign: !isDesktop ? 'left' : 'left',
+                marginLeft: !isDesktop ? 0 : 0
+              }}>
+                {!isDesktop ? 'Contacts' : 'Messages'}
+              </h2>
               {totalUnread > 0 && (
                 <span className="bg-[var(--primary)] text-white text-[12px] font-bold px-2.5 py-1 rounded-[12px] shadow-[0_2px_8px_rgba(124,58,237,0.3)]">
                   {totalUnread}
@@ -734,20 +776,40 @@ export default function TeacherMessagesPage() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search conversations..."
+                placeholder={!isDesktop ? "Search..." : "Search conversations..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] text-[14px] outline-none transition"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 40px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text-primary)',
+                  fontSize: 15,
+                  outline: 'none'
+                }}
               />
               <Search
                 size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted)',
+                }}
               />
             </div>
           </div>
 
           {/* Threads List */}
-          <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+          <div className="hide-scrollbar" style={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            padding: '12px',
+            paddingTop: !isDesktop ? '136px' : '12px'
+          }}>
             {threadsLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
                 <div className="spinner"></div>
@@ -875,7 +937,7 @@ export default function TeacherMessagesPage() {
             /* Chat View */
             <>
               {/* Chat Header */}
-              <div className={`${isDesktop ? 'py-5 px-7' : 'p-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
+              <div className={`${isDesktop ? 'py-7 px-7' : 'py-5 px-4'} ${isDesktop ? 'border-b border-[var(--border)]' : ''} bg-[var(--surface)] [backdrop-filter:blur(12px)] flex items-center gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] ${isDesktop ? 'sticky' : 'fixed'} ${isDesktop ? 'top-0' : 'top-0'} z-10 w-full ${isDesktop ? '' : 'left-0 right-0'}`}>
                 {!isDesktop && (
                   <button
                     onClick={() => setSelectedThreadId(null)}
@@ -1001,7 +1063,7 @@ export default function TeacherMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   padding: isDesktop ? '24px 28px' : '0px',
-                  paddingTop: !isDesktop ? (selectedThread.student ? '116px' : '88px') : undefined,
+                  paddingTop: !isDesktop ? (selectedThread.student ? '110px' : '80px') : undefined,
                   display: 'flex',
                   flexDirection: 'column',
                   paddingBottom: isDesktop ? undefined : selectedThread.student ? '70px' : '60px',

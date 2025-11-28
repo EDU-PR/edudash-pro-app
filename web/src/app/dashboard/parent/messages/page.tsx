@@ -390,24 +390,15 @@ export default function ParentMessagesPage() {
     const participants = thread.message_participants || [];
     const educator = participants.find((p) => p.role !== 'parent');
     const educatorUserId = educator?.user_id;
-    const studentKey = thread.student_id || 'no-student';
     
-    console.log('🔍 Thread dedup key:', {
-      threadId: thread.id,
-      participants: participants.map(p => ({ role: p.role, userId: p.user_id })),
-      educatorUserId,
-      studentKey,
-      finalKey: educatorUserId ? `${educatorUserId}:${studentKey}` : `thread:${thread.id}`
-    });
-    
-    // Use educator user_id + student_id as key for proper deduplication
-    if (educatorUserId) {
-      return `${educatorUserId}:${studentKey}`;
+    if (!educatorUserId) {
+      console.warn('⚠️  No educator found in thread:', thread.id, participants);
+      return `thread:${thread.id}`;
     }
     
-    // Fallback only if no educator found
-    console.warn('⚠️  No educator found in thread:', thread.id, participants);
-    return `thread:${thread.id}`;
+    // Use educator user_id as the unique identifier for deduplication
+    // This ensures one conversation per educator (teacher/principal) regardless of students
+    return `educator:${educatorUserId}`;
   };
 
   const getThreadRecencyValue = (thread: MessageThread) => {
@@ -871,7 +862,7 @@ export default function ParentMessagesPage() {
             flexDirection: 'column',
             position: 'relative',
             overflow: 'hidden',
-            marginRight: isDesktop ? 280 : 0,
+            marginRight: 0,
           }}
         >
           {/* Mobile: Show thread list when no selection, otherwise show chat */}
@@ -1584,7 +1575,7 @@ export default function ParentMessagesPage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                paddingRight: 320,
+                paddingRight: 0,
                 background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
               }}
             >
@@ -1626,7 +1617,7 @@ export default function ParentMessagesPage() {
           )}
         </div>
 
-        {isDesktop && (
+        {false && isDesktop && (
           <div
             style={{
               position: 'fixed',

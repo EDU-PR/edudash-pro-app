@@ -198,7 +198,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
     if (!teacherId) return;
     
     try {
-      // Check if thread exists - get all threads for this student and filter client-side
+      // Check if thread exists between this parent and teacher (regardless of student)
       const { data: allThreads } = await supabase
         .from('message_threads')
         .select(`
@@ -206,7 +206,6 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
           message_participants!inner(user_id, role)
         `)
         .eq('preschool_id', preschoolId)
-        .eq('student_id', student.id)
         .eq('type', 'parent-teacher');
       
       let threadId: string | null = null;
@@ -320,7 +319,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
 
   return (
     <div className="card" style={{ padding: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Users size={24} color="var(--primary)" />
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Parent Contacts</h3>
@@ -420,7 +419,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
                   <User size={20} color="var(--primary)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 1 }}>
                     <h4 style={{ 
                       margin: 0, 
                       fontSize: 15, 
