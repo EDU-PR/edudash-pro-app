@@ -1319,12 +1319,12 @@ function TeacherMessagesPage() {
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
+                          className="w-[38px] h-[38px] rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
                           aria-label="Emoji"
                         >
                           <Smile size={20} />
                         </button>
-                        <div className="flex flex-row items-end flex-1 gap-4 px-5 py-4 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
+                        <div className="flex flex-row items-end flex-1 min-w-0 gap-2 px-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
                           {/* Textarea */}
                           <textarea
                             value={messageText}
@@ -1339,7 +1339,7 @@ function TeacherMessagesPage() {
                             placeholder="Type a message"
                             disabled={sending || attachmentUploading}
                             rows={1}
-                            className="flex-1 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0"
+                            className="flex-1 min-w-0 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0"
                             style={{ height: '36px', border: 'none', outline: 'none', paddingBottom: '10px' }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
@@ -1379,7 +1379,7 @@ function TeacherMessagesPage() {
                           <button
                             type="submit"
                             disabled={sending || attachmentUploading}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
                           >
                             {sending || attachmentUploading ? (
                               <Loader2 size={16} className="animate-spin" color="white" />
@@ -1391,7 +1391,7 @@ function TeacherMessagesPage() {
                           <button
                             type="button"
                             onClick={handleMicClick}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                           >
                             <Mic size={18} color="white" />
                           </button>

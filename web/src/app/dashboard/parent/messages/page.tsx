@@ -1567,14 +1567,14 @@ export default function ParentMessagesPage() {
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker((prev) => !prev)}
-                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
+                          className="w-[38px] h-[38px] rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
                         >
                           <Smile size={20} />
                         </button>
                       )}
 
                       {/* Flex row container for mobile */}
-                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 gap-4 px-5 py-4 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]' : ''}>
+                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 min-w-0 gap-2 px-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]' : ''}>
                         <textarea
                           value={messageText}
                           onChange={(e) => {
@@ -1590,7 +1590,7 @@ export default function ParentMessagesPage() {
                           placeholder="Type a message"
                           disabled={sending || attachmentUploading}
                           rows={1}
-                          className={!isDesktop ? 'flex-1 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0' : ''}
+                          className={!isDesktop ? 'flex-1 min-w-0 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0' : ''}
                           style={isDesktop ? {
                             width: '100%',
                             padding: '14px 20px',
@@ -1645,7 +1645,7 @@ export default function ParentMessagesPage() {
                           <button
                             type="submit"
                             disabled={sending || attachmentUploading}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
                           >
                             {sending || attachmentUploading ? (
                               <Loader2 size={16} className="animate-spin" color="white" />
@@ -1657,7 +1657,7 @@ export default function ParentMessagesPage() {
                             <button
                               type="button"
                               onClick={handleMicClick}
-                              className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                              className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                             >
                               <Mic size={18} color="white" />
                             </button>
