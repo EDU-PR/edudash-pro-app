@@ -144,6 +144,7 @@ export default function TeacherMessagesPage() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -196,6 +197,7 @@ export default function TeacherMessagesPage() {
     isRecording,
     handleMicClick,
     statusMessage,
+    uploadProgress,
   } = useComposerEnhancements({
     supabase,
     threadId: selectedThreadId,
@@ -1003,6 +1005,14 @@ export default function TeacherMessagesPage() {
                   className="hidden"
                   onChange={handleAttachmentChange}
                 />
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={cameraInputRef}
+                  className="hidden"
+                  onChange={handleAttachmentChange}
+                />
                 <form onSubmit={handleSendMessage} className="relative" style={{ marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div
@@ -1085,7 +1095,9 @@ export default function TeacherMessagesPage() {
                           {!messageText.trim() && (
                             <button
                               type="button"
-                              className="text-[var(--muted)] shrink-0 mb-1"
+                              onClick={() => cameraInputRef.current?.click()}
+                              disabled={attachmentUploading}
+                              className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                               aria-label="Camera"
                             >
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1158,6 +1170,20 @@ export default function TeacherMessagesPage() {
                   <p className="mt-2.5 text-[13px] text-[var(--danger)] text-center">
                     {statusMessage}
                   </p>
+                )}
+                {attachmentUploading && uploadProgress !== null && (
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-center gap-2 text-[13px] text-[var(--muted)] mb-1.5">
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Uploading... {Math.round(uploadProgress)}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-[var(--surface-2)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--primary)] transition-all duration-300 rounded-full"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
                 </div>
               </div>

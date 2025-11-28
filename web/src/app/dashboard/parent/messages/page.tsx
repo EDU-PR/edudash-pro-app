@@ -251,6 +251,7 @@ export default function ParentMessagesPage() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
@@ -274,6 +275,7 @@ export default function ParentMessagesPage() {
     isRecording,
     handleMicClick,
     statusMessage,
+    uploadProgress,
   } = useComposerEnhancements({
     supabase,
     threadId: selectedThreadId,
@@ -1080,6 +1082,14 @@ export default function ParentMessagesPage() {
                   style={{ display: 'none' }}
                   onChange={handleAttachmentChange}
                 />
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={cameraInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleAttachmentChange}
+                />
                 <form onSubmit={handleSendMessage} style={{ position: 'relative', marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div
@@ -1223,7 +1233,12 @@ export default function ParentMessagesPage() {
                         {!isDesktop && (
                           <>
                             {!messageText.trim() && (
-                              <button type="button" className="text-[var(--muted)] shrink-0 mb-1">
+                              <button
+                                type="button"
+                                onClick={() => cameraInputRef.current?.click()}
+                                disabled={attachmentUploading}
+                                className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                                   <circle cx="12" cy="13" r="4"/>
@@ -1330,6 +1345,25 @@ export default function ParentMessagesPage() {
                 </form>
                 {statusMessage && (
                   <p style={{ marginTop: 10, fontSize: 13, color: '#f87171', textAlign: 'center' }}>{statusMessage}</p>
+                )}
+                {attachmentUploading && uploadProgress !== null && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, color: '#94a3b8', marginBottom: 6 }}>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Uploading... {Math.round(uploadProgress)}%</span>
+                    </div>
+                    <div style={{ width: '100%', height: 6, background: 'rgba(100, 116, 139, 0.2)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                          transition: 'width 0.3s ease',
+                          width: `${uploadProgress}%`,
+                          borderRadius: 3,
+                        }}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             </>
