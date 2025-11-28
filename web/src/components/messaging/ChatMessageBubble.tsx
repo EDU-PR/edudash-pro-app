@@ -1,5 +1,6 @@
 import { parseMessageContent } from '@/lib/messaging/messageContent';
 import { User } from 'lucide-react';
+import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 
 // Add CSS animation for pulsing glow
 if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styles')) {
@@ -30,6 +31,7 @@ if (typeof document !== 'undefined' && !document.querySelector('#pulse-glow-styl
 
 export interface ChatMessage {
   id: string;
+  thread_id?: string;
   sender_id: string;
   content: string;
   created_at: string;
@@ -54,6 +56,7 @@ interface ChatMessageBubbleProps {
   otherParticipantIds?: string[];
   hideAvatars?: boolean;
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
+  isDashAI?: boolean;
 }
 
 // WhatsApp-style tick component
@@ -118,6 +121,7 @@ export const ChatMessageBubble = ({
   otherParticipantIds = [],
   hideAvatars = false,
   onContextMenu,
+  isDashAI = false,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
   
@@ -149,11 +153,15 @@ export const ChatMessageBubble = ({
   // Improved color scheme for better contrast and distinction
   const bubbleBackground = isOwn
     ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
-    : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)';
+    : isDashAI
+      ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(236, 72, 153, 0.1) 100%)'
+      : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)';
   const bubbleColor = isOwn ? '#ffffff' : '#e2e8f0';
   const bubbleBorder = isOwn 
     ? '1px solid rgba(59, 130, 246, 0.3)' 
-    : '1px solid rgba(148, 163, 184, 0.2)';
+    : isDashAI
+      ? '1px solid rgba(168, 85, 247, 0.3)'
+      : '1px solid rgba(148, 163, 184, 0.2)';
   const elevation = isOwn
     ? isDesktop
       ? '0 4px 16px rgba(59, 130, 246, 0.25), 0 2px 8px rgba(37, 99, 235, 0.15)'
@@ -234,36 +242,40 @@ export const ChatMessageBubble = ({
         display: 'flex',
         justifyContent: isOwn ? 'flex-end' : 'flex-start',
         maxWidth: '100%',
-        paddingLeft: isDesktop ? 8 : (isOwn ? 0 : 6),
-        paddingRight: isDesktop ? 280 : (isOwn ? 6 : 0),
+        paddingLeft: isDesktop ? 8 : (isOwn ? 0 : 10),
+        paddingRight: isDesktop ? 280 : (isOwn ? 10 : 0),
         gap: 8,
         alignItems: 'flex-end',
       }}
     >
       {/* Avatar for received messages */}
       {!hideAvatars && !isOwn && (
-        <div
-          style={{
-            width: isDesktop ? 36 : 32,
-            height: isDesktop ? 36 : 32,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
-            marginBottom: 2,
-          }}
-        >
-          {senderName ? (
-            <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
-              {getInitials(senderName)}
-            </span>
-          ) : (
-            <User size={isDesktop ? 18 : 16} color="#fff" />
-          )}
-        </div>
+        isDashAI ? (
+          <DashAIAvatar size={isDesktop ? 36 : 32} showStars={true} animated={false} />
+        ) : (
+          <div
+            style={{
+              width: isDesktop ? 36 : 32,
+              height: isDesktop ? 36 : 32,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+              marginBottom: 2,
+            }}
+          >
+            {senderName ? (
+              <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
+                {getInitials(senderName)}
+              </span>
+            ) : (
+              <User size={isDesktop ? 18 : 16} color="#fff" />
+            )}
+          </div>
+        )
       )}
       
       <div

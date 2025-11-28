@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
@@ -14,7 +14,10 @@ import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
-import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image } from 'lucide-react';
+import { DashAIAvatar, DashAILoading } from '@/components/dash/DashAIAvatar';
+import { InviteContactModal } from '@/components/messaging/InviteContactModal';
+import { NewChatModal } from '@/components/messaging/NewChatModal';
+import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image, Plus, Sparkles } from 'lucide-react';
 
 interface ParticipantProfile {
   first_name: string;
@@ -45,6 +48,40 @@ interface MessageThread {
   };
   unread_count?: number;
 }
+
+// Dash AI Virtual Contact Constants
+const DASH_AI_THREAD_ID = 'dash-ai-assistant';
+const DASH_AI_USER_ID = 'dash-ai-system';
+
+// Create virtual Dash AI thread that appears as a contact
+const createDashAIThread = (lastMessage?: string, lastMessageAt?: string): MessageThread => ({
+  id: DASH_AI_THREAD_ID,
+  type: 'dash_ai',
+  subject: 'Dash AI',
+  student_id: null,
+  last_message_at: lastMessageAt || new Date().toISOString(),
+  message_participants: [
+    {
+      user_id: DASH_AI_USER_ID,
+      role: 'ai_assistant',
+      profiles: {
+        first_name: 'Dash',
+        last_name: 'AI',
+        role: 'ai_assistant',
+      },
+    },
+  ],
+  last_message: lastMessage ? {
+    content: lastMessage,
+    created_at: lastMessageAt || new Date().toISOString(),
+    sender_id: DASH_AI_USER_ID,
+  } : {
+    content: 'Hi! I\'m Dash, your AI assistant. How can I help you today? 🌟',
+    created_at: new Date().toISOString(),
+    sender_id: DASH_AI_USER_ID,
+  },
+  unread_count: 0,
+});
 
 const CONTACT_PANEL_WIDTH = 296;
 
@@ -78,18 +115,61 @@ interface ThreadItemProps {
   onSelect: () => void;
   onDelete: (threadId: string) => void;
   isDesktop: boolean;
+  currentUserId?: string;
 }
 
-const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadItemProps) => {
+// Message status ticks component for thread list
+const ThreadMessageTicks = ({ 
+  lastMessage, 
+  participants, 
+  currentUserId 
+}: { 
+  lastMessage?: MessageThread['last_message']; 
+  participants: MessageThread['message_participants'];
+  currentUserId?: string;
+}) => {
+  if (!lastMessage || !currentUserId) return null;
+  
+  // Only show ticks for messages WE sent
+  const isOwnMessage = lastMessage.sender_id === currentUserId;
+  if (!isOwnMessage) return null;
+  
+  // Find other participant (not us)
+  const otherParticipant = participants?.find(p => p.user_id !== currentUserId);
+  if (!otherParticipant) return null;
+  
+  // Check if they've read it (their last_read_at is after message created_at)
+  const messageTime = new Date(lastMessage.created_at).getTime();
+  const readTime = otherParticipant.last_read_at ? new Date(otherParticipant.last_read_at).getTime() : 0;
+  const isRead = readTime >= messageTime;
+  
+  return (
+    <span style={{ 
+      fontSize: 13, 
+      fontWeight: 600,
+      color: isRead ? '#34d399' : 'rgba(148, 163, 184, 0.6)',
+      letterSpacing: '-3px',
+      marginRight: 4,
+      flexShrink: 0,
+    }}>
+      ✓✓
+    </span>
+  );
+};
+
+const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUserId }: ThreadItemProps) => {
+  // Check if this is the Dash AI thread
+  const isDashAI = thread.id === DASH_AI_THREAD_ID || thread.type === 'dash_ai';
+  
   const participants = thread.message_participants || [];
   const educator = participants.find((p) => {
     const role = p.role || p.profiles?.role;
     return role !== 'parent';
   });
-  const educatorName = educator?.profiles
+  const educatorName = isDashAI ? 'Dash AI' : (educator?.profiles
     ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.trim()
-    : 'Teacher';
-  const educatorRole = educator?.profiles?.role || educator?.role || 'teacher';
+    : 'Teacher');
+  const educatorRole = isDashAI ? 'ai_assistant' : (educator?.profiles?.role || educator?.role || 'teacher');
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
@@ -112,7 +192,9 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadI
         padding: '12px 16px',
         cursor: 'pointer',
         background: isActive 
-          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
+          ? isDashAI 
+            ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
           : 'transparent',
         borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
         display: 'flex',
@@ -123,7 +205,9 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadI
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
-          e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+          e.currentTarget.style.background = isDashAI 
+            ? 'rgba(168, 85, 247, 0.1)' 
+            : 'rgba(30, 41, 59, 0.6)';
         }
       }}
       onMouseLeave={(e) => {
@@ -132,47 +216,77 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadI
         }
       }}
     >
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          background: isActive 
-            ? educatorRole === 'principal' 
-              ? 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)' 
-              : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
-            : educatorRole === 'principal'
-              ? 'linear-gradient(135deg, #6d28d9 0%, #581c87 100%)'
-              : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          color: '#fff',
-          fontSize: 13,
-          fontWeight: 600,
-          transition: 'all 0.2s ease',
-        }}
-      >
-        {educatorRole === 'principal' ? <School size={16} /> : getInitials(educatorName)}
-      </div>
+      {/* Avatar - Dash AI gets special avatar */}
+      {isDashAI ? (
+        <DashAIAvatar size={36} showStars={true} animated={isActive} />
+      ) : (
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            background: isActive 
+              ? educatorRole === 'principal' 
+                ? 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)' 
+                : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
+              : educatorRole === 'principal'
+                ? 'linear-gradient(135deg, #6d28d9 0%, #581c87 100%)'
+                : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: '#fff',
+            fontSize: 13,
+            fontWeight: 600,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {educatorRole === 'principal' ? <School size={16} /> : getInitials(educatorName)}
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: hasUnread ? 700 : 600,
-              color: hasUnread ? '#f1f5f9' : '#e2e8f0',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              letterSpacing: '0.01em',
-            }}
-          >
-            {educatorName}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: hasUnread ? 700 : 600,
+                color: isDashAI ? '#e879f9' : (hasUnread ? '#f1f5f9' : '#e2e8f0'),
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.01em',
+              }}
+            >
+              {educatorName}
+            </span>
+            {isDashAI && (
+              <span style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: '#a855f7',
+                background: 'rgba(168, 85, 247, 0.15)',
+                padding: '2px 6px',
+                borderRadius: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}>
+                AI
+              </span>
+            )}
+          </div>
         </div>
-        {studentName && (
+        {isDashAI ? (
+          <p style={{
+            margin: '0 0 2px 0',
+            fontSize: 11,
+            color: '#22d3ee',
+            fontWeight: 500,
+          }}>
+            ✨ Your AI Assistant
+          </p>
+        ) : studentName && (
           <p
             style={{
               margin: '0 0 2px 0',
@@ -187,7 +301,13 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadI
             📚 {studentName}
           </p>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Ticks for own messages */}
+          <ThreadMessageTicks 
+            lastMessage={thread.last_message} 
+            participants={thread.message_participants || []} 
+            currentUserId={currentUserId} 
+          />
           <p
             style={{
               margin: 0,
@@ -277,6 +397,8 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadI
 export default function ParentMessagesPage() {
   useBodyScrollLock(true);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const threadFromUrl = searchParams.get('thread');
   const supabase = createClient();
   const [userEmail, setUserEmail] = useState<string>();
   const [userId, setUserId] = useState<string>();
@@ -288,7 +410,7 @@ export default function ParentMessagesPage() {
   const [threadsLoading, setThreadsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadFromUrl);
   const selectedThreadIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -305,24 +427,55 @@ export default function ParentMessagesPage() {
   const [optionsMenuAnchor, setOptionsMenuAnchor] = useState<HTMLElement | null>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   
-  // Chat wallpaper state
+  // Dash AI state
+  const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
+  const [dashAILoading, setDashAILoading] = useState(false);
+  const [dashAILastMessage, setDashAILastMessage] = useState<string>('Hi! I\'m Dash, your AI assistant. How can I help you today? 🌟');
+  const [dashAILastMessageAt, setDashAILastMessageAt] = useState<string>(new Date().toISOString());
+  
+  // Chat wallpaper state with localStorage persistence
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [wallpaperCss, setWallpaperCss] = useState<string | null>(null);
   
+  // Modals state
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+  
+  // Presets mapping (shared)
+  const presetMap: Record<string, string> = {
+    'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
+    'midnight': 'linear-gradient(180deg, #0a0f1e 0%, #1a1a2e 50%, #0a0f1e 100%)',
+    'ocean-deep': 'linear-gradient(180deg, #0c4a6e 0%, #164e63 50%, #0f172a 100%)',
+    'forest-night': 'linear-gradient(180deg, #14532d 0%, #1e3a3a 50%, #0f172a 100%)',
+    'sunset-warm': 'linear-gradient(180deg, #7c2d12 0%, #4a1d1d 50%, #0f172a 100%)',
+    'dark-slate': 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+  };
+  
+  // Load wallpaper from localStorage on mount
+  useEffect(() => {
+    const savedWallpaper = localStorage.getItem('edudash-chat-wallpaper');
+    if (savedWallpaper) {
+      try {
+        const parsed = JSON.parse(savedWallpaper);
+        if (parsed.type === 'url') {
+          setWallpaperCss(`url(${parsed.value}) center/cover no-repeat fixed`);
+        } else if (parsed.type === 'preset' && presetMap[parsed.value]) {
+          setWallpaperCss(presetMap[parsed.value]);
+        }
+      } catch (e) {
+        console.error('Failed to load wallpaper:', e);
+      }
+    }
+  }, []);
+  
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
+    // Save to localStorage
+    localStorage.setItem('edudash-chat-wallpaper', JSON.stringify(sel));
+    
     if (sel.type === 'url') {
       setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);
       return;
     }
-    // Presets mapping
-    const presetMap: Record<string, string> = {
-      'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
-      'midnight': 'linear-gradient(180deg, #0a0f1e 0%, #1a1a2e 50%, #0a0f1e 100%)',
-      'ocean-deep': 'linear-gradient(180deg, #0c4a6e 0%, #164e63 50%, #0f172a 100%)',
-      'forest-night': 'linear-gradient(180deg, #14532d 0%, #1e3a3a 50%, #0f172a 100%)',
-      'sunset-warm': 'linear-gradient(180deg, #7c2d12 0%, #4a1d1d 50%, #0f172a 100%)',
-      'dark-slate': 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
-    };
     setWallpaperCss(presetMap[sel.value] || presetMap['purple-glow']);
   };
 
@@ -396,7 +549,8 @@ export default function ParentMessagesPage() {
   }, [messages]);
 
   const markThreadAsRead = useCallback(async (threadId: string) => {
-    if (!userId) return;
+    // Skip for Dash AI thread - it's virtual, not in database
+    if (!userId || threadId === DASH_AI_THREAD_ID) return;
     try {
       const { error } = await supabase.rpc('mark_thread_messages_as_read', {
         thread_id: threadId,
@@ -415,7 +569,8 @@ export default function ParentMessagesPage() {
 
   // Mark thread as read when selected (with delay to ensure messages are loaded)
   useEffect(() => {
-    if (selectedThreadId && userId) {
+    // Skip for Dash AI thread
+    if (selectedThreadId && userId && selectedThreadId !== DASH_AI_THREAD_ID) {
       // Mark as read and trigger refresh
       const markAndRefresh = async () => {
         await markThreadAsRead(selectedThreadId);
@@ -595,7 +750,150 @@ export default function ParentMessagesPage() {
     }
   }, [selectedThreadId, supabase, userId]);
 
+  // Load Dash AI messages from localStorage
+  const loadDashAIMessages = useCallback(() => {
+    const savedMessages = localStorage.getItem('dash-ai-messages');
+    if (savedMessages) {
+      try {
+        const parsed = JSON.parse(savedMessages);
+        setDashAIMessages(parsed);
+        if (parsed.length > 0) {
+          const lastMsg = parsed[parsed.length - 1];
+          setDashAILastMessage(lastMsg.content);
+          setDashAILastMessageAt(lastMsg.created_at);
+        }
+      } catch (e) {
+        // Initialize with welcome message
+        const welcomeMessage: ChatMessage = {
+          id: 'dash-welcome',
+          thread_id: DASH_AI_THREAD_ID,
+          sender_id: DASH_AI_USER_ID,
+          content: 'Hi! I\'m Dash, your AI assistant. I can help you with questions about your child\'s education, homework help, understanding school announcements, and more! How can I help you today? 🌟',
+          created_at: new Date().toISOString(),
+          sender: { first_name: 'Dash', last_name: 'AI', role: 'ai_assistant' },
+        };
+        setDashAIMessages([welcomeMessage]);
+      }
+    } else {
+      // Initialize with welcome message
+      const welcomeMessage: ChatMessage = {
+        id: 'dash-welcome',
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: 'Hi! I\'m Dash, your AI assistant. I can help you with questions about your child\'s education, homework help, understanding school announcements, and more! How can I help you today? 🌟',
+        created_at: new Date().toISOString(),
+        sender: { first_name: 'Dash', last_name: 'AI', role: 'ai_assistant' },
+      };
+      setDashAIMessages([welcomeMessage]);
+    }
+  }, []);
+
+  // Save Dash AI messages to localStorage
+  const saveDashAIMessages = useCallback((msgs: ChatMessage[]) => {
+    localStorage.setItem('dash-ai-messages', JSON.stringify(msgs));
+  }, []);
+
+  // Send message to Dash AI
+  const sendMessageToDashAI = useCallback(async (userMessage: string) => {
+    if (!userMessage.trim() || !userId) return;
+    
+    // Add user message
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      thread_id: DASH_AI_THREAD_ID,
+      sender_id: userId,
+      content: userMessage,
+      created_at: new Date().toISOString(),
+      sender: { 
+        first_name: profile?.firstName || 'You', 
+        last_name: profile?.lastName || '', 
+        role: 'parent' 
+      },
+    };
+    
+    const updatedMessages = [...dashAIMessages, userMsg];
+    setDashAIMessages(updatedMessages);
+    setDashAILastMessage(userMessage);
+    setDashAILastMessageAt(userMsg.created_at);
+    saveDashAIMessages(updatedMessages);
+    setMessageText('');
+    setTimeout(() => scrollToBottom(), 80);
+    
+    // Show loading state
+    setDashAILoading(true);
+    
+    try {
+      // Call AI proxy endpoint
+      const response = await fetch('/api/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: `You are Dash, a friendly and helpful AI assistant for parents using the EduDash Pro educational platform. You help parents with:
+- Questions about their child's education and homework
+- Understanding school announcements and policies  
+- Tips for supporting their child's learning at home
+- General educational guidance and encouragement
+
+Be warm, supportive, and conversational. Use emojis occasionally to be friendly. Keep responses concise but helpful.`
+            },
+            ...updatedMessages.slice(-10).map(m => ({
+              role: m.sender_id === DASH_AI_USER_ID ? 'assistant' : 'user',
+              content: m.content
+            }))
+          ],
+        }),
+      });
+      
+      if (!response.ok) throw new Error('AI request failed');
+      
+      const data = await response.json();
+      const aiContent = data.content || data.message || 'I apologize, I couldn\'t process that. Could you try asking again?';
+      
+      // Add AI response
+      const aiMsg: ChatMessage = {
+        id: `dash-${Date.now()}`,
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: aiContent,
+        created_at: new Date().toISOString(),
+        sender: { first_name: 'Dash', last_name: 'AI', role: 'ai_assistant' },
+      };
+      
+      const finalMessages = [...updatedMessages, aiMsg];
+      setDashAIMessages(finalMessages);
+      setDashAILastMessage(aiContent);
+      setDashAILastMessageAt(aiMsg.created_at);
+      saveDashAIMessages(finalMessages);
+      setTimeout(() => scrollToBottom(), 80);
+    } catch (err) {
+      // Add error message
+      const errorMsg: ChatMessage = {
+        id: `dash-error-${Date.now()}`,
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: 'Sorry, I\'m having trouble connecting right now. Please try again in a moment! 🙏',
+        created_at: new Date().toISOString(),
+        sender: { first_name: 'Dash', last_name: 'AI', role: 'ai_assistant' },
+      };
+      const errorMessages = [...updatedMessages, errorMsg];
+      setDashAIMessages(errorMessages);
+      saveDashAIMessages(errorMessages);
+    } finally {
+      setDashAILoading(false);
+    }
+  }, [dashAIMessages, userId, profile, saveDashAIMessages]);
+
   const fetchMessages = useCallback(async (threadId: string) => {
+    // Handle Dash AI thread specially
+    if (threadId === DASH_AI_THREAD_ID) {
+      loadDashAIMessages();
+      setMessages([]); // Clear regular messages
+      return;
+    }
+    
     setMessagesLoading(true);
     try {
       const { data, error } = await supabase
@@ -621,7 +919,7 @@ export default function ParentMessagesPage() {
     } finally {
       setMessagesLoading(false);
     }
-  }, [markThreadAsRead, supabase]);
+  }, [markThreadAsRead, supabase, loadDashAIMessages]);
 
   const refreshConversation = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
@@ -640,7 +938,8 @@ export default function ParentMessagesPage() {
   }, [selectedThreadId, fetchMessages]);
 
   useEffect(() => {
-    if (!selectedThreadId) return;
+    // Skip realtime subscription for Dash AI thread - it's virtual
+    if (!selectedThreadId || selectedThreadId === DASH_AI_THREAD_ID) return;
 
     const channel = supabase
       .channel(`parent-thread-${selectedThreadId}`)
@@ -708,7 +1007,12 @@ export default function ParentMessagesPage() {
   // Compute derived values BEFORE early return (hooks must always be called)
   const filteredThreads = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return threads.filter((thread) => {
+    
+    // Create the Dash AI virtual thread
+    const dashAIThread = createDashAIThread(dashAILastMessage, dashAILastMessageAt);
+    
+    // Filter regular threads
+    const filtered = threads.filter((thread) => {
       if (!query) return true;
       const participants = thread.message_participants || [];
       const educator = participants.find((p) => p.role !== 'parent');
@@ -727,7 +1031,16 @@ export default function ParentMessagesPage() {
         thread.subject.toLowerCase().includes(query)
       );
     });
-  }, [threads, searchQuery]);
+    
+    // Check if Dash AI matches search
+    const dashAIMatches = !query || 
+      'dash ai'.includes(query) || 
+      'ai assistant'.includes(query) ||
+      dashAIThread.last_message?.content?.toLowerCase().includes(query);
+    
+    // Always put Dash AI at the top if it matches the search
+    return dashAIMatches ? [dashAIThread, ...filtered] : filtered;
+  }, [threads, searchQuery, dashAILastMessage, dashAILastMessageAt]);
 
   // Early return for loading states (AFTER all hooks)
   if (authLoading || profileLoading) {
@@ -739,6 +1052,18 @@ export default function ParentMessagesPage() {
   }
 
   const handleDeleteThread = async (threadId: string) => {
+    // Handle Dash AI thread deletion differently - just clear local storage
+    if (threadId === DASH_AI_THREAD_ID) {
+      localStorage.removeItem('dash-ai-messages');
+      setDashAIMessages([]);
+      setDashAILastMessage('Hi! I\'m Dash, your AI assistant. How can I help you today? 🌟');
+      setDashAILastMessageAt(new Date().toISOString());
+      if (selectedThreadId === threadId) {
+        setSelectedThreadId(null);
+      }
+      return;
+    }
+    
     try {
       // First delete all messages in the thread
       const { error: messagesError } = await supabase
@@ -784,6 +1109,24 @@ export default function ParentMessagesPage() {
 
   const handleClearConversation = async () => {
     if (!selectedThreadId || !confirm('Are you sure you want to clear all messages in this conversation?')) return;
+    
+    // Handle Dash AI thread - clear local storage
+    if (selectedThreadId === DASH_AI_THREAD_ID) {
+      localStorage.removeItem('dash-ai-messages');
+      const welcomeMessage: ChatMessage = {
+        id: 'dash-welcome',
+        thread_id: DASH_AI_THREAD_ID,
+        sender_id: DASH_AI_USER_ID,
+        content: 'Hi! I\'m Dash, your AI assistant. I can help you with questions about your child\'s education, homework help, understanding school announcements, and more! How can I help you today? 🌟',
+        created_at: new Date().toISOString(),
+        sender: { first_name: 'Dash', last_name: 'AI', role: 'ai_assistant' },
+      };
+      setDashAIMessages([welcomeMessage]);
+      setDashAILastMessage(welcomeMessage.content);
+      setDashAILastMessageAt(welcomeMessage.created_at);
+      return;
+    }
+    
     try {
       await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
       setMessages([]);
@@ -805,9 +1148,71 @@ export default function ParentMessagesPage() {
     alert('Report issue functionality coming soon!');
   };
 
+  // Handle starting a new chat with a contact
+  const handleStartChatWithContact = async (contact: { id: string; first_name: string | null; last_name: string | null; role: string | null }) => {
+    if (!userId) return;
+    
+    try {
+      // Check if a thread already exists with this contact
+      const { data: existingThreads } = await supabase
+        .from('message_participants')
+        .select('thread_id')
+        .eq('user_id', contact.id);
+      
+      if (existingThreads && existingThreads.length > 0) {
+        // Check which of these threads we're also a participant in
+        const threadIds = existingThreads.map((t: { thread_id: string }) => t.thread_id);
+        const { data: myThreads } = await supabase
+          .from('message_participants')
+          .select('thread_id')
+          .eq('user_id', userId)
+          .in('thread_id', threadIds);
+        
+        if (myThreads && myThreads.length > 0) {
+          // Found existing thread - select it
+          setSelectedThreadId(myThreads[0].thread_id);
+          return;
+        }
+      }
+      
+      // Create new thread
+      const contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Chat';
+      const { data: newThread, error: threadError } = await supabase
+        .from('message_threads')
+        .insert({
+          type: 'direct',
+          subject: contactName,
+          preschool_id: profile?.preschoolId,
+        })
+        .select()
+        .single();
+      
+      if (threadError || !newThread) throw threadError;
+      
+      // Add participants
+      await supabase.from('message_participants').insert([
+        { thread_id: newThread.id, user_id: userId, role: profile?.role || 'parent' },
+        { thread_id: newThread.id, user_id: contact.id, role: contact.role || 'user' },
+      ]);
+      
+      // Refresh threads and select the new one
+      setRefreshTrigger(prev => prev + 1);
+      setSelectedThreadId(newThread.id);
+    } catch (err) {
+      console.error('Error starting chat:', err);
+      alert('Failed to start chat. Please try again.');
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || !selectedThreadId || !userId) return;
+
+    // Handle Dash AI messages specially
+    if (selectedThreadId === DASH_AI_THREAD_ID) {
+      await sendMessageToDashAI(messageText.trim());
+      return;
+    }
 
     setSending(true);
     try {
@@ -824,6 +1229,38 @@ export default function ParentMessagesPage() {
         .from('message_threads')
         .update({ last_message_at: new Date().toISOString() })
         .eq('id', selectedThreadId);
+
+      // Send push notification to recipient (for when app is closed)
+      const selectedThread = threads.find(t => t.id === selectedThreadId);
+      const otherParticipant = selectedThread?.message_participants?.find(p => p.user_id !== userId);
+      if (otherParticipant?.user_id) {
+        const senderName = profile 
+          ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Someone'
+          : 'Someone';
+        
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: otherParticipant.user_id,
+              title: `New message from ${senderName}`,
+              body: messageText.trim().length > 50 
+                ? messageText.trim().slice(0, 50) + '...' 
+                : messageText.trim(),
+              tag: `message-${selectedThreadId}`,
+              type: 'message',
+              requireInteraction: false,
+              data: {
+                url: `/dashboard/parent/messages?thread=${selectedThreadId}`,
+                threadId: selectedThreadId,
+              },
+            }),
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send message push notification:', notifErr);
+        }
+      }
 
       setMessageText('');
       setRefreshTrigger(prev => prev + 1);
@@ -920,13 +1357,25 @@ export default function ParentMessagesPage() {
   };
 
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
+  
+  // Check if we're in the Dash AI thread
+  const isDashAISelected = selectedThreadId === DASH_AI_THREAD_ID;
+  
   const currentThread = selectedThreadId
-    ? threads.find((thread) => thread.id === selectedThreadId)
+    ? isDashAISelected 
+      ? createDashAIThread(dashAILastMessage, dashAILastMessageAt)
+      : threads.find((thread) => thread.id === selectedThreadId)
     : null;
+  
   const educator = currentThread?.message_participants?.find((p) => p.role !== 'parent');
-  const educatorName = educator?.profiles
-    ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.trim()
-    : 'Teacher';
+  const educatorName = isDashAISelected 
+    ? 'Dash AI' 
+    : (educator?.profiles
+      ? `${educator.profiles.first_name} ${educator.profiles.last_name}`.trim()
+      : 'Teacher');
+
+  // Get the messages to display (Dash AI or regular)
+  const displayMessages = isDashAISelected ? dashAIMessages : messages;
 
   const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId);
@@ -1005,6 +1454,7 @@ export default function ParentMessagesPage() {
                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 gap: 12,
                 position: 'fixed',
                 top: 0,
@@ -1015,27 +1465,48 @@ export default function ParentMessagesPage() {
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
                 zIndex: 1000,
               }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={() => router.back()}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      background: 'transparent',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                      padding: 0,
+                    }}
+                  >
+                    <ArrowLeft size={22} />
+                  </button>
+                  <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                    Messages
+                  </h2>
+                </div>
+                {/* New chat / Invite button */}
                 <button
-                  onClick={() => router.back()}
+                  onClick={() => setNewChatModalOpen(true)}
                   style={{
                     width: 36,
                     height: 36,
                     borderRadius: 18,
-                    background: 'transparent',
-                    border: 'none',
+                    background: 'rgba(124, 58, 237, 0.15)',
+                    border: '1px solid rgba(124, 58, 237, 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    color: 'var(--text-primary)',
+                    color: '#a78bfa',
                     padding: 0,
                   }}
                 >
-                  <ArrowLeft size={22} />
+                  <Plus size={20} />
                 </button>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  Contacts
-                </h2>
               </div>
               
               {/* Search bar fixed below header */}
@@ -1092,6 +1563,7 @@ export default function ParentMessagesPage() {
                     onSelect={() => handleSelectThread(thread.id)}
                     onDelete={handleDeleteThread}
                     isDesktop={isDesktop}
+                    currentUserId={userId}
                   />
                 ))
               ) : (
@@ -1101,6 +1573,30 @@ export default function ParentMessagesPage() {
                 </div>
                 )}
               </div>
+              
+              {/* Dash AI FAB - Fixed at bottom right for quick access */}
+              <button
+                onClick={() => handleSelectThread(DASH_AI_THREAD_ID)}
+                style={{
+                  position: 'fixed',
+                  bottom: 'calc(80px + env(safe-area-inset-bottom))',
+                  right: 16,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(168, 85, 247, 0.5), 0 0 30px rgba(168, 85, 247, 0.3)',
+                  zIndex: 999,
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                <Sparkles size={24} color="white" />
+              </button>
             </div>
           ) : currentThread ? (
             <div style={{
@@ -1154,37 +1650,67 @@ export default function ParentMessagesPage() {
                     <ArrowLeft size={20} />
                   </button>
                 )}
-                <div
-                  style={{
-                    width: isDesktop ? 52 : 36,
-                    height: isDesktop ? 52 : 36,
-                    borderRadius: isDesktop ? 26 : 18,
-                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
-                    fontSize: isDesktop ? 17 : 13,
-                    fontWeight: 600,
-                    color: '#fff',
-                  }}
-                >
-                  {educatorName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
-                </div>
+                {/* Avatar - Dash AI gets special avatar */}
+                {isDashAISelected ? (
+                  <DashAIAvatar size={isDesktop ? 52 : 36} showStars={true} animated={true} />
+                ) : (
+                  <div
+                    style={{
+                      width: isDesktop ? 52 : 36,
+                      height: isDesktop ? 52 : 36,
+                      borderRadius: isDesktop ? 26 : 18,
+                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                      fontSize: isDesktop ? 17 : 13,
+                      fontWeight: 600,
+                      color: '#fff',
+                    }}
+                  >
+                    {educatorName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                  </div>
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h2 style={{ 
-                    margin: 0, 
-                    fontSize: isDesktop ? 18 : 16, 
-                    fontWeight: 700, 
-                    color: '#f1f5f9',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {educatorName}
-                  </h2>
-                  {isDesktop && currentThread.student && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2 style={{ 
+                      margin: 0, 
+                      fontSize: isDesktop ? 18 : 16, 
+                      fontWeight: 700, 
+                      color: isDashAISelected ? '#e879f9' : '#f1f5f9',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {educatorName}
+                    </h2>
+                    {isDashAISelected && (
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#a855f7',
+                        background: 'rgba(168, 85, 247, 0.15)',
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                      }}>
+                        AI
+                      </span>
+                    )}
+                  </div>
+                  {isDashAISelected ? (
+                    <p style={{ 
+                      margin: '4px 0 0', 
+                      fontSize: 13, 
+                      color: '#22d3ee', 
+                      fontWeight: 500,
+                    }}>
+                      ✨ Your AI Assistant
+                    </p>
+                  ) : isDesktop && currentThread.student && (
                     <p style={{ 
                       margin: '4px 0 0', 
                       fontSize: 13, 
@@ -1223,44 +1749,49 @@ export default function ParentMessagesPage() {
                     </button>
                   ) : (
                     <>
-                      <button
-                        onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
-                        title="Voice call"
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          background: 'transparent',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#e2e8f0',
-                          padding: 0,
-                        }}
-                      >
-                        <Phone size={18} />
-                      </button>
-                      <button
-                        onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
-                        title="Video call"
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          background: 'transparent',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                          color: '#e2e8f0',
-                          padding: 0,
-                        }}
-                      >
-                        <Video size={18} />
-                      </button>
+                      {/* Hide call buttons for Dash AI */}
+                      {!isDashAISelected && (
+                        <>
+                          <button
+                            onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
+                            title="Voice call"
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 10,
+                              background: 'transparent',
+                              border: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#e2e8f0',
+                              padding: 0,
+                            }}
+                          >
+                            <Phone size={18} />
+                          </button>
+                          <button
+                            onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
+                            title="Video call"
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 10,
+                              background: 'transparent',
+                              border: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#e2e8f0',
+                              padding: 0,
+                            }}
+                          >
+                            <Video size={18} />
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => setWallpaperOpen(true)}
                         title="Chat wallpaper"
@@ -1412,11 +1943,14 @@ export default function ParentMessagesPage() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: isDesktop ? 20 : 16 }}>
-                    {messages.map((message) => {
+                    {displayMessages.map((message) => {
                       const isOwn = message.sender_id === userId;
-                      const senderName = message.sender
-                        ? `${message.sender.first_name} ${message.sender.last_name}`
-                        : 'Unknown';
+                      const isDashAIMessage = message.sender_id === DASH_AI_USER_ID;
+                      const senderName = isDashAIMessage 
+                        ? 'Dash AI'
+                        : (message.sender
+                          ? `${message.sender.first_name} ${message.sender.last_name}`
+                          : 'Unknown');
 
                       // Get other participant IDs (excluding current user) for read status
                       const otherParticipantIds = (currentThread?.message_participants || [])
@@ -1433,10 +1967,17 @@ export default function ParentMessagesPage() {
                           senderName={!isOwn ? senderName : undefined}
                           otherParticipantIds={otherParticipantIds}
                           hideAvatars={!isDesktop}
-                          onContextMenu={handleMessageContextMenu}
+                          onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
+                          isDashAI={isDashAIMessage}
                         />
                       );
                     })}
+                    {/* Dash AI Loading indicator */}
+                    {isDashAISelected && dashAILoading && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: 8 }}>
+                        <DashAILoading size={36} />
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
@@ -1560,21 +2101,30 @@ export default function ParentMessagesPage() {
                     )}
 
                     {/* Mobile & Desktop: Input field */}
-                    <div style={{ position: 'relative', flex: 1, display: 'flex', gap: 8, alignItems: 'center', zIndex: 101 }}>
-                      {/* Mobile: Emoji button outside left */}
+                    <div className="wa-composer" style={{ position: 'relative', flex: 1, zIndex: 101, padding: isDesktop ? 0 : 'var(--scale-xs, 6px)' }}>
+                      {/* Mobile: Emoji button */}
                       {!isDesktop && (
                         <button
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker((prev) => !prev)}
-                          className="w-[38px] h-[38px] rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
+                          className="wa-composer-btn wa-composer-btn-icon"
+                          style={{ width: 'var(--touch-sm, 36px)', height: 'var(--touch-sm, 36px)' }}
                         >
-                          <Smile size={20} />
+                          <Smile size={22} />
                         </button>
                       )}
 
-                      {/* Flex row container for mobile */}
-                      <div style={isDesktop ? { position: 'relative', flex: 1 } : undefined} className={!isDesktop ? 'flex flex-row items-end flex-1 min-w-0 gap-2 pl-2 pr-3 py-3 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]' : ''}>
+                      {/* Input wrapper - WhatsApp style */}
+                      <div 
+                        className="wa-composer-input-wrap"
+                        style={isDesktop ? { 
+                          background: 'var(--surface-2)', 
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-lg, 24px)',
+                          padding: '8px 16px',
+                        } : undefined}
+                      >
                         <textarea
                           value={messageText}
                           onChange={(e) => {
@@ -1587,22 +2137,14 @@ export default function ParentMessagesPage() {
                             }
                           }}
                           onBlur={() => { try { stopTyping(); } catch {} }}
-                          placeholder="Type a message"
+                          placeholder="Message"
                           disabled={sending || attachmentUploading}
                           rows={1}
-                          className={!isDesktop ? 'flex-1 min-w-0 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0' : ''}
-                          style={isDesktop ? {
-                            width: '100%',
-                            padding: '14px 20px',
-                            borderRadius: 26,
-                            border: '1px solid var(--border)',
-                            background: 'var(--bg)',
-                            color: 'var(--text)',
-                            fontSize: 15,
-                            outline: 'none',
-                            resize: 'none',
-                            maxHeight: 120,
-                          } : { height: '36px', border: 'none', outline: 'none', paddingBottom: '10px' }}
+                          className="wa-composer-input"
+                          style={{ 
+                            minHeight: isDesktop ? '24px' : 'var(--touch-sm, 36px)',
+                            fontSize: 'var(--font-md, 16px)',
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
@@ -1611,118 +2153,72 @@ export default function ParentMessagesPage() {
                             }
                           }}
                         />
-                        {/* Mobile: Camera (autohides), Clip - SMALLER ICONS */}
-                        {!isDesktop && (
-                          <>
-                            {!messageText.trim() && (
-                              <button
-                                type="button"
-                                onClick={() => cameraInputRef.current?.click()}
-                                disabled={attachmentUploading}
-                                className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ paddingBottom: '10px' }}>
-                                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                                  <circle cx="12" cy="13" r="4"/>
-                                </svg>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={triggerFilePicker}
-                              disabled={attachmentUploading}
-                              className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50' : ''}`}
-                            >
-                              <Paperclip size={28} style={{ paddingBottom: '10px', paddingRight: '5' }} />
-                            </button>
-                          </>
+                        
+                        {/* Inline icons - Camera & Clip (hide camera when typing) */}
+                        {!messageText.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => cameraInputRef.current?.click()}
+                            disabled={attachmentUploading}
+                            className="wa-composer-btn wa-composer-btn-icon"
+                            style={{ width: 'var(--icon-md, 24px)', height: 'var(--icon-md, 24px)' }}
+                          >
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                              <circle cx="12" cy="13" r="4"/>
+                            </svg>
+                          </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={triggerFilePicker}
+                          disabled={attachmentUploading}
+                          className="wa-composer-btn wa-composer-btn-icon"
+                          style={{ width: 'var(--icon-md, 24px)', height: 'var(--icon-md, 24px)', opacity: attachmentUploading ? 0.5 : 1 }}
+                        >
+                          <Paperclip size={22} />
+                        </button>
                       </div>
 
-                      {/* Mobile: Send/Mic outside right */}
-                      {!isDesktop && (
-                        messageText.trim() ? (
-                          <button
-                            type="submit"
-                            disabled={sending || attachmentUploading}
-                            className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
-                          >
-                            {sending || attachmentUploading ? (
-                              <Loader2 size={16} className="animate-spin" color="white" />
-                            ) : (
-                              <Send size={16} color="white" />
-                            )}
-                          </button>
-                        ) : (
-                            <button
-                              type="button"
-                              onClick={handleMicClick}
-                              className={`w-[36px] h-[36px] rounded-full border-0 flex items-center justify-center ml-1 mr-[5px] self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
-                            >
-                              <Mic size={18} color="white" />
-                            </button>
-                          )
-                      )}
-                    </div>
-
-                    {/* Desktop: Send/Mic button outside */}
-                    {isDesktop && (
-                      messageText.trim() ? (
+                      {/* Send/Mic button - outside on right */}
+                      {messageText.trim() ? (
                         <button
                           type="submit"
                           disabled={sending || attachmentUploading}
-                          style={{
-                            width: 50,
-                            height: 50,
-                            borderRadius: 25,
-                            background:
-                              sending || attachmentUploading
-                                ? '#475569'
-                                : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
-                            boxShadow:
-                              sending || attachmentUploading ? 'none' : '0 4px 14px rgba(59, 130, 246, 0.4)',
-                            transition: 'all 0.2s ease',
-                            flexShrink: 0,
+                          className="wa-composer-btn wa-composer-btn-send"
+                          style={{ 
+                            width: 'var(--composer-button, 44px)', 
+                            height: 'var(--composer-button, 44px)',
+                            opacity: sending || attachmentUploading ? 0.6 : 1,
                           }}
                         >
                           {sending || attachmentUploading ? (
-                            <Loader2 size={20} className="animate-spin" color="#fff" />
+                            <Loader2 size={20} className="animate-spin" color="white" />
                           ) : (
-                            <Send size={20} color="#fff" />
+                            <Send size={20} color="white" />
                           )}
                         </button>
                       ) : (
                         <button
                           type="button"
                           onClick={handleMicClick}
-                          style={{
-                            width: 50,
-                            height: 50,
-                            borderRadius: 25,
+                          className="wa-composer-btn wa-composer-btn-mic"
+                          style={{ 
+                            width: 'var(--composer-button, 44px)', 
+                            height: 'var(--composer-button, 44px)',
                             background: isRecording 
                               ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
-                              : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            flexShrink: 0,
-                            boxShadow: isRecording 
-                              ? '0 4px 14px rgba(245, 158, 11, 0.4)' 
-                              : '0 4px 14px rgba(34, 197, 94, 0.4)',
+                              : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                            boxShadow: isRecording
+                              ? '0 4px 16px rgba(245, 158, 11, 0.5), 0 0 20px rgba(245, 158, 11, 0.3)'
+                              : '0 4px 16px rgba(0, 212, 255, 0.4), 0 0 20px rgba(0, 212, 255, 0.25)',
+                            border: '1px solid rgba(0, 212, 255, 0.3)',
                           }}
                         >
-                          <Mic size={22} color="white" />
+                          <Mic size={20} color={isRecording ? 'white' : '#00d4ff'} />
                         </button>
-                      )
-                    )}
+                      )}
+                    </div>
                   </div>
                 </form>
                 {statusMessage && (
@@ -1903,6 +2399,7 @@ export default function ParentMessagesPage() {
                     onSelect={() => handleSelectThread(thread.id)}
                     onDelete={handleDeleteThread}
                     isDesktop={isDesktop}
+                    currentUserId={userId}
                   />
                 ))
               ) : (
@@ -1961,6 +2458,26 @@ export default function ParentMessagesPage() {
         onDelete={() => selectedMessageId && handleDeleteMessage(selectedMessageId)}
         onCopy={() => selectedMessageId && handleCopyMessage(selectedMessageId)}
         onReact={() => selectedMessageId && handleReactToMessage(selectedMessageId)}
+      />
+      <InviteContactModal
+        isOpen={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        preschoolId={profile?.preschoolId}
+        preschoolName={profile?.preschoolName}
+        inviterName={profile ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() : undefined}
+      />
+      <NewChatModal
+        isOpen={newChatModalOpen}
+        onClose={() => setNewChatModalOpen(false)}
+        onSelectContact={handleStartChatWithContact}
+        onSelectDashAI={() => setSelectedThreadId(DASH_AI_THREAD_ID)}
+        onInviteNew={() => {
+          setNewChatModalOpen(false);
+          setInviteModalOpen(true);
+        }}
+        currentUserId={userId || null}
+        currentUserRole={profile?.role || undefined}
+        preschoolId={profile?.preschoolId}
       />
     </ParentShell>
   );

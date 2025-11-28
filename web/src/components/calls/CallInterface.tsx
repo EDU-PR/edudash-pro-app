@@ -246,6 +246,17 @@ export const CallInterface = ({
       const callId = crypto.randomUUID();
       setCurrentCallId(callId);
 
+      // Get caller's name for notification
+      const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', currentUserId)
+        .single();
+      
+      const callerName = callerProfile 
+        ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+        : 'Someone';
+
       // Create call record in database
       await supabase.from('active_calls').insert({
         call_id: callId,
@@ -253,8 +264,33 @@ export const CallInterface = ({
         callee_id: remoteUserId,
         call_type: initialCallType,
         status: 'ringing',
-        caller_name: remoteUserName, // Will be used by receiver
+        caller_name: callerName,
       });
+
+      // Send push notification to callee (for when app is closed)
+      try {
+        await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: remoteUserId,
+            title: `Incoming ${initialCallType} call`,
+            body: `${callerName} is calling...`,
+            tag: `call-${callId}`,
+            type: 'call',
+            requireInteraction: true,
+            data: {
+              url: '/dashboard/parent/messages',
+              callId,
+              callType: initialCallType,
+              callerId: currentUserId,
+              callerName,
+            },
+          }),
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send call push notification:', notifErr);
+      }
 
       // Initialize media
       const stream = await initializeLocalStream();
@@ -560,21 +596,71 @@ export const CallInterface = ({
             }}
           />
         ) : (
-          <div
-            style={{
-              width: 160,
-              height: 160,
-              borderRadius: 80,
-              background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 64,
-              fontWeight: 600,
-              color: 'white',
-            }}
-          >
-            {(remoteUserName || 'U').charAt(0).toUpperCase()}
+          <div style={{ position: 'relative' }}>
+            {/* Pulsing ring animation for connecting/ringing states */}
+            {(callState === 'connecting' || callState === 'ringing') && (
+              <>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 200,
+                    height: 200,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.4)',
+                    animation: 'pulse-ring 1.5s ease-out infinite',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 240,
+                    height: 240,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.2)',
+                    animation: 'pulse-ring 1.5s ease-out infinite 0.3s',
+                  }}
+                />
+                <style>{`
+                  @keyframes pulse-ring {
+                    0% {
+                      transform: translate(-50%, -50%) scale(0.8);
+                      opacity: 1;
+                    }
+                    100% {
+                      transform: translate(-50%, -50%) scale(1.4);
+                      opacity: 0;
+                    }
+                  }
+                `}</style>
+              </>
+            )}
+            <div
+              style={{
+                width: 160,
+                height: 160,
+                borderRadius: 80,
+                background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 64,
+                fontWeight: 600,
+                color: 'white',
+                position: 'relative',
+                zIndex: 1,
+                boxShadow: (callState === 'connecting' || callState === 'ringing') 
+                  ? '0 0 40px rgba(124, 58, 237, 0.5)' 
+                  : 'none',
+              }}
+            >
+              {(remoteUserName || 'U').charAt(0).toUpperCase()}
+            </div>
           </div>
         )}
 
