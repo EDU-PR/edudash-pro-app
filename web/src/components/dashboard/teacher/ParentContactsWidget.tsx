@@ -20,7 +20,6 @@ interface Parent {
   last_name: string;
   phone?: string;
   students: Student[];
-  unread_count: number;
 }
 
 interface ParentContactsWidgetProps {
@@ -119,55 +118,11 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
         throw profilesError;
       }
       
-      // Get unread message counts for each parent
-      const unreadCounts = await Promise.all(
-        parentIds.map(async (parentId) => {
-          // First get all threads for this preschool
-          const { data: allThreads } = await supabase
-            .from('message_threads')
-            .select(`
-              id,
-              message_participants!inner(user_id, role, last_read_at)
-            `)
-            .eq('preschool_id', preschoolId);
-          
-          if (!allThreads) return { parentId, count: 0 };
-          
-          // Filter threads where this parent is a participant
-          const parentThreads = allThreads.filter((thread: any) => 
-            thread.message_participants?.some((p: any) => 
-              p.user_id === parentId && p.role === 'parent'
-            )
-          );
-          
-          let totalUnread = 0;
-          for (const thread of parentThreads) {
-            const parentParticipant = thread.message_participants?.find(
-              (p: any) => p.user_id === parentId && p.role === 'parent'
-            );
-            
-            if (parentParticipant) {
-              const { count } = await supabase
-                .from('messages')
-                .select('id', { count: 'exact', head: true })
-                .eq('thread_id', thread.id)
-                .neq('sender_id', parentId)
-                .gt('created_at', parentParticipant.last_read_at || '2000-01-01');
-              
-              totalUnread += count || 0;
-            }
-          }
-          
-          return { parentId, count: totalUnread };
-        })
-      );
-      
-      // Group students by parent
+      // Group students by parent (no unread count - that's handled in messages page)
       const parentsMap = new Map<string, Parent>();
       
       profiles?.forEach((profile: any) => {
         const studentList = students.filter((s: any) => s.parent_id === profile.id);
-        const unreadData = unreadCounts.find(u => u.parentId === profile.id);
         
         parentsMap.set(profile.id, {
           id: profile.id,
@@ -176,7 +131,6 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
           last_name: profile.last_name || '',
           phone: profile.phone,
           students: studentList,
-          unread_count: unreadData?.count || 0,
         });
       });
       
@@ -259,8 +213,8 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
         ]);
       }
       
-      // Navigate to thread
-      router.push(`/dashboard/teacher/messages/${threadId}`);
+      // Navigate to messages page with thread selection
+      router.push(`/dashboard/teacher/messages?thread=${threadId}`);
     } catch (err: any) {
       console.error('Error creating/finding thread:', err);
       alert('Failed to open message thread. Please try again.');
@@ -430,20 +384,6 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
                     }}>
                       {parent.first_name} {parent.last_name}
                     </h4>
-                    {parent.unread_count > 0 && (
-                      <span style={{
-                        background: 'var(--danger)',
-                        color: 'white',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        padding: '2px 6px',
-                        borderRadius: 10,
-                        minWidth: 18,
-                        textAlign: 'center',
-                      }}>
-                        {parent.unread_count > 9 ? '9+' : parent.unread_count}
-                      </span>
-                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>

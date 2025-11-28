@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera } from 'lucide-react';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Users } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
@@ -15,6 +15,7 @@ import { CallInterface, useCallInterface } from '@/components/calls/CallInterfac
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
+import { TeacherContactsWidget } from '@/components/dashboard/teacher/TeacherContactsWidget';
 
 interface MessageThread {
   id: string;
@@ -54,9 +55,15 @@ interface MessageThread {
   unread_count?: number;
 }
 
-const formatMessageTime = (timestamp: string): string => {
+const formatMessageTime = (timestamp: string | undefined | null): string => {
+  if (!timestamp) return '';
+  
   const now = new Date();
   const messageTime = new Date(timestamp);
+  
+  // Handle invalid dates
+  if (isNaN(messageTime.getTime())) return '';
+  
   const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
   
   if (diffInHours < 1) return 'Just now';
@@ -69,14 +76,16 @@ interface ThreadItemProps {
   thread: MessageThread;
   isActive: boolean;
   onSelect: () => void;
+  currentUserId?: string;
 }
 
-const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
+const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemProps) => {
   const participants = thread.message_participants || thread.participants || [];
-  const parentParticipant = participants.find((p) => p.role === 'parent');
-  const parentName = parentParticipant?.user_profile
-    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
-    : 'Parent';
+  // Find the OTHER participant (the contact, not the current user)
+  const otherParticipant = participants.find((p) => p.user_id !== currentUserId) || participants.find((p) => p.role === 'parent');
+  const contactName = otherParticipant?.user_profile
+    ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+    : 'Contact';
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`
     : null;
@@ -97,12 +106,12 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
       <div
         className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-[14px] font-semibold flex-shrink-0 ${isActive ? 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.3)]' : 'bg-[var(--surface-2)]'}`}
       >
-        {getInitials(parentName)}
+        {getInitials(contactName)}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1.5">
           <span className={`text-[15px] ${hasUnread ? 'font-bold' : 'font-semibold'} truncate text-[var(--text)]`}>
-            {parentName}
+            {contactName}
           </span>
           {thread.last_message?.created_at && (
             <span className="text-[11px] text-[var(--muted)] ml-2 flex-shrink-0">
@@ -114,7 +123,11 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
           <p className="m-0 mb-1.5 text-[13px] text-[var(--cyan)] truncate font-medium">📚 {studentName}</p>
         )}
         <p className={`m-0 text-[14px] truncate ${hasUnread ? 'text-[var(--text)]' : 'text-[var(--muted)]'} leading-relaxed`}>
-          {thread.last_message?.content || 'No messages yet'}
+          {thread.last_message?.content 
+            ? thread.last_message.content.startsWith('__media__') 
+              ? '📷 Photo' 
+              : thread.last_message.content 
+            : 'No messages yet'}
         </p>
       </div>
       {hasUnread && (
@@ -126,8 +139,10 @@ const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
   );
 };
 
-export default function TeacherMessagesPage() {
+function TeacherMessagesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const threadFromUrl = searchParams.get('thread');
   useBodyScrollLock(true);
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
@@ -136,7 +151,7 @@ export default function TeacherMessagesPage() {
   const [threadsLoading, setThreadsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(threadFromUrl);
   const selectedThreadIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -168,16 +183,22 @@ export default function TeacherMessagesPage() {
   const [messageActionsPosition, setMessageActionsPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
+  // Contacts widget state (for "New Chat" button)
+  const [showContactsWidget, setShowContactsWidget] = useState(false);
+
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     if (sel.type === 'url') {
-      setWallpaperCss(`url(${sel.value}) center/cover no-repeat, linear-gradient(180deg, #0f172a 0%, #1e293b 100%)`);
+      setWallpaperCss(`url(${sel.value}) center/cover no-repeat fixed`);
       return;
     }
     // Presets mapping (mirror of ChatWallpaperPicker presets)
     const presetMap: Record<string, string> = {
-      'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%), radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.08) 0%, transparent 45%)',
-      'midnight': 'linear-gradient(135deg, #0b1020 0%, #151a2f 100%)',
-      'deep-space': 'radial-gradient(1000px 600px at 10% 10%, rgba(124, 58, 237, 0.08), transparent), radial-gradient(1000px 600px at 90% 90%, rgba(236, 72, 153, 0.08), transparent), #0a0f1e',
+      'purple-glow': 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
+      'midnight': 'linear-gradient(180deg, #0a0f1e 0%, #1a1a2e 50%, #0a0f1e 100%)',
+      'ocean-deep': 'linear-gradient(180deg, #0c4a6e 0%, #164e63 50%, #0f172a 100%)',
+      'forest-night': 'linear-gradient(180deg, #14532d 0%, #1e3a3a 50%, #0f172a 100%)',
+      'sunset-warm': 'linear-gradient(180deg, #7c2d12 0%, #4a1d1d 50%, #0f172a 100%)',
+      'dark-slate': 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
     };
     setWallpaperCss(presetMap[sel.value] || presetMap['purple-glow']);
   };
@@ -185,6 +206,13 @@ export default function TeacherMessagesPage() {
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
+
+  // Auto-select thread from URL query param
+  useEffect(() => {
+    if (threadFromUrl && threadFromUrl !== selectedThreadId) {
+      setSelectedThreadId(threadFromUrl);
+    }
+  }, [threadFromUrl]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -239,12 +267,18 @@ export default function TeacherMessagesPage() {
   const markThreadAsRead = useCallback(async (threadId: string) => {
     if (!userId) return;
     try {
-      await supabase.rpc('mark_thread_messages_as_read', {
+      const { error } = await supabase.rpc('mark_thread_messages_as_read', {
         thread_id: threadId,
         reader_id: userId,
       });
+      if (!error) {
+        // Immediately update local state to show 0 unread for this thread
+        setThreads(prev => prev.map(t => 
+          t.id === threadId ? { ...t, unread_count: 0 } : t
+        ));
+      }
     } catch (err) {
-      console.error('Error marking thread as read:', err);
+      // Silent fail - marking as read is not critical
     }
   }, [supabase, userId]);
 
@@ -252,9 +286,11 @@ export default function TeacherMessagesPage() {
     if (selectedThreadId && userId) {
       const markAndRefresh = async () => {
         await markThreadAsRead(selectedThreadId);
-        setTimeout(() => setRefreshTrigger(prev => prev + 1), 300);
+        // Refresh threads to get updated last_read_at
+        setTimeout(() => setRefreshTrigger(prev => prev + 1), 500);
       };
-      setTimeout(markAndRefresh, 500);
+      // Mark thread as read after a brief delay to let UI render
+      setTimeout(markAndRefresh, 300);
     }
   }, [selectedThreadId, userId, markThreadAsRead]);
 
@@ -269,31 +305,45 @@ export default function TeacherMessagesPage() {
           sender_id,
           content,
           created_at,
-          read_by,
-          sender:profiles(first_name, last_name, role)
+          read_by
         `)
         .eq('thread_id', threadId)
         .order('created_at', { ascending: true });
+      
+      // Fetch sender profiles separately to avoid ambiguous FK issue
+      if (!error && data && data.length > 0) {
+        const senderIds = [...new Set(data.map((m: any) => m.sender_id))];
+        const { data: senderProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, role')
+          .in('id', senderIds);
+        
+        const profileMap = new Map((senderProfiles || []).map((p: any) => [p.id, p]));
+        data.forEach((msg: any) => {
+          msg.sender = profileMap.get(msg.sender_id) || null;
+        });
+      }
 
       if (error) throw error;
       setMessages(data || []);
       await markThreadAsRead(threadId);
       setTimeout(() => scrollToBottom(), 80);
     } catch (err) {
-      console.error('Error fetching messages:', err);
+      // Silent fail for messages fetch
     } finally {
       setMessagesLoading(false);
     }
   }, [markThreadAsRead, supabase]);
 
-  const getThreadContactKey = (thread: MessageThread) => {
+  const getThreadContactKey = (thread: MessageThread, currentUserId: string | undefined) => {
     const participants = thread.message_participants || thread.participants || [];
-    const parentParticipant = participants.find((p) => p.role === 'parent');
-    if (!parentParticipant?.user_profile) {
+    // Find the OTHER participant (not the current teacher) for deduplication
+    const otherParticipant = participants.find((p) => p.user_id !== currentUserId);
+    if (!otherParticipant?.user_id) {
       return `thread:${thread.id}`;
     }
-    // Use parent email as the unique identifier for deduplication
-    return `parent:${parentParticipant.user_id}`;
+    // Use the other participant's user_id as the unique key for one conversation per contact
+    return `contact:${otherParticipant.user_id}`;
   };
 
   const getThreadRecencyValue = (thread: MessageThread) => {
@@ -303,11 +353,12 @@ export default function TeacherMessagesPage() {
 
   const fetchThreads = useCallback(async () => {
     if (!userId || !profile?.preschoolId) return;
-    
+
     setThreadsLoading(true);
     setError(null);
-    
+
     try {
+      // First fetch threads with participants (no FK to profiles, so fetch separately)
       const { data: threads, error: threadsError } = await supabase
         .from('message_threads')
         .select(`
@@ -320,8 +371,7 @@ export default function TeacherMessagesPage() {
           message_participants!inner(
             user_id,
             role,
-            last_read_at,
-            user_profile:profiles(first_name, last_name, role)
+            last_read_at
           )
         `)
         .eq('preschool_id', profile.preschoolId)
@@ -329,8 +379,37 @@ export default function TeacherMessagesPage() {
       
       if (threadsError) throw threadsError;
       
-      const uniqueThreadMap = new Map<string, any>();
+      // Collect unique user IDs from all participants to fetch their profiles
+      const allUserIds = new Set<string>();
       (threads || []).forEach((thread: any) => {
+        (thread.message_participants || []).forEach((p: any) => {
+          if (p.user_id) allUserIds.add(p.user_id);
+        });
+      });
+      
+      // Fetch all participant profiles in one query
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, role')
+        .in('id', Array.from(allUserIds));
+      
+      // Create a lookup map for profiles
+      const profilesMap = new Map<string, any>();
+      (profilesData || []).forEach((p: any) => {
+        profilesMap.set(p.id, p);
+      });
+      
+      // Attach user_profile to each participant
+      const threadsWithProfiles = (threads || []).map((thread: any) => ({
+        ...thread,
+        message_participants: (thread.message_participants || []).map((p: any) => ({
+          ...p,
+          user_profile: profilesMap.get(p.user_id) || null
+        }))
+      }));
+      
+      const uniqueThreadMap = new Map<string, any>();
+      threadsWithProfiles.forEach((thread: any) => {
         if (!thread?.id) return;
         const existing = uniqueThreadMap.get(thread.id);
         if (!existing) {
@@ -378,12 +457,13 @@ export default function TeacherMessagesPage() {
           
           let unreadCount = 0;
           if (teacherParticipant) {
+            const lastReadAt = teacherParticipant.last_read_at || '2000-01-01';
             const { count } = await supabase
               .from('messages')
               .select('id', { count: 'exact', head: true })
               .eq('thread_id', thread.id)
               .neq('sender_id', userId)
-              .gt('created_at', teacherParticipant.last_read_at || '2000-01-01');
+              .gt('created_at', lastReadAt);
             
             unreadCount = count || 0;
           }
@@ -396,10 +476,10 @@ export default function TeacherMessagesPage() {
         })
       );
       
-      // Collapse duplicates so each parent/student pair only shows a single conversation entry.
+      // Collapse duplicates so each contact only shows a single conversation (one inbox per contact)
       const uniqueParentThreadMap = new Map<string, MessageThread>();
       threadsWithDetails.forEach((thread) => {
-        const key = getThreadContactKey(thread);
+        const key = getThreadContactKey(thread, userId);
         const existing = uniqueParentThreadMap.get(key);
         if (!existing || getThreadRecencyValue(thread) >= getThreadRecencyValue(existing)) {
           uniqueParentThreadMap.set(key, thread);
@@ -410,16 +490,6 @@ export default function TeacherMessagesPage() {
         (a, b) => getThreadRecencyValue(b) - getThreadRecencyValue(a)
       );
 
-      console.log('Threads before dedup:', threadsWithDetails.length);
-      console.log('Threads after dedup:', uniqueThreads.length);
-      console.log('Thread keys:', Array.from(uniqueParentThreadMap.keys()));
-      console.log('Detailed threads:', threadsWithDetails.map(t => ({
-        id: t.id,
-        key: getThreadContactKey(t),
-        parent: t.message_participants?.find((p: any) => p.role === 'parent')?.user_profile,
-        student: t.student
-      })));
-
       setThreads(uniqueThreads);
 
       if (selectedThreadId) {
@@ -427,7 +497,7 @@ export default function TeacherMessagesPage() {
         if (!stillSelected) {
           const originalSelected = threadsWithDetails.find((t) => t.id === selectedThreadId);
           if (originalSelected) {
-            const replacementKey = getThreadContactKey(originalSelected);
+            const replacementKey = getThreadContactKey(originalSelected, userId);
             const replacement = uniqueParentThreadMap.get(replacementKey);
             setSelectedThreadId(replacement?.id || null);
           } else {
@@ -436,7 +506,6 @@ export default function TeacherMessagesPage() {
         }
       }
     } catch (err: any) {
-      console.error('Error fetching threads:', err);
       setError(err.message);
     } finally {
       setThreadsLoading(false);
@@ -452,6 +521,8 @@ export default function TeacherMessagesPage() {
   useEffect(() => {
     if (selectedThreadId) {
       fetchMessages(selectedThreadId);
+    } else {
+      setMessages([]);
     }
   }, [selectedThreadId, fetchMessages]);
 
@@ -565,10 +636,11 @@ export default function TeacherMessagesPage() {
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
   const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
-  const parentParticipant = selectedParticipants?.find((p: any) => p.role === 'parent');
-  const parentName = parentParticipant?.user_profile
-    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
-    : 'Parent';
+  // Find the other participant (the contact) for the chat header
+  const contactParticipant = selectedParticipants?.find((p: any) => p.user_id !== userId) || selectedParticipants?.find((p: any) => p.role === 'parent');
+  const contactName = contactParticipant?.user_profile
+    ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
+    : 'Contact';
 
   // Message options menu handlers
   const handleDeleteThread = async () => {
@@ -588,8 +660,9 @@ export default function TeacherMessagesPage() {
     if (!selectedThreadId || !confirm('Are you sure you want to clear all messages in this conversation?')) return;
     try {
       await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
+      // Clear local messages immediately
+      setMessages([]);
       setRefreshTrigger(prev => prev + 1);
-      alert('Conversation cleared successfully.');
     } catch (err) {
       console.error('Error clearing conversation:', err);
       alert('Failed to clear conversation.');
@@ -682,6 +755,23 @@ export default function TeacherMessagesPage() {
       <style jsx global>{`
         @media (max-width: 1023px) {
           header.topbar { display: none !important; }
+          .frame {
+            padding: 0 !important;
+            gap: 0 !important;
+          }
+          .content {
+            padding: 0 !important;
+            padding-bottom: 0 !important;
+            max-height: 100vh !important;
+            max-height: 100dvh !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+          }
+          .app {
+            height: 100vh !important;
+            height: 100dvh !important;
+            overflow: hidden !important;
+          }
         }
       `}</style>
       <TeacherShell
@@ -692,9 +782,9 @@ export default function TeacherMessagesPage() {
         preschoolId={profile?.preschoolId}
         userId={userId}
         unreadCount={totalUnread}
-        contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100%', position: 'relative' }}
+        contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100vh', maxHeight: '100vh', position: 'relative' }}
       >
-        <div className="flex h-[calc(100vh-var(--topnav-h))] w-full overflow-hidden bg-[var(--bg)]">
+        <div className="flex h-screen w-full overflow-hidden bg-[var(--bg)]">
           {/* Collapsible Sidebar */}
           <div
             style={{
@@ -762,13 +852,32 @@ export default function TeacherMessagesPage() {
                 textAlign: !isDesktop ? 'left' : 'left',
                 marginLeft: !isDesktop ? 0 : 0
               }}>
-                {!isDesktop ? 'Contacts' : 'Messages'}
+                Messages
               </h2>
               {totalUnread > 0 && (
                 <span className="bg-[var(--primary)] text-white text-[12px] font-bold px-2.5 py-1 rounded-[12px] shadow-[0_2px_8px_rgba(124,58,237,0.3)]">
                   {totalUnread}
                 </span>
               )}
+              <button
+                onClick={() => setShowContactsWidget(true)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-1)',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Users size={16} />
+                New Chat
+              </button>
             </div>
 
             {/* Search */}
@@ -839,6 +948,7 @@ export default function TeacherMessagesPage() {
                   thread={thread}
                   isActive={thread.id === selectedThreadId}
                   onSelect={() => setSelectedThreadId(thread.id)}
+                  currentUserId={userId}
                 />
               ))
             ) : (
@@ -879,7 +989,7 @@ export default function TeacherMessagesPage() {
           flex: 1,
           display: (!isDesktop && !selectedThread) ? 'none' : 'flex',
           flexDirection: 'column',
-          background: wallpaperCss || 'var(--bg)',
+          background: wallpaperCss || 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
           position: 'relative',
           height: '100%',
           overflow: 'hidden',
@@ -948,11 +1058,11 @@ export default function TeacherMessagesPage() {
                 <div
                   className={`${isDesktop ? 'w-[52px] h-[52px] text-[18px]' : 'w-9 h-9 text-[13px]'} rounded-full bg-[linear-gradient(135deg,var(--primary)_0%,var(--cyan)_100%)] flex items-center justify-center text-white font-bold shadow-[0_4px_16px_rgba(124,58,237,0.3)] flex-shrink-0`}
                 >
-                  {parentName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
+                  {contactName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className={`${isDesktop ? 'text-[18px]' : 'text-[16px]'} m-0 font-bold text-[var(--text)] truncate`}>
-                    {parentName}
+                    {contactName}
                   </h3>
                   {isDesktop && selectedThread.student && (
                     <p className="mt-1 text-[13px] text-[var(--cyan)] font-medium flex items-center gap-1.5">
@@ -972,14 +1082,14 @@ export default function TeacherMessagesPage() {
                         <ImageIcon size={18} />
                       </button>
                       <button
-                        onClick={() => parentParticipant?.user_id && startVoiceCall(parentParticipant.user_id, parentName)}
+                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
                         title="Start voice call"
                         className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
                       >
                         <Phone size={18} />
                       </button>
                       <button
-                        onClick={() => parentParticipant?.user_id && startVideoCall(parentParticipant.user_id, parentName)}
+                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
                         title="Start video call"
                         className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
                       >
@@ -988,7 +1098,6 @@ export default function TeacherMessagesPage() {
                       <button
                         ref={moreButtonRef}
                         onClick={() => {
-                          console.log('Desktop options clicked', { ref: moreButtonRef.current });
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
@@ -1000,14 +1109,14 @@ export default function TeacherMessagesPage() {
                   ) : (
                     <>
                       <button
-                        onClick={() => parentParticipant?.user_id && startVoiceCall(parentParticipant.user_id, parentName)}
+                        onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
                         title="Voice call"
                         className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
                       >
                         <Phone size={18} />
                       </button>
                       <button
-                        onClick={() => parentParticipant?.user_id && startVideoCall(parentParticipant.user_id, parentName)}
+                        onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
                         title="Video call"
                         className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
                       >
@@ -1017,7 +1126,6 @@ export default function TeacherMessagesPage() {
                         ref={moreButtonRef}
                         type="button"
                         onClick={() => {
-                          console.log('Mobile options clicked', { ref: moreButtonRef.current });
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
@@ -1141,7 +1249,12 @@ export default function TeacherMessagesPage() {
               </div>
 
               {/* Message Composer */}
-              <div className={`${isDesktop ? 'py-3 px-7 border-t border-[var(--border)]' : 'fixed bottom-0 left-0 right-0 px-3 py-2.5'} bg-[var(--surface)] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-40`}>
+              <div className={`${isDesktop ? 'py-3 px-7 border-t border-[var(--border)]' : 'fixed bottom-0 left-0 right-0 px-3 pt-2.5'} z-[100]`} style={{ 
+                background: isDesktop ? 'var(--surface)' : 'linear-gradient(180deg, rgba(15, 23, 42, 0.0) 0%, rgba(15, 23, 42, 0.95) 15%, rgba(15, 23, 42, 1) 100%)',
+                backdropFilter: 'blur(12px)',
+                paddingBottom: isDesktop ? undefined : 'max(10px, env(safe-area-inset-bottom))',
+                boxShadow: isDesktop ? '0 -4px 20px rgba(0,0,0,0.08)' : 'none',
+              }}>
                 <div className={`w-full ${isDesktop ? 'max-w-[860px] mx-auto' : ''}`}>
                 <input
                   type="file"
@@ -1206,12 +1319,12 @@ export default function TeacherMessagesPage() {
                           type="button"
                           ref={emojiButtonRef}
                           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end mb-[2px]"
+                          className="w-[44px] h-[44px] rounded-[12px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)] shrink-0 self-end z-[101]"
                           aria-label="Emoji"
                         >
                           <Smile size={20} />
                         </button>
-                        <div className="flex flex-row items-end flex-1 gap-3 px-4 py-4 rounded-[24px] border-0 bg-[var(--surface-2)]">
+                        <div className="flex flex-row items-end flex-1 gap-4 px-5 py-4 rounded-[28px] border-0 bg-[rgba(30,41,59,0.95)] backdrop-blur-xl z-[101]">
                           {/* Textarea */}
                           <textarea
                             value={messageText}
@@ -1226,13 +1339,13 @@ export default function TeacherMessagesPage() {
                             placeholder="Type a message"
                             disabled={sending || attachmentUploading}
                             rows={1}
-                            className="flex-1 min-h-[28px] py-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[24px] placeholder:text-[var(--muted)] focus:outline-none focus:ring-0 focus:border-0"
-                            style={{ height: '28px', border: 'none', outline: 'none' }}
+                            className="flex-1 min-h-[36px] py-2 px-1 bg-transparent text-[var(--text)] text-[16px] outline-none resize-none max-h-[120px] leading-[28px] placeholder:text-[var(--muted)] placeholder:pb-[10px] focus:outline-none focus:ring-0 focus:border-0"
+                            style={{ height: '36px', border: 'none', outline: 'none', paddingBottom: '10px' }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 handleSendMessage(e);
-                                (e.currentTarget as HTMLTextAreaElement).style.height = '28px';
+                                (e.currentTarget as HTMLTextAreaElement).style.height = '36px';
                               }
                             }}
                           />
@@ -1242,10 +1355,10 @@ export default function TeacherMessagesPage() {
                               type="button"
                               onClick={() => cameraInputRef.current?.click()}
                               disabled={attachmentUploading}
-                              className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                               aria-label="Camera"
                             >
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ paddingBottom: '10px' }}>
                                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                                 <circle cx="12" cy="13" r="4"/>
                               </svg>
@@ -1256,17 +1369,17 @@ export default function TeacherMessagesPage() {
                             type="button"
                             onClick={triggerFilePicker}
                             disabled={attachmentUploading}
-                            className={`text-[var(--muted)] shrink-0 mb-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`text-[var(--muted)] shrink-0 p-1 ${attachmentUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                             aria-label="Attach file"
                           >
-                            <Paperclip size={20} />
+                            <Paperclip size={28} style={{ paddingBottom: '10px', paddingRight: '5' }} />
                           </button>
                         </div>
                         {messageText.trim() ? (
                           <button
                             type="submit"
                             disabled={sending || attachmentUploading}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
+                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[99999] ${sending || attachmentUploading ? 'bg-[var(--muted)] cursor-not-allowed' : 'bg-[var(--primary)] shadow-[0_4px_12px_rgba(124,58,237,0.4)]'}`}
                           >
                             {sending || attachmentUploading ? (
                               <Loader2 size={16} className="animate-spin" color="white" />
@@ -1278,7 +1391,7 @@ export default function TeacherMessagesPage() {
                           <button
                             type="button"
                             onClick={handleMicClick}
-                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
+                            className={`w-[40px] h-[40px] rounded-full border-0 flex items-center justify-center ml-1 self-end z-[101] ${isRecording ? 'bg-[var(--warning)] shadow-[0_4px_12px_rgba(245,158,11,0.4)]' : 'bg-[var(--cyan)] shadow-[0_4px_12px_rgba(0,245,255,0.4)]'}`}
                           >
                             <Mic size={18} color="white" />
                           </button>
@@ -1350,10 +1463,6 @@ export default function TeacherMessagesPage() {
           userId={userId || ''}
           onSelect={applyWallpaper}
         />
-        {(() => {
-          console.log('MessageOptionsMenu render', { isOpen: optionsMenuOpen, anchorEl: optionsMenuAnchor });
-          return null;
-        })()}
         <MessageOptionsMenu
           isOpen={optionsMenuOpen}
           onClose={() => setOptionsMenuOpen(false)}
@@ -1376,7 +1485,57 @@ export default function TeacherMessagesPage() {
           onCopy={handleCopyMessage}
           onReact={handleReactToMessage}
         />
+        
+        {/* Contacts Widget Modal */}
+        {showContactsWidget && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+            onClick={() => setShowContactsWidget(false)}
+          >
+            <div 
+              style={{ maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TeacherContactsWidget 
+                preschoolId={profile?.preschoolId} 
+                teacherId={userId}
+              />
+            </div>
+          </div>
+        )}
       </TeacherShell>
     </>
+  );
+}
+
+// Wrap with Suspense for useSearchParams
+export default function TeacherMessagesPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100vh',
+        background: 'var(--bg)'
+      }}>
+        <div className="spinner" />
+      </div>
+    }>
+      <TeacherMessagesPage />
+    </Suspense>
   );
 }

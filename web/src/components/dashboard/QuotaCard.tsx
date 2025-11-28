@@ -119,10 +119,10 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   if (!usage) {
     const freeLimits = TIER_LIMITS.free;
     return (
-      <div className="card" style={{ padding: 'var(--space-4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
-            <TrendingUp size={20} style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)' }} />
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <TrendingUp size={20} style={{ color: 'var(--primary)' }} />
             AI Usage
           </h3>
           <span 
@@ -241,17 +241,21 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   };
 
   return (
-    <div className="card" style={{ padding: 'var(--space-4)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
-          <TrendingUp size={20} style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)' }} />
+    <div className="card" style={{ marginBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <TrendingUp size={20} style={{ color: 'var(--primary)' }} />
           AI Usage
         </h3>
         <span 
-          className="badge badge-primary" 
+          className="badge" 
           style={{ 
             textTransform: 'capitalize',
             fontSize: 12,
+            background: 'var(--primary)',
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: '12px'
           }}
         >
           {usage.current_tier} Plan

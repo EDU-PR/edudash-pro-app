@@ -415,6 +415,15 @@ button {
   }
 }
 
+/* Base card styles */
+.card {
+  padding: var(--space-4);
+  border-radius: var(--radius-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
 /* Card hover effects for desktop */
 @media (min-width: 1024px) {
   .card {
@@ -428,20 +437,37 @@ button {
   
   .card-interactive {
     cursor: pointer;
+    border: 1px solid var(--border) !important;
   }
   
   .card-interactive:hover {
     transform: translateY(-4px);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    border-color: var(--primary) !important;
+  }
+
+  /* Remove any unwanted colored borders on interactive cards */
+  .card-interactive:not([style*="border: 2px solid"]) {
+    border-color: var(--border) !important;
   }
 }
 
-/* Grid layouts for desktop */
+/* Grid layouts for all screen sizes */
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .grid2 {
+    gap: 20px;
+  }
+}
+
 @media (min-width: 1024px) {
   .grid2 {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
+    gap: 24px;
   }
   
   .grid3 {
@@ -455,6 +481,107 @@ button {
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
   }
+}
+
+/* Metric tiles with color-coded borders */
+.tile {
+  text-align: center;
+  padding: 20px 16px;
+  border-left: 4px solid var(--primary);
+  position: relative;
+}
+
+.tile:nth-child(1) {
+  border-left-color: #3b82f6; /* Blue for students */
+}
+
+.tile:nth-child(2) {
+  border-left-color: #10b981; /* Green for classes */
+}
+
+.tile:nth-child(3) {
+  border-left-color: #f59e0b; /* Orange for pending */
+}
+
+.tile:nth-child(4) {
+  border-left-color: #8b5cf6; /* Purple for lessons */
+}
+
+.metricValue {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  color: var(--foreground);
+}
+
+.metricLabel {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Section titles */
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--foreground);
+}
+
+/* Quick action buttons */
+.qa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 60px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.qa:hover {
+  border-color: var(--primary);
+  background: var(--surface-1);
+  transform: translateY(-2px);
+}
+
+/* Search input styles */
+.searchInput {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px 0 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--foreground);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.searchInput:focus {
+  border-color: var(--primary);
+}
+
+.searchInput::placeholder {
+  color: var(--muted);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
 }
 
 @media (min-width: 1280px) {
@@ -743,6 +870,95 @@ textarea.input { min-height: 80px; padding: 10px 12px; resize: vertical; line-he
 .icon16 { width: 16px; height: 16px; }
 .icon20 { width: 20px; height: 20px; }
 .icon48 { width: 48px; height: 48px; }
+
+/* Tile styles for metrics */
+.tile {
+  text-align: center;
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  transition: all 0.2s ease;
+}
+
+.tile:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.metricValue {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--foreground);
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.metricLabel {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+  color: var(--foreground);
+}
+
+/* Quick action styles */
+.qa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.qa:hover {
+  border-color: var(--primary);
+  background: var(--surface-1);
+  transform: translateY(-1px);
+}
+
+/* Grid utilities - removed duplicate, using the earlier definition */
+
+/* Search input styles */
+.searchInput {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px 0 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.searchInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
 
 /* Google Sign-In Button */
 .googleSignInBtn{
