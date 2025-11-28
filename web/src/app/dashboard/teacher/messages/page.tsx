@@ -927,6 +927,7 @@ export default function TeacherMessagesPage() {
                       <button
                         ref={moreButtonRef}
                         onClick={() => {
+                          console.log('Desktop options clicked', { ref: moreButtonRef.current });
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
@@ -955,6 +956,7 @@ export default function TeacherMessagesPage() {
                         ref={moreButtonRef}
                         type="button"
                         onClick={() => {
+                          console.log('Mobile options clicked', { ref: moreButtonRef.current });
                           setOptionsMenuAnchor(moreButtonRef.current);
                           setOptionsMenuOpen(true);
                         }}
@@ -1287,6 +1289,10 @@ export default function TeacherMessagesPage() {
           userId={userId || ''}
           onSelect={applyWallpaper}
         />
+        {(() => {
+          console.log('MessageOptionsMenu render', { isOpen: optionsMenuOpen, anchorEl: optionsMenuAnchor });
+          return null;
+        })()}
         <MessageOptionsMenu
           isOpen={optionsMenuOpen}
           onClose={() => setOptionsMenuOpen(false)}
