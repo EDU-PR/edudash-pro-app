@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -394,7 +394,7 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUs
   );
 };
 
-export default function ParentMessagesPage() {
+function ParentMessagesContent() {
   useBodyScrollLock(true);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2480,5 +2480,34 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         preschoolId={profile?.preschoolId}
       />
     </ParentShell>
+  );
+}
+
+// Loading fallback component
+function MessagesLoading() {
+  return (
+    <ParentShell>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        background: 'var(--background)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: 40, height: 40, margin: '0 auto 16px' }} />
+          <p style={{ color: 'var(--muted)' }}>Loading messages...</p>
+        </div>
+      </div>
+    </ParentShell>
+  );
+}
+
+// Export with Suspense wrapper
+export default function ParentMessagesPage() {
+  return (
+    <Suspense fallback={<MessagesLoading />}>
+      <ParentMessagesContent />
+    </Suspense>
   );
 }
