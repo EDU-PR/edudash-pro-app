@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from('push_subscriptions').upsert({
       user_id: userId || null,
       endpoint: subscription.endpoint,
-      p256dh_key: subscription.keys?.p256dh || null,
-      auth_key: subscription.keys?.auth || null,
+      p256dh: subscription.keys?.p256dh || null,
+      auth: subscription.keys?.auth || null,
       topics: topics || ['updates'],
       updated_at: new Date().toISOString(),
     }, {

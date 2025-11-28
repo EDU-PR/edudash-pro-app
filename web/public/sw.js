@@ -230,7 +230,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
     self.registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(
-        'BHOCSq7oH9Xn1NopQcMTw_ijbBpq-V-2Ux_6DuIzKe3pGt0BDF2LOwzYYajy6EccmDhWV2lpFcX4w_NuKwiZDnQ'
+        'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE'
       ),
     })
     .then((subscription) => {

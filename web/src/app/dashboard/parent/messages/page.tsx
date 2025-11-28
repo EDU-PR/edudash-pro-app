@@ -968,10 +968,43 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
             .single();
 
           if (newMessage) {
-            // Add new message to state immediately
-            setMessages((prev) => [...prev, newMessage]);
-            // Refresh thread list to update last message
-            fetchThreads();
+            // Add new message to state immediately (avoid duplicates)
+            setMessages((prev) => {
+              if (prev.some(m => m.id === newMessage.id)) return prev;
+              return [...prev, newMessage];
+            });
+
+            // Play notification sound for incoming messages
+            if (newMessage.sender_id !== userId) {
+              try {
+                const audio = new Audio('/sounds/notification.mp3');
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+                // Vibrate on mobile if supported
+                if ('vibrate' in navigator) {
+                  navigator.vibrate(100);
+                }
+              } catch (e) {
+                // Ignore audio errors
+              }
+            }
+
+            // Update thread's last message in local state (avoid full refetch)
+            setThreads((prev) => prev.map(t => 
+              t.id === selectedThreadId 
+                ? { 
+                    ...t, 
+                    last_message: {
+                      content: newMessage.content,
+                      created_at: newMessage.created_at,
+                      sender_id: newMessage.sender_id
+                    },
+                    last_message_at: newMessage.created_at,
+                    unread_count: newMessage.sender_id !== userId ? (t.unread_count || 0) + 1 : t.unread_count
+                  } 
+                : t
+            ));
+
             // Scroll to bottom
             setTimeout(() => scrollToBottom(), 100);
           }
@@ -982,7 +1015,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchThreads]);
+  }, [selectedThreadId, supabase, userId]);
 
   // Stable keyboard listener with empty deps array - MUST be before any conditional returns
   useEffect(() => {

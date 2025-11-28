@@ -31,7 +31,7 @@ export function useDeploymentNotifications() {
 
           // Subscribe to push notifications
           const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-            'BHOCSq7oH9Xn1NopQcMTw_ijbBpq-V-2Ux_6DuIzKe3pGt0BDF2LOwzYYajy6EccmDhWV2lpFcX4w_NuKwiZDnQ';
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE';
 
           subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,

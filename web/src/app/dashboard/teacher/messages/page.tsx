@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Users } from 'lucide-react';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Plus, Sparkles } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
@@ -15,7 +15,9 @@ import { CallInterface, useCallInterface } from '@/components/calls/CallInterfac
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
-import { TeacherContactsWidget } from '@/components/dashboard/teacher/TeacherContactsWidget';
+import { NewChatModal } from '@/components/messaging/NewChatModal';
+import { InviteContactModal } from '@/components/messaging/InviteContactModal';
+import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 
 interface MessageThread {
   id: string;
@@ -231,8 +233,9 @@ function TeacherMessagesPage() {
   const [messageActionsPosition, setMessageActionsPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
-  // Contacts widget state (for "New Chat" button)
-  const [showContactsWidget, setShowContactsWidget] = useState(false);
+  // New Chat modal state
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   const applyWallpaper = (sel: { type: 'preset' | 'url'; value: string }) => {
     // Save to localStorage for persistence
@@ -590,10 +593,76 @@ function TeacherMessagesPage() {
           table: 'messages',
           filter: `thread_id=eq.${selectedThreadId}`,
         },
-        () => {
-          fetchMessages(selectedThreadId);
-          fetchThreads();
-          setTimeout(() => scrollToBottom(), 100);
+        async (payload: { new: Record<string, unknown> }) => {
+          // Fetch the complete message with sender info
+          const newMsg = payload.new as { id: string; thread_id: string };
+          const { data: newMessage } = await supabase
+            .from('messages')
+            .select(`
+              id,
+              thread_id,
+              sender_id,
+              content,
+              created_at,
+              read_by
+            `)
+            .eq('id', newMsg.id)
+            .single();
+
+          if (newMessage) {
+            // Fetch sender profile
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name, role')
+              .eq('id', newMessage.sender_id)
+              .single();
+            
+            const messageWithSender = {
+              ...newMessage,
+              sender: senderProfile || null
+            };
+
+            // Add new message to state immediately (avoid full re-fetch)
+            setMessages((prev) => {
+              // Avoid duplicate messages
+              if (prev.some(m => m.id === newMessage.id)) return prev;
+              return [...prev, messageWithSender];
+            });
+
+            // Play notification sound for incoming messages
+            if (newMessage.sender_id !== userId) {
+              try {
+                const audio = new Audio('/sounds/notification.mp3');
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+                // Vibrate on mobile if supported
+                if ('vibrate' in navigator) {
+                  navigator.vibrate(100);
+                }
+              } catch (e) {
+                // Ignore audio errors
+              }
+            }
+
+            // Update thread's last message in local state
+            setThreads((prev) => prev.map(t => 
+              t.id === selectedThreadId 
+                ? { 
+                    ...t, 
+                    last_message: {
+                      content: newMessage.content,
+                      created_at: newMessage.created_at,
+                      sender_id: newMessage.sender_id
+                    },
+                    last_message_at: newMessage.created_at,
+                    unread_count: newMessage.sender_id !== userId ? (t.unread_count || 0) + 1 : t.unread_count
+                  } 
+                : t
+            ));
+
+            // Scroll to bottom
+            setTimeout(() => scrollToBottom(), 100);
+          }
         }
       )
       .subscribe();
@@ -601,7 +670,7 @@ function TeacherMessagesPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
+  }, [selectedThreadId, supabase, userId]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -911,23 +980,22 @@ function TeacherMessagesPage() {
                 </span>
               )}
               <button
-                onClick={() => setShowContactsWidget(true)}
+                onClick={() => setShowNewChatModal(true)}
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface-1)',
-                  color: 'var(--text-primary)',
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  border: 'none',
+                  background: 'var(--primary)',
+                  color: 'white',
                   cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: 500,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)',
                 }}
               >
-                <Users size={16} />
-                New Chat
+                <Plus size={20} />
               </button>
             </div>
 
@@ -971,47 +1039,20 @@ function TeacherMessagesPage() {
           }}>
             {/* Dash AI Assistant - Always at top like Meta AI in WhatsApp */}
             <div
-              onClick={() => router.push('/dashboard/teacher/dash-ai')}
+              onClick={() => router.push('/dashboard/teacher/dash-chat')}
+              className="flex items-center gap-3 p-3.5 cursor-pointer rounded-xl mb-2 transition-all hover:scale-[1.01]"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--scale-md, 12px)',
-                padding: 'var(--scale-md, 14px)',
-                cursor: 'pointer',
-                borderRadius: 'var(--radius-md, 12px)',
-                marginBottom: 'var(--scale-sm, 8px)',
-                background: 'linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, rgba(0, 212, 255, 0.06) 100%)',
-                border: '1px solid rgba(124, 58, 237, 0.2)',
-                transition: 'all 0.2s ease',
+                background: 'linear-gradient(90deg, rgba(124, 58, 237, 0.12) 0%, rgba(6, 182, 212, 0.08) 50%, rgba(236, 72, 153, 0.08) 100%)',
+                border: '1px solid rgba(124, 58, 237, 0.25)',
               }}
             >
-              <div style={{
-                width: 'var(--touch-md, 48px)',
-                height: 'var(--touch-md, 48px)',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #06b6d4 50%, #ec4899 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 16px rgba(124, 58, 237, 0.4)',
-                flexShrink: 0,
-              }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" strokeOpacity="0.5"/>
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10" strokeLinecap="round"/>
-                  <circle cx="12" cy="12" r="4" fill="white" fillOpacity="0.3"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 'var(--font-md, 16px)', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Dash AI
-                  </span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
+              <DashAIAvatar size={48} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[16px] font-semibold text-[var(--text)]">Dash AI</span>
+                  <Sparkles size={14} className="text-[#a78bfa]" />
                 </div>
-                <p style={{ fontSize: 'var(--font-sm, 13px)', color: 'var(--muted)', marginTop: 2 }}>
+                <p className="text-[13px] text-[var(--muted)] mt-0.5 truncate">
                   AI assistant for lesson planning & grading
                 </p>
               </div>
@@ -1590,36 +1631,37 @@ function TeacherMessagesPage() {
           onReact={handleReactToMessage}
         />
         
-        {/* Contacts Widget Modal */}
-        {showContactsWidget && (
-          <div 
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.6)',
-              backdropFilter: 'blur(4px)',
-              zIndex: 1000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 20,
-            }}
-            onClick={() => setShowContactsWidget(false)}
-          >
-            <div 
-              style={{ maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <TeacherContactsWidget 
-                preschoolId={profile?.preschoolId} 
-                teacherId={userId}
-              />
-            </div>
-          </div>
-        )}
+        {/* New Chat Modal */}
+        <NewChatModal
+          isOpen={showNewChatModal}
+          onClose={() => setShowNewChatModal(false)}
+          onSelectContact={(contact) => {
+            // TODO: Create or find thread with this contact
+            console.log('Selected contact:', contact);
+            setShowNewChatModal(false);
+            // For now, just show an alert
+            alert(`Starting chat with ${contact.first_name} ${contact.last_name}`);
+          }}
+          onSelectDashAI={() => {
+            setShowNewChatModal(false);
+            router.push('/dashboard/teacher/dash-chat');
+          }}
+          onInviteNew={() => {
+            setShowNewChatModal(false);
+            setShowInviteModal(true);
+          }}
+          currentUserId={userId || null}
+          currentUserRole="teacher"
+          preschoolId={profile?.preschoolId}
+        />
+
+        {/* Invite Contact Modal */}
+        <InviteContactModal
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          inviterName={profile?.firstName || 'A teacher'}
+          preschoolName={profile?.preschoolName}
+        />
       </TeacherShell>
     </>
   );
