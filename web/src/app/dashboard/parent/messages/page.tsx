@@ -353,6 +353,22 @@ export default function ParentMessagesPage() {
     }
   }, [selectedThreadId, userId, markThreadAsRead]);
 
+  // Deduplication helpers
+  const getThreadContactKey = (thread: MessageThread) => {
+    const participants = thread.message_participants || [];
+    const educator = participants.find((p) => p.role !== 'parent');
+    if (!educator?.user_id) {
+      return `thread:${thread.id}`;
+    }
+    const studentKey = thread.student_id || 'no-student';
+    return `${educator.user_id}:${studentKey}`;
+  };
+
+  const getThreadRecencyValue = (thread: MessageThread) => {
+    const rawTimestamp = thread.last_message?.created_at || thread.last_message_at;
+    return rawTimestamp ? new Date(rawTimestamp).getTime() : 0;
+  };
+
   const fetchThreads = useCallback(async () => {
     if (!userId) return;
 
@@ -417,7 +433,25 @@ export default function ParentMessagesPage() {
         })
       );
 
-      setThreads(threadsWithDetails);
+      // Collapse duplicates so each teacher/student pair only shows once
+      const uniqueContactThreadMap = new Map<string, MessageThread>();
+      threadsWithDetails.forEach((thread) => {
+        const key = getThreadContactKey(thread);
+        const existing = uniqueContactThreadMap.get(key);
+        if (!existing || getThreadRecencyValue(thread) >= getThreadRecencyValue(existing)) {
+          uniqueContactThreadMap.set(key, thread);
+        }
+      });
+
+      const uniqueThreads = Array.from(uniqueContactThreadMap.values()).sort(
+        (a, b) => getThreadRecencyValue(b) - getThreadRecencyValue(a)
+      );
+
+      console.log('Parent threads before dedup:', threadsWithDetails.length);
+      console.log('Parent threads after dedup:', uniqueThreads.length);
+      console.log('Thread keys:', Array.from(uniqueContactThreadMap.keys()));
+
+      setThreads(uniqueThreads);
       // Don't auto-select threads - let user choose
       // Only ensure selection is still valid if one exists
       if (selectedThreadId) {
@@ -1060,8 +1094,8 @@ export default function ParentMessagesPage() {
                   overflowY: 'auto',
                   minHeight: 0,
                   padding: isDesktop ? '28px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : currentThread.student ? '116px' : '88px',
-                  paddingBottom: isDesktop ? 100 : currentThread.student ? 110 : 100,
+                  paddingTop: isDesktop ? '32px' : (currentThread.student ? '130px' : '88px'),
+                  paddingBottom: isDesktop ? 100 : (currentThread.student ? 110 : 100),
                   paddingRight: isDesktop ? 340 : 0,
                   background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
                   backgroundImage:
