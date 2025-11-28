@@ -8,6 +8,40 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
 import { FileText, Sparkles, CheckCircle2, Clock, AlertCircle, Calendar, BookOpen } from 'lucide-react';
 
+type HomeworkSubmission = {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  submitted_at: string;
+  feedback?: string | null;
+  [key: string]: unknown;
+};
+
+type HomeworkAssignmentRecord = {
+  id: string;
+  class_id: string;
+  preschool_id: string;
+  title: string;
+  description?: string | null;
+  due_date: string;
+  subject?: string | null;
+  estimated_time_minutes?: number | null;
+  class?: { name?: string | null } | null;
+  [key: string]: unknown;
+};
+
+type HomeworkAssignment = HomeworkAssignmentRecord & {
+  homework_submissions?: HomeworkSubmission[];
+  submissions?: HomeworkSubmission[];
+};
+
+type HomeworkStats = {
+  pending: number;
+  completed: number;
+  total: number;
+  overdue: number;
+};
+
 // Skeleton Component
 const HomeworkSkeleton = () => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
@@ -77,8 +111,8 @@ export default function HomeworkPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [homework, setHomework] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [homework, setHomework] = useState<HomeworkAssignment[]>([]);
+  const [stats, setStats] = useState<HomeworkStats | null>(null);
   const [homeworkLoading, setHomeworkLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -118,7 +152,7 @@ export default function HomeworkPage() {
 
         if (!studentData || !studentData.class_id) {
           setHomework([]);
-          setStats({ pending: 0, completed: 0, total: 0 });
+          setStats({ pending: 0, completed: 0, total: 0, overdue: 0 });
           setHomeworkLoading(false);
           return;
         }
@@ -134,30 +168,37 @@ export default function HomeworkPage() {
         if (hwError) throw hwError;
 
         // Fetch submissions for this student
-        const assignmentIds = assignments?.map((a: { id: string }) => a.id) || [];
-        const { data: submissions } = assignmentIds.length > 0 ? await supabase
+        const assignmentIds = assignments?.map((assignment: { id: string }) => assignment.id) || [];
+        const submissionsResponse = assignmentIds.length > 0 ? await supabase
           .from('homework_submissions')
           .select('*')
           .eq('student_id', activeChildId)
           .eq('preschool_id', studentData.preschool_id)
-          .in('assignment_id', assignmentIds) : { data: [] };
+          .in('assignment_id', assignmentIds) : { data: [] as HomeworkSubmission[] };
+
+        const submissions = (submissionsResponse.data || []) as HomeworkSubmission[];
 
         // Attach submissions to assignments
-        const enrichedAssignments = assignments?.map((assignment: any) => ({
+        const enrichedAssignments: HomeworkAssignment[] = assignments?.map((assignment: HomeworkAssignmentRecord) => ({
           ...assignment,
-          homework_submissions: submissions?.filter((s: any) => s.assignment_id === assignment.id) || [],
-          submissions: submissions?.filter((s: any) => s.assignment_id === assignment.id) || []
+          homework_submissions: submissions?.filter((submission: HomeworkSubmission) => submission.assignment_id === assignment.id) || [],
+          submissions: submissions?.filter((submission: HomeworkSubmission) => submission.assignment_id === assignment.id) || []
         })) || [];
         
-        const data = enrichedAssignments;
+        const data: HomeworkAssignment[] = enrichedAssignments;
         
         if (hwError) throw hwError;
         setHomework(data || []);
         
         // Calculate stats
-        const pending = data?.filter((hw: any) => !hw.homework_submissions || hw.homework_submissions.length === 0).length || 0;
-        const completed = data?.filter((hw: any) => hw.homework_submissions && hw.homework_submissions.length > 0).length || 0;
-        setStats({ pending, completed, total: data?.length || 0 });
+        const pending = data?.filter((hw) => !hw.homework_submissions || hw.homework_submissions.length === 0).length || 0;
+        const completed = data?.filter((hw) => hw.homework_submissions && hw.homework_submissions.length > 0).length || 0;
+        const overdueCount = data?.filter((hw) => {
+          const hasSubmission = !!(hw.homework_submissions && hw.homework_submissions.length);
+          if (hasSubmission) return false;
+          return new Date(hw.due_date).getTime() < Date.now();
+        }).length || 0;
+        setStats({ pending, completed, total: data?.length || 0, overdue: overdueCount });
       } catch (err: any) {
         setError(err.message);
       } finally {

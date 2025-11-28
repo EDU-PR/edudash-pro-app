@@ -34,12 +34,16 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   read_by?: string[];
+  delivered_to?: string[];
   sender?: {
     first_name: string;
     last_name: string;
     role: string;
   };
 }
+
+// Message status types for WhatsApp-style ticks
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -48,7 +52,62 @@ interface ChatMessageBubbleProps {
   formattedTime: string;
   senderName?: string;
   otherParticipantIds?: string[];
+  hideAvatars?: boolean;
+  onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
 }
+
+// WhatsApp-style tick component
+const MessageTicks = ({ status }: { status: MessageStatus }) => {
+  // Single grey tick = sent
+  // Double grey tick = delivered
+  // Double blue tick = read
+  
+  if (status === 'sending') {
+    return (
+      <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.4)' }}>
+        ○
+      </span>
+    );
+  }
+  
+  if (status === 'sent') {
+    return (
+      <span style={{ 
+        fontSize: 14, 
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontWeight: 500,
+      }}>
+        ✓
+      </span>
+    );
+  }
+  
+  if (status === 'delivered') {
+    return (
+      <span style={{ 
+        fontSize: 14, 
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontWeight: 500,
+        letterSpacing: '-3px',
+      }}>
+        ✓✓
+      </span>
+    );
+  }
+  
+  // Read - blue ticks
+  return (
+    <span style={{ 
+      fontSize: 14, 
+      fontWeight: 600,
+      color: '#34d399', // WhatsApp-style blue-green for read
+      letterSpacing: '-3px',
+      textShadow: '0 0 6px rgba(52, 211, 153, 0.4)',
+    }}>
+      ✓✓
+    </span>
+  );
+};
 
 export const ChatMessageBubble = ({
   message,
@@ -57,13 +116,35 @@ export const ChatMessageBubble = ({
   formattedTime,
   senderName,
   otherParticipantIds = [],
+  hideAvatars = false,
+  onContextMenu,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
   
-  // Check if message is read by other participants
-  const isRead = isOwn && message.read_by && otherParticipantIds.length > 0
-    ? otherParticipantIds.some(id => message.read_by?.includes(id))
-    : false;
+  // Determine message status for ticks
+  const getMessageStatus = (): MessageStatus => {
+    if (!isOwn) return 'sent'; // Not applicable for received messages
+    
+    // Check if read by any other participant
+    const isRead = message.read_by && otherParticipantIds.length > 0
+      ? otherParticipantIds.some(id => message.read_by?.includes(id))
+      : false;
+    
+    if (isRead) return 'read';
+    
+    // Check if delivered to any other participant
+    const isDelivered = message.delivered_to && otherParticipantIds.length > 0
+      ? otherParticipantIds.some(id => message.delivered_to?.includes(id))
+      : false;
+    
+    if (isDelivered) return 'delivered';
+    
+    // If we have an ID, it's been saved to DB (sent)
+    // For now, treat all saved messages as delivered since we don't track delivery separately
+    return message.id ? 'delivered' : 'sending';
+  };
+  
+  const messageStatus = getMessageStatus();
 
   // Improved color scheme for better contrast and distinction
   const bubbleBackground = isOwn
@@ -100,10 +181,11 @@ export const ChatMessageBubble = ({
             alt={content.name || 'Image attachment'}
             style={{
               width: '100%',
-              maxWidth: 300,
-              borderRadius: 12,
-              marginBottom: 8,
+              maxWidth: 280,
+              borderRadius: 10,
+              marginBottom: 4,
               border: isOwn ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(148, 163, 184, 0.2)',
+              display: 'block',
             }}
           />
         );
@@ -152,14 +234,14 @@ export const ChatMessageBubble = ({
         display: 'flex',
         justifyContent: isOwn ? 'flex-end' : 'flex-start',
         maxWidth: '100%',
-        paddingLeft: isDesktop ? 8 : 0,
-        paddingRight: isDesktop ? 280 : 0,
+        paddingLeft: isDesktop ? 8 : (isOwn ? 0 : 6),
+        paddingRight: isDesktop ? 280 : (isOwn ? 6 : 0),
         gap: 8,
         alignItems: 'flex-end',
       }}
     >
       {/* Avatar for received messages */}
-      {!isOwn && (
+      {!hideAvatars && !isOwn && (
         <div
           style={{
             width: isDesktop ? 36 : 32,
@@ -186,39 +268,43 @@ export const ChatMessageBubble = ({
       
       <div
         style={{
-          width: isDesktop ? 36 : 32,
-          height: isDesktop ? 36 : 32,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
-          marginBottom: 2,
-        }}
-      >
-        {senderName ? (
-          <span style={{ color: '#fff', fontSize: isDesktop ? 13 : 11, fontWeight: 600 }}>
-            {getInitials(senderName)}
-          </span>
-        ) : (
-          <User size={isDesktop ? 18 : 16} color="#fff" />
-        )}
-      </div>
-      
-      <div
-        style={{
-          maxWidth: isDesktop ? '65%' : '75%',
+          maxWidth: isDesktop ? '65%' : '80%',
           width: 'fit-content',
-          padding: isDesktop ? '14px 20px' : '12px 16px',
-          borderRadius: isOwn ? '20px 20px 6px 20px' : '20px 20px 20px 6px',
+          padding: content.kind === 'media' 
+            ? (isDesktop ? '6px 6px' : '4px 4px') 
+            : (isDesktop ? '10px 16px' : '8px 12px'),
+          borderRadius: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
           background: bubbleBackground,
           color: bubbleColor,
           border: bubbleBorder,
           boxShadow: elevation,
           animation: !isOwn ? 'pulse-glow 4s ease-in-out infinite' : 'none',
           transform: 'translateZ(0)',
+          cursor: 'pointer',
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContextMenu?.(e, message.id);
+        }}
+        onTouchStart={(e) => {
+          const target = e.currentTarget;
+          let longPressTriggered = false;
+          
+          const timer = setTimeout(() => {
+            longPressTriggered = true;
+            onContextMenu?.(e, message.id);
+          }, 500); // Long press duration
+          
+          const clearTimer = () => {
+            clearTimeout(timer);
+            if (target) {
+              target.removeEventListener('touchend', clearTimer);
+              target.removeEventListener('touchmove', clearTimer);
+            }
+          };
+          
+          target.addEventListener('touchend', clearTimer, { once: true });
+          target.addEventListener('touchmove', clearTimer, { once: true });
         }}
       >
         {/* Sender name for received messages */}
@@ -238,35 +324,22 @@ export const ChatMessageBubble = ({
         
         <div
           style={{
-            marginTop: content.kind === 'media' ? 4 : 8,
-            fontSize: 11,
+            marginTop: content.kind === 'media' ? 2 : 3,
+            fontSize: 10,
             display: 'flex',
             alignItems: 'center',
             justifyContent: isOwn ? 'flex-end' : 'flex-start',
-            gap: 6,
-            color: isOwn ? 'rgba(255, 255, 255, 0.7)' : 'rgba(148, 163, 184, 0.8)',
+            gap: 4,
+            color: isOwn ? 'rgba(255, 255, 255, 0.6)' : 'rgba(148, 163, 184, 0.7)',
           }}
         >
           <span>{formattedTime}</span>
-          {isOwn && (
-            <span 
-              style={{ 
-                  fontSize: 14,
-                  fontWeight: isRead ? 700 : 400,
-                  color: isRead ? '#a855f7' : 'rgba(255, 255, 255, 0.6)',
-                  opacity: isRead ? 1 : 0.75,
-                  textShadow: isRead ? '0 0 8px rgba(168, 85, 247, 0.5)' : 'none',
-                  transition: 'all 0.3s ease',
-              }}
-            >
-              ✓✓
-            </span>
-          )}
+          {isOwn && <MessageTicks status={messageStatus} />}
         </div>
       </div>
 
       {/* Spacer for sent messages (to maintain alignment) */}
-      {isOwn && (
+      {isOwn && !hideAvatars && (
         <div style={{ width: isDesktop ? 36 : 32, flexShrink: 0 }} />
       )}
     </div>

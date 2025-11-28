@@ -28,6 +28,9 @@ interface UseChildrenDataReturn {
   refetch: () => Promise<void>;
 }
 
+type HomeworkAssignmentRow = { id: string };
+type HomeworkSubmissionRow = { assignment_id: string };
+
 export function useChildrenData(userId: string | undefined): UseChildrenDataReturn {
   const [children, setChildren] = useState<any[]>([]);
   const [childrenCards, setChildrenCards] = useState<ChildCard[]>([]);
@@ -76,7 +79,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
           .gte('due_date', today);
 
         if (assignments && assignments.length > 0) {
-          const assignmentIds = assignments.map((a: any) => a.id);
+          const assignmentIds: string[] = assignments.map((assignment: HomeworkAssignmentRow) => assignment.id);
           // Check which ones have been submitted
           const { data: submissions } = await supabase
             .from('homework_submissions')
@@ -85,8 +88,10 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
             .eq('preschool_id', child.preschool_id)
             .in('assignment_id', assignmentIds);
 
-          const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
-          homeworkPending = assignmentIds.filter((id: string) => !submittedIds.has(id)).length;
+          const submittedIds = new Set(
+            submissions?.map((submission: HomeworkSubmissionRow) => submission.assignment_id) || []
+          );
+          homeworkPending = assignmentIds.filter((assignmentId: string) => !submittedIds.has(assignmentId)).length;
         }
       } catch {}
       try {

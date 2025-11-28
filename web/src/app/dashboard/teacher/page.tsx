@@ -13,7 +13,6 @@ import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
 import { ClassCard } from '@/components/dashboard/teacher/ClassCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
-import { ParentContactsWidget } from '@/components/dashboard/teacher/ParentContactsWidget';
 import {
   Users,
   School,
@@ -103,7 +102,7 @@ export default function TeacherDashboard() {
           overflow-x: hidden;
           max-width: 100vw;
         }
-        .section, .card, .grid2 {
+        .section, .card {
           max-width: 100%;
           overflow-x: hidden;
         }
@@ -118,25 +117,24 @@ export default function TeacherDashboard() {
         unreadCount={unreadCount}
       >
       {/* Search Bar */}
-      <div style={{ marginTop: 0, marginBottom: 'var(--space-3)' }}>
+      <div style={{ marginTop: 0, marginBottom: '20px' }}>
         <div style={{ position: 'relative' }}>
+          <Search className="searchIcon icon16" />
           <input
             className="searchInput"
             placeholder="Search students, classes..."
-            style={{ width: '100%', paddingRight: '2.5rem' }}
             onKeyDown={(e) => {
               const t = e.target as HTMLInputElement;
               if (e.key === 'Enter' && t.value.trim()) router.push(`/dashboard/teacher/search?q=${encodeURIComponent(t.value.trim())}`);
             }}
           />
-          <Search className="searchIcon icon16" style={{ right: '0.75rem', left: 'auto' }} />
         </div>
       </div>
 
       {/* Page Header with Preschool Name */}
-      <div className="section" style={{ marginBottom: 0 }}>
+      <div className="section" style={{ marginTop: '8px', marginBottom: '16px' }}>
         {preschoolName && (
-          <div className="card" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', marginBottom: 16, cursor: 'pointer' }} onClick={() => router.push('/dashboard/teacher/classes')}>
+          <div className="card" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', marginBottom: 16, cursor: 'pointer', border: 'none' }} onClick={() => router.push('/dashboard/teacher/classes')}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 24 }}>🎓</span>
@@ -198,14 +196,6 @@ export default function TeacherDashboard() {
             <span>Message Parents</span>
           </button>
         </div>
-      </div>
-
-      {/* Parent Contacts */}
-      <div className="section">
-        <ParentContactsWidget 
-          preschoolId={preschoolId} 
-          teacherId={userId}
-        />
       </div>
 
       {/* My Classes */}

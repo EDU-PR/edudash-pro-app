@@ -45,7 +45,7 @@ DROP POLICY IF EXISTS "Parents can view homework files for their children" ON st
 DROP POLICY IF EXISTS "Users can delete their own uploaded homework files" ON storage.objects;
 
 -- Policy 1: Parents can upload files for their children's homework
--- Pattern: homework_submissions/{preschool_id}/{assignment_id}/{student_id}/{filename}
+-- Pattern: homework-files/{preschool_id}/{assignment_id}/{student_id}/{filename}
 CREATE POLICY "Parents can upload homework files for their children"
 ON storage.objects
 FOR INSERT
@@ -53,12 +53,12 @@ TO authenticated
 WITH CHECK (
   bucket_id = 'homework-files'
   AND (
-    -- Check if the user is a parent of the student in the path via parent_child_links
+    -- Check if the user is a parent of the student in the path
     EXISTS (
-      SELECT 1 FROM public.parent_child_links
-      WHERE parent_child_links.student_id::text = (string_to_array(name, '/'))[4]
-      AND parent_child_links.parent_id = auth.uid()
-      AND parent_child_links.relationship_status = 'active'
+      SELECT 1 FROM public.students
+      WHERE students.id::text = (string_to_array(name, '/'))[4]
+      AND (students.parent_id = auth.uid() OR students.guardian_id = auth.uid())
+      AND students.is_active = true
     )
     OR
     -- Or if the user is the student themselves
@@ -76,18 +76,18 @@ USING (
   AND (
     -- Teacher can see files in their preschool
     EXISTS (
-      SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
-      AND users.role = 'teacher'
-      AND users.preschool_id::text = (string_to_array(name, '/'))[2]
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'teacher'
+      AND profiles.preschool_id::text = (string_to_array(name, '/'))[2]
     )
     OR
     -- Principal can see files in their preschool
     EXISTS (
-      SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
-      AND users.role = 'principal'
-      AND users.preschool_id::text = (string_to_array(name, '/'))[2]
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'principal'
+      AND profiles.preschool_id::text = (string_to_array(name, '/'))[2]
     )
   )
 );
@@ -100,12 +100,12 @@ TO authenticated
 USING (
   bucket_id = 'homework-files'
   AND (
-    -- Parent can see files for their children via parent_child_links
+    -- Parent can see files for their children
     EXISTS (
-      SELECT 1 FROM public.parent_child_links
-      WHERE parent_child_links.student_id::text = (string_to_array(name, '/'))[4]
-      AND parent_child_links.parent_id = auth.uid()
-      AND parent_child_links.relationship_status = 'active'
+      SELECT 1 FROM public.students
+      WHERE students.id::text = (string_to_array(name, '/'))[4]
+      AND (students.parent_id = auth.uid() OR students.guardian_id = auth.uid())
+      AND students.is_active = true
     )
     OR
     -- Student can see their own files
