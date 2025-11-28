@@ -973,11 +973,11 @@ export default function TeacherMessagesPage() {
               {/* Mobile: Fixed student name subtitle */}
               {!isDesktop && selectedThread.student && (
                 <div 
-                  className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2 flex items-center justify-center gap-1.5 [backdrop-filter:blur(8px)] border-b border-[var(--border)]/30"
-                  style={{ background: wallpaperCss || 'var(--surface)' }}
+                  className="fixed top-[68px] left-0 right-0 z-[999] px-4 py-2.5 flex items-center justify-center gap-1.5"
+                  style={{ background: 'var(--surface)' }}
                 >
                   <span className="text-[13px] text-[var(--cyan)] font-medium">📚</span>
-                  <span className="text-[13px] text-white/90 font-medium drop-shadow-sm">
+                  <span className="text-[13px] text-[#cbd5e1] font-medium">
                     {selectedThread.student.first_name} {selectedThread.student.last_name}
                   </span>
                 </div>
@@ -1000,7 +1000,7 @@ export default function TeacherMessagesPage() {
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-                  padding: isDesktop ? '24px 28px' : '16px',
+                  padding: isDesktop ? '24px 28px' : '0px',
                   paddingTop: !isDesktop ? (selectedThread.student ? '116px' : '88px') : undefined,
                   display: 'flex',
                   flexDirection: 'column',

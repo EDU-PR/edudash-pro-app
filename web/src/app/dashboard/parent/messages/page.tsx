@@ -11,7 +11,7 @@ import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/Chat
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
 import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
-import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical } from 'lucide-react';
+import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2 } from 'lucide-react';
 
 interface ParticipantProfile {
   first_name: string;
@@ -67,10 +67,11 @@ interface ThreadItemProps {
   thread: MessageThread;
   isActive: boolean;
   onSelect: () => void;
+  onDelete: (threadId: string) => void;
   isDesktop: boolean;
 }
 
-const ThreadItem = ({ thread, isActive, onSelect, isDesktop }: ThreadItemProps) => {
+const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop }: ThreadItemProps) => {
   const participants = thread.message_participants || [];
   const educator = participants.find((p) => p.role !== 'parent');
   const educatorName = educator?.profiles
@@ -225,6 +226,37 @@ const ThreadItem = ({ thread, isActive, onSelect, isDesktop }: ThreadItemProps) 
           </span>
         </div>
       )}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (confirm(`Delete conversation with ${educatorName}?`)) {
+            onDelete(thread.id);
+          }
+        }}
+        style={{
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: 8,
+          width: 32,
+          height: 32,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: '#ef4444',
+          flexShrink: 0,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+        }}
+        title="Delete conversation"
+      >
+        <Trash2 size={16} />
+      </button>
     </div>
   );
 };
@@ -357,11 +389,17 @@ export default function ParentMessagesPage() {
   const getThreadContactKey = (thread: MessageThread) => {
     const participants = thread.message_participants || [];
     const educator = participants.find((p) => p.role !== 'parent');
-    if (!educator?.user_id) {
-      return `thread:${thread.id}`;
-    }
+    const educatorUserId = educator?.user_id;
     const studentKey = thread.student_id || 'no-student';
-    return `${educator.user_id}:${studentKey}`;
+    
+    // Use educator user_id + student_id as key for proper deduplication
+    if (educatorUserId) {
+      return `${educatorUserId}:${studentKey}`;
+    }
+    
+    // Fallback only if no educator found
+    console.warn('No educator found in thread:', thread.id, participants);
+    return `thread:${thread.id}`;
   };
 
   const getThreadRecencyValue = (thread: MessageThread) => {
@@ -610,6 +648,39 @@ export default function ParentMessagesPage() {
       </div>
     );
   }
+
+  const handleDeleteThread = async (threadId: string) => {
+    try {
+      // First delete all messages in the thread
+      const { error: messagesError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('thread_id', threadId);
+
+      if (messagesError) throw messagesError;
+
+      // Then delete the thread itself
+      const { error: threadError } = await supabase
+        .from('message_threads')
+        .delete()
+        .eq('id', threadId);
+
+      if (threadError) throw threadError;
+
+      // Remove from local state
+      setThreads(prev => prev.filter(t => t.id !== threadId));
+      
+      // If it was selected, clear selection
+      if (selectedThreadId === threadId) {
+        setSelectedThreadId(null);
+      }
+
+      console.log('✅ Thread and messages deleted:', threadId);
+    } catch (err: any) {
+      console.error('Error deleting thread:', err);
+      alert('Failed to delete conversation. Please try again.');
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -879,6 +950,7 @@ export default function ParentMessagesPage() {
                     thread={thread}
                     isActive={false}
                     onSelect={() => handleSelectThread(thread.id)}
+                    onDelete={handleDeleteThread}
                     isDesktop={isDesktop}
                   />
                 ))
@@ -1073,11 +1145,12 @@ export default function ParentMessagesPage() {
                     left: 0,
                     right: 0,
                     zIndex: 999,
-                    padding: '8px 16px',
+                    padding: '10px 16px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 6,
+                    background: 'var(--surface)',
                   }}
                 >
                   <span style={{ fontSize: 13, color: '#a78bfa', fontWeight: 500 }}>📚</span>
@@ -1093,13 +1166,10 @@ export default function ParentMessagesPage() {
                   flex: 1,
                   overflowY: 'auto',
                   minHeight: 0,
-                  padding: isDesktop ? '28px 0px' : '16px 8px',
-                  paddingTop: isDesktop ? '32px' : (currentThread.student ? '130px' : '88px'),
+                  padding: isDesktop ? '28px 0px' : '0px',
+                  paddingTop: isDesktop ? '32px' : (currentThread.student ? '120px' : '88px'),
                   paddingBottom: isDesktop ? 100 : (currentThread.student ? 110 : 100),
                   paddingRight: isDesktop ? 340 : 0,
-                  background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
-                  backgroundImage:
-                    'radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.04) 0%, transparent 45%), radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.04) 0%, transparent 45%)',
                 }}
               >
                 {messagesLoading ? (
@@ -1639,6 +1709,7 @@ export default function ParentMessagesPage() {
                     thread={thread}
                     isActive={thread.id === selectedThreadId}
                     onSelect={() => handleSelectThread(thread.id)}
+                    onDelete={handleDeleteThread}
                     isDesktop={isDesktop}
                   />
                 ))
