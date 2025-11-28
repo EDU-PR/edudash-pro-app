@@ -1295,12 +1295,12 @@ export default function TeacherMessagesPage() {
           onClose={() => setMessageActionsOpen(false)}
           position={messageActionsPosition}
           isOwnMessage={messages.find(m => m.id === selectedMessageId)?.sender_id === userId}
-          onReply={() => selectedMessageId && handleReplyMessage(selectedMessageId)}
-          onForward={() => selectedMessageId && handleForwardMessage(selectedMessageId)}
-          onEdit={() => selectedMessageId && handleEditMessage(selectedMessageId)}
-          onDelete={() => selectedMessageId && handleDeleteMessage(selectedMessageId)}
-          onCopy={() => selectedMessageId && handleCopyMessage(selectedMessageId)}
-          onReact={() => selectedMessageId && handleReactToMessage(selectedMessageId)}
+          onReply={handleReplyMessage}
+          onForward={handleForwardMessage}
+          onEdit={handleEditMessage}
+          onDelete={handleDeleteMessage}
+          onCopy={handleCopyMessage}
+          onReact={handleReactToMessage}
         />
       </TeacherShell>
     </>
