@@ -21,6 +21,7 @@ import {
   Clipboard,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
+import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 
 interface ParentShellProps {
   tenantSlug?: string;
@@ -139,7 +140,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       // Independent parents see learning-focused nav
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/dashboard/parent/ai-help', label: 'AI Help', icon: Sparkles },
+        { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: 'Dash AI', icon: Sparkles },
         { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
@@ -336,6 +337,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           </div>
         </>
       )}
+
+      {/* Push Notification Prompt */}
+      <PushNotificationPrompt />
 
       <style jsx>{`
         @media (max-width: 1023px) {
