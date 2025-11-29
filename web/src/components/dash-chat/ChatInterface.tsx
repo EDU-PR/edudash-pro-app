@@ -113,7 +113,7 @@ export function ChatInterface({
   };
 
   return (
-    <>
+    <div className="flex flex-col h-full overflow-hidden relative">
       {/* Exam Builder Overlay */}
       {showExamBuilder && (
         <div className="absolute inset-0 z-50">
@@ -225,7 +225,7 @@ export function ChatInterface({
         onCameraClick={() => setShowImageUpload(true)}
         selectedImagesCount={selectedImages.length}
       />
-    </>
+    </div>
   );
 }
 
