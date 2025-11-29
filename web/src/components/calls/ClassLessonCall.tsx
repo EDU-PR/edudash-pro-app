@@ -22,7 +22,17 @@ import {
   UserX,
   VolumeX,
   X,
+  MessageCircle,
+  Send,
 } from 'lucide-react';
+
+interface ChatMessage {
+  id: string;
+  sender: string;
+  senderName: string;
+  text: string;
+  timestamp: number;
+}
 
 interface ClassLessonCallProps {
   roomUrl: string;
@@ -71,7 +81,12 @@ export function ClassLessonCall({
   const [showParticipantMenu, setShowParticipantMenu] = useState<string | null>(null);
   const [handRaised, setHandRaised] = useState(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set()); // Track all raised hands by session_id
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   // Get current user ID for raise hand feature
@@ -156,6 +171,72 @@ export function ClassLessonCall({
       },
     });
   }, [localParticipant, handRaised]);
+
+  // Ref to hold the chat channel for reuse
+  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
+  // Subscribe to chat messages via realtime broadcast
+  useEffect(() => {
+    if (!isInCall || !roomName) return;
+    
+    const channel = supabase
+      .channel(`chat-${roomName}`)
+      .on('broadcast', { event: 'chat-message' }, ({ payload }: { payload: ChatMessage }) => {
+        console.log('[ClassLessonCall] Chat message received:', payload);
+        setChatMessages(prev => [...prev, payload]);
+        
+        // If chat panel is closed, increment unread count
+        if (!showChat) {
+          setUnreadMessages(prev => prev + 1);
+        }
+      })
+      .subscribe();
+    
+    chatChannelRef.current = channel;
+    
+    return () => {
+      supabase.removeChannel(channel);
+      chatChannelRef.current = null;
+    };
+  }, [isInCall, roomName, supabase, showChat]);
+  
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+  
+  // Clear unread count when chat is opened
+  useEffect(() => {
+    if (showChat) {
+      setUnreadMessages(0);
+    }
+  }, [showChat]);
+  
+  // Send chat message
+  const sendChatMessage = useCallback(async () => {
+    if (!chatInput.trim() || !localParticipant || !chatChannelRef.current) return;
+    
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      sender: localParticipant.session_id,
+      senderName: localParticipant.user_name || 'Participant',
+      text: chatInput.trim(),
+      timestamp: Date.now(),
+    };
+    
+    // Add to local messages immediately
+    setChatMessages(prev => [...prev, message]);
+    setChatInput('');
+    
+    // Broadcast to other participants
+    await chatChannelRef.current.send({
+      type: 'broadcast',
+      event: 'chat-message',
+      payload: message,
+    });
+  }, [chatInput, localParticipant]);
 
   // Handle leave - mark lesson as ended if teacher leaves
   const handleLeave = async () => {
@@ -447,6 +528,90 @@ export function ClassLessonCall({
             )}
           </aside>
         )}
+
+        {/* Chat sidebar - Mobile overlay, desktop sidebar */}
+        {showChat && (
+          <aside className="absolute sm:relative inset-0 sm:inset-auto w-full sm:w-80 bg-gray-800/95 sm:bg-gray-800 backdrop-blur-sm sm:backdrop-blur-none border-l border-gray-700 flex flex-col z-20">
+            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+              <h2 className="text-white font-semibold flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                Chat
+              </h2>
+              <button
+                onClick={() => setShowChat(false)}
+                className="p-1 text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Messages */}
+            <div 
+              ref={chatScrollRef}
+              className="flex-1 overflow-y-auto p-3 space-y-3"
+            >
+              {chatMessages.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No messages yet</p>
+                  <p className="text-xs text-gray-600">Start the conversation!</p>
+                </div>
+              ) : (
+                chatMessages.map((msg) => {
+                  const isOwn = localParticipant?.session_id === msg.sender;
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-2 ${
+                        isOwn 
+                          ? 'bg-blue-600 text-white rounded-br-md' 
+                          : 'bg-gray-700 text-white rounded-bl-md'
+                      }`}>
+                        {!isOwn && (
+                          <p className="text-xs text-blue-300 font-medium mb-1">
+                            {msg.senderName}
+                          </p>
+                        )}
+                        <p className="text-sm break-words">{msg.text}</p>
+                      </div>
+                      <span className="text-xs text-gray-500 mt-1 px-1">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            
+            {/* Input */}
+            <div className="p-3 border-t border-gray-700">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendChatMessage();
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim()}
+                  className="p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </form>
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Controls bar - Mobile responsive */}
@@ -515,6 +680,25 @@ export function ClassLessonCall({
             </span>
           </button>
         )}
+
+        {/* Chat button */}
+        <button
+          onClick={() => {
+            setShowChat(!showChat);
+            setShowParticipants(false);
+          }}
+          className={`p-2.5 sm:p-4 rounded-full transition-colors relative ${
+            showChat ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'
+          }`}
+          title="Chat"
+        >
+          <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+          {unreadMessages > 0 && !showChat && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-xs font-bold flex items-center justify-center">
+              {unreadMessages > 9 ? '9+' : unreadMessages}
+            </span>
+          )}
+        </button>
 
         {/* Recording (teacher only) - hidden on mobile */}
         {isTeacher && (
