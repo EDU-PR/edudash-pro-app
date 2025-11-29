@@ -114,8 +114,10 @@ export function IncomingCallOverlay({
     console.log('[IncomingCall] Incoming call visible, starting ringtone');
     playRingtone();
 
-    // NOTE: We no longer call navigator.vibrate() here to avoid browser intervention warnings.
-    // Vibration will be triggered when user taps the answer/reject buttons.
+    // NOTE: navigator.vibrate() requires a user gesture (click/tap) to work in modern browsers.
+    // Calling it automatically here causes "[Intervention] Blocked call to navigator.vibrate"
+    // warnings in Chrome. Vibration is now triggered in handleAnswer/handleReject callbacks.
+    // See: https://developer.mozilla.org/en-US/docs/Web/API/Navigator/vibrate#security
 
     // Retry playing audio every 2 seconds if it failed initially
     const retryInterval = setInterval(() => {
