@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
+import { useBackButton } from '@/hooks/useBackButton';
 
 interface ParentShellProps {
   tenantSlug?: string;
@@ -48,6 +49,12 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
+
+  // Handle back button to prevent logout
+  useBackButton({
+    fallbackRoute: '/dashboard/parent',
+    protectedRoutes: ['/dashboard/parent'],
+  });
 
   // Show sidebar navigation for parent dashboard
   const showSidebar = true;
