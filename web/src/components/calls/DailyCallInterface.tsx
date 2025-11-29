@@ -76,6 +76,8 @@ export const DailyCallInterface = ({
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   // Ref to track current call state to avoid stale closure issues
   const callStateRef = useRef<CallState>('idle');
+  // Ref to prevent duplicate call attempts (React StrictMode / re-renders)
+  const isJoiningRef = useRef<boolean>(false);
   
   // Remote participant
   const [remoteParticipant, setRemoteParticipant] = useState<DailyParticipant | null>(null);
@@ -179,6 +181,7 @@ export const DailyCallInterface = ({
   // Create a private room for 1-on-1 call
   const createPrivateRoom = useCallback(async (): Promise<string | null> => {
     try {
+      console.log('[P2P Call] Requesting room from /api/daily/rooms...');
       const response = await fetch('/api/daily/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,23 +196,33 @@ export const DailyCallInterface = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[P2P Call] Room creation failed - Status:', response.status, 'Error:', errorData);
         // Handle specific error codes
         if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
-          setError('Video calls are not available. Please contact your administrator.');
+          setError('Video calls are not available. Please contact your administrator to configure video calling.');
         } else if (response.status === 401) {
           setError('Please sign in to make calls.');
         } else if (response.status === 403) {
-          setError('You do not have permission to make calls.');
+          setError('You do not have permission to make calls. Only teachers can initiate calls.');
         } else {
           setError(errorData.message || 'Failed to set up call. Please try again.');
         }
-        throw new Error(errorData.error || 'Failed to create room');
+        return null;
       }
 
       const data = await response.json();
+      console.log('[P2P Call] Room creation response:', data);
+      
+      if (!data.room?.url) {
+        console.error('[P2P Call] Room created but no URL returned:', data);
+        setError('Failed to get room URL. Please try again.');
+        return null;
+      }
+      
       return data.room.url;
     } catch (err) {
-      console.error('Error creating room:', err);
+      console.error('[P2P Call] Error creating room:', err);
+      setError('Network error. Please check your connection and try again.');
       return null;
     }
   }, [remoteUserName]);
@@ -333,9 +346,17 @@ export const DailyCallInterface = ({
                 }, 1000);
               }
               
-              // Update remote video
-              if (remoteVideoRef.current && p.tracks?.video?.track) {
-                remoteVideoRef.current.srcObject = new MediaStream([p.tracks.video.track]);
+              // Update remote video and audio - attach both tracks to video element
+              if (remoteVideoRef.current) {
+                const tracks: MediaStreamTrack[] = [];
+                if (p.tracks?.video?.track) tracks.push(p.tracks.video.track);
+                if (p.tracks?.audio?.track) tracks.push(p.tracks.audio.track);
+                if (tracks.length > 0) {
+                  remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                  // Ensure audio plays
+                  remoteVideoRef.current.muted = false;
+                  remoteVideoRef.current.volume = 1.0;
+                }
               }
             }
           });
@@ -365,9 +386,16 @@ export const DailyCallInterface = ({
               }, 1000);
             }
 
-            // Update remote video
-            if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
-              remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+            // Update remote video and audio - attach both tracks
+            if (remoteVideoRef.current) {
+              const tracks: MediaStreamTrack[] = [];
+              if (event.participant.tracks?.video?.track) tracks.push(event.participant.tracks.video.track);
+              if (event.participant.tracks?.audio?.track) tracks.push(event.participant.tracks.audio.track);
+              if (tracks.length > 0) {
+                remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                remoteVideoRef.current.muted = false;
+                remoteVideoRef.current.volume = 1.0;
+              }
             }
 
             // Also update call status in database
@@ -393,8 +421,16 @@ export const DailyCallInterface = ({
             } else {
               setRemoteParticipant(event.participant);
               
-              if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
-                remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+              // Update remote video and audio
+              if (remoteVideoRef.current) {
+                const tracks: MediaStreamTrack[] = [];
+                if (event.participant.tracks?.video?.track) tracks.push(event.participant.tracks.video.track);
+                if (event.participant.tracks?.audio?.track) tracks.push(event.participant.tracks.audio.track);
+                if (tracks.length > 0) {
+                  remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                  remoteVideoRef.current.muted = false;
+                  remoteVideoRef.current.volume = 1.0;
+                }
               }
             }
           }
@@ -403,6 +439,33 @@ export const DailyCallInterface = ({
           if (event?.participant && !event.participant.local) {
             setRemoteParticipant(null);
             endCall();
+          }
+        })
+        .on('track-started', (event) => {
+          // Handle when audio/video tracks start
+          if (event?.participant && !event.participant.local && event.track) {
+            console.log('[P2P Call] Track started:', event.track.kind, 'from:', event.participant.user_name);
+            if (remoteVideoRef.current) {
+              const currentStream = remoteVideoRef.current.srcObject as MediaStream | null;
+              const tracks: MediaStreamTrack[] = [];
+              
+              // Keep existing tracks and add new one
+              if (currentStream) {
+                currentStream.getTracks().forEach(t => {
+                  if (t.kind !== event.track?.kind) tracks.push(t);
+                });
+              }
+              tracks.push(event.track);
+              
+              remoteVideoRef.current.srcObject = new MediaStream(tracks);
+              remoteVideoRef.current.muted = false;
+              remoteVideoRef.current.volume = 1.0;
+              
+              // Ensure audio plays after user interaction
+              remoteVideoRef.current.play().catch(e => {
+                console.warn('[P2P Call] Autoplay blocked, will retry on user interaction:', e);
+              });
+            }
           }
         })
         .on('left-meeting', () => {
@@ -456,8 +519,16 @@ export const DailyCallInterface = ({
 
   // Start outgoing call
   const startCall = useCallback(async () => {
+    // Prevent duplicate call attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate startCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     if (!currentUserId || !remoteUserId) {
       setError('Missing user information');
+      isJoiningRef.current = false;
       return;
     }
 
@@ -466,11 +537,20 @@ export const DailyCallInterface = ({
       setError(null);
 
       // Create private room
+      console.log('[P2P Call] Creating private room...');
       const newRoomUrl = await createPrivateRoom();
-      if (!newRoomUrl) {
-        throw new Error('Failed to create room');
+      
+      // CRITICAL: Validate room URL before proceeding
+      if (!newRoomUrl || typeof newRoomUrl !== 'string' || !newRoomUrl.startsWith('https://')) {
+        console.error('[P2P Call] Invalid room URL returned:', newRoomUrl);
+        setError('Failed to create call room. Please try again.');
+        setCallState('failed');
+        setShowRetryButton(true);
+        isJoiningRef.current = false;
+        return;
       }
-
+      
+      console.log('[P2P Call] Room created successfully:', newRoomUrl);
       setRoomUrl(newRoomUrl);
 
       // Generate call ID
@@ -499,13 +579,13 @@ export const DailyCallInterface = ({
         meeting_url: newRoomUrl,
       });
 
-      // Send call-offer signal with meeting URL for resilience
+      // Send offer signal with meeting URL for resilience
       try {
         await supabase.from('call_signals').insert({
           call_id: callId,
           from_user_id: currentUserId,
           to_user_id: remoteUserId,
-          signal_type: 'call-offer',
+          signal_type: 'offer',
           payload: {
             meeting_url: newRoomUrl,
             call_type: initialCallType,
@@ -513,7 +593,7 @@ export const DailyCallInterface = ({
           },
         });
       } catch (signalErr) {
-        console.warn('Failed to send call-offer signal:', signalErr);
+        console.warn('Failed to send offer signal:', signalErr);
       }
 
       // Send push notification
@@ -560,6 +640,7 @@ export const DailyCallInterface = ({
           setCallState('no-answer');
           setError('No answer');
           setShowRetryButton(true);
+          isJoiningRef.current = false;
         }
       }, CALL_TIMEOUT_MS);
 
@@ -567,16 +648,96 @@ export const DailyCallInterface = ({
       console.error('Error starting call:', err);
       setCallState('failed');
       setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
   }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom]);
 
+  // State for fetching meeting URL
+  const [isFetchingMeetingUrl, setIsFetchingMeetingUrl] = useState(false);
+
+  // Helper function to fetch meeting URL when missing
+  const fetchMeetingUrl = useCallback(async (callId: string): Promise<string | undefined> => {
+    const maxAttempts = 5;
+    const baseDelay = 500;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Try fetching from active_calls first
+      const { data: callData } = await supabase
+        .from('active_calls')
+        .select('meeting_url')
+        .eq('call_id', callId)
+        .single();
+      
+      if (callData?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');
+        return callData.meeting_url;
+      }
+      
+      // Fallback: Try fetching from call_signals table
+      const { data: signalData } = await supabase
+        .from('call_signals')
+        .select('payload')
+        .eq('call_id', callId)
+        .eq('signal_type', 'offer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const signalPayload = signalData?.payload as { meeting_url?: string } | null;
+      if (signalPayload?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from call_signals (attempt', attempt + 1, ')');
+        return signalPayload.meeting_url;
+      }
+      
+      // Exponential backoff
+      if (attempt < maxAttempts - 1) {
+        const delay = baseDelay * Math.pow(1.5, attempt);
+        console.log(`[P2P Call] fetchMeetingUrl: Waiting ${Math.round(delay)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    console.error('[P2P Call] fetchMeetingUrl: Failed after', maxAttempts, 'attempts');
+    return undefined;
+  }, [supabase]);
+
   // Answer incoming call
   const answerCall = useCallback(async () => {
+    // Prevent duplicate join attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate answerCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     console.log('[P2P Call] Answering call, meetingUrl:', incomingMeetingUrl, 'callId:', incomingCallId);
     
-    if (!incomingMeetingUrl) {
-      setError('No room URL provided');
-      console.error('[P2P Call] No meeting URL for incoming call');
+    let meetingUrlToUse = incomingMeetingUrl;
+    
+    // If meeting URL is missing, try to fetch it
+    if (!meetingUrlToUse && incomingCallId) {
+      console.log('[P2P Call] Meeting URL missing, attempting to fetch...');
+      setIsFetchingMeetingUrl(true);
+      setCallState('connecting');
+      setError('Connecting...');
+      
+      meetingUrlToUse = await fetchMeetingUrl(incomingCallId);
+      
+      setIsFetchingMeetingUrl(false);
+      
+      if (meetingUrlToUse) {
+        console.log('[P2P Call] Successfully fetched meeting URL:', meetingUrlToUse);
+        setRoomUrl(meetingUrlToUse);
+        setError(null);
+      }
+    }
+    
+    if (!meetingUrlToUse) {
+      setError('Unable to connect to call. Please try again.');
+      setCallState('failed');
+      setShowRetryButton(true);
+      isJoiningRef.current = false;
+      console.error('[P2P Call] No meeting URL for incoming call after fetch attempts');
       return;
     }
 
@@ -597,18 +758,23 @@ export const DailyCallInterface = ({
         console.log('[P2P Call] Updated call status to connected');
       }
       
-      await joinRoom(incomingMeetingUrl);
+      await joinRoom(meetingUrlToUse);
       // Note: Don't set connected here - let the participant detection handle it
       console.log('[P2P Call] Join room completed, waiting for participants');
     } catch (err) {
       console.error('[P2P Call] Error answering call:', err);
       setCallState('failed');
-      setError('Failed to answer call');
+      setError('Failed to answer call. Tap to retry.');
+      setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
-  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom]);
+  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom, fetchMeetingUrl]);
 
   // End call
   const endCall = useCallback(async () => {
+    // Reset joining flag to allow new calls
+    isJoiningRef.current = false;
+    
     // Clear timeouts
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
@@ -658,6 +824,9 @@ export const DailyCallInterface = ({
 
   // Retry call
   const retryCall = useCallback(async () => {
+    // Reset joining flag for retry
+    isJoiningRef.current = false;
+    
     setCallState('idle');
     setError(null);
     setShowRetryButton(false);
@@ -828,18 +997,21 @@ export const DailyCallInterface = ({
         flexDirection: 'column',
       }}
     >
-      {/* Header */}
+      {/* Header - Mobile responsive */}
       <div
         style={{
-          padding: '16px 20px',
+          padding: 'clamp(12px, 3vw, 16px) clamp(12px, 3vw, 20px)',
+          paddingTop: 'max(env(safe-area-inset-top), clamp(12px, 3vw, 16px))',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 8,
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'white' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: 'clamp(16px, 4vw, 18px)', fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {remoteUserName || 'Unknown'}
             </h3>
             {initialCallType === 'video' && (
@@ -851,12 +1023,13 @@ export const DailyCallInterface = ({
                   padding: '2px 8px',
                   borderRadius: 12,
                   background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                  fontSize: 11,
+                  fontSize: 'clamp(10px, 2.5vw, 11px)',
                   color: isVideoEnabled ? '#22c55e' : 'rgba(255, 255, 255, 0.6)',
+                  flexShrink: 0,
                 }}
               >
                 <Video size={12} />
-                {isVideoEnabled ? 'Camera on' : 'Camera off'}
+                <span className="hidden xs:inline">{isVideoEnabled ? 'Camera on' : 'Camera off'}</span>
               </span>
             )}
             {/* Network Quality Indicator */}
@@ -1109,75 +1282,80 @@ export const DailyCallInterface = ({
         )}
       </div>
 
-      {/* Controls */}
+      {/* Controls - Mobile responsive with safe area */}
       <div
         style={{
-          padding: '24px 20px 40px',
+          padding: 'clamp(16px, 4vw, 24px) clamp(12px, 3vw, 20px) clamp(24px, 6vw, 40px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), clamp(24px, 6vw, 40px))',
           display: 'flex',
           justifyContent: 'center',
-          gap: 16,
+          gap: 'clamp(10px, 3vw, 16px)',
+          flexWrap: 'wrap',
         }}
       >
         {/* Mute */}
         <button
           onClick={toggleAudio}
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
-            background: isAudioEnabled ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.3)',
-            border: 'none',
+            background: isAudioEnabled ? 'rgba(255, 255, 255, 0.1)' : 'rgba(239, 68, 68, 0.3)',
+            border: !isAudioEnabled ? '2px solid rgba(239, 68, 68, 0.5)' : 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isAudioEnabled ? <Mic size={24} color="white" /> : <MicOff size={24} color="white" />}
+          {isAudioEnabled ? <Mic size={22} color="white" /> : <MicOff size={22} color="#ef4444" />}
         </button>
 
         {/* Video */}
         <button
           onClick={toggleVideo}
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
-            background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+            background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
             border: isVideoEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isVideoEnabled ? <Video size={24} color="#22c55e" /> : <VideoOff size={24} color="white" />}
+          {isVideoEnabled ? <Video size={22} color="#22c55e" /> : <VideoOff size={22} color="white" />}
         </button>
 
-        {/* Screen share */}
+        {/* Screen share - hide on very small screens */}
         <button
           onClick={toggleScreenShare}
+          className="hidden xs:flex"
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
             background: isScreenSharing ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
             border: isScreenSharing ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
-            display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isScreenSharing ? <MonitorOff size={24} color="#22c55e" /> : <Monitor size={24} color="white" />}
+          {isScreenSharing ? <MonitorOff size={22} color="#22c55e" /> : <Monitor size={22} color="white" />}
         </button>
 
         {/* End call */}
         <button
           onClick={endCall}
           style={{
-            width: 72,
-            height: 56,
+            width: 'clamp(56px, 15vw, 72px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
             background: '#ef4444',
             border: 'none',
@@ -1186,9 +1364,10 @@ export const DailyCallInterface = ({
             justifyContent: 'center',
             cursor: 'pointer',
             boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+            transition: 'all 0.2s',
           }}
         >
-          <PhoneOff size={28} color="white" />
+          <PhoneOff size={24} color="white" />
         </button>
       </div>
     </div>

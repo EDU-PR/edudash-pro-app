@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[Daily Rooms] Authenticated user:', user.id, user.email);
 
-    // Verify user is a teacher or principal
+    // Verify user role - allow teachers, principals, superadmins, AND parents (for P2P calls)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role, preschool_id')
@@ -68,9 +68,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
     }
 
-    if (!profile || !['teacher', 'principal', 'superadmin'].includes(profile.role)) {
+    // Allow parents to create rooms for P2P calls
+    const allowedRoles = ['teacher', 'principal', 'superadmin', 'parent'];
+    if (!profile || !allowedRoles.includes(profile.role)) {
       console.log('[Daily Rooms] User role not authorized:', profile?.role);
-      return NextResponse.json({ error: 'Only teachers can create lesson rooms' }, { status: 403 });
+      return NextResponse.json({ error: 'Not authorized to create call rooms' }, { status: 403 });
     }
 
     const body: CreateRoomRequest = await request.json();
@@ -138,9 +140,30 @@ export async function POST(request: NextRequest) {
     });
 
     if (!dailyResponse.ok) {
-      const error = await dailyResponse.json();
-      console.error('Daily.co room creation failed:', error);
-      return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
+      const errorData = await dailyResponse.json().catch(() => ({}));
+      console.error('[Daily Rooms] Daily.co room creation failed:', {
+        status: dailyResponse.status,
+        statusText: dailyResponse.statusText,
+        error: errorData,
+      });
+      
+      // Provide more specific error messages based on Daily.co response
+      let errorMessage = 'Failed to create room';
+      if (dailyResponse.status === 401) {
+        errorMessage = 'Daily.co API key is invalid. Please check your DAILY_API_KEY environment variable.';
+      } else if (dailyResponse.status === 403) {
+        errorMessage = 'Daily.co API access denied. Please verify your API key permissions.';
+      } else if (dailyResponse.status === 429) {
+        errorMessage = 'Too many requests. Please try again in a few moments.';
+      } else if (errorData?.info) {
+        errorMessage = errorData.info;
+      } else if (errorData?.error) {
+        errorMessage = errorData.error;
+      }
+      
+      return NextResponse.json({ 
+        error: errorMessage
+      }, { status: dailyResponse.status || 500 });
     }
 
     const room = await dailyResponse.json();
@@ -179,8 +202,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error creating Daily room:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Daily Rooms] Error creating Daily room:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error'
+    }, { status: 500 });
   }
 }
 

@@ -694,10 +694,12 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
           background: 'rgba(0, 0, 0, 0.8)',
           backdropFilter: 'blur(8px)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
           zIndex: 1000,
-          padding: 16,
+          padding: '16px',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}>
           <div style={{
             background: '#1a1a2e',
@@ -708,19 +710,24 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
             overflow: 'hidden',
             boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
+            margin: 'auto 0',
+            maxHeight: 'calc(100vh - 32px)',
+            display: 'flex',
+            flexDirection: 'column',
           }}>
             {/* Modal Header */}
             <div style={{
               background: 'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
-              padding: '24px 24px 32px',
+              padding: '20px 20px 28px',
               position: 'relative',
+              flexShrink: 0,
             }}>
               <button
                 onClick={() => setShowModal(false)}
                 style={{
                   position: 'absolute',
-                  top: 16,
-                  right: 16,
+                  top: 12,
+                  right: 12,
                   width: 32,
                   height: 32,
                   borderRadius: 8,
@@ -735,31 +742,37 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               >
                 <X style={{ width: 18, height: 18 }} />
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 16,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
                   background: 'rgba(255, 255, 255, 0.2)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
                 }}>
-                  <Video style={{ width: 28, height: 28, color: 'white' }} />
+                  <Video style={{ width: 24, height: 24, color: 'white' }} />
                 </div>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'white' }}>
+                <div style={{ minWidth: 0 }}>
+                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'white' }}>
                     Start Live Lesson
                   </h2>
-                  <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255, 255, 255, 0.85)' }}>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255, 255, 255, 0.85)' }}>
                     Parents will be notified instantly
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Modal Body */}
-            <div style={{ padding: 24 }}>
+            {/* Modal Body - Scrollable */}
+            <div style={{ 
+              padding: '20px', 
+              overflowY: 'auto', 
+              flex: 1,
+              WebkitOverflowScrolling: 'touch',
+            }}>
               {error && (
                 <div style={{
                   marginBottom: 16,
@@ -775,13 +788,13 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               )}
 
               {/* Lesson Title */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: '#a1a1aa',
-                  marginBottom: 8,
+                  marginBottom: 6,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                 }}>
@@ -794,10 +807,10 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                   placeholder="e.g., Math - Counting to 10"
                   style={{
                     width: '100%',
-                    padding: '14px 16px',
+                    padding: '12px 14px',
                     border: '2px solid #3f3f46',
                     borderRadius: 12,
-                    fontSize: 16,
+                    fontSize: 15,
                     background: '#27272a',
                     color: '#fafafa',
                     outline: 'none',
@@ -810,13 +823,13 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               </div>
 
               {/* Select Class */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: '#a1a1aa',
-                  marginBottom: 8,
+                  marginBottom: 6,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                 }}>
@@ -827,10 +840,10 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                   onChange={(e) => setSelectedClass(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '14px 16px',
+                    padding: '12px 14px',
                     border: '2px solid #3f3f46',
                     borderRadius: 12,
-                    fontSize: 16,
+                    fontSize: 15,
                     background: '#27272a',
                     color: '#fafafa',
                     outline: 'none',
@@ -847,13 +860,13 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               </div>
 
               {/* Schedule Toggle */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 12,
+                  gap: 10,
                   cursor: 'pointer',
-                  padding: '12px 16px',
+                  padding: '10px 14px',
                   background: isScheduled ? 'rgba(124, 58, 237, 0.2)' : '#27272a',
                   border: `2px solid ${isScheduled ? '#7c3aed' : '#3f3f46'}`,
                   borderRadius: 12,
@@ -866,8 +879,8 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                     style={{ display: 'none' }}
                   />
                   <div style={{
-                    width: 24,
-                    height: 24,
+                    width: 22,
+                    height: 22,
                     borderRadius: 6,
                     background: isScheduled ? '#7c3aed' : 'transparent',
                     border: `2px solid ${isScheduled ? '#7c3aed' : '#52525b'}`,
@@ -876,11 +889,11 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    {isScheduled && <Calendar style={{ width: 14, height: 14, color: 'white' }} />}
+                    {isScheduled && <Calendar style={{ width: 12, height: 12, color: 'white' }} />}
                   </div>
-                  <div>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: '#fafafa' }}>Schedule for Later</span>
-                    <p style={{ margin: '2px 0 0', fontSize: 13, color: '#a1a1aa' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fafafa' }}>Schedule for Later</span>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#a1a1aa' }}>
                       Set a specific date and time
                     </p>
                   </div>
@@ -889,15 +902,15 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
 
               {/* Scheduling Fields */}
               {isScheduled && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                     <div>
                       <label style={{
                         display: 'block',
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: 600,
                         color: '#a1a1aa',
-                        marginBottom: 6,
+                        marginBottom: 4,
                       }}>
                         Date
                       </label>
@@ -908,7 +921,7 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                         min={new Date().toISOString().split('T')[0]}
                         style={{
                           width: '100%',
-                          padding: '12px 14px',
+                          padding: '10px 12px',
                           border: '2px solid #3f3f46',
                           borderRadius: 10,
                           fontSize: 14,
@@ -922,10 +935,10 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                     <div>
                       <label style={{
                         display: 'block',
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: 600,
                         color: '#a1a1aa',
-                        marginBottom: 6,
+                        marginBottom: 4,
                       }}>
                         Time
                       </label>
@@ -935,7 +948,7 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                         onChange={(e) => setScheduledTime(e.target.value)}
                         style={{
                           width: '100%',
-                          padding: '12px 14px',
+                          padding: '10px 12px',
                           border: '2px solid #3f3f46',
                           borderRadius: 10,
                           fontSize: 14,
@@ -952,9 +965,9 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                   <label style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 10,
+                    gap: 8,
                     cursor: 'pointer',
-                    padding: '10px 14px',
+                    padding: '8px 12px',
                     background: '#27272a',
                     borderRadius: 10,
                   }}>
@@ -965,8 +978,8 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                       style={{ display: 'none' }}
                     />
                     <div style={{
-                      width: 20,
-                      height: 20,
+                      width: 18,
+                      height: 18,
                       borderRadius: 4,
                       background: sendReminders ? '#7c3aed' : 'transparent',
                       border: `2px solid ${sendReminders ? '#7c3aed' : '#52525b'}`,
@@ -975,21 +988,21 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                       justifyContent: 'center',
                       flexShrink: 0,
                     }}>
-                      {sendReminders && <Bell style={{ width: 12, height: 12, color: 'white' }} />}
+                      {sendReminders && <Bell style={{ width: 10, height: 10, color: 'white' }} />}
                     </div>
-                    <span style={{ fontSize: 14, color: '#d4d4d8' }}>Send reminders to parents</span>
+                    <span style={{ fontSize: 13, color: '#d4d4d8' }}>Send reminders to parents</span>
                   </label>
                 </div>
               )}
 
               {/* Duration Selector */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: '#a1a1aa',
-                  marginBottom: 8,
+                  marginBottom: 6,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                 }}>
@@ -997,8 +1010,8 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                 </label>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
-                  gap: 8,
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(65px, 1fr))',
+                  gap: 6,
                 }}>
                   {durationOptions.map((option) => (
                     <button
@@ -1006,11 +1019,11 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                       type="button"
                       onClick={() => setCustomDuration(option.value)}
                       style={{
-                        padding: '10px 8px',
+                        padding: '8px 6px',
                         border: `2px solid ${(customDuration === option.value || (customDuration === 0 && option.value === maxDurationMinutes)) ? '#7c3aed' : '#3f3f46'}`,
                         borderRadius: 10,
                         background: (customDuration === option.value || (customDuration === 0 && option.value === maxDurationMinutes)) ? 'rgba(124, 58, 237, 0.2)' : '#27272a',
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: 600,
                         color: (customDuration === option.value || (customDuration === 0 && option.value === maxDurationMinutes)) ? '#a78bfa' : '#a1a1aa',
                         cursor: 'pointer',
@@ -1022,7 +1035,7 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                     </button>
                   ))}
                 </div>
-                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#71717a' }}>
+                <p style={{ margin: '6px 0 0', fontSize: 11, color: '#71717a' }}>
                   Your {tierConfig.badge} plan allows up to {tierConfig.label}
                 </p>
               </div>
@@ -1030,31 +1043,31 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               {/* Class Info Card */}
               {selectedClass && (
                 <div style={{
-                  padding: 16,
+                  padding: 14,
                   background: '#27272a',
                   borderRadius: 12,
-                  marginBottom: 24,
+                  marginBottom: 16,
                   border: '1px solid #3f3f46',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <Users style={{ width: 16, height: 16, color: '#7c3aed' }} />
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#fafafa' }}>
+                        <Users style={{ width: 14, height: 14, color: '#7c3aed' }} />
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#fafafa' }}>
                           {classes.find(c => c.id === selectedClass)?.student_count || 0}
                         </span>
                       </div>
-                      <span style={{ fontSize: 12, color: '#a1a1aa' }}>Students</span>
+                      <span style={{ fontSize: 11, color: '#a1a1aa' }}>Students</span>
                     </div>
-                    <div style={{ width: 1, height: 32, background: '#3f3f46' }} />
+                    <div style={{ width: 1, height: 28, background: '#3f3f46' }} />
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <Clock style={{ width: 16, height: 16, color: '#7c3aed' }} />
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#fafafa' }}>
+                        <Clock style={{ width: 14, height: 14, color: '#7c3aed' }} />
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#fafafa' }}>
                           {durationOptions.find(o => o.value === effectiveDuration)?.label || tierConfig.label}
                         </span>
                       </div>
-                      <span style={{ fontSize: 12, color: '#a1a1aa' }}>Duration</span>
+                      <span style={{ fontSize: 11, color: '#a1a1aa' }}>Duration</span>
                     </div>
                   </div>
                 </div>
@@ -1063,32 +1076,32 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               {/* Tier Upgrade Hint for limited plans */}
               {(subscriptionTier.toLowerCase() === 'free' || subscriptionTier.toLowerCase() === 'starter') && (
                 <div style={{
-                  padding: '12px 14px',
+                  padding: '10px 12px',
                   background: 'rgba(124, 58, 237, 0.15)',
                   borderRadius: 10,
-                  marginBottom: 20,
+                  marginBottom: 16,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
+                  gap: 8,
                 }}>
-                  <Sparkles style={{ width: 18, height: 18, color: '#a78bfa', flexShrink: 0 }} />
-                  <p style={{ margin: 0, fontSize: 13, color: '#c4b5fd' }}>
+                  <Sparkles style={{ width: 16, height: 16, color: '#a78bfa', flexShrink: 0 }} />
+                  <p style={{ margin: 0, fontSize: 12, color: '#c4b5fd' }}>
                     Upgrade to Premium for longer lessons and recording
                   </p>
                 </div>
               )}
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => setShowModal(false)}
                   style={{
                     flex: 1,
-                    padding: '14px 20px',
+                    padding: '12px 16px',
                     border: '2px solid #3f3f46',
                     borderRadius: 12,
                     background: 'transparent',
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: 600,
                     color: '#a1a1aa',
                     cursor: 'pointer',
@@ -1101,11 +1114,11 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                   disabled={isCreating || !lessonTitle.trim() || !selectedClass}
                   style={{
                     flex: 1,
-                    padding: '14px 20px',
+                    padding: '12px 16px',
                     border: 'none',
                     borderRadius: 12,
                     background: 'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: 600,
                     color: 'white',
                     cursor: isCreating || !lessonTitle.trim() || !selectedClass ? 'not-allowed' : 'pointer',
@@ -1113,17 +1126,17 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 8,
+                    gap: 6,
                   }}
                 >
                   {isCreating ? (
                     <>
-                      <Loader2 style={{ width: 18, height: 18, animation: 'spin 1s linear infinite' }} />
+                      <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
                       {isScheduled ? 'Scheduling...' : 'Starting...'}
                     </>
                   ) : (
                     <>
-                      {isScheduled ? <Calendar style={{ width: 18, height: 18 }} /> : <Play style={{ width: 18, height: 18 }} />}
+                      {isScheduled ? <Calendar style={{ width: 16, height: 16 }} /> : <Play style={{ width: 16, height: 16 }} />}
                       {isScheduled ? 'Schedule' : 'Go Live'}
                     </>
                   )}
