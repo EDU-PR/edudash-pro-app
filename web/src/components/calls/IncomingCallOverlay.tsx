@@ -30,10 +30,10 @@ export function IncomingCallOverlay({
     try {
       const audio = new Audio('/sounds/ringtone.mp3');
       audio.loop = true;
-      audio.volume = 0.8;
+      audio.volume = 1.0; // Maximum volume
       audio.preload = 'auto';
       ringtoneRef.current = audio;
-      console.log('[IncomingCall] Ringtone audio initialized');
+      console.log('[IncomingCall] Ringtone audio initialized at max volume');
     } catch (err) {
       console.warn('[IncomingCall] Failed to initialize audio:', err);
     }
