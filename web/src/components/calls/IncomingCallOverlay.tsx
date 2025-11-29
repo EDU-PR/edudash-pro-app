@@ -1,7 +1,7 @@
 'use client';
 
 import { Phone, PhoneOff, Video, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface IncomingCallOverlayProps {
   callerName?: string;
@@ -19,52 +19,103 @@ export function IncomingCallOverlay({
   isVisible,
 }: IncomingCallOverlayProps) {
   const [ringCount, setRingCount] = useState(0);
+  const [audioInitialized, setAudioInitialized] = useState(false);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const vibrateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Play ringtone and vibrate
+  // Initialize audio with user gesture fallback
+  const initializeAudio = useCallback(() => {
+    if (ringtoneRef.current) return;
+    
+    try {
+      const audio = new Audio('/sounds/ringtone.mp3');
+      audio.loop = true;
+      audio.volume = 0.8;
+      audio.preload = 'auto';
+      ringtoneRef.current = audio;
+      console.log('[IncomingCall] Ringtone audio initialized');
+    } catch (err) {
+      console.warn('[IncomingCall] Failed to initialize audio:', err);
+    }
+  }, []);
+
+  // Try to play ringtone
+  const playRingtone = useCallback(async () => {
+    if (!ringtoneRef.current) {
+      initializeAudio();
+    }
+    
+    if (ringtoneRef.current) {
+      try {
+        ringtoneRef.current.currentTime = 0;
+        await ringtoneRef.current.play();
+        setAudioInitialized(true);
+        console.log('[IncomingCall] Ringtone playing');
+      } catch (err) {
+        console.warn('[IncomingCall] Ringtone autoplay blocked, will play on interaction:', err);
+        // Will try again when user interacts with the page
+      }
+    }
+  }, [initializeAudio]);
+
+  // Stop ringtone
+  const stopRingtone = useCallback(() => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+    if (vibrateIntervalRef.current) {
+      clearInterval(vibrateIntervalRef.current);
+      vibrateIntervalRef.current = null;
+    }
+    if ('vibrate' in navigator) {
+      navigator.vibrate(0);
+    }
+  }, []);
+
+  // Play ringtone and vibrate when visible
   useEffect(() => {
     if (!isVisible) {
       setRingCount(0);
-      // Stop ringtone
-      if (ringtoneRef.current) {
-        ringtoneRef.current.pause();
-        ringtoneRef.current.currentTime = 0;
-      }
+      stopRingtone();
       return;
     }
 
-    // Play ringtone
-    if (!ringtoneRef.current) {
-      ringtoneRef.current = new Audio('/sounds/ringtone.mp3');
-      ringtoneRef.current.loop = true;
-      ringtoneRef.current.volume = 0.7;
-    }
-    ringtoneRef.current.play().catch(console.warn);
+    console.log('[IncomingCall] Incoming call visible, starting ringtone');
+    
+    // Try to play ringtone immediately
+    playRingtone();
 
     // Try to vibrate (mobile devices)
     if ('vibrate' in navigator) {
       const vibratePattern = [200, 100, 200, 100, 200, 500];
-      const interval = setInterval(() => {
+      // Vibrate immediately
+      navigator.vibrate(vibratePattern);
+      // Continue vibrating
+      vibrateIntervalRef.current = setInterval(() => {
         navigator.vibrate(vibratePattern);
       }, 2000);
-      
-      return () => {
-        clearInterval(interval);
-        navigator.vibrate(0);
-        if (ringtoneRef.current) {
-          ringtoneRef.current.pause();
-          ringtoneRef.current.currentTime = 0;
-        }
-      };
     }
 
-    return () => {
-      if (ringtoneRef.current) {
-        ringtoneRef.current.pause();
-        ringtoneRef.current.currentTime = 0;
+    // Retry playing audio every 2 seconds if it failed initially
+    const retryInterval = setInterval(() => {
+      if (ringtoneRef.current?.paused && isVisible) {
+        playRingtone();
       }
+    }, 2000);
+
+    return () => {
+      clearInterval(retryInterval);
+      stopRingtone();
     };
-  }, [isVisible]);
+  }, [isVisible, playRingtone, stopRingtone]);
+
+  // Handle user interaction to enable audio
+  const handleInteraction = useCallback(() => {
+    if (!audioInitialized && isVisible) {
+      playRingtone();
+    }
+  }, [audioInitialized, isVisible, playRingtone]);
 
   // Visual pulse effect counter
   useEffect(() => {
@@ -81,6 +132,7 @@ export function IncomingCallOverlay({
 
   return (
     <div
+      onClick={handleInteraction}
       style={{
         position: 'fixed',
         top: 0,

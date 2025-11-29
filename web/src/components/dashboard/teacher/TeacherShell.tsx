@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
+import { useBackButton } from '@/hooks/useBackButton';
 
 interface TeacherShellProps {
   tenantSlug?: string;
@@ -64,6 +65,12 @@ export function TeacherShell({
   const [notificationCount, setNotificationCount] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
+
+  // Handle back button to prevent logout
+  useBackButton({
+    fallbackRoute: '/dashboard/teacher',
+    protectedRoutes: ['/dashboard/teacher'],
+  });
 
   // Fetch unread notification count
   useEffect(() => {
