@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DailyParticipant } from '@daily-co/daily-js';
 import { useGroupCall } from './GroupCallProvider';
 import { createClient } from '@/lib/supabase/client';
@@ -95,14 +95,17 @@ export function ClassLessonCall({
   // Get room name from URL for raise hand channel
   const roomName = roomUrl ? roomUrl.split('/').pop() || '' : '';
   
+  // Ref to hold the raise hand channel for reuse
+  const raiseHandChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
   // Subscribe to raise hand events via realtime broadcast
   useEffect(() => {
     if (!isInCall || !roomName) return;
     
     const channel = supabase
       .channel(`raise-hand-${roomName}`)
-      .on('broadcast', { event: 'hand-raised' }, (payload: { payload: { sessionId: string; userName: string; raised: boolean } }) => {
-        const { sessionId, raised } = payload.payload;
+      .on('broadcast', { event: 'hand-raised' }, ({ payload }: { payload: { sessionId: string; userName: string; raised: boolean } }) => {
+        const { sessionId, raised } = payload;
         console.log('[ClassLessonCall] Hand raised event:', sessionId, raised);
         setRaisedHands(prev => {
           const updated = new Set(prev);
@@ -116,14 +119,17 @@ export function ClassLessonCall({
       })
       .subscribe();
     
+    raiseHandChannelRef.current = channel;
+    
     return () => {
       supabase.removeChannel(channel);
+      raiseHandChannelRef.current = null;
     };
   }, [isInCall, roomName, supabase]);
   
   // Toggle raise hand with realtime broadcast
-  const toggleRaiseHand = async () => {
-    if (!localParticipant || !roomName) return;
+  const toggleRaiseHand = useCallback(async () => {
+    if (!localParticipant || !raiseHandChannelRef.current) return;
     
     const newRaised = !handRaised;
     setHandRaised(newRaised);
@@ -139,9 +145,8 @@ export function ClassLessonCall({
       return updated;
     });
     
-    // Broadcast to other participants
-    const channel = supabase.channel(`raise-hand-${roomName}`);
-    await channel.send({
+    // Broadcast to other participants using existing channel
+    await raiseHandChannelRef.current.send({
       type: 'broadcast',
       event: 'hand-raised',
       payload: {
@@ -150,7 +155,7 @@ export function ClassLessonCall({
         raised: newRaised,
       },
     });
-  };
+  }, [localParticipant, handRaised]);
 
   // Handle leave - mark lesson as ended if teacher leaves
   const handleLeave = async () => {

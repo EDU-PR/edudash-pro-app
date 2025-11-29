@@ -48,14 +48,12 @@ export function IncomingCallOverlay({
     if (ringtoneRef.current) {
       try {
         ringtoneRef.current.currentTime = 0;
-        // On mobile, ensure proper audio context
-        if (typeof AudioContext !== 'undefined' || typeof (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext !== 'undefined') {
-          const AudioContextClass = AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-          if (AudioContextClass) {
-            const ctx = new AudioContextClass();
-            if (ctx.state === 'suspended') {
-              await ctx.resume();
-            }
+        // Resume AudioContext if suspended (required for mobile browsers)
+        const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
           }
         }
         await ringtoneRef.current.play();
