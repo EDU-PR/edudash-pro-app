@@ -55,10 +55,12 @@ export function DailyPrebuiltCall({
   const [participantCount, setParticipantCount] = useState(1);
   const [isRecording, setIsRecording] = useState(false);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const [iframeSrcSet, setIframeSrcSet] = useState(false);
 
   // Get meeting token
   const getMeetingToken = useCallback(async (roomName: string): Promise<string | null> => {
     try {
+      console.log('[DailyPrebuiltCall] Fetching token for room:', roomName);
       const response = await fetch('/api/daily/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,17 +70,19 @@ export function DailyPrebuiltCall({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[DailyPrebuiltCall] Token fetch failed:', response.status, errorData);
         if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
           setLocalError('Video calls are not available. Please contact your administrator.');
         } else if (response.status === 401) {
           setLocalError('Please sign in to join calls.');
         } else {
-          setLocalError(errorData.message || 'Failed to join call. Please try again.');
+          setLocalError(errorData.message || errorData.error || 'Failed to join call. Please try again.');
         }
         return null;
       }
 
       const data = await response.json();
+      console.log('[DailyPrebuiltCall] Token received successfully');
       return data.token;
     } catch (err) {
       console.error('[DailyPrebuiltCall] Error getting token:', err);
@@ -139,23 +143,42 @@ export function DailyPrebuiltCall({
   // Initialize Daily Prebuilt
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
 
     const initializePrebuilt = async () => {
       setIsJoining(true);
       setLocalError(null);
+      setIframeSrcSet(false);
 
+      console.log('[DailyPrebuiltCall] Initializing with roomUrl:', roomUrl);
       const prebuiltUrl = await buildPrebuiltUrl();
 
       if (!isMounted) return;
 
       if (!prebuiltUrl) {
+        console.error('[DailyPrebuiltCall] Failed to build prebuilt URL');
         setIsJoining(false);
         return;
       }
 
+      console.log('[DailyPrebuiltCall] Setting iframe src');
       // Set the iframe src
       if (iframeRef.current) {
         iframeRef.current.src = prebuiltUrl;
+        setIframeSrcSet(true);
+        
+        // Set a timeout in case the iframe never loads
+        timeoutId = setTimeout(() => {
+          if (isMounted && !frameLoaded) {
+            console.error('[DailyPrebuiltCall] Iframe load timeout - iframe may be blocked or URL invalid');
+            setLocalError('Video call failed to load. Please check your connection and try again.');
+            setIsJoining(false);
+          }
+        }, 30000); // 30 second timeout
+      } else {
+        console.error('[DailyPrebuiltCall] iframe ref is null');
+        setLocalError('Failed to initialize video call. Please refresh and try again.');
+        setIsJoining(false);
       }
     };
 
@@ -163,12 +186,21 @@ export function DailyPrebuiltCall({
 
     return () => {
       isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [buildPrebuiltUrl]);
+  }, [buildPrebuiltUrl, frameLoaded, roomUrl]);
 
   // Handle iframe load
   const handleIframeLoad = useCallback(() => {
+    console.log('[DailyPrebuiltCall] Iframe loaded successfully');
     setFrameLoaded(true);
+    setIsJoining(false);
+  }, []);
+
+  // Handle iframe error
+  const handleIframeError = useCallback(() => {
+    console.error('[DailyPrebuiltCall] Iframe failed to load');
+    setLocalError('Video call failed to load. Please try again.');
     setIsJoining(false);
   }, []);
 
@@ -381,6 +413,7 @@ export function DailyPrebuiltCall({
           title={`${callType === 'voice' ? 'Voice Call' : 'Video Lesson'}: ${title}`}
           allow="camera; microphone; fullscreen; display-capture; autoplay"
           onLoad={handleIframeLoad}
+          onError={handleIframeError}
           style={{
             width: '100%',
             height: '100%',
@@ -390,7 +423,7 @@ export function DailyPrebuiltCall({
         />
 
         {/* Loading overlay while iframe loads */}
-        {!frameLoaded && (
+        {!frameLoaded && iframeSrcSet && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
           </div>
