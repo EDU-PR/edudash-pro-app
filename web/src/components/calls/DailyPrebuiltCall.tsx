@@ -109,6 +109,7 @@ export function DailyPrebuiltCall({
     // Configure based on call type
     if (callType === 'voice') {
       // Voice call configuration (industry standard)
+      // videoSource=false is the primary parameter that disables video capture
       params.set('showLeaveButton', 'true');
       params.set('showFullscreenButton', 'false');
       params.set('showLocalVideo', 'false');
@@ -116,8 +117,6 @@ export function DailyPrebuiltCall({
       params.set('showChat', 'true');
       params.set('showScreenShare', 'false');
       params.set('videoSource', 'false');
-      params.set('startVideoOff', 'true');
-      params.set('camOff', 'true');
     } else {
       // Video call configuration
       params.set('showLeaveButton', 'true');
@@ -198,8 +197,16 @@ export function DailyPrebuiltCall({
   // Listen for Daily Prebuilt events via postMessage
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Verify origin is from Daily.co
-      if (!event.origin.includes('daily.co')) return;
+      // Verify origin is from Daily.co using proper URL parsing
+      // Daily.co uses subdomains, so we check if the hostname ends with .daily.co
+      try {
+        const url = new URL(event.origin);
+        const isDailyOrigin = url.hostname === 'daily.co' || url.hostname.endsWith('.daily.co');
+        if (!isDailyOrigin) return;
+      } catch {
+        // Invalid URL origin, ignore
+        return;
+      }
 
       const { action, ...data } = event.data || {};
 

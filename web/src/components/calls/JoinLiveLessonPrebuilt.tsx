@@ -91,7 +91,6 @@ function JoinLiveLessonPrebuiltInner({ classId, preschoolId }: JoinLiveLessonPre
     }
 
     if (isInitial) setLoading(false);
-    setLastRefresh(Date.now());
   };
 
   // Initial fetch and realtime subscription
