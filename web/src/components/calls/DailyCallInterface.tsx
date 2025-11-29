@@ -620,13 +620,84 @@ export const DailyCallInterface = ({
     }
   }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom]);
 
+  // State for fetching meeting URL
+  const [isFetchingMeetingUrl, setIsFetchingMeetingUrl] = useState(false);
+
+  // Helper function to fetch meeting URL when missing
+  const fetchMeetingUrl = useCallback(async (callId: string): Promise<string | undefined> => {
+    const maxAttempts = 5;
+    const baseDelay = 500;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Try fetching from active_calls first
+      const { data: callData } = await supabase
+        .from('active_calls')
+        .select('meeting_url')
+        .eq('call_id', callId)
+        .single();
+      
+      if (callData?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');
+        return callData.meeting_url;
+      }
+      
+      // Fallback: Try fetching from call_signals table
+      const { data: signalData } = await supabase
+        .from('call_signals')
+        .select('payload')
+        .eq('call_id', callId)
+        .eq('signal_type', 'call-offer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const signalPayload = signalData?.payload as { meeting_url?: string } | null;
+      if (signalPayload?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from call_signals (attempt', attempt + 1, ')');
+        return signalPayload.meeting_url;
+      }
+      
+      // Exponential backoff
+      if (attempt < maxAttempts - 1) {
+        const delay = baseDelay * Math.pow(1.5, attempt);
+        console.log(`[P2P Call] fetchMeetingUrl: Waiting ${Math.round(delay)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    console.error('[P2P Call] fetchMeetingUrl: Failed after', maxAttempts, 'attempts');
+    return undefined;
+  }, [supabase]);
+
   // Answer incoming call
   const answerCall = useCallback(async () => {
     console.log('[P2P Call] Answering call, meetingUrl:', incomingMeetingUrl, 'callId:', incomingCallId);
     
-    if (!incomingMeetingUrl) {
-      setError('No room URL provided');
-      console.error('[P2P Call] No meeting URL for incoming call');
+    let meetingUrlToUse = incomingMeetingUrl;
+    
+    // If meeting URL is missing, try to fetch it
+    if (!meetingUrlToUse && incomingCallId) {
+      console.log('[P2P Call] Meeting URL missing, attempting to fetch...');
+      setIsFetchingMeetingUrl(true);
+      setCallState('connecting');
+      setError('Connecting...');
+      
+      meetingUrlToUse = await fetchMeetingUrl(incomingCallId);
+      
+      setIsFetchingMeetingUrl(false);
+      
+      if (meetingUrlToUse) {
+        console.log('[P2P Call] Successfully fetched meeting URL:', meetingUrlToUse);
+        setRoomUrl(meetingUrlToUse);
+        setError(null);
+      }
+    }
+    
+    if (!meetingUrlToUse) {
+      setError('Unable to connect to call. Please try again.');
+      setCallState('failed');
+      setShowRetryButton(true);
+      console.error('[P2P Call] No meeting URL for incoming call after fetch attempts');
       return;
     }
 
@@ -647,15 +718,16 @@ export const DailyCallInterface = ({
         console.log('[P2P Call] Updated call status to connected');
       }
       
-      await joinRoom(incomingMeetingUrl);
+      await joinRoom(meetingUrlToUse);
       // Note: Don't set connected here - let the participant detection handle it
       console.log('[P2P Call] Join room completed, waiting for participants');
     } catch (err) {
       console.error('[P2P Call] Error answering call:', err);
       setCallState('failed');
-      setError('Failed to answer call');
+      setError('Failed to answer call. Tap to retry.');
+      setShowRetryButton(true);
     }
-  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom]);
+  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom, fetchMeetingUrl]);
 
   // End call
   const endCall = useCallback(async () => {

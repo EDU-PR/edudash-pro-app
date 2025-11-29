@@ -1,6 +1,6 @@
 'use client';
 
-import { Phone, PhoneOff, Video } from 'lucide-react';
+import { Phone, PhoneOff, Video, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface IncomingCallOverlayProps {
@@ -9,6 +9,7 @@ interface IncomingCallOverlayProps {
   onAnswer: () => void;
   onReject: () => void;
   isVisible: boolean;
+  isConnecting?: boolean;
 }
 
 export function IncomingCallOverlay({
@@ -17,6 +18,7 @@ export function IncomingCallOverlay({
   onAnswer,
   onReject,
   isVisible,
+  isConnecting = false,
 }: IncomingCallOverlayProps) {
   const [ringCount, setRingCount] = useState(0);
   const [audioInitialized, setAudioInitialized] = useState(false);
@@ -295,7 +297,7 @@ export function IncomingCallOverlay({
           textAlign: 'center',
         }}
       >
-        Incoming {callType} call...
+        {isConnecting ? 'Connecting...' : `Incoming ${callType} call...`}
       </p>
 
       {/* Action buttons - mobile responsive gap */}
@@ -309,20 +311,26 @@ export function IncomingCallOverlay({
         {/* Reject button */}
         <button
           onClick={handleReject}
+          disabled={isConnecting}
           style={{
             width: 'clamp(60px, 18vw, 72px)',
             height: 'clamp(60px, 18vw, 72px)',
             borderRadius: 36,
-            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+            background: isConnecting 
+              ? 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)'
+              : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(239, 68, 68, 0.4)',
+            cursor: isConnecting ? 'not-allowed' : 'pointer',
+            boxShadow: isConnecting 
+              ? '0 8px 24px rgba(107, 114, 128, 0.4)'
+              : '0 8px 24px rgba(239, 68, 68, 0.4)',
             transition: 'transform 0.2s ease',
+            opacity: isConnecting ? 0.6 : 1,
           }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseEnter={(e) => !isConnecting && (e.currentTarget.style.transform = 'scale(1.05)')}
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           <PhoneOff style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
@@ -331,25 +339,32 @@ export function IncomingCallOverlay({
         {/* Accept button */}
         <button
           onClick={handleAnswer}
+          disabled={isConnecting}
           style={{
             width: 'clamp(60px, 18vw, 72px)',
             height: 'clamp(60px, 18vw, 72px)',
             borderRadius: 36,
-            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            background: isConnecting 
+              ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+              : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(34, 197, 94, 0.4)',
+            cursor: isConnecting ? 'not-allowed' : 'pointer',
+            boxShadow: isConnecting 
+              ? '0 8px 24px rgba(59, 130, 246, 0.4)'
+              : '0 8px 24px rgba(34, 197, 94, 0.4)',
             transition: 'transform 0.2s ease',
-            animation: 'bounce-slight 1s ease-in-out infinite',
+            animation: isConnecting ? 'none' : 'bounce-slight 1s ease-in-out infinite',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseEnter={(e) => !isConnecting && (e.currentTarget.style.transform = 'scale(1.05)')}
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
-          {callType === 'video' ? (
-            <Video style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
+          {isConnecting ? (
+            <Loader2 size={32} color="white" className="animate-spin" />
+          ) : callType === 'video' ? (
+            <Video size={32} color="white" />
           ) : (
             <Phone style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
           )}
@@ -367,8 +382,8 @@ export function IncomingCallOverlay({
         <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 'clamp(12px, 3.5vw, 14px)', width: 'clamp(60px, 18vw, 72px)', textAlign: 'center' }}>
           Decline
         </span>
-        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 'clamp(12px, 3.5vw, 14px)', width: 'clamp(60px, 18vw, 72px)', textAlign: 'center' }}>
-          Accept
+        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 14, width: 72, textAlign: 'center' }}>
+          {isConnecting ? 'Connecting...' : 'Accept'}
         </span>
       </div>
 
