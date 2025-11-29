@@ -12,7 +12,7 @@ This document outlines a detailed plan to refactor the teacher and parent dashbo
 
 ## WARP.md File Size Standards
 
-Per project standards, files must adhere to these limits:
+Per project repository custom instructions (defined in `.github/instructions/*.instructions.md`), files must adhere to these limits:
 
 | File Type | Maximum Lines |
 |-----------|---------------|
@@ -75,56 +75,57 @@ Per project standards, files must adhere to these limits:
 **Proposed Structure:**
 
 ```
-web/src/components/dashboard/teacher/contacts/
+web/src/components/dashboard/teacher/teacher-contacts/
 ├── index.ts                      # Re-export all components
-├── TeacherContactsWidget.tsx     # Main container (~250 lines)
-├── ContactsHeader.tsx            # Header with count (~50 lines)
-├── ContactsSearch.tsx            # Search input component (~60 lines)
-├── ContactsTabs.tsx              # Tab navigation (~80 lines)
-├── ParentContactItem.tsx         # Single parent contact (~100 lines)
-├── TeacherContactItem.tsx        # Single teacher contact (~100 lines)
-├── EmptyContactsState.tsx        # Empty state component (~60 lines)
-└── types.ts                      # Shared types (~50 lines)
+├── TeacherContactsWidget.tsx     # Main container (~200 lines)
+├── ContactsHeader.tsx            # Header with count (~40 lines)
+├── ContactsSearch.tsx            # Search input component (~50 lines)
+├── ContactsTabs.tsx              # Tab navigation (~60 lines)
+├── ContactListItem.tsx           # Shared contact item (~80 lines)
+├── EmptyContactsState.tsx        # Empty state component (~40 lines)
+└── types.ts                      # Shared types (~30 lines)
 
 web/src/lib/hooks/teacher/
 ├── useTeacherContacts.ts         # Contact data fetching (~150 lines)
 └── useContactConversation.ts     # Thread management (~100 lines)
 ```
 
+**Note:** The total extracted component lines (~500) are intentionally less than 700 because:
+- Logic is moved to hooks (~250 lines moved to useTeacherContacts and useContactConversation)
+- Shared ContactListItem component reduces duplication (single component for both parent/teacher items)
+- Types are centralized in types.ts
+- **Total accounting:** ~500 lines (components) + ~250 lines (hooks) = 750, but hooks contain extracted logic that was inline in the original 700-line component
+
 **Extraction Details:**
 
-1. **ContactsHeader.tsx**
+1. **ContactsHeader.tsx** (~40 lines)
    - Header section with title and contact count
    - Props: `totalContacts: number`
 
-2. **ContactsSearch.tsx**
+2. **ContactsSearch.tsx** (~50 lines)
    - Search input with styling
    - Props: `searchQuery: string`, `onSearchChange: (value: string) => void`
 
-3. **ContactsTabs.tsx**
+3. **ContactsTabs.tsx** (~60 lines)
    - Tab buttons for Parents/Teachers switching
    - Props: `activeTab: 'parents' | 'teachers'`, `onTabChange`, `parentCount`, `teacherCount`
 
-4. **ParentContactItem.tsx**
-   - Individual parent contact display
-   - Avatar, name, children list
-   - Props: `parent: Parent`, `onStartConversation: (parentId: string) => void`
+4. **ContactListItem.tsx** (~80 lines) - *Shared Component*
+   - Unified contact item for both parents and teachers
+   - Uses variant prop to differentiate styling
+   - Props: `contact: Contact`, `variant: 'parent' | 'teacher'`, `onStartConversation`
+   - **Location:** `web/src/components/dashboard/teacher/shared/ContactListItem.tsx` for reuse across teacher-contacts and parent-contacts directories
 
-5. **TeacherContactItem.tsx**
-   - Individual teacher/principal contact display
-   - Role badge, classes list
-   - Props: `teacher: Teacher`, `onStartConversation: (teacherId: string, role: string) => void`
-
-6. **EmptyContactsState.tsx**
+5. **EmptyContactsState.tsx** (~40 lines)
    - Reusable empty state with icon and message
    - Props: `type: 'parents' | 'teachers'`, `hasSearchQuery: boolean`
 
-7. **useTeacherContacts.ts**
+6. **useTeacherContacts.ts** (~150 lines)
    - Fetch parents and teachers data
    - Handle search filtering
    - Returns: `{ parents, teachers, loading, error, refetch }`
 
-8. **useContactConversation.ts**
+7. **useContactConversation.ts** (~100 lines)
    - Handle thread creation/finding
    - Navigate to messages
    - Returns: `{ startConversation, loading }`
@@ -205,10 +206,11 @@ web/src/lib/hooks/teacher/
 **Proposed Structure:**
 
 ```
-web/src/components/dashboard/teacher/contacts/
-├── ParentContactsWidget.tsx      # Main container (~280 lines)
-├── ParentContactCard.tsx         # Individual card (~120 lines)
-└── StudentTagList.tsx            # Student tags component (~50 lines)
+web/src/components/dashboard/teacher/parent-contacts/
+├── index.ts                      # Re-export
+├── ParentContactsWidget.tsx      # Main container (~200 lines)
+├── ParentContactCard.tsx         # Individual card (~100 lines)
+└── StudentTagList.tsx            # Student tags component (~40 lines)
 
 web/src/lib/hooks/teacher/
 └── useParentContacts.ts          # Data fetching (~100 lines)
@@ -312,37 +314,24 @@ web/src/lib/utils/
 
 ---
 
-### 6. useTeacherUnreadMessages.ts (213 → ~150 lines)
+### 6. useTeacherUnreadMessages.ts (213 → Keep As-Is)
 
-**Current Responsibilities:**
-- Fetch unread message count
-- Real-time subscription
-- Handle updates
+**Assessment:** This hook is only 13 lines over the 200-line limit. The overhead of splitting it would add more complexity than it resolves.
 
-**Proposed Structure:**
+**Recommendation:** Mark as low priority. Consider minor cleanup if other hooks in the file can be simplified, but splitting is not recommended.
 
-```
-web/src/lib/hooks/teacher/
-├── useTeacherUnreadMessages.ts   # Simplified (~100 lines)
-└── useUnreadMessageSubscription.ts # Real-time logic (~80 lines)
-```
+**Alternative:** Simple inline optimizations to reduce to ~195 lines:
+- Remove verbose comments
+- Consolidate duplicate logic
+- Simplify early returns
 
 ---
 
-### 7. useUnreadMessages.ts (211 → ~150 lines)
+### 7. useUnreadMessages.ts (211 → Keep As-Is)
 
-**Current Responsibilities:**
-- Fetch unread count for parent
-- Real-time updates
-- Thread participant handling
+**Assessment:** This hook is only 11 lines over the 200-line limit. Similar to useTeacherUnreadMessages, splitting would add unnecessary complexity.
 
-**Proposed Structure:**
-
-```
-web/src/lib/hooks/parent/
-├── useUnreadMessages.ts          # Simplified (~100 lines)
-└── useParentMessageSubscription.ts # Real-time logic (~80 lines)
-```
+**Recommendation:** Mark as low priority. Consider minor inline optimizations if needed.
 
 ---
 
@@ -381,7 +370,7 @@ export { ContactsHeader } from './ContactsHeader';
 // ... etc
 
 // Usage
-import { TeacherContactsWidget } from '@/components/dashboard/teacher/contacts';
+import { TeacherContactsWidget } from '@/components/dashboard/teacher/teacher-contacts';
 ```
 
 ---
