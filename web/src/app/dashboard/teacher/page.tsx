@@ -13,7 +13,8 @@ import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
 import { ClassCard } from '@/components/dashboard/teacher/ClassCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
-import { StartLiveLesson } from '@/components/calls';
+import { StartLiveLesson, QuickCallModal } from '@/components/calls';
+import { useCall } from '@/components/calls';
 import {
   Users,
   School,
@@ -24,6 +25,7 @@ import {
   FileText,
   PlusCircle,
   Search,
+  Phone,
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -32,6 +34,10 @@ export default function TeacherDashboard() {
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
+  const [showQuickCallModal, setShowQuickCallModal] = useState(false);
+
+  // Call functionality
+  const { startVoiceCall, startVideoCall } = useCall();
 
   // Fetch user profile with preschool data
   const { profile, loading: profileLoading } = useUserProfile(userId);
@@ -257,6 +263,42 @@ export default function TeacherDashboard() {
           </div>
         </div>
       )}
+
+      {/* Quick Call Modal */}
+      <QuickCallModal
+        isOpen={showQuickCallModal}
+        onClose={() => setShowQuickCallModal(false)}
+        onVoiceCall={(userId, userName) => startVoiceCall(userId, userName)}
+        onVideoCall={(userId, userName) => startVideoCall(userId, userName)}
+        currentUserId={userId}
+        preschoolId={preschoolId}
+      />
+
+      {/* Quick Call FAB */}
+      <button
+        onClick={() => setShowQuickCallModal(true)}
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 4px 16px rgba(34, 197, 94, 0.4), 0 0 24px rgba(34, 197, 94, 0.2)',
+          zIndex: 998,
+          transition: 'transform 0.2s ease',
+        }}
+        className="active:scale-95 hover:scale-105"
+        title="Quick Call"
+      >
+        <Phone size={24} color="white" />
+      </button>
       </TeacherShell>
     </>
   );

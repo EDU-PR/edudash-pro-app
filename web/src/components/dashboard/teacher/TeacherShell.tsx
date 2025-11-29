@@ -206,7 +206,8 @@ export function TeacherShell({
         </header>
       )}
 
-      <div className="frame">
+      <div className={`frame ${hideHeader ? 'frame-fullscreen' : ''}`}>
+        {!hideHeader && (
         <aside 
           className="sidenav sticky" 
           aria-label="Sidebar"
@@ -275,12 +276,13 @@ export function TeacherShell({
             </div>
           </div>
         </aside>
+        )}
 
         <main className={`content ${contentClassName ?? ''}`} style={contentStyle}>
           {children}
         </main>
 
-        {rightSidebar && (
+        {rightSidebar && !hideHeader && (
           <aside className="right sticky" aria-label="Activity">
             {rightSidebar}
           </aside>
