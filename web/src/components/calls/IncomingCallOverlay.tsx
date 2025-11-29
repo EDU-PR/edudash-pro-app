@@ -1,6 +1,6 @@
 'use client';
 
-import { Phone, PhoneOff, Video, X } from 'lucide-react';
+import { Phone, PhoneOff, Video } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface IncomingCallOverlayProps {
@@ -20,6 +20,7 @@ export function IncomingCallOverlay({
 }: IncomingCallOverlayProps) {
   const [ringCount, setRingCount] = useState(0);
   const [audioInitialized, setAudioInitialized] = useState(false);
+  const [hasUserInteraction, setHasUserInteraction] = useState(false);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const vibrateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -34,7 +35,6 @@ export function IncomingCallOverlay({
       audio.preload = 'auto';
       ringtoneRef.current = audio;
       console.log('[IncomingCall] Ringtone audio initialized at max volume');
-    const [hasUserInteraction, setHasUserInteraction] = useState(false);
     } catch (err) {
       console.warn('[IncomingCall] Failed to initialize audio:', err);
     }
@@ -74,7 +74,31 @@ export function IncomingCallOverlay({
     }
   }, []);
 
-  // Play ringtone and vibrate when visible
+  // Track first user interaction so we can safely trigger audio/vibration
+  useEffect(() => {
+    if (hasUserInteraction) return;
+
+    const markInteraction = () => {
+      setHasUserInteraction(true);
+    };
+
+    window.addEventListener('pointerdown', markInteraction, { once: true });
+    window.addEventListener('keydown', markInteraction, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', markInteraction);
+      window.removeEventListener('keydown', markInteraction);
+    };
+  }, [hasUserInteraction]);
+
+  // Ensure audio element is lazily created when overlay mounts
+  useEffect(() => {
+    if (isVisible) {
+      initializeAudio();
+    }
+  }, [isVisible, initializeAudio]);
+
+  // Play ringtone and vibrate when visible and user has interacted
   useEffect(() => {
     if (!isVisible) {
       setRingCount(0);
@@ -82,20 +106,24 @@ export function IncomingCallOverlay({
       return;
     }
 
+    if (!hasUserInteraction) {
+      console.log('[IncomingCall] Waiting for user interaction before playing ringtone');
+      return;
+    }
+
     console.log('[IncomingCall] Incoming call visible, starting ringtone');
-    
-    // Try to play ringtone immediately
     playRingtone();
 
-    // Try to vibrate (mobile devices)
+    const vibratePattern = [200, 100, 200, 100, 200, 500];
     if ('vibrate' in navigator) {
-      const vibratePattern = [200, 100, 200, 100, 200, 500];
-      // Vibrate immediately
-      navigator.vibrate(vibratePattern);
-      // Continue vibrating
-      vibrateIntervalRef.current = setInterval(() => {
+      try {
         navigator.vibrate(vibratePattern);
-      }, 2000);
+        vibrateIntervalRef.current = setInterval(() => {
+          navigator.vibrate(vibratePattern);
+        }, 2000);
+      } catch (err) {
+        console.warn('[IncomingCall] Vibration blocked:', err);
+      }
     }
 
     // Retry playing audio every 2 seconds if it failed initially
@@ -109,14 +137,18 @@ export function IncomingCallOverlay({
       clearInterval(retryInterval);
       stopRingtone();
     };
-  }, [isVisible, playRingtone, stopRingtone]);
+  }, [isVisible, hasUserInteraction, playRingtone, stopRingtone]);
 
   // Handle user interaction to enable audio
   const handleInteraction = useCallback(() => {
+    if (!hasUserInteraction) {
+      setHasUserInteraction(true);
+    }
+
     if (!audioInitialized && isVisible) {
       playRingtone();
     }
-  }, [audioInitialized, isVisible, playRingtone]);
+  }, [audioInitialized, hasUserInteraction, isVisible, playRingtone]);
 
   // Visual pulse effect counter
   useEffect(() => {
