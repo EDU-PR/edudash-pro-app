@@ -1,0 +1,402 @@
+'use client';
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import {
+  Users,
+  Circle,
+  PhoneOff,
+  Mic,
+  Video,
+} from 'lucide-react';
+
+// EduDash Pro Theme Colors for Daily Prebuilt
+const EDUDASH_THEME = {
+  colors: {
+    accent: '#7c3aed',
+    accentText: '#FFFFFF',
+    background: '#1a1a2e',
+    backgroundAccent: '#27272a',
+    baseText: '#fafafa',
+    border: '#3f3f46',
+    mainAreaBg: '#111827',
+    mainAreaBgAccent: '#1f2937',
+    mainAreaText: '#f9fafb',
+    supportiveText: '#a1a1aa',
+  },
+};
+
+interface DailyPrebuiltCallProps {
+  roomUrl: string;
+  callType: 'video' | 'voice';
+  title: string;
+  className?: string;
+  teacherName?: string;
+  isTeacher?: boolean;
+  onLeave?: () => void;
+  userName?: string;
+}
+
+export function DailyPrebuiltCall({
+  roomUrl,
+  callType,
+  title,
+  className,
+  teacherName,
+  isTeacher = false,
+  onLeave,
+  userName,
+}: DailyPrebuiltCallProps) {
+  const supabase = createClient();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isJoining, setIsJoining] = useState(true);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [participantCount, setParticipantCount] = useState(1);
+  const [isRecording, setIsRecording] = useState(false);
+  const [frameLoaded, setFrameLoaded] = useState(false);
+
+  // Get meeting token
+  const getMeetingToken = useCallback(async (roomName: string): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/daily/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ roomName, userName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
+          setLocalError('Video calls are not available. Please contact your administrator.');
+        } else if (response.status === 401) {
+          setLocalError('Please sign in to join calls.');
+        } else {
+          setLocalError(errorData.message || 'Failed to join call. Please try again.');
+        }
+        return null;
+      }
+
+      const data = await response.json();
+      return data.token;
+    } catch (err) {
+      console.error('[DailyPrebuiltCall] Error getting token:', err);
+      setLocalError('Network error. Please check your connection.');
+      return null;
+    }
+  }, [userName]);
+
+  // Build Daily Prebuilt iframe URL with configuration
+  const buildPrebuiltUrl = useCallback(async () => {
+    const roomName = roomUrl.split('/').pop() || '';
+    const token = await getMeetingToken(roomName);
+
+    if (!token) {
+      return null;
+    }
+
+    // Base URL for Daily Prebuilt
+    const baseUrl = roomUrl;
+
+    // Build URL parameters for Daily Prebuilt customization
+    const params = new URLSearchParams();
+    params.set('t', token);
+
+    // Apply EduDash Pro theme colors
+    params.set('color', EDUDASH_THEME.colors.accent.replace('#', ''));
+
+    // Configure based on call type
+    if (callType === 'voice') {
+      // Voice call configuration (industry standard)
+      params.set('showLeaveButton', 'true');
+      params.set('showFullscreenButton', 'false');
+      params.set('showLocalVideo', 'false');
+      params.set('showParticipantsBar', 'true');
+      params.set('showChat', 'true');
+      params.set('showScreenShare', 'false');
+      params.set('videoSource', 'false');
+      params.set('startVideoOff', 'true');
+      params.set('camOff', 'true');
+    } else {
+      // Video call configuration
+      params.set('showLeaveButton', 'true');
+      params.set('showFullscreenButton', 'true');
+      params.set('showLocalVideo', 'true');
+      params.set('showParticipantsBar', 'true');
+      params.set('showChat', 'true');
+      params.set('showScreenShare', 'true');
+    }
+
+    // Teacher-only features
+    if (isTeacher) {
+      params.set('showRecording', 'true');
+    }
+
+    return `${baseUrl}?${params.toString()}`;
+  }, [roomUrl, callType, isTeacher, getMeetingToken]);
+
+  // Initialize Daily Prebuilt
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializePrebuilt = async () => {
+      setIsJoining(true);
+      setLocalError(null);
+
+      const prebuiltUrl = await buildPrebuiltUrl();
+
+      if (!isMounted) return;
+
+      if (!prebuiltUrl) {
+        setIsJoining(false);
+        return;
+      }
+
+      // Set the iframe src
+      if (iframeRef.current) {
+        iframeRef.current.src = prebuiltUrl;
+      }
+    };
+
+    initializePrebuilt();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [buildPrebuiltUrl]);
+
+  // Handle iframe load
+  const handleIframeLoad = useCallback(() => {
+    setFrameLoaded(true);
+    setIsJoining(false);
+  }, []);
+
+  // Handle leave
+  const handleLeave = useCallback(async () => {
+    // If teacher is leaving, mark the video call as ended
+    if (isTeacher && roomUrl) {
+      try {
+        const meetingId = roomUrl.split('/').pop();
+        if (meetingId) {
+          await supabase
+            .from('video_calls')
+            .update({
+              status: 'ended',
+              actual_end: new Date().toISOString(),
+            })
+            .eq('meeting_id', meetingId);
+        }
+      } catch (err) {
+        console.error('[DailyPrebuiltCall] Error updating video call status:', err);
+      }
+    }
+
+    onLeave?.();
+  }, [isTeacher, roomUrl, supabase, onLeave]);
+
+  // Listen for Daily Prebuilt events via postMessage
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Verify origin is from Daily.co
+      if (!event.origin.includes('daily.co')) return;
+
+      const { action, ...data } = event.data || {};
+
+      switch (action) {
+        case 'participant-joined':
+          setParticipantCount((prev) => prev + 1);
+          break;
+        case 'participant-left':
+          setParticipantCount((prev) => Math.max(1, prev - 1));
+          break;
+        case 'recording-started':
+          setIsRecording(true);
+          break;
+        case 'recording-stopped':
+          setIsRecording(false);
+          break;
+        case 'left-meeting':
+          handleLeave();
+          break;
+        case 'error':
+          setLocalError(data.errorMsg || 'Call error occurred');
+          break;
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleLeave]);
+
+  // Render loading state
+  if (isJoining && !frameLoaded) {
+    return (
+      <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50">
+        <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-white text-lg">
+          Joining {callType === 'voice' ? 'voice call' : 'video lesson'}...
+        </p>
+        {title && <p className="text-gray-400 mt-2">{title}</p>}
+      </div>
+    );
+  }
+
+  // Render error state
+  if (localError) {
+    return (
+      <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50">
+        <div className="text-red-500 text-6xl mb-4">⚠️</div>
+        <p className="text-white text-lg mb-2">Unable to join call</p>
+        <p className="text-gray-400 mb-6">{localError}</p>
+        <div className="flex gap-4">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={handleLeave}
+            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="fixed inset-0 bg-gray-900 flex flex-col z-50"
+      style={{
+        background: EDUDASH_THEME.colors.background,
+      }}
+    >
+      {/* EduDash Pro Branded Header */}
+      <header
+        className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4"
+        style={{
+          background: EDUDASH_THEME.colors.backgroundAccent,
+          borderBottom: `1px solid ${EDUDASH_THEME.colors.border}`,
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Logo placeholder */}
+          <div
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              background: `linear-gradient(135deg, ${EDUDASH_THEME.colors.accent} 0%, #db2777 100%)`,
+            }}
+          >
+            {callType === 'voice' ? (
+              <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            ) : (
+              <Video className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Recording indicator */}
+              {isRecording && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-red-600 rounded text-white text-xs font-medium flex-shrink-0">
+                  <Circle className="w-2 h-2 fill-current animate-pulse" />
+                  <span className="hidden sm:inline">Recording</span>
+                  <span className="sm:hidden">REC</span>
+                </span>
+              )}
+              <h1
+                className="font-semibold text-sm sm:text-base truncate"
+                style={{ color: EDUDASH_THEME.colors.baseText }}
+              >
+                {title}
+              </h1>
+            </div>
+            {(className || teacherName) && (
+              <p
+                className="text-xs sm:text-sm truncate"
+                style={{ color: EDUDASH_THEME.colors.supportiveText }}
+              >
+                {className && <span>{className}</span>}
+                {className && teacherName && <span> • </span>}
+                {teacherName && <span>Led by {teacherName}</span>}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {/* Participant count */}
+          <span
+            className="flex items-center gap-1 text-xs sm:text-sm"
+            style={{ color: EDUDASH_THEME.colors.supportiveText }}
+          >
+            <Users className="w-4 h-4" />
+            {participantCount}
+          </span>
+
+          {/* Call type badge */}
+          <span
+            className="px-2 py-1 rounded text-xs font-medium"
+            style={{
+              background:
+                callType === 'voice'
+                  ? 'rgba(59, 130, 246, 0.2)'
+                  : 'rgba(124, 58, 237, 0.2)',
+              color:
+                callType === 'voice'
+                  ? '#60a5fa'
+                  : EDUDASH_THEME.colors.accent,
+            }}
+          >
+            {callType === 'voice' ? 'Voice' : 'Video'}
+          </span>
+
+          {/* Leave button */}
+          <button
+            onClick={handleLeave}
+            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+            title="Leave call"
+          >
+            <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5" />
+          </button>
+        </div>
+      </header>
+
+      {/* Daily Prebuilt iframe */}
+      <div className="flex-1 relative" style={{ background: EDUDASH_THEME.colors.mainAreaBg }}>
+        <iframe
+          ref={iframeRef}
+          title={`${callType === 'voice' ? 'Voice Call' : 'Video Lesson'}: ${title}`}
+          allow="camera; microphone; fullscreen; display-capture; autoplay"
+          onLoad={handleIframeLoad}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: frameLoaded ? 'block' : 'none',
+          }}
+        />
+
+        {/* Loading overlay while iframe loads */}
+        {!frameLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+      </div>
+
+      {/* Safe area padding for mobile */}
+      <div
+        className="safe-area-pb"
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          background: EDUDASH_THEME.colors.backgroundAccent,
+        }}
+      />
+    </div>
+  );
+}
