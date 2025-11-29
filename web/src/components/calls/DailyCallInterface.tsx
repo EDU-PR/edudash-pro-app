@@ -1,0 +1,964 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import DailyIframe, { DailyCall, DailyParticipant } from '@daily-co/daily-js';
+import {
+  Phone,
+  PhoneOff,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  Minimize2,
+  X,
+  Volume2,
+  VolumeX,
+  SwitchCamera,
+  Monitor,
+  MonitorOff,
+} from 'lucide-react';
+
+type CallState = 'idle' | 'creating-room' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed' | 'no-answer';
+
+// Call timeout in milliseconds (30 seconds)
+const CALL_TIMEOUT_MS = 30000;
+
+interface DailyCallInterfaceProps {
+  isOpen: boolean;
+  onClose: () => void;
+  callType: 'voice' | 'video';
+  remoteUserId?: string;
+  remoteUserName?: string;
+  onCallStart?: () => void;
+  onCallEnd?: () => void;
+  // For answering incoming calls
+  isIncoming?: boolean;
+  incomingCallId?: string;
+  meetingUrl?: string;
+}
+
+export const DailyCallInterface = ({
+  isOpen,
+  onClose,
+  callType: initialCallType,
+  remoteUserId,
+  remoteUserName,
+  onCallStart,
+  onCallEnd,
+  isIncoming = false,
+  incomingCallId,
+  meetingUrl: incomingMeetingUrl,
+}: DailyCallInterfaceProps) => {
+  const supabase = createClient();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(incomingCallId || null);
+  const [callState, setCallState] = useState<CallState>('idle');
+  const [isVideoEnabled, setIsVideoEnabled] = useState(initialCallType === 'video');
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [roomUrl, setRoomUrl] = useState<string | null>(incomingMeetingUrl || null);
+  const [showRetryButton, setShowRetryButton] = useState(false);
+
+  // Daily.co refs
+  const callObjectRef = useRef<DailyCall | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Remote participant
+  const [remoteParticipant, setRemoteParticipant] = useState<DailyParticipant | null>(null);
+  const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
+
+  // Get current user
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
+
+  // Play/stop ringback tone when ringing
+  useEffect(() => {
+    if (callState === 'ringing' && !isIncoming) {
+      if (!ringbackAudioRef.current) {
+        ringbackAudioRef.current = new Audio('/sounds/ringback.mp3');
+        ringbackAudioRef.current.loop = true;
+        ringbackAudioRef.current.volume = 0.5;
+      }
+      ringbackAudioRef.current.play().catch(console.warn);
+    } else {
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current.currentTime = 0;
+      }
+    }
+
+    return () => {
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current.currentTime = 0;
+      }
+    };
+  }, [callState, isIncoming]);
+
+  // Format call duration
+  const formatDuration = useCallback((seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Create a private room for 1-on-1 call
+  const createPrivateRoom = useCallback(async (): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/daily/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Call with ${remoteUserName || 'User'}`,
+          preschoolId: 'private-call',
+          maxParticipants: 2,
+          expiryMinutes: 60,
+          enableRecording: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create room');
+      }
+
+      const data = await response.json();
+      return data.room.url;
+    } catch (err) {
+      console.error('Error creating room:', err);
+      return null;
+    }
+  }, [remoteUserName]);
+
+  // Get meeting token
+  const getMeetingToken = useCallback(async (roomName: string): Promise<string | null> => {
+    try {
+      const response = await fetch('/api/daily/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get token');
+      }
+
+      const data = await response.json();
+      return data.token;
+    } catch (err) {
+      console.error('Error getting token:', err);
+      return null;
+    }
+  }, []);
+
+  // Join Daily.co room
+  const joinRoom = useCallback(async (url: string) => {
+    try {
+      const roomName = url.split('/').pop() || '';
+      const token = await getMeetingToken(roomName);
+
+      if (!token) {
+        throw new Error('Failed to get meeting token');
+      }
+
+      // Create Daily call object
+      const callObject = DailyIframe.createCallObject({
+        audioSource: true,
+        videoSource: initialCallType === 'video',
+      });
+
+      callObjectRef.current = callObject;
+
+      // Set up event listeners
+      callObject
+        .on('joined-meeting', () => {
+          const participants = callObject.participants();
+          const local = participants.local;
+          setLocalParticipant(local);
+          setIsVideoEnabled(local.video);
+          setIsAudioEnabled(local.audio);
+          
+          // Update local video
+          if (localVideoRef.current && local.tracks?.video?.track) {
+            localVideoRef.current.srcObject = new MediaStream([local.tracks.video.track]);
+          }
+        })
+        .on('participant-joined', (event) => {
+          if (event?.participant && !event.participant.local) {
+            setRemoteParticipant(event.participant);
+            setCallState('connected');
+            
+            // Clear timeout since call is answered
+            if (callTimeoutRef.current) {
+              clearTimeout(callTimeoutRef.current);
+              callTimeoutRef.current = null;
+            }
+
+            // Start call timer
+            if (!callTimerRef.current) {
+              callTimerRef.current = setInterval(() => {
+                setCallDuration((prev) => prev + 1);
+              }, 1000);
+            }
+
+            // Update remote video
+            if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
+              remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+            }
+          }
+        })
+        .on('participant-updated', (event) => {
+          if (event?.participant) {
+            if (event.participant.local) {
+              setLocalParticipant(event.participant);
+              setIsVideoEnabled(event.participant.video);
+              setIsAudioEnabled(event.participant.audio);
+              
+              if (localVideoRef.current && event.participant.tracks?.video?.track) {
+                localVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+              }
+            } else {
+              setRemoteParticipant(event.participant);
+              
+              if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
+                remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+              }
+            }
+          }
+        })
+        .on('participant-left', (event) => {
+          if (event?.participant && !event.participant.local) {
+            setRemoteParticipant(null);
+            endCall();
+          }
+        })
+        .on('left-meeting', () => {
+          setCallState('ended');
+        })
+        .on('error', (e) => {
+          console.error('Daily error:', e);
+          setError(e?.errorMsg || 'Call error occurred');
+          setCallState('failed');
+          setShowRetryButton(true);
+        });
+
+      // Join the room
+      await callObject.join({
+        url,
+        token,
+        startVideoOff: initialCallType !== 'video',
+        startAudioOff: false,
+      });
+
+      onCallStart?.();
+    } catch (err) {
+      console.error('Error joining room:', err);
+      setError('Failed to join call');
+      setCallState('failed');
+      setShowRetryButton(true);
+    }
+  }, [getMeetingToken, initialCallType, onCallStart]);
+
+  // Start outgoing call
+  const startCall = useCallback(async () => {
+    if (!currentUserId || !remoteUserId) {
+      setError('Missing user information');
+      return;
+    }
+
+    try {
+      setCallState('creating-room');
+      setError(null);
+
+      // Create private room
+      const newRoomUrl = await createPrivateRoom();
+      if (!newRoomUrl) {
+        throw new Error('Failed to create room');
+      }
+
+      setRoomUrl(newRoomUrl);
+
+      // Generate call ID
+      const callId = crypto.randomUUID();
+      setCurrentCallId(callId);
+
+      // Get caller's name
+      const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', currentUserId)
+        .single();
+      
+      const callerName = callerProfile 
+        ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+        : 'Someone';
+
+      // Create call record with room URL
+      await supabase.from('active_calls').insert({
+        call_id: callId,
+        caller_id: currentUserId,
+        callee_id: remoteUserId,
+        call_type: initialCallType,
+        status: 'ringing',
+        caller_name: callerName,
+        meeting_url: newRoomUrl,
+      });
+
+      // Send push notification
+      try {
+        await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: remoteUserId,
+            title: `Incoming ${initialCallType} call`,
+            body: `${callerName} is calling...`,
+            tag: `call-${callId}`,
+            type: 'call',
+            requireInteraction: true,
+            data: {
+              url: '/dashboard/parent/messages',
+              callId,
+              callType: initialCallType,
+              callerId: currentUserId,
+              callerName,
+              roomUrl: newRoomUrl,
+            },
+          }),
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send call push notification:', notifErr);
+      }
+
+      setCallState('connecting');
+      
+      // Join the room
+      await joinRoom(newRoomUrl);
+      
+      setCallState('ringing');
+
+      // Set call timeout
+      callTimeoutRef.current = setTimeout(async () => {
+        if (callState === 'ringing') {
+          await supabase
+            .from('active_calls')
+            .update({ status: 'missed', ended_at: new Date().toISOString() })
+            .eq('call_id', callId);
+
+          setCallState('no-answer');
+          setError('No answer');
+          setShowRetryButton(true);
+        }
+      }, CALL_TIMEOUT_MS);
+
+    } catch (err) {
+      console.error('Error starting call:', err);
+      setCallState('failed');
+      setShowRetryButton(true);
+    }
+  }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom, callState]);
+
+  // Answer incoming call
+  const answerCall = useCallback(async () => {
+    if (!incomingMeetingUrl) {
+      setError('No room URL provided');
+      return;
+    }
+
+    try {
+      setCallState('connecting');
+      await joinRoom(incomingMeetingUrl);
+      setCallState('connected');
+
+      // Update call status
+      if (incomingCallId) {
+        await supabase
+          .from('active_calls')
+          .update({ status: 'connected', answered_at: new Date().toISOString() })
+          .eq('call_id', incomingCallId);
+      }
+    } catch (err) {
+      console.error('Error answering call:', err);
+      setCallState('failed');
+    }
+  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom]);
+
+  // End call
+  const endCall = useCallback(async () => {
+    // Clear timeouts
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+
+    // Stop ringback
+    if (ringbackAudioRef.current) {
+      ringbackAudioRef.current.pause();
+      ringbackAudioRef.current.currentTime = 0;
+    }
+
+    // Leave Daily.co room
+    if (callObjectRef.current) {
+      await callObjectRef.current.leave();
+      await callObjectRef.current.destroy();
+      callObjectRef.current = null;
+    }
+
+    // Clear timer
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+
+    // Update database
+    if (currentCallId) {
+      await supabase
+        .from('active_calls')
+        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .eq('call_id', currentCallId);
+    }
+
+    setCurrentCallId(null);
+    setRoomUrl(null);
+    setRemoteParticipant(null);
+    setLocalParticipant(null);
+    setCallState('ended');
+    setCallDuration(0);
+    setShowRetryButton(false);
+    onCallEnd?.();
+    
+    setTimeout(() => {
+      onClose();
+    }, 1000);
+  }, [currentCallId, supabase, onCallEnd, onClose]);
+
+  // Retry call
+  const retryCall = useCallback(async () => {
+    setCallState('idle');
+    setError(null);
+    setShowRetryButton(false);
+    setCallDuration(0);
+    
+    setTimeout(() => {
+      startCall();
+    }, 100);
+  }, [startCall]);
+
+  // Toggle video
+  const toggleVideo = useCallback(() => {
+    if (callObjectRef.current) {
+      callObjectRef.current.setLocalVideo(!isVideoEnabled);
+    }
+  }, [isVideoEnabled]);
+
+  // Toggle audio
+  const toggleAudio = useCallback(() => {
+    if (callObjectRef.current) {
+      callObjectRef.current.setLocalAudio(!isAudioEnabled);
+    }
+  }, [isAudioEnabled]);
+
+  // Toggle screen share
+  const toggleScreenShare = useCallback(async () => {
+    if (!callObjectRef.current) return;
+    
+    try {
+      if (isScreenSharing) {
+        await callObjectRef.current.stopScreenShare();
+      } else {
+        await callObjectRef.current.startScreenShare();
+      }
+      setIsScreenSharing(!isScreenSharing);
+    } catch (err) {
+      console.error('Error toggling screen share:', err);
+    }
+  }, [isScreenSharing]);
+
+  // Start call when opened (for outgoing calls)
+  useEffect(() => {
+    if (isOpen && callState === 'idle') {
+      if (isIncoming && incomingMeetingUrl) {
+        answerCall();
+      } else if (!isIncoming) {
+        startCall();
+      }
+    }
+  }, [isOpen, callState, isIncoming, incomingMeetingUrl, startCall, answerCall]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (callObjectRef.current) {
+        callObjectRef.current.leave();
+        callObjectRef.current.destroy();
+      }
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+      }
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+      }
+      if (ringbackAudioRef.current) {
+        ringbackAudioRef.current.pause();
+        ringbackAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  if (!isOpen) return null;
+
+  // Minimized view
+  if (isMinimized) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 100,
+          right: 20,
+          width: 160,
+          height: 120,
+          borderRadius: 12,
+          overflow: 'hidden',
+          background: '#1a1a2e',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+          zIndex: 1000,
+          cursor: 'pointer',
+        }}
+        onClick={() => setIsMinimized(false)}
+      >
+        {isVideoEnabled && localParticipant?.video ? (
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+            }}
+          >
+            <Phone size={32} color="white" />
+          </div>
+        )}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'white',
+            background: 'rgba(0, 0, 0, 0.6)',
+            padding: '2px 8px',
+            borderRadius: 4,
+          }}
+        >
+          {formatDuration(callDuration)}
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            endCall();
+          }}
+          style={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            background: 'var(--danger)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <X size={14} color="white" />
+        </button>
+      </div>
+    );
+  }
+
+  // Full call interface
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: '#0f0f1a',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: '16px 20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'white' }}>
+              {remoteUserName || 'Unknown'}
+            </h3>
+            {initialCallType === 'video' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                  fontSize: 11,
+                  color: isVideoEnabled ? '#22c55e' : 'rgba(255, 255, 255, 0.6)',
+                }}
+              >
+                <Video size={12} />
+                {isVideoEnabled ? 'Camera on' : 'Camera off'}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255, 255, 255, 0.7)' }}>
+            {callState === 'creating-room' && 'Setting up call...'}
+            {callState === 'connecting' && 'Connecting...'}
+            {callState === 'ringing' && 'Ringing...'}
+            {callState === 'connected' && formatDuration(callDuration)}
+            {callState === 'ended' && 'Call ended'}
+            {callState === 'no-answer' && 'No answer'}
+            {callState === 'failed' && (error || 'Call failed')}
+          </p>
+        </div>
+        <button
+          onClick={() => setIsMinimized(true)}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'white',
+          }}
+        >
+          <Minimize2 size={20} />
+        </button>
+      </div>
+
+      {/* Video Area */}
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* No Answer / Failed Overlay */}
+        {(callState === 'no-answer' || callState === 'failed') && showRetryButton && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.85)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10,
+              gap: 24,
+            }}
+          >
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                background: callState === 'no-answer' ? 'rgba(251, 191, 36, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PhoneOff size={40} color={callState === 'no-answer' ? '#fbbf24' : '#ef4444'} />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 24, fontWeight: 600, color: 'white' }}>
+                {callState === 'no-answer' ? 'No Answer' : 'Call Failed'}
+              </h3>
+              <p style={{ margin: '8px 0 0', color: 'rgba(255, 255, 255, 0.6)', fontSize: 14 }}>
+                {callState === 'no-answer' 
+                  ? `${remoteUserName || 'User'} didn't answer`
+                  : error || 'Unable to connect the call'
+                }
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+              <button
+                onClick={retryCall}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '14px 28px',
+                  borderRadius: 28,
+                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(124, 58, 237, 0.4)',
+                }}
+              >
+                <Phone size={20} />
+                Call Again
+              </button>
+              <button
+                onClick={onClose}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '14px 28px',
+                  borderRadius: 28,
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={20} />
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Remote video */}
+        {remoteParticipant?.video ? (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              background: '#1a1a2e',
+            }}
+          />
+        ) : (
+          <div style={{ position: 'relative' }}>
+            {/* Pulsing ring animation */}
+            {(callState === 'connecting' || callState === 'ringing' || callState === 'creating-room') && (
+              <>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 200,
+                    height: 200,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.4)',
+                    animation: 'pulse-ring 1.5s ease-out infinite',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 240,
+                    height: 240,
+                    borderRadius: '50%',
+                    border: '2px solid rgba(124, 58, 237, 0.2)',
+                    animation: 'pulse-ring 1.5s ease-out infinite 0.3s',
+                  }}
+                />
+                <style>{`
+                  @keyframes pulse-ring {
+                    0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
+                    100% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
+                  }
+                `}</style>
+              </>
+            )}
+            <div
+              style={{
+                width: 160,
+                height: 160,
+                borderRadius: 80,
+                background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 64,
+                fontWeight: 600,
+                color: 'white',
+                position: 'relative',
+                zIndex: 1,
+              }}
+            >
+              {(remoteUserName || 'U').charAt(0).toUpperCase()}
+            </div>
+          </div>
+        )}
+
+        {/* Local video PiP */}
+        {isVideoEnabled && localParticipant?.video && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 20,
+              right: 20,
+              width: 120,
+              height: 160,
+              borderRadius: 12,
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                transform: 'scaleX(-1)',
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div
+        style={{
+          padding: '24px 20px 40px',
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 16,
+        }}
+      >
+        {/* Mute */}
+        <button
+          onClick={toggleAudio}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: isAudioEnabled ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.3)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          {isAudioEnabled ? <Mic size={24} color="white" /> : <MicOff size={24} color="white" />}
+        </button>
+
+        {/* Video */}
+        <button
+          onClick={toggleVideo}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+            border: isVideoEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          {isVideoEnabled ? <Video size={24} color="#22c55e" /> : <VideoOff size={24} color="white" />}
+        </button>
+
+        {/* Screen share */}
+        <button
+          onClick={toggleScreenShare}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: isScreenSharing ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+            border: isScreenSharing ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          {isScreenSharing ? <MonitorOff size={24} color="#22c55e" /> : <Monitor size={24} color="white" />}
+        </button>
+
+        {/* End call */}
+        <button
+          onClick={endCall}
+          style={{
+            width: 72,
+            height: 56,
+            borderRadius: 28,
+            background: '#ef4444',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+          }}
+        >
+          <PhoneOff size={28} color="white" />
+        </button>
+      </div>
+    </div>
+  );
+};

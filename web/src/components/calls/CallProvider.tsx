@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { CallInterface } from './CallInterface';
+import { DailyCallInterface } from './DailyCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
 
 interface ActiveCall {
@@ -13,6 +13,7 @@ interface ActiveCall {
   call_type: 'voice' | 'video';
   status: 'ringing' | 'connected' | 'ended' | 'rejected' | 'missed' | 'busy';
   caller_name?: string;
+  meeting_url?: string;
   started_at: string;
 }
 
@@ -186,7 +187,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
       {/* Call interface for outgoing calls */}
       {outgoingCall && (
-        <CallInterface
+        <DailyCallInterface
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={handleCallClose}
           callType={outgoingCall.callType}
@@ -197,7 +198,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
       {/* Call interface for answering calls */}
       {answeringCall && (
-        <CallInterface
+        <DailyCallInterface
           isOpen={isCallInterfaceOpen}
           onClose={handleCallClose}
           callType={answeringCall.call_type}
@@ -205,6 +206,7 @@ export function CallProvider({ children }: CallProviderProps) {
           remoteUserName={answeringCall.caller_name}
           isIncoming={true}
           incomingCallId={answeringCall.call_id}
+          meetingUrl={answeringCall.meeting_url}
         />
       )}
     </CallContext.Provider>

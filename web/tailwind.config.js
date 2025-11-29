@@ -7,6 +7,9 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '375px', // Extra small screens (phones)
+      },
       colors: {
         gray: {
           750: '#1a1f2e',

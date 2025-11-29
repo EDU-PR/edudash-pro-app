@@ -1,6 +1,6 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20251128211351';
+const SW_VERSION = 'v20251129102721';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -164,59 +164,105 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification event - display notification
 self.addEventListener('push', (event) => {
+  console.log('[SW] Push event received');
+  
   let notificationData = {
     title: 'EduDash Pro',
     body: 'You have a new notification',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     data: { url: '/dashboard' },
+    tag: 'default',
+    requireInteraction: false,
+    renotify: false,
+    silent: false,
+    vibrate: [200, 100, 200],
   };
 
   if (event.data) {
     try {
       const payload = event.data.json();
+      console.log('[SW] Push payload:', payload);
+      
       notificationData = {
         title: payload.title || notificationData.title,
         body: payload.body || notificationData.body,
         icon: payload.icon || notificationData.icon,
         badge: payload.badge || notificationData.badge,
         data: payload.data || notificationData.data,
-        tag: payload.tag,
+        tag: payload.tag || `notif-${Date.now()}`,
         requireInteraction: payload.requireInteraction || false,
+        renotify: true, // Always renotify for important updates
+        silent: false,
+        vibrate: payload.type === 'call' ? [200, 100, 200, 100, 200] : [200, 100, 200],
+        // Add actions for call notifications
+        actions: payload.type === 'call' || payload.data?.type === 'call' ? [
+          { action: 'join', title: '📹 Join Now' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ] : payload.type === 'message' || payload.data?.type === 'message' ? [
+          { action: 'view', title: '💬 View' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ] : undefined,
       };
     } catch (e) {
-      console.error('Failed to parse push notification payload:', e);
+      console.error('[SW] Failed to parse push notification payload:', e);
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(notificationData.title, {
-      body: notificationData.body,
-      icon: notificationData.icon,
-      badge: notificationData.badge,
-      data: notificationData.data,
-      tag: notificationData.tag,
-      requireInteraction: notificationData.requireInteraction,
-    })
-  );
+  // Force show notification even when app is in focus
+  const promiseChain = self.registration.showNotification(notificationData.title, {
+    body: notificationData.body,
+    icon: notificationData.icon,
+    badge: notificationData.badge,
+    data: notificationData.data,
+    tag: notificationData.tag,
+    requireInteraction: notificationData.requireInteraction,
+    renotify: notificationData.renotify,
+    silent: notificationData.silent,
+    vibrate: notificationData.vibrate,
+    actions: notificationData.actions,
+  }).then(() => {
+    console.log('[SW] Notification shown successfully');
+  }).catch((err) => {
+    console.error('[SW] Failed to show notification:', err);
+  });
+
+  event.waitUntil(promiseChain);
 });
 
 // Notification click event - open app
 self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked:', event.action);
   event.notification.close();
 
+  // Handle action buttons
+  if (event.action === 'dismiss') {
+    return; // Just close the notification
+  }
+
   const urlToOpen = event.notification.data?.url || '/dashboard';
+  const notificationType = event.notification.data?.type;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // Check if app is already open
+        console.log('[SW] Found clients:', clientList.length);
+        
+        // Try to find an existing window with our app
         for (const client of clientList) {
-          if (client.url.includes(urlToOpen) && 'focus' in client) {
+          // Check if this is one of our app windows
+          if ((client.url.includes('localhost:3000') || client.url.includes('edudashpro')) && 'focus' in client) {
+            // Navigate the existing window to the target URL
+            client.postMessage({
+              type: 'NOTIFICATION_CLICK',
+              url: urlToOpen,
+              notificationType: notificationType,
+            });
             return client.focus();
           }
         }
-        // Open new window
+        
+        // No existing window found, open a new one
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }

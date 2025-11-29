@@ -13,6 +13,7 @@ import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
 import { ClassCard } from '@/components/dashboard/teacher/ClassCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { StartLiveLesson } from '@/components/calls';
 import {
   Users,
   School,
@@ -42,6 +43,7 @@ export default function TeacherDashboard() {
   const preschoolId = profile?.preschoolId;
   const userRole = profile?.role;
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Teacher';
+  const subscriptionTier = profile?.subscription_tier || 'starter';
 
   // Initialize auth
   useEffect(() => {
@@ -197,6 +199,19 @@ export default function TeacherDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Live Lesson Section */}
+      {preschoolId && userId && (
+        <div className="section">
+          <div className="sectionTitle">Live Lessons</div>
+          <StartLiveLesson 
+            preschoolId={preschoolId} 
+            teacherId={userId} 
+            teacherName={userName}
+            subscriptionTier={subscriptionTier}
+          />
+        </div>
+      )}
 
       {/* My Classes */}
       {classes.length > 0 ? (

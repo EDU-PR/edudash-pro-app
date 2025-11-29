@@ -185,72 +185,101 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUs
     return parts[0]?.[0]?.toUpperCase() || '?';
   };
 
+  // Role-based gradient colors
+  const getRoleGradient = (role: string, isActive: boolean) => {
+    if (isDashAI) {
+      return isActive 
+        ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(236, 72, 153, 0.2) 100%)'
+        : 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(236, 72, 153, 0.05) 100%)';
+    }
+    if (role === 'principal') {
+      return isActive
+        ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(168, 85, 247, 0.2) 100%)'
+        : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%)';
+    }
+    return isActive
+      ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(99, 102, 241, 0.15) 100%)'
+      : 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%)';
+  };
+
+  const getAvatarGradient = (role: string) => {
+    if (isDashAI) {
+      return 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)';
+    }
+    if (role === 'principal') {
+      return 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)';
+    }
+    return 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)';
+  };
+
   return (
     <div
       onClick={onSelect}
       style={{
-        padding: '12px 16px',
+        padding: '14px 16px',
+        margin: '4px 8px',
         cursor: 'pointer',
-        background: isActive 
-          ? isDashAI 
-            ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)'
-            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
-          : 'transparent',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+        background: getRoleGradient(educatorRole, isActive),
+        borderRadius: 16,
+        border: isActive 
+          ? `1px solid ${isDashAI ? 'rgba(168, 85, 247, 0.3)' : educatorRole === 'principal' ? 'rgba(139, 92, 246, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`
+          : '1px solid rgba(255, 255, 255, 0.06)',
         display: 'flex',
-        gap: 12,
+        gap: 14,
         alignItems: 'center',
-        transition: 'all 0.2s ease',
-        width: '100%',
+        transition: 'all 0.25s ease',
+        width: 'calc(100% - 16px)',
+        boxShadow: isActive 
+          ? isDashAI 
+            ? '0 4px 20px rgba(168, 85, 247, 0.2), 0 0 30px rgba(168, 85, 247, 0.1)'
+            : '0 4px 16px rgba(59, 130, 246, 0.15)'
+          : 'none',
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
-          e.currentTarget.style.background = isDashAI 
-            ? 'rgba(168, 85, 247, 0.1)' 
-            : 'rgba(30, 41, 59, 0.6)';
+          e.currentTarget.style.background = getRoleGradient(educatorRole, true);
+          e.currentTarget.style.transform = 'translateX(4px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
         }
       }}
       onMouseLeave={(e) => {
         if (!isActive) {
-          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.background = getRoleGradient(educatorRole, false);
+          e.currentTarget.style.transform = 'translateX(0)';
+          e.currentTarget.style.boxShadow = 'none';
         }
       }}
     >
-      {/* Avatar - Dash AI gets special avatar */}
+      {/* Avatar - All contacts get gradient avatars now */}
       {isDashAI ? (
-        <DashAIAvatar size={36} showStars={true} animated={isActive} />
+        <DashAIAvatar size={44} showStars={true} animated={isActive} />
       ) : (
         <div
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            background: isActive 
-              ? educatorRole === 'principal' 
-                ? 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)' 
-                : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
-              : educatorRole === 'principal'
-                ? 'linear-gradient(135deg, #6d28d9 0%, #581c87 100%)'
-                : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            background: getAvatarGradient(educatorRole),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
             color: '#fff',
-            fontSize: 13,
+            fontSize: 15,
             fontWeight: 600,
-            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            transition: 'all 0.25s ease',
           }}
         >
-          {educatorRole === 'principal' ? <School size={16} /> : getInitials(educatorName)}
+          {educatorRole === 'principal' ? <School size={18} /> : getInitials(educatorName)}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
             <span
               style={{
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: hasUnread ? 700 : 600,
                 color: isDashAI ? '#e879f9' : (hasUnread ? '#f1f5f9' : '#e2e8f0'),
                 overflow: 'hidden',
@@ -264,15 +293,30 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUs
             {isDashAI && (
               <span style={{
                 fontSize: 9,
+                fontWeight: 700,
+                color: '#fff',
+                background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                padding: '3px 8px',
+                borderRadius: 6,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                boxShadow: '0 2px 8px rgba(168, 85, 247, 0.4)',
+              }}>
+                AI
+              </span>
+            )}
+            {educatorRole === 'principal' && !isDashAI && (
+              <span style={{
+                fontSize: 9,
                 fontWeight: 600,
-                color: '#a855f7',
-                background: 'rgba(168, 85, 247, 0.15)',
+                color: '#a78bfa',
+                background: 'rgba(139, 92, 246, 0.15)',
                 padding: '2px 6px',
                 borderRadius: 4,
                 textTransform: 'uppercase',
-                letterSpacing: '0.5px',
+                letterSpacing: '0.3px',
               }}>
-                AI
+                Principal
               </span>
             )}
           </div>
@@ -280,7 +324,7 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUs
         {isDashAI ? (
           <p style={{
             margin: '0 0 2px 0',
-            fontSize: 11,
+            fontSize: 12,
             color: '#22d3ee',
             fontWeight: 500,
           }}>

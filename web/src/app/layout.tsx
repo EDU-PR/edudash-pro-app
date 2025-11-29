@@ -7,6 +7,7 @@ import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdateChecker } from "@/components/PWAUpdateChecker";
 import { DeploymentNotificationProvider } from "@/components/DeploymentNotificationProvider";
 import { PWASplashScreen } from "@/components/PWASplashScreen";
+import { CallProviderWrapper } from "@/components/calls/CallProviderWrapper";
 import 'katex/dist/katex.min.css';
 
 const geistSans = Geist({
@@ -69,7 +70,9 @@ export default function RootLayout({
         <PWAInstallPrompt />
         <PWAUpdateChecker />
         <DeploymentNotificationProvider />
-        <ErrorBoundary>{children}</ErrorBoundary>
+        <CallProviderWrapper>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </CallProviderWrapper>
       </body>
     </html>
   );
