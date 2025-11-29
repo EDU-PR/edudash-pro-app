@@ -362,7 +362,7 @@ export function IncomingCallOverlay({
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           {isConnecting ? (
-            <Loader2 size={32} color="white" className="animate-spin" />
+            <Loader2 size={32} color="white" style={{ animation: 'spin 1s linear infinite' }} />
           ) : callType === 'video' ? (
             <Video size={32} color="white" />
           ) : (
@@ -408,6 +408,11 @@ export function IncomingCallOverlay({
         @keyframes bounce-slight {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

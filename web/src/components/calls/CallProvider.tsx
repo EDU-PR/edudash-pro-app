@@ -154,8 +154,9 @@ export function CallProvider({ children }: CallProviderProps) {
                     .limit(1)
                     .maybeSingle();
                   
-                  if (signalData?.payload?.meeting_url) {
-                    meetingUrl = signalData.payload.meeting_url as string;
+                  const signalPayload = signalData?.payload as CallSignalPayload | null;
+                  if (signalPayload?.meeting_url) {
+                    meetingUrl = signalPayload.meeting_url;
                     console.log('[CallProvider] Got meeting_url from call_signals fallback:', meetingUrl);
                     break;
                   }
@@ -305,9 +306,10 @@ export function CallProvider({ children }: CallProviderProps) {
         .limit(1)
         .maybeSingle();
       
-      if (signalData?.payload?.meeting_url) {
+      const signalPayload = signalData?.payload as CallSignalPayload | null;
+      if (signalPayload?.meeting_url) {
         console.log('[CallProvider] fetchMeetingUrl: Got URL from call_signals (attempt', attempt + 1, ')');
-        return signalData.payload.meeting_url as string;
+        return signalPayload.meeting_url;
       }
       
       // Exponential backoff
