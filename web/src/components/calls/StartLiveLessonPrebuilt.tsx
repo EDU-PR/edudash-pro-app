@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Video, Clock, Users, Play, Loader2, X, Sparkles, Radio, Calendar, Bell } from 'lucide-react';
+import { 
+  Video, Clock, Users, Play, Loader2, X, Sparkles, Radio, Calendar, Bell, 
+  Settings, MessageSquare, Monitor, Lock, Unlock, Mic, ChevronDown, ChevronUp
+} from 'lucide-react';
 import { DailyPrebuiltCall } from './DailyPrebuiltCall';
 import { DailyPrebuiltProvider } from './DailyPrebuiltProvider';
 
@@ -70,6 +73,14 @@ function StartLiveLessonPrebuiltInner({
 
   // Custom duration state
   const [customDuration, setCustomDuration] = useState<number>(0);
+
+  // Advanced room options (like Daily dashboard)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [enableRecording, setEnableRecording] = useState(true);
+  const [enableScreenShare, setEnableScreenShare] = useState(true);
+  const [enableChat, setEnableChat] = useState(true);
+  const [isPrivateRoom, setIsPrivateRoom] = useState(true);
+  const [maxParticipants, setMaxParticipants] = useState(50);
 
   // Get time limit based on tier
   const tierConfig = TIER_TIME_LIMITS[subscriptionTier.toLowerCase()] || TIER_TIME_LIMITS.starter;
@@ -259,12 +270,18 @@ function StartLiveLessonPrebuiltInner({
     setError(null);
 
     try {
+      // Recording requires premium tier or higher
+      const canRecord = !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && enableRecording;
+      
       const room = await createRoom({
         name: lessonTitle,
         classId: selectedClass,
         preschoolId,
-        maxParticipants: 50,
-        enableRecording: subscriptionTier.toLowerCase() !== 'free' && subscriptionTier.toLowerCase() !== 'starter',
+        maxParticipants,
+        enableRecording: canRecord,
+        enableScreenShare,
+        enableChat,
+        isPrivate: isPrivateRoom,
         expiryMinutes: effectiveDuration,
       });
 
@@ -1107,6 +1124,267 @@ function StartLiveLessonPrebuiltInner({
                         </span>
                       </div>
                       <span style={{ fontSize: 11, color: '#a1a1aa' }}>Duration</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Advanced Room Options Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  border: '2px solid #3f3f46',
+                  borderRadius: 12,
+                  background: showAdvancedOptions ? 'rgba(124, 58, 237, 0.1)' : '#27272a',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#d4d4d8',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Settings style={{ width: 16, height: 16, color: '#7c3aed' }} />
+                  <span>Advanced Room Options</span>
+                </div>
+                {showAdvancedOptions ? (
+                  <ChevronUp style={{ width: 16, height: 16, color: '#a1a1aa' }} />
+                ) : (
+                  <ChevronDown style={{ width: 16, height: 16, color: '#a1a1aa' }} />
+                )}
+              </button>
+
+              {/* Advanced Options Panel */}
+              {showAdvancedOptions && (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: 14,
+                    background: '#27272a',
+                    borderRadius: 12,
+                    border: '1px solid #3f3f46',
+                  }}
+                >
+                  <p style={{ margin: '0 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Room Features
+                  </p>
+                  
+                  {/* Recording Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 'not-allowed' : 'pointer',
+                      padding: '10px 12px',
+                      background: enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                      opacity: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 0.5 : 1,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase())}
+                      onChange={(e) => setEnableRecording(e.target.checked)}
+                      disabled={['free', 'starter'].includes(subscriptionTier.toLowerCase())}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && (
+                        <Mic style={{ width: 10, height: 10, color: 'white' }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Enable Recording</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
+                        {['free', 'starter'].includes(subscriptionTier.toLowerCase()) 
+                          ? 'Requires Premium plan or higher'
+                          : 'Cloud recording of the session'}
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Screen Share Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableScreenShare ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableScreenShare}
+                      onChange={(e) => setEnableScreenShare(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableScreenShare ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableScreenShare ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableScreenShare && <Monitor style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Screen Sharing</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Allow sharing your screen</p>
+                    </div>
+                  </label>
+
+                  {/* Chat Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableChat ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableChat}
+                      onChange={(e) => setEnableChat(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableChat ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableChat ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableChat && <MessageSquare style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>In-call Chat</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Enable text messaging</p>
+                    </div>
+                  </label>
+
+                  {/* Private Room Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: isPrivateRoom ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isPrivateRoom}
+                      onChange={(e) => setIsPrivateRoom(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: isPrivateRoom ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${isPrivateRoom ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isPrivateRoom ? (
+                        <Lock style={{ width: 10, height: 10, color: 'white' }} />
+                      ) : (
+                        <Unlock style={{ width: 10, height: 10, color: '#52525b' }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Private Room</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
+                        {isPrivateRoom ? 'Only invited participants can join' : 'Anyone with link can join'}
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Max Participants */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#71717a',
+                        marginBottom: 6,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Max Participants
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[10, 25, 50, 100].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setMaxParticipants(num)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            border: `2px solid ${maxParticipants === num ? '#7c3aed' : '#3f3f46'}`,
+                            borderRadius: 8,
+                            background: maxParticipants === num ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: maxParticipants === num ? '#a78bfa' : '#a1a1aa',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {num}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
