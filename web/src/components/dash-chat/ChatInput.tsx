@@ -229,8 +229,11 @@ export function ChatInput({
               : showMicButton && !isSupported
               ? 'var(--muted)'
               : 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
-            transition: 'all 0.2s ease',
-            boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)'
+            transition: 'all 0.3s ease',
+            boxShadow: showStopButton 
+              ? '0 0 20px rgba(239, 68, 68, 0.5), 0 0 40px rgba(239, 68, 68, 0.3)'
+              : '0 0 20px rgba(124, 58, 237, 0.4), 0 0 40px rgba(236, 72, 153, 0.2)',
+            animation: (isDisabled || (showMicButton && !isSupported)) ? 'none' : 'glow-pulse 2s ease-in-out infinite'
           }}
           onMouseEnter={(e) => {
             if (!isDisabled && (showSendButton || showStopButton || (showMicButton && isSupported))) {
@@ -317,6 +320,14 @@ export function ChatInput({
           to {
             opacity: 1;
             transform: translateX(-50%) translateY(0);
+          }
+        }
+        @keyframes glow-pulse {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(124, 58, 237, 0.4), 0 0 40px rgba(236, 72, 153, 0.2);
+          }
+          50% {
+            box-shadow: 0 0 25px rgba(124, 58, 237, 0.6), 0 0 50px rgba(236, 72, 153, 0.35);
           }
         }
       `}</style>

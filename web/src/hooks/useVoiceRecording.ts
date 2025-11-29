@@ -5,7 +5,7 @@
  * Handles browser-based voice recording using MediaRecorder API
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 export interface VoiceRecordingState {
   isRecording: boolean;
@@ -37,15 +37,21 @@ export function useVoiceRecording(): UseVoiceRecordingReturn {
     permissionState: 'unknown',
   });
 
+  // Initialize isSupported as false to match server render, then update on mount
+  const [isSupported, setIsSupported] = useState(false);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Check if browser supports audio recording
-  const isSupported = typeof navigator !== 'undefined' && 
+  // Check if browser supports audio recording after mount to avoid hydration mismatch
+  useEffect(() => {
+    const supported = typeof navigator !== 'undefined' && 
                       !!navigator.mediaDevices?.getUserMedia &&
                       typeof MediaRecorder !== 'undefined';
+    setIsSupported(supported);
+  }, []);
 
   const startRecording = useCallback(async (): Promise<boolean> => {
     if (!isSupported) {

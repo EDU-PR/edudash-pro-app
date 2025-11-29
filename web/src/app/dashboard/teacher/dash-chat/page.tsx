@@ -70,60 +70,82 @@ export default function TeacherDashChatPage() {
   };
 
   return (
-    <TeacherShell tenantSlug={slug} userEmail={email} hideHeader={true}>
-      <div className="h-[calc(100vh-var(--topnav-h,64px)-var(--bottomnav-h,0px))] flex flex-col bg-gray-950 overflow-hidden">
-        <header className="px-5 py-4 border-b border-gray-800 bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 flex items-center justify-between gap-4 flex-shrink-0 sticky top-0 z-20 shadow-lg shadow-purple-900/10">
-          <div className="flex items-center gap-4">
+    <TeacherShell 
+      tenantSlug={slug} 
+      userEmail={email} 
+      hideHeader={true}
+      contentClassName="content-fullscreen"
+    >
+      <div className="h-[100dvh] flex flex-col bg-gray-950" style={{ overflow: 'hidden' }}>
+        <header className="px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-800 bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 z-20 shadow-lg shadow-purple-900/10">
+          {/* Left section - Back button and Menu button on mobile */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <button
+              onClick={() => router.push('/dashboard/teacher')}
+              aria-label="Go back to dashboard"
+              className="inline-flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 active:scale-95"
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
             {isMobile && (
               <button
                 onClick={() => setShowSidebar(!showSidebar)}
                 aria-label={showSidebar ? 'Close conversations' : 'Open conversations'}
                 aria-expanded={showSidebar}
                 aria-controls="conversations-sidebar"
-                className="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-2 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 active:scale-95"
+                className="inline-flex items-center justify-center w-9 h-9 bg-gray-800/80 hover:bg-gray-700 border border-gray-700 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 active:scale-95"
               >
                 {showSidebar ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30 ring-2 ring-purple-400/20">
-              <Sparkles size={24} color="white" aria-hidden="true" className="drop-shadow-md" />
+          {/* Center section - Logo and title */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-purple-600 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30 ring-2 ring-purple-400/20 flex-shrink-0">
+              <Sparkles size={isMobile ? 18 : 20} color="white" aria-hidden="true" className="drop-shadow-md" />
             </div>
-            <div>
-              <h1 className="m-0 text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Dash AI</h1>
-              <p className="m-0 text-xs text-gray-400 font-medium">
+            <div className="min-w-0 hidden xs:block">
+              <h1 className="m-0 text-base sm:text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent truncate">Dash AI</h1>
+              <p className="m-0 text-[10px] sm:text-xs text-gray-400 font-medium hidden sm:block">
                 Teaching Assistant
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Right section - New Chat button */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleNewConversation}
               aria-label="Start new conversation"
-              className="px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 shadow-lg shadow-purple-600/30 hover:shadow-xl hover:shadow-purple-600/40 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-gray-950"
+              className="px-2.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 sm:gap-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white transition-all duration-200 shadow-lg shadow-purple-600/30 hover:shadow-xl hover:shadow-purple-600/40 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
-              <Sparkles size={16} aria-hidden="true" />
-              New Chat
+              <Sparkles size={isMobile ? 14 : 16} aria-hidden="true" />
+              <span className="hidden xs:inline">New</span>
+              <span className="hidden sm:inline">Chat</span>
             </button>
           </div>
         </header>
 
         {/* Quota Progress Bar */}
-        {userId && <QuotaProgress userId={userId} />}
+        <div className="flex-shrink-0">
+          {userId && <QuotaProgress userId={userId} />}
+        </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0" style={{ overflow: 'hidden' }}>
           <aside
             id="conversations-sidebar"
             className={`
               ${showSidebar && isMobile ? 'w-[85%] max-w-[320px]' : 'w-0'} md:w-80
               border-r border-gray-800
-              overflow-hidden flex-shrink-0
+              flex-shrink-0
               ${isMobile ? 'absolute z-20 h-full shadow-2xl shadow-black/50' : 'relative'}
               bg-gradient-to-b from-gray-950 to-gray-900
             `}
+            style={{ overflow: 'hidden' }}
           >
             {(!isMobile || showSidebar) && (
               <ConversationList
@@ -134,7 +156,7 @@ export default function TeacherDashChatPage() {
             )}
           </aside>
 
-          <main className="flex-1 overflow-hidden flex flex-col">
+          <main className="flex-1 flex flex-col" style={{ overflow: 'hidden' }}>
             <ChatInterface
               conversationId={activeConversationId}
               onNewConversation={handleNewConversation}

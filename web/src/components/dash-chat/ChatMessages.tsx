@@ -41,7 +41,7 @@ export function ChatMessages({
     <div
       className="flex-1 overflow-y-auto"
       style={{
-        paddingTop: '100px',
+        paddingTop: '1rem',
         paddingBottom: '1rem',
         paddingLeft: 'max(1rem, env(safe-area-inset-left))',
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
@@ -52,7 +52,7 @@ export function ChatMessages({
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
-        minHeight: messages.length === 0 ? 'calc(100vh - 200px)' : 'auto',
+        minHeight: messages.length === 0 ? '100%' : 'auto',
         justifyContent: messages.length === 0 ? 'center' : 'flex-start'
       }}>
         {/* Empty State */}
