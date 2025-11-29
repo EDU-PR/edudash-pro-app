@@ -151,36 +151,66 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
 
   const messageStatus = getMessageStatus();
 
+  // Role-based gradient backgrounds
+  const getBackgroundGradient = () => {
+    if (isDashAI) {
+      return isActive 
+        ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(236, 72, 153, 0.2) 100%)'
+        : 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(236, 72, 153, 0.05) 100%)';
+    }
+    return isActive
+      ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(99, 102, 241, 0.15) 100%)'
+      : 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%)';
+  };
+
+  const getAvatarGradient = () => {
+    if (isDashAI) return 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)';
+    return 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)';
+  };
+
   return (
     <div
       onClick={onSelect}
       style={{
         padding: '14px 16px',
-        marginBottom: 12,
+        margin: '4px 8px',
         borderRadius: 16,
         cursor: 'pointer',
         display: 'flex',
         gap: 14,
         alignItems: 'center',
-        transition: 'all 0.2s ease',
-        background: isActive 
-          ? isDashAI 
-            ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)'
-            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)' 
-          : 'rgba(30, 41, 59, 0.4)',
+        transition: 'all 0.25s ease',
+        background: getBackgroundGradient(),
         border: isActive 
           ? isDashAI
             ? '1px solid rgba(168, 85, 247, 0.3)'
-            : '1px solid rgba(99, 102, 241, 0.3)'
+            : '1px solid rgba(59, 130, 246, 0.3)'
           : '1px solid rgba(255, 255, 255, 0.06)',
         boxShadow: isActive 
           ? isDashAI
-            ? '0 4px 20px rgba(168, 85, 247, 0.2)'
-            : '0 4px 16px rgba(99, 102, 241, 0.15)'
+            ? '0 4px 20px rgba(168, 85, 247, 0.2), 0 0 30px rgba(168, 85, 247, 0.1)'
+            : '0 4px 16px rgba(59, 130, 246, 0.15)'
           : 'none',
+        width: 'calc(100% - 16px)',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = isDashAI 
+            ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%)'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%)';
+          e.currentTarget.style.transform = 'translateX(4px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = getBackgroundGradient();
+          e.currentTarget.style.transform = 'translateX(0)';
+          e.currentTarget.style.boxShadow = 'none';
+        }
       }}
     >
-      {/* Avatar - Dash AI gets special avatar */}
+      {/* Avatar - All contacts get gradient avatars */}
       {isDashAI ? (
         <DashAIAvatar size={48} showStars={true} animated={isActive} />
       ) : (
@@ -189,9 +219,7 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
             width: 48,
             height: 48,
             borderRadius: 24,
-            background: isActive 
-              ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
-              : 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+            background: getAvatarGradient(),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -199,8 +227,8 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
             fontSize: 16,
             fontWeight: 600,
             flexShrink: 0,
-            boxShadow: isActive ? '0 4px 14px rgba(99, 102, 241, 0.35)' : 'none',
-            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            transition: 'all 0.25s ease',
           }}
         >
           {getInitials(contactName)}
@@ -211,7 +239,7 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
             <span
               style={{
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: hasUnread ? 700 : 600,
                 color: isDashAI ? '#e879f9' : (hasUnread ? '#f1f5f9' : '#e2e8f0'),
                 overflow: 'hidden',
@@ -225,13 +253,14 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
             {isDashAI && (
               <span style={{
                 fontSize: 9,
-                fontWeight: 600,
-                color: '#a855f7',
-                background: 'rgba(168, 85, 247, 0.15)',
-                padding: '2px 6px',
-                borderRadius: 4,
+                fontWeight: 700,
+                color: '#fff',
+                background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                padding: '3px 8px',
+                borderRadius: 6,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
+                boxShadow: '0 2px 8px rgba(168, 85, 247, 0.4)',
               }}>
                 AI
               </span>
@@ -879,14 +908,6 @@ function TeacherMessagesPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  if (authLoading || profileLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="spinner"></div>
-      </div>
-    );
-  }
-
   // Dash AI message handling
   const loadDashAIMessages = useCallback(() => {
     try {
@@ -1022,6 +1043,15 @@ function TeacherMessagesPage() {
       loadDashAIMessages();
     }
   }, [selectedThreadId, loadDashAIMessages]);
+
+  // Early return for loading state - MUST be after all hooks
+  if (authLoading || profileLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

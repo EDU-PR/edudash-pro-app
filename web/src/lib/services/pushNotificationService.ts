@@ -18,7 +18,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-export type NotificationType = 'call' | 'message' | 'announcement' | 'homework' | 'general';
+export type NotificationType = 'call' | 'message' | 'announcement' | 'homework' | 'general' | 'live-lesson' | 'scheduled-lesson';
 
 export interface PushPayload {
   title: string;
@@ -26,6 +26,7 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
   tag?: string;
+  type?: NotificationType;
   data?: {
     url?: string;
     type?: NotificationType;
@@ -45,15 +46,35 @@ export function isPushSupported(): boolean {
 }
 
 /**
+ * Check if device is iOS (special handling needed)
+ */
+export function isIOSDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * Check if running as installed PWA
+ */
+export function isInstalledPWA(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true;
+}
+
+/**
  * Get current push subscription status
  */
 export async function getPushSubscriptionStatus(): Promise<{
   supported: boolean;
   permission: NotificationPermission | 'unsupported';
   subscribed: boolean;
+  isIOS: boolean;
+  isPWA: boolean;
 }> {
   if (!isPushSupported()) {
-    return { supported: false, permission: 'unsupported', subscribed: false };
+    return { supported: false, permission: 'unsupported', subscribed: false, isIOS: isIOSDevice(), isPWA: isInstalledPWA() };
   }
 
   const permission = Notification.permission;
@@ -64,10 +85,16 @@ export async function getPushSubscriptionStatus(): Promise<{
     const subscription = await registration.pushManager.getSubscription();
     subscribed = !!subscription;
   } catch (e) {
-    console.error('Failed to check subscription:', e);
+    console.error('[Push] Failed to check subscription:', e);
   }
 
-  return { supported: true, permission, subscribed };
+  return { 
+    supported: true, 
+    permission, 
+    subscribed,
+    isIOS: isIOSDevice(),
+    isPWA: isInstalledPWA()
+  };
 }
 
 /**
@@ -75,25 +102,62 @@ export async function getPushSubscriptionStatus(): Promise<{
  */
 export async function subscribeToPush(userId: string): Promise<{ success: boolean; error?: string }> {
   if (!isPushSupported()) {
-    return { success: false, error: 'Push notifications not supported' };
+    return { success: false, error: 'Push notifications not supported on this device' };
+  }
+
+  // Special handling for iOS
+  if (isIOSDevice() && !isInstalledPWA()) {
+    return { 
+      success: false, 
+      error: 'On iOS, please install the app first: tap Share → Add to Home Screen, then enable notifications' 
+    };
   }
 
   try {
     // Request permission
+    console.log('[Push] Requesting permission...');
     const permission = await Notification.requestPermission();
+    console.log('[Push] Permission result:', permission);
+    
     if (permission !== 'granted') {
-      return { success: false, error: 'Permission denied' };
+      return { success: false, error: 'Notification permission denied' };
     }
 
-    // Get service worker registration
-    const registration = await navigator.serviceWorker.ready;
+    // Ensure service worker is registered and active
+    let registration = await navigator.serviceWorker.ready;
+    console.log('[Push] Service worker ready:', registration.active?.state);
 
-    // Subscribe to push manager
+    // Subscribe to push manager with retry
+    let subscription: PushSubscription | null = null;
     const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
-    });
+    
+    // Try up to 3 times
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // Check for existing subscription first
+        subscription = await registration.pushManager.getSubscription();
+        
+        if (!subscription) {
+          console.log(`[Push] Creating new subscription (attempt ${attempt})...`);
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
+          });
+        }
+        
+        if (subscription) break;
+      } catch (err) {
+        console.error(`[Push] Subscription attempt ${attempt} failed:`, err);
+        if (attempt === 3) throw err;
+        await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+      }
+    }
+
+    if (!subscription) {
+      return { success: false, error: 'Failed to create push subscription after 3 attempts' };
+    }
+
+    console.log('[Push] Subscription created:', subscription.endpoint);
 
     // Save to Supabase
     const supabase = createClient();
@@ -106,6 +170,8 @@ export async function subscribeToPush(userId: string): Promise<{ success: boolea
       .maybeSingle();
 
     const subscriptionJson = subscription.toJSON();
+    
+    // Upsert subscription (handles existing subscriptions)
     const { error } = await supabase
       .from('push_subscriptions')
       .upsert({
@@ -122,13 +188,14 @@ export async function subscribeToPush(userId: string): Promise<{ success: boolea
       });
 
     if (error) {
-      console.error('Failed to save subscription:', error);
-      return { success: false, error: 'Failed to save subscription' };
+      console.error('[Push] Failed to save subscription:', error);
+      return { success: false, error: 'Failed to save subscription to server' };
     }
 
+    console.log('[Push] Subscription saved successfully');
     return { success: true };
   } catch (e: any) {
-    console.error('Subscribe error:', e);
+    console.error('[Push] Subscribe error:', e);
     return { success: false, error: e?.message || 'Subscription failed' };
   }
 }
@@ -159,31 +226,140 @@ export async function unsubscribeFromPush(userId: string): Promise<{ success: bo
 
     return { success: true };
   } catch (e: any) {
-    console.error('Unsubscribe error:', e);
+    console.error('[Push] Unsubscribe error:', e);
     return { success: false, error: e?.message || 'Unsubscribe failed' };
   }
 }
 
 /**
  * Show a local notification (when user is in app)
+ * This bypasses the service worker for immediate in-app notifications
  */
-export async function showLocalNotification(payload: PushPayload): Promise<void> {
-  if (!isPushSupported()) return;
-  if (Notification.permission !== 'granted') return;
+export async function showLocalNotification(payload: PushPayload): Promise<boolean> {
+  if (!isPushSupported()) {
+    console.log('[Push] Local notification skipped - push not supported');
+    return false;
+  }
+  
+  if (Notification.permission !== 'granted') {
+    console.log('[Push] Local notification skipped - permission not granted');
+    return false;
+  }
 
   try {
     const registration = await navigator.serviceWorker.ready;
+    
+    // Determine vibration pattern based on type
+    const vibrate = payload.type === 'call' || payload.data?.type === 'call' 
+      ? [200, 100, 200, 100, 200] 
+      : [200, 100, 200];
+    
+    // Determine actions based on type
+    let actions: { action: string; title: string }[] | undefined;
+    if (payload.type === 'call' || payload.data?.type === 'call' || payload.type === 'live-lesson') {
+      actions = [
+        { action: 'join', title: '📹 Join Now' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ];
+    } else if (payload.type === 'message' || payload.data?.type === 'message') {
+      actions = [
+        { action: 'view', title: '💬 View' },
+        { action: 'dismiss', title: 'Dismiss' }
+      ];
+    }
+
     await registration.showNotification(payload.title, {
       body: payload.body,
       icon: payload.icon || '/icon-192.png',
       badge: payload.badge || '/icon-192.png',
-      tag: payload.tag,
-      data: payload.data,
-      requireInteraction: payload.requireInteraction,
-    });
+      tag: payload.tag || `local-${Date.now()}`,
+      data: {
+        ...payload.data,
+        type: payload.type,
+      },
+      requireInteraction: payload.requireInteraction || false,
+      silent: false,
+      vibrate,
+      actions,
+    } as NotificationOptions);
+    
+    console.log('[Push] Local notification shown:', payload.title);
+    return true;
   } catch (e) {
-    console.error('Failed to show notification:', e);
+    console.error('[Push] Failed to show local notification:', e);
+    return false;
   }
+}
+
+/**
+ * Send a push notification via the API (server-side delivery)
+ * Use this for notifications that need to reach users even when the app is closed
+ */
+export async function sendPushNotification(
+  recipientUserId: string,
+  payload: PushPayload
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch('/api/notifications/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        userId: recipientUserId,
+        title: payload.title,
+        body: payload.body,
+        icon: payload.icon,
+        tag: payload.tag,
+        type: payload.type || payload.data?.type || 'general',
+        requireInteraction: payload.requireInteraction,
+        data: payload.data,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to send notification');
+    }
+
+    const result = await response.json();
+    console.log('[Push] Server notification sent:', result);
+    return { success: true };
+  } catch (e: any) {
+    console.error('[Push] Failed to send server notification:', e);
+    return { success: false, error: e?.message || 'Failed to send notification' };
+  }
+}
+
+/**
+ * Listen for service worker messages (e.g., notification clicks)
+ * Call this once on app initialization
+ */
+export function setupServiceWorkerMessageListener(
+  onNotificationClick?: (url: string, type?: string) => void
+): () => void {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return () => {};
+  }
+
+  const handler = (event: MessageEvent) => {
+    console.log('[Push] Service worker message:', event.data);
+    
+    if (event.data?.type === 'NOTIFICATION_CLICK') {
+      const { url, notificationType } = event.data;
+      if (onNotificationClick) {
+        onNotificationClick(url, notificationType);
+      } else if (url && typeof window !== 'undefined') {
+        // Default behavior: navigate to the URL
+        window.location.href = url;
+      }
+    }
+  };
+
+  navigator.serviceWorker.addEventListener('message', handler);
+  
+  return () => {
+    navigator.serviceWorker.removeEventListener('message', handler);
+  };
 }
 
 /**

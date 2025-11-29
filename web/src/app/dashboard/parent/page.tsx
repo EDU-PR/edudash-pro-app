@@ -17,6 +17,7 @@ import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
+import { JoinLiveLesson } from '@/components/calls';
 import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -253,6 +254,16 @@ export default function ParentDashboard() {
         {/* Homework Card - Show if organization-linked */}
         {hasOrganization && userId && (
           <HomeworkCard userId={userId} />
+        )}
+
+        {/* Live Lessons Section - Show if organization-linked with active child */}
+        {hasOrganization && activeChild && profile?.preschoolId && (
+          <div className="section" style={{ marginTop: 'var(--space-4)' }}>
+            <JoinLiveLesson 
+              preschoolId={profile.preschoolId} 
+              classId={activeChild.classId}
+            />
+          </div>
         )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}

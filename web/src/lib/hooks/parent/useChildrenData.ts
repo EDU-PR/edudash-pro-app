@@ -10,6 +10,7 @@ export interface ChildCard {
   dateOfBirth?: string;
   grade: string;
   className: string | null;
+  classId?: string;
   lastActivity: Date;
   homeworkPending: number;
   upcomingEvents: number;
@@ -112,6 +113,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
       dateOfBirth: child.date_of_birth,
       grade: child.classes?.grade_level || 'Preschool',
       className: child.classes?.name || (child.class_id ? `Class ${String(child.class_id).slice(-4)}` : null),
+      classId: child.class_id || undefined,
       lastActivity,
       homeworkPending,
       upcomingEvents,
