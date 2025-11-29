@@ -17,6 +17,22 @@ interface ActiveCall {
   started_at: string;
 }
 
+interface CallSignalPayload {
+  meeting_url?: string;
+  call_type?: 'voice' | 'video';
+  caller_name?: string;
+}
+
+interface CallSignal {
+  id: string;
+  call_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  signal_type: string;
+  payload: CallSignalPayload | null;
+  created_at: string;
+}
+
 interface CallContextType {
   startVoiceCall: (userId: string, userName?: string) => void;
   startVideoCall: (userId: string, userName?: string) => void;
@@ -104,6 +120,7 @@ export function CallProvider({ children }: CallProviderProps) {
               await new Promise(resolve => setTimeout(resolve, 200));
               
               // Fetch with retry
+              let lastError: { message?: string } | null = null;
               for (let attempt = 0; attempt < 3; attempt++) {
                 const { data: fullCall, error } = await supabase
                   .from('active_calls')
@@ -118,6 +135,7 @@ export function CallProvider({ children }: CallProviderProps) {
                 }
                 
                 if (error) {
+                  lastError = error;
                   console.warn('[CallProvider] DB fetch attempt', attempt + 1, 'failed:', error.message);
                 }
                 
@@ -128,7 +146,7 @@ export function CallProvider({ children }: CallProviderProps) {
               }
               
               if (!meetingUrl) {
-                console.error('[CallProvider] Failed to get meeting_url after 3 attempts');
+                console.error('[CallProvider] Failed to get meeting_url after 3 attempts', lastError?.message);
               }
             }
             
@@ -171,6 +189,57 @@ export function CallProvider({ children }: CallProviderProps) {
       supabase.removeChannel(channel);
     };
   }, [currentUserId, supabase, incomingCall]);
+
+  // Listen for call signal payloads (e.g., meeting_url)
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const signalChannel = supabase
+      .channel(`call-signals-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_signals',
+          filter: `to_user_id=eq.${currentUserId}`,
+        },
+        (payload: { new: CallSignal }) => {
+          const signal = payload.new;
+          if (signal.signal_type !== 'call-offer') return;
+
+          const meetingUrl = signal.payload?.meeting_url;
+          if (!meetingUrl) return;
+
+          setIncomingCall((prev) => {
+            if (prev && prev.call_id === signal.call_id) {
+              if (prev.meeting_url === meetingUrl) return prev;
+              console.log('[CallProvider] Hydrated meeting_url from call-offer signal');
+              return { ...prev, meeting_url: meetingUrl };
+            }
+
+            // If active_calls payload hasn't arrived yet, create a placeholder entry
+            console.log('[CallProvider] Creating placeholder incoming call from call-offer signal');
+            return {
+              id: signal.id,
+              call_id: signal.call_id,
+              caller_id: signal.from_user_id,
+              callee_id: signal.to_user_id,
+              call_type: (signal.payload?.call_type as 'voice' | 'video') || 'voice',
+              status: 'ringing',
+              caller_name: signal.payload?.caller_name || 'Unknown',
+              meeting_url: meetingUrl,
+              started_at: signal.created_at,
+            } as ActiveCall;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(signalChannel);
+    };
+  }, [currentUserId, supabase]);
 
   // Start voice call
   const startVoiceCall = useCallback((userId: string, userName?: string) => {

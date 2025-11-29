@@ -449,6 +449,23 @@ export const DailyCallInterface = ({
         meeting_url: newRoomUrl,
       });
 
+      // Send call-offer signal with meeting URL for resilience
+      try {
+        await supabase.from('call_signals').insert({
+          call_id: callId,
+          from_user_id: currentUserId,
+          to_user_id: remoteUserId,
+          signal_type: 'call-offer',
+          payload: {
+            meeting_url: newRoomUrl,
+            call_type: initialCallType,
+            caller_name: callerName,
+          },
+        });
+      } catch (signalErr) {
+        console.warn('Failed to send call-offer signal:', signalErr);
+      }
+
       // Send push notification
       try {
         await fetch('/api/notifications/send', {
