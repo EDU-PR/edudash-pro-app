@@ -251,7 +251,7 @@ export function QuickCallModal({
                 gap: 12,
               }}
             >
-              <Loader2 size={32} color="#3b82f6" className="animate-spin" />
+              <Loader2 size={32} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
               <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 14 }}>
                 Loading contacts...
               </p>
