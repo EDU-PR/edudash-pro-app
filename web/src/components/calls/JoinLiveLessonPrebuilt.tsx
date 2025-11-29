@@ -191,8 +191,9 @@ function JoinLiveLessonPrebuiltInner({ classId, preschoolId }: JoinLiveLessonPre
           setShowError('Session expired. Please sign in again.');
         }
       }
-    } catch {
-      setShowError('Failed to refresh session.');
+    } catch (err) {
+      console.error('[JoinLiveLessonPrebuilt] Session refresh error:', err);
+      setShowError('Failed to refresh session. Please try again.');
     } finally {
       setIsRefreshing(false);
     }
