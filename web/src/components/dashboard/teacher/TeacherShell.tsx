@@ -1,4 +1,7 @@
-'use client';
+/**
+ * TeacherShell - Re-export for backward compatibility
+ * Implementation moved to teacher-shell/TeacherShell.tsx
+ */
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
