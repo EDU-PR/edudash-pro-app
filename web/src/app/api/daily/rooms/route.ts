@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[Daily Rooms] Authenticated user:', user.id, user.email);
 
-    // Verify user is a teacher or principal
+    // Verify user role - allow teachers, principals, superadmins, AND parents (for P2P calls)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role, preschool_id')
@@ -68,9 +68,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
     }
 
-    if (!profile || !['teacher', 'principal', 'superadmin'].includes(profile.role)) {
+    // Allow parents to create rooms for P2P calls
+    const allowedRoles = ['teacher', 'principal', 'superadmin', 'parent'];
+    if (!profile || !allowedRoles.includes(profile.role)) {
       console.log('[Daily Rooms] User role not authorized:', profile?.role);
-      return NextResponse.json({ error: 'Only teachers can create lesson rooms' }, { status: 403 });
+      return NextResponse.json({ error: 'Not authorized to create call rooms' }, { status: 403 });
     }
 
     const body: CreateRoomRequest = await request.json();
