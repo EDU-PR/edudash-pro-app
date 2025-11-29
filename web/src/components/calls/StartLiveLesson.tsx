@@ -145,7 +145,7 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
               .update({ status: 'ended', actual_end: now })
               .eq('id', liveCall.id)
               .then(() => console.log('[StartLiveLesson] Marked expired call as ended'))
-              .catch((err) => console.warn('[StartLiveLesson] Failed to mark call as ended:', err));
+              .catch((err: unknown) => console.warn('[StartLiveLesson] Failed to mark call as ended:', err));
             setExistingCall(null);
             return;
           }
