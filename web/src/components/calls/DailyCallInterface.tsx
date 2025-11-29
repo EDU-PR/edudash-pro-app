@@ -568,13 +568,13 @@ export const DailyCallInterface = ({
         meeting_url: newRoomUrl,
       });
 
-      // Send call-offer signal with meeting URL for resilience
+      // Send offer signal with meeting URL for resilience
       try {
         await supabase.from('call_signals').insert({
           call_id: callId,
           from_user_id: currentUserId,
           to_user_id: remoteUserId,
-          signal_type: 'call-offer',
+          signal_type: 'offer',
           payload: {
             meeting_url: newRoomUrl,
             call_type: initialCallType,
@@ -582,7 +582,7 @@ export const DailyCallInterface = ({
           },
         });
       } catch (signalErr) {
-        console.warn('Failed to send call-offer signal:', signalErr);
+        console.warn('Failed to send offer signal:', signalErr);
       }
 
       // Send push notification
@@ -665,7 +665,7 @@ export const DailyCallInterface = ({
         .from('call_signals')
         .select('payload')
         .eq('call_id', callId)
-        .eq('signal_type', 'call-offer')
+        .eq('signal_type', 'offer')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
