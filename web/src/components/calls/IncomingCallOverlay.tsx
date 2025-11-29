@@ -24,6 +24,7 @@ export function IncomingCallOverlay({
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [hasUserInteraction, setHasUserInteraction] = useState(false);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const hasUserInteractionRef = useRef(false);
 
   // Initialize audio with user gesture fallback
   const initializeAudio = useCallback(() => {
@@ -74,8 +75,9 @@ export function IncomingCallOverlay({
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
     }
-    // Stop any ongoing vibration
-    if ('vibrate' in navigator) {
+    // Stop any ongoing vibration - only if user has interacted (browser security requirement)
+    // See: https://www.chromestatus.com/feature/5644273861001216
+    if ('vibrate' in navigator && hasUserInteractionRef.current) {
       try {
         navigator.vibrate(0);
       } catch (err) {
@@ -90,6 +92,7 @@ export function IncomingCallOverlay({
 
     const markInteraction = () => {
       setHasUserInteraction(true);
+      hasUserInteractionRef.current = true;
     };
 
     window.addEventListener('pointerdown', markInteraction, { once: true });
@@ -146,6 +149,7 @@ export function IncomingCallOverlay({
   const handleInteraction = useCallback(() => {
     if (!hasUserInteraction) {
       setHasUserInteraction(true);
+      hasUserInteractionRef.current = true;
     }
 
     if (!audioInitialized && isVisible) {
