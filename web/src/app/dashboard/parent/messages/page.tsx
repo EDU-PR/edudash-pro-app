@@ -1834,9 +1834,9 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                             onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
                             title="Voice call"
                             style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 22,
+                              width: 36,
+                              height: 36,
+                              borderRadius: 18,
                               background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                               border: 'none',
                               display: 'flex',
@@ -1844,20 +1844,20 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                               justifyContent: 'center',
                               cursor: 'pointer',
                               padding: 0,
-                              boxShadow: '0 3px 10px rgba(34, 197, 94, 0.35)',
+                              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.3)',
                               transition: 'transform 0.2s ease',
                             }}
                             className="active:scale-95"
                           >
-                            <Phone size={18} color="white" />
+                            <Phone size={16} color="white" />
                           </button>
                           <button
                             onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
                             title="Video call"
                             style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 22,
+                              width: 36,
+                              height: 36,
+                              borderRadius: 18,
                               background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
                               border: 'none',
                               display: 'flex',
@@ -1865,12 +1865,12 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                               justifyContent: 'center',
                               cursor: 'pointer',
                               padding: 0,
-                              boxShadow: '0 3px 10px rgba(59, 130, 246, 0.35)',
+                              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)',
                               transition: 'transform 0.2s ease',
                             }}
                             className="active:scale-95"
                           >
-                            <Video size={18} color="white" />
+                            <Video size={16} color="white" />
                           </button>
                         </>
                       )}
@@ -2572,30 +2572,31 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         preschoolId={profile?.preschoolId}
       />
       
-      {/* Quick Call FAB - Shows on mobile when no conversation is selected */}
-      {!isDesktop && !currentThread && (
+      {/* Quick Call FAB - Shows when no conversation is selected */}
+      {!currentThread && (
         <button
           onClick={() => setQuickCallModalOpen(true)}
           style={{
             position: 'fixed',
-            bottom: 'calc(150px + env(safe-area-inset-bottom))',
-            right: 16,
-            width: 56,
-            height: 56,
-            borderRadius: 28,
+            bottom: isDesktop ? 24 : 'calc(150px + env(safe-area-inset-bottom))',
+            right: isDesktop ? 24 : 16,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
             background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
             border: 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(34, 197, 94, 0.5), 0 0 30px rgba(34, 197, 94, 0.3)',
+            boxShadow: '0 4px 16px rgba(34, 197, 94, 0.4), 0 0 24px rgba(34, 197, 94, 0.2)',
             zIndex: 998,
             transition: 'transform 0.2s ease',
           }}
-          className="active:scale-95"
+          className="active:scale-95 hover:scale-105"
+          title="Quick Call"
         >
-          <Phone size={24} color="white" />
+          <Phone size={22} color="white" />
         </button>
       )}
     </ParentShell>
