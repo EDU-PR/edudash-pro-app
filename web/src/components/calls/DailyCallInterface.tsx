@@ -76,6 +76,8 @@ export const DailyCallInterface = ({
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   // Ref to track current call state to avoid stale closure issues
   const callStateRef = useRef<CallState>('idle');
+  // Ref to prevent duplicate call attempts (React StrictMode / re-renders)
+  const isJoiningRef = useRef<boolean>(false);
   
   // Remote participant
   const [remoteParticipant, setRemoteParticipant] = useState<DailyParticipant | null>(null);
@@ -517,8 +519,16 @@ export const DailyCallInterface = ({
 
   // Start outgoing call
   const startCall = useCallback(async () => {
+    // Prevent duplicate call attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate startCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     if (!currentUserId || !remoteUserId) {
       setError('Missing user information');
+      isJoiningRef.current = false;
       return;
     }
 
@@ -536,6 +546,7 @@ export const DailyCallInterface = ({
         setError('Failed to create call room. Please try again.');
         setCallState('failed');
         setShowRetryButton(true);
+        isJoiningRef.current = false;
         return;
       }
       
@@ -629,6 +640,7 @@ export const DailyCallInterface = ({
           setCallState('no-answer');
           setError('No answer');
           setShowRetryButton(true);
+          isJoiningRef.current = false;
         }
       }, CALL_TIMEOUT_MS);
 
@@ -636,6 +648,7 @@ export const DailyCallInterface = ({
       console.error('Error starting call:', err);
       setCallState('failed');
       setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
   }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom]);
 
@@ -690,6 +703,13 @@ export const DailyCallInterface = ({
 
   // Answer incoming call
   const answerCall = useCallback(async () => {
+    // Prevent duplicate join attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate answerCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     console.log('[P2P Call] Answering call, meetingUrl:', incomingMeetingUrl, 'callId:', incomingCallId);
     
     let meetingUrlToUse = incomingMeetingUrl;
@@ -716,6 +736,7 @@ export const DailyCallInterface = ({
       setError('Unable to connect to call. Please try again.');
       setCallState('failed');
       setShowRetryButton(true);
+      isJoiningRef.current = false;
       console.error('[P2P Call] No meeting URL for incoming call after fetch attempts');
       return;
     }
@@ -745,11 +766,15 @@ export const DailyCallInterface = ({
       setCallState('failed');
       setError('Failed to answer call. Tap to retry.');
       setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
   }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom, fetchMeetingUrl]);
 
   // End call
   const endCall = useCallback(async () => {
+    // Reset joining flag to allow new calls
+    isJoiningRef.current = false;
+    
     // Clear timeouts
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
@@ -799,6 +824,9 @@ export const DailyCallInterface = ({
 
   // Retry call
   const retryCall = useCallback(async () => {
+    // Reset joining flag for retry
+    isJoiningRef.current = false;
+    
     setCallState('idle');
     setError(null);
     setShowRetryButton(false);
