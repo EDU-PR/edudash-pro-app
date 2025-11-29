@@ -103,7 +103,7 @@ export function IncomingCallOverlay({
     }
   }, [isVisible, initializeAudio]);
 
-  // Play ringtone when visible - vibration is only triggered on user interaction (answer/reject)
+  // Play ringtone when visible - try immediately, fall back to waiting for interaction
   useEffect(() => {
     if (!isVisible) {
       setRingCount(0);
@@ -111,12 +111,8 @@ export function IncomingCallOverlay({
       return;
     }
 
-    if (!hasUserInteraction) {
-      console.log('[IncomingCall] Waiting for user interaction before playing ringtone');
-      return;
-    }
-
-    console.log('[IncomingCall] Incoming call visible, starting ringtone');
+    // Try to play ringtone immediately - most browsers allow this if user has interacted with the page before
+    console.log('[IncomingCall] Incoming call visible, attempting to start ringtone');
     playRingtone();
 
     // NOTE: navigator.vibrate() requires a user gesture (click/tap) to work in modern browsers.
@@ -124,9 +120,10 @@ export function IncomingCallOverlay({
     // warnings in Chrome. Vibration is now triggered in handleAnswer/handleReject callbacks.
     // See: https://developer.mozilla.org/en-US/docs/Web/API/Navigator/vibrate#security
 
-    // Retry playing audio every 2 seconds if it failed initially
+    // Retry playing audio every 2 seconds if it failed initially (autoplay blocked)
     const retryInterval = setInterval(() => {
       if (ringtoneRef.current?.paused && isVisible) {
+        console.log('[IncomingCall] Retrying ringtone playback...');
         playRingtone();
       }
     }, 2000);
@@ -135,7 +132,7 @@ export function IncomingCallOverlay({
       clearInterval(retryInterval);
       stopRingtone();
     };
-  }, [isVisible, hasUserInteraction, playRingtone, stopRingtone]);
+  }, [isVisible, playRingtone, stopRingtone]);
 
   // Handle user interaction to enable audio
   const handleInteraction = useCallback(() => {
