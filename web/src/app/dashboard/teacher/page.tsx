@@ -13,7 +13,7 @@ import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
 import { ClassCard } from '@/components/dashboard/teacher/ClassCard';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
-import { StartLiveLesson, QuickCallModal } from '@/components/calls';
+import { StartLiveLessonWithToggle, QuickCallModal } from '@/components/calls';
 import { useCall } from '@/components/calls';
 import {
   Users,
@@ -210,7 +210,7 @@ export default function TeacherDashboard() {
       {preschoolId && userId && (
         <div className="section">
           <div className="sectionTitle">Live Lessons</div>
-          <StartLiveLesson 
+          <StartLiveLessonWithToggle 
             preschoolId={preschoolId} 
             teacherId={userId} 
             teacherName={userName}

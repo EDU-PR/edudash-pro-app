@@ -16,3 +16,7 @@ export { DailyPrebuiltCall } from './DailyPrebuiltCall';
 export { DailyPrebuiltProvider, useDailyPrebuilt } from './DailyPrebuiltProvider';
 export { StartLiveLessonPrebuilt } from './StartLiveLessonPrebuilt';
 export { JoinLiveLessonPrebuilt } from './JoinLiveLessonPrebuilt';
+
+// Feature-flagged components (toggle between legacy and Prebuilt)
+// Default: Uses Daily Prebuilt. Set NEXT_PUBLIC_USE_DAILY_PREBUILT=false to use legacy.
+export { StartLiveLessonWithToggle, JoinLiveLessonWithToggle } from './LiveLessonWithToggle';
