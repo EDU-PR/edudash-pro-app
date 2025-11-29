@@ -49,21 +49,25 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
     return tierLower;
   };
 
-  // Get realistic chat limits for tiers (used when DB has placeholder values like 999999)
+  // Get realistic chat limits for tiers
+  // DB now has proper values, but keep fallback for edge cases
   const getRealisticLimit = (tierName: string, dbLimit: number): number => {
-    // If DB has a reasonable limit, use it
-    if (dbLimit > 0 && dbLimit <= 10000) {
+    // DB values are now correct, use them directly
+    // Only override if DB returns 0 or negative
+    if (dbLimit > 0) {
       return dbLimit;
     }
-    
-    // Otherwise, use sensible defaults based on tier
+
+    // Fallback defaults (shouldn't be needed with updated DB)
     const tierLower = tierName.toLowerCase();
-    if (tierLower.includes('enterprise')) return -1; // Unlimited
-    if (tierLower.includes('pro')) return 2000;
-    if (tierLower.includes('premium')) return 1000;
-    if (tierLower.includes('starter')) return 500;
-    if (tierLower.includes('plus')) return 500;
-    if (tierLower.includes('basic')) return 200;
+    if (tierLower === 'school_enterprise') return -1; // Unlimited
+    if (tierLower === 'school_pro') return 5000;
+    if (tierLower === 'school_premium') return 2000;
+    if (tierLower === 'school_starter') return 1000;
+    if (tierLower === 'teacher_pro') return 2000;
+    if (tierLower === 'teacher_starter') return 500;
+    if (tierLower === 'parent_plus') return 1000;
+    if (tierLower === 'parent_starter') return 200;
     if (tierLower.includes('trial')) return 50;
     return 20; // free
   };
@@ -142,8 +146,8 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
 
   if (loading || !quota) return null;
 
-  // Only Enterprise tier (-1) is truly unlimited
-  const isUnlimited = quota.limit === -1;
+  // Enterprise tier (999999 or -1) is unlimited
+  const isUnlimited = quota.limit === -1 || quota.limit >= 999999;
   const percentage = !isUnlimited && quota.limit > 0 ? Math.min((quota.used / quota.limit) * 100, 100) : 0;
   const remaining = !isUnlimited ? quota.limit - quota.used : Infinity;
   const isLow = !isUnlimited && percentage > 80;

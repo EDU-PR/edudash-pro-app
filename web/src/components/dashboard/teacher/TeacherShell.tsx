@@ -206,7 +206,7 @@ export function TeacherShell({
         </header>
       )}
 
-      <div className={`frame ${hideHeader ? 'frame-fullscreen' : ''}`}>
+      <div className={hideHeader ? 'frame frame-fullscreen' : 'frame'}>
         {!hideHeader && (
         <aside 
           className="sidenav sticky" 

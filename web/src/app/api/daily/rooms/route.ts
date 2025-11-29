@@ -140,9 +140,30 @@ export async function POST(request: NextRequest) {
     });
 
     if (!dailyResponse.ok) {
-      const error = await dailyResponse.json();
-      console.error('Daily.co room creation failed:', error);
-      return NextResponse.json({ error: 'Failed to create room' }, { status: 500 });
+      const errorData = await dailyResponse.json().catch(() => ({}));
+      console.error('[Daily Rooms] Daily.co room creation failed:', {
+        status: dailyResponse.status,
+        statusText: dailyResponse.statusText,
+        error: errorData,
+      });
+      
+      // Provide more specific error messages based on Daily.co response
+      let errorMessage = 'Failed to create room';
+      if (dailyResponse.status === 401) {
+        errorMessage = 'Daily.co API key is invalid. Please check your DAILY_API_KEY environment variable.';
+      } else if (dailyResponse.status === 403) {
+        errorMessage = 'Daily.co API access denied. Please verify your API key permissions.';
+      } else if (dailyResponse.status === 429) {
+        errorMessage = 'Too many requests. Please try again in a few moments.';
+      } else if (errorData?.info) {
+        errorMessage = errorData.info;
+      } else if (errorData?.error) {
+        errorMessage = errorData.error;
+      }
+      
+      return NextResponse.json({ 
+        error: errorMessage
+      }, { status: dailyResponse.status || 500 });
     }
 
     const room = await dailyResponse.json();
@@ -181,8 +202,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error creating Daily room:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Daily Rooms] Error creating Daily room:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error'
+    }, { status: 500 });
   }
 }
 
