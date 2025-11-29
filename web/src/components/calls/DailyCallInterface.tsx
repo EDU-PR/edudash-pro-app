@@ -76,6 +76,8 @@ export const DailyCallInterface = ({
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   // Ref to track current call state to avoid stale closure issues
   const callStateRef = useRef<CallState>('idle');
+  // Ref to prevent duplicate call attempts (React StrictMode / re-renders)
+  const isJoiningRef = useRef<boolean>(false);
   
   // Remote participant
   const [remoteParticipant, setRemoteParticipant] = useState<DailyParticipant | null>(null);
@@ -179,6 +181,7 @@ export const DailyCallInterface = ({
   // Create a private room for 1-on-1 call
   const createPrivateRoom = useCallback(async (): Promise<string | null> => {
     try {
+      console.log('[P2P Call] Requesting room from /api/daily/rooms...');
       const response = await fetch('/api/daily/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,23 +196,33 @@ export const DailyCallInterface = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[P2P Call] Room creation failed - Status:', response.status, 'Error:', errorData);
         // Handle specific error codes
         if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
-          setError('Video calls are not available. Please contact your administrator.');
+          setError('Video calls are not available. Please contact your administrator to configure video calling.');
         } else if (response.status === 401) {
           setError('Please sign in to make calls.');
         } else if (response.status === 403) {
-          setError('You do not have permission to make calls.');
+          setError('You do not have permission to make calls. Only teachers can initiate calls.');
         } else {
           setError(errorData.message || 'Failed to set up call. Please try again.');
         }
-        throw new Error(errorData.error || 'Failed to create room');
+        return null;
       }
 
       const data = await response.json();
+      console.log('[P2P Call] Room creation response:', data);
+      
+      if (!data.room?.url) {
+        console.error('[P2P Call] Room created but no URL returned:', data);
+        setError('Failed to get room URL. Please try again.');
+        return null;
+      }
+      
       return data.room.url;
     } catch (err) {
-      console.error('Error creating room:', err);
+      console.error('[P2P Call] Error creating room:', err);
+      setError('Network error. Please check your connection and try again.');
       return null;
     }
   }, [remoteUserName]);
@@ -456,8 +469,16 @@ export const DailyCallInterface = ({
 
   // Start outgoing call
   const startCall = useCallback(async () => {
+    // Prevent duplicate call attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate startCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     if (!currentUserId || !remoteUserId) {
       setError('Missing user information');
+      isJoiningRef.current = false;
       return;
     }
 
@@ -466,11 +487,20 @@ export const DailyCallInterface = ({
       setError(null);
 
       // Create private room
+      console.log('[P2P Call] Creating private room...');
       const newRoomUrl = await createPrivateRoom();
-      if (!newRoomUrl) {
-        throw new Error('Failed to create room');
+      
+      // CRITICAL: Validate room URL before proceeding
+      if (!newRoomUrl || typeof newRoomUrl !== 'string' || !newRoomUrl.startsWith('https://')) {
+        console.error('[P2P Call] Invalid room URL returned:', newRoomUrl);
+        setError('Failed to create call room. Please try again.');
+        setCallState('failed');
+        setShowRetryButton(true);
+        isJoiningRef.current = false;
+        return;
       }
-
+      
+      console.log('[P2P Call] Room created successfully:', newRoomUrl);
       setRoomUrl(newRoomUrl);
 
       // Generate call ID
@@ -499,13 +529,13 @@ export const DailyCallInterface = ({
         meeting_url: newRoomUrl,
       });
 
-      // Send call-offer signal with meeting URL for resilience
+      // Send offer signal with meeting URL for resilience
       try {
         await supabase.from('call_signals').insert({
           call_id: callId,
           from_user_id: currentUserId,
           to_user_id: remoteUserId,
-          signal_type: 'call-offer',
+          signal_type: 'offer',
           payload: {
             meeting_url: newRoomUrl,
             call_type: initialCallType,
@@ -513,7 +543,7 @@ export const DailyCallInterface = ({
           },
         });
       } catch (signalErr) {
-        console.warn('Failed to send call-offer signal:', signalErr);
+        console.warn('Failed to send offer signal:', signalErr);
       }
 
       // Send push notification
@@ -560,6 +590,7 @@ export const DailyCallInterface = ({
           setCallState('no-answer');
           setError('No answer');
           setShowRetryButton(true);
+          isJoiningRef.current = false;
         }
       }, CALL_TIMEOUT_MS);
 
@@ -567,16 +598,96 @@ export const DailyCallInterface = ({
       console.error('Error starting call:', err);
       setCallState('failed');
       setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
   }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom]);
 
+  // State for fetching meeting URL
+  const [isFetchingMeetingUrl, setIsFetchingMeetingUrl] = useState(false);
+
+  // Helper function to fetch meeting URL when missing
+  const fetchMeetingUrl = useCallback(async (callId: string): Promise<string | undefined> => {
+    const maxAttempts = 5;
+    const baseDelay = 500;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Try fetching from active_calls first
+      const { data: callData } = await supabase
+        .from('active_calls')
+        .select('meeting_url')
+        .eq('call_id', callId)
+        .single();
+      
+      if (callData?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');
+        return callData.meeting_url;
+      }
+      
+      // Fallback: Try fetching from call_signals table
+      const { data: signalData } = await supabase
+        .from('call_signals')
+        .select('payload')
+        .eq('call_id', callId)
+        .eq('signal_type', 'offer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const signalPayload = signalData?.payload as { meeting_url?: string } | null;
+      if (signalPayload?.meeting_url) {
+        console.log('[P2P Call] fetchMeetingUrl: Got URL from call_signals (attempt', attempt + 1, ')');
+        return signalPayload.meeting_url;
+      }
+      
+      // Exponential backoff
+      if (attempt < maxAttempts - 1) {
+        const delay = baseDelay * Math.pow(1.5, attempt);
+        console.log(`[P2P Call] fetchMeetingUrl: Waiting ${Math.round(delay)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    console.error('[P2P Call] fetchMeetingUrl: Failed after', maxAttempts, 'attempts');
+    return undefined;
+  }, [supabase]);
+
   // Answer incoming call
   const answerCall = useCallback(async () => {
+    // Prevent duplicate join attempts (React StrictMode / rapid re-renders)
+    if (isJoiningRef.current) {
+      console.log('[P2P Call] Already joining, skipping duplicate answerCall');
+      return;
+    }
+    isJoiningRef.current = true;
+    
     console.log('[P2P Call] Answering call, meetingUrl:', incomingMeetingUrl, 'callId:', incomingCallId);
     
-    if (!incomingMeetingUrl) {
-      setError('No room URL provided');
-      console.error('[P2P Call] No meeting URL for incoming call');
+    let meetingUrlToUse = incomingMeetingUrl;
+    
+    // If meeting URL is missing, try to fetch it
+    if (!meetingUrlToUse && incomingCallId) {
+      console.log('[P2P Call] Meeting URL missing, attempting to fetch...');
+      setIsFetchingMeetingUrl(true);
+      setCallState('connecting');
+      setError('Connecting...');
+      
+      meetingUrlToUse = await fetchMeetingUrl(incomingCallId);
+      
+      setIsFetchingMeetingUrl(false);
+      
+      if (meetingUrlToUse) {
+        console.log('[P2P Call] Successfully fetched meeting URL:', meetingUrlToUse);
+        setRoomUrl(meetingUrlToUse);
+        setError(null);
+      }
+    }
+    
+    if (!meetingUrlToUse) {
+      setError('Unable to connect to call. Please try again.');
+      setCallState('failed');
+      setShowRetryButton(true);
+      isJoiningRef.current = false;
+      console.error('[P2P Call] No meeting URL for incoming call after fetch attempts');
       return;
     }
 
@@ -597,18 +708,23 @@ export const DailyCallInterface = ({
         console.log('[P2P Call] Updated call status to connected');
       }
       
-      await joinRoom(incomingMeetingUrl);
+      await joinRoom(meetingUrlToUse);
       // Note: Don't set connected here - let the participant detection handle it
       console.log('[P2P Call] Join room completed, waiting for participants');
     } catch (err) {
       console.error('[P2P Call] Error answering call:', err);
       setCallState('failed');
-      setError('Failed to answer call');
+      setError('Failed to answer call. Tap to retry.');
+      setShowRetryButton(true);
+      isJoiningRef.current = false;
     }
-  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom]);
+  }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom, fetchMeetingUrl]);
 
   // End call
   const endCall = useCallback(async () => {
+    // Reset joining flag to allow new calls
+    isJoiningRef.current = false;
+    
     // Clear timeouts
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
@@ -658,6 +774,9 @@ export const DailyCallInterface = ({
 
   // Retry call
   const retryCall = useCallback(async () => {
+    // Reset joining flag for retry
+    isJoiningRef.current = false;
+    
     setCallState('idle');
     setError(null);
     setShowRetryButton(false);
