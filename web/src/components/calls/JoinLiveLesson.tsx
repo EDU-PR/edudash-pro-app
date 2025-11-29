@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Video, Users, Clock, ChevronRight, Loader2, Radio, Bell, Sparkles } from 'lucide-react';
+import { Video, Users, Clock, ChevronRight, Loader2, Radio, Bell, Sparkles, AlertCircle, RefreshCw, LogIn } from 'lucide-react';
 import { GroupCallProvider, useGroupCall } from './GroupCallProvider';
 import { ClassLessonCall } from './ClassLessonCall';
+import { useRouter } from 'next/navigation';
 
 interface LiveLesson {
   id: string;
@@ -30,12 +31,31 @@ interface JoinLiveLessonProps {
 
 function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLessonProps) {
   const supabase = createClient();
-  const { isInCall } = useGroupCall();
+  const router = useRouter();
+  const { isInCall, error: callError, isJoining: isGroupJoining } = useGroupCall();
   
   const [liveLessons, setLiveLessons] = useState<LiveLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeLesson, setActiveLesson] = useState<LiveLesson | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [showError, setShowError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Show error from GroupCallProvider
+  useEffect(() => {
+    if (callError) {
+      setShowError(callError);
+      setJoiningId(null);
+      setActiveLesson(null);
+    }
+  }, [callError]);
+
+  // Reset joining state when group joining completes
+  useEffect(() => {
+    if (!isGroupJoining && joiningId && !isInCall && !callError) {
+      // Still joining but group call provider not joining - might be stuck
+    }
+  }, [isGroupJoining, joiningId, isInCall, callError]);
 
   // Fetch live lessons for this student's class
   useEffect(() => {
@@ -45,12 +65,16 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
       const now = new Date().toISOString();
       
       // First, clean up any expired calls in this preschool
-      await supabase
-        .from('video_calls')
-        .update({ status: 'ended', actual_end: now })
-        .eq('preschool_id', preschoolId)
-        .eq('status', 'live')
-        .lt('scheduled_end', now);
+      try {
+        await supabase
+          .from('video_calls')
+          .update({ status: 'ended', actual_end: now })
+          .eq('preschool_id', preschoolId)
+          .eq('status', 'live')
+          .lt('scheduled_end', now);
+      } catch (e) {
+        console.warn('[JoinLiveLesson] Cleanup error:', e);
+      }
       
       // Only fetch actually LIVE lessons (not scheduled ones that haven't started)
       let query = supabase
@@ -109,6 +133,7 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
 
   // Join a lesson
   const handleJoinLesson = (lesson: LiveLesson) => {
+    setShowError(null);
     setJoiningId(lesson.id);
     setActiveLesson(lesson);
   };
@@ -118,6 +143,157 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
     setActiveLesson(null);
     setJoiningId(null);
   };
+
+  // Handle sign in redirect
+  const handleSignIn = () => {
+    router.push('/auth/signin');
+  };
+
+  // Handle session refresh
+  const handleRefreshSession = async () => {
+    setIsRefreshing(true);
+    try {
+      const { error } = await supabase.auth.refreshSession();
+      if (error) {
+        setShowError('Failed to refresh session. Please sign in again.');
+      } else {
+        setShowError(null);
+        // Re-check session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setShowError(null);
+        } else {
+          setShowError('Session expired. Please sign in again.');
+        }
+      }
+    } catch (e) {
+      setShowError('Failed to refresh session.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Show error state
+  if (showError) {
+    const isAuthError = showError.toLowerCase().includes('sign in') || 
+                       showError.toLowerCase().includes('authentication') ||
+                       showError.toLowerCase().includes('session') ||
+                       showError.toLowerCase().includes('unauthorized');
+
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+        borderRadius: 20,
+        padding: 24,
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: '0 10px 40px rgba(239, 68, 68, 0.3)',
+      }}>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              background: 'rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <AlertCircle style={{ width: 24, height: 24, color: 'white' }} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'white' }}>
+                Unable to Join
+              </h3>
+              <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255, 255, 255, 0.8)' }}>
+                {showError}
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {isAuthError && (
+              <button
+                onClick={handleSignIn}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 20px',
+                  background: 'white',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                }}
+              >
+                <LogIn style={{ width: 18, height: 18 }} />
+                Sign In
+              </button>
+            )}
+            
+            <button
+              onClick={handleRefreshSession}
+              disabled={isRefreshing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'white',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                opacity: isRefreshing ? 0.7 : 1,
+              }}
+            >
+              <RefreshCw style={{ 
+                width: 18, 
+                height: 18,
+                animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+              }} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh Session'}
+            </button>
+
+            <button
+              onClick={() => setShowError(null)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 20px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+        
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   // Show active lesson call
   if (activeLesson) {

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import DailyIframe, { DailyCall, DailyParticipant, DailyEventObjectParticipant } from '@daily-co/daily-js';
+import { createClient } from '@/lib/supabase/client';
 
 interface GroupCallContextType {
   // State
@@ -140,21 +141,65 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       setError(null);
       setIsJoining(true);
 
+      // Check for WebRTC support first
+      if (typeof window !== 'undefined' && !navigator.mediaDevices) {
+        setError('Your browser does not support video calls. Please use a modern browser like Chrome, Firefox, Safari, or Edge.');
+        setIsJoining(false);
+        return false;
+      }
+
+      // Check if WebRTC is available (might be blocked by browser settings or extensions)
+      try {
+        const testConnection = new RTCPeerConnection();
+        testConnection.close();
+        console.log('[GroupCall] WebRTC check passed');
+      } catch (rtcError) {
+        console.error('[GroupCall] WebRTC not available:', rtcError);
+        setError('Video calls are blocked in your browser. Please disable any VPN, ad blockers, or privacy extensions that may block WebRTC.');
+        setIsJoining(false);
+        return false;
+      }
+
       // Clean up any existing call object first to prevent duplicate instances
       if (callObject) {
         try {
+          console.log('[GroupCall] Cleaning up existing call object');
           await callObject.leave();
           await callObject.destroy();
         } catch (e) {
-          console.warn('Error cleaning up previous call object:', e);
+          console.warn('[GroupCall] Error cleaning up previous call object:', e);
         }
         setCallObject(null);
+        // Small delay to ensure cleanup is complete
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
+
+      // IMPORTANT: Refresh the session before making API calls
+      // This ensures the auth cookies are fresh for remote users
+      const supabase = createClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('[GroupCall] No active session:', sessionError);
+        setError('Please sign in to join the call. Your session may have expired.');
+        setIsJoining(false);
+        return false;
+      }
+
+      // Refresh session if needed to ensure cookies are valid
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.warn('[GroupCall] Session refresh warning:', refreshError.message);
+        // Continue anyway - the session might still be valid
+      }
+
+      console.log('[GroupCall] Session verified for user:', session.user.email);
 
       // Get room name from URL
       const roomName = roomUrl.split('/').pop() || '';
 
       // Get meeting token from our API
+      console.log('[GroupCall] Fetching meeting token for room:', roomName);
       const tokenResponse = await fetch('/api/daily/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,10 +208,20 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       });
 
       if (!tokenResponse.ok) {
-        throw new Error('Failed to get meeting token');
+        const errorData = await tokenResponse.json();
+        console.error('[GroupCall] Token request failed:', tokenResponse.status, errorData);
+        
+        if (tokenResponse.status === 401) {
+          setError('Authentication failed. Please sign out and sign back in.');
+        } else {
+          setError(errorData.error || errorData.details || 'Failed to get meeting token');
+        }
+        setIsJoining(false);
+        return false;
       }
 
-      const { token } = await tokenResponse.json();
+      const { token, userName: displayName } = await tokenResponse.json();
+      console.log('[GroupCall] Token received, joining as:', displayName);
 
       // Create Daily call object with allowMultipleCallInstances as fallback
       const newCallObject = DailyIframe.createCallObject({
@@ -178,6 +233,7 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       // Set up event listeners
       newCallObject
         .on('joined-meeting', () => {
+          console.log('[GroupCall] Successfully joined meeting');
           setIsInCall(true);
           setIsJoining(false);
           // Get initial participants
@@ -194,6 +250,7 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
           setParticipants(participantsMap);
         })
         .on('left-meeting', () => {
+          console.log('[GroupCall] Left meeting');
           setIsInCall(false);
           setParticipants(new Map());
           setLocalParticipant(null);
@@ -204,13 +261,24 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
         .on('recording-started', () => setIsRecording(true))
         .on('recording-stopped', () => setIsRecording(false))
         .on('error', (e) => {
-          console.error('Daily error:', e);
+          console.error('[GroupCall] Daily error:', e);
           setError(e?.errorMsg || 'Call error occurred');
+          setIsJoining(false);
+        })
+        .on('camera-error', (e) => {
+          console.warn('[GroupCall] Camera error:', e);
+          // Don't block join for camera errors - user can still participate with audio
+        })
+        .on('load-attempt-failed', (e) => {
+          console.error('[GroupCall] Load attempt failed:', e);
+          setError('Failed to connect to video service. Please check your internet connection.');
+          setIsJoining(false);
         });
 
       setCallObject(newCallObject);
 
       // Join the room
+      console.log('[GroupCall] Joining room URL:', roomUrl);
       await newCallObject.join({
         url: roomUrl,
         token,
@@ -219,8 +287,8 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to join room';
+      console.error('[GroupCall] Error joining room:', err);
       setError(message);
-      console.error('Error joining room:', err);
       setIsJoining(false);
       return false;
     }

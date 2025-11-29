@@ -95,61 +95,75 @@ function StartLiveLessonInner({ preschoolId, teacherId, teacherName, subscriptio
   // Check for existing live calls on mount and periodically
   useEffect(() => {
     const checkExistingCall = async () => {
-      // First, clean up any expired calls (calls past their scheduled_end)
-      const now = new Date().toISOString();
-      await supabase
-        .from('video_calls')
-        .update({ status: 'ended', actual_end: now })
-        .eq('teacher_id', teacherId)
-        .eq('status', 'live')
-        .lt('scheduled_end', now);
-
-      // Then check for any active live calls (use maybeSingle to handle 0 rows gracefully)
-      const { data: liveCall, error } = await supabase
-        .from('video_calls')
-        .select(`
-          id,
-          meeting_id,
-          meeting_url,
-          title,
-          class_id,
-          actual_start,
-          scheduled_end,
-          classes:class_id (name)
-        `)
-        .eq('teacher_id', teacherId)
-        .eq('status', 'live')
-        .order('actual_start', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // Ignore PGRST116 error (no rows) - that's expected when there's no active call
-      if (error && error.code !== 'PGRST116') {
-        console.error('[StartLiveLesson] Error checking for existing call:', error);
-      }
-
-      if (liveCall && liveCall.meeting_url) {
-        // Double-check the call hasn't expired
-        if (liveCall.scheduled_end && new Date(liveCall.scheduled_end) < new Date()) {
-          // This call has expired, mark it as ended
+      try {
+        // First, clean up any expired calls (calls past their scheduled_end)
+        // Wrap in try-catch to handle network errors gracefully
+        const now = new Date().toISOString();
+        try {
           await supabase
             .from('video_calls')
             .update({ status: 'ended', actual_end: now })
-            .eq('id', liveCall.id);
-          setExistingCall(null);
-          return;
+            .eq('teacher_id', teacherId)
+            .eq('status', 'live')
+            .lt('scheduled_end', now);
+        } catch (cleanupErr) {
+          // Ignore cleanup errors - not critical
+          console.warn('[StartLiveLesson] Cleanup failed (non-critical):', cleanupErr);
         }
-        
-        setExistingCall({
-          id: liveCall.id,
-          meetingUrl: liveCall.meeting_url,
-          title: liveCall.title || 'Live Lesson',
-          className: (liveCall.classes as { name: string } | null)?.name || 'Class',
-          classId: liveCall.class_id,
-          startedAt: liveCall.actual_start,
-        });
-      } else {
-        setExistingCall(null);
+
+        // Then check for any active live calls (use maybeSingle to handle 0 rows gracefully)
+        const { data: liveCall, error } = await supabase
+          .from('video_calls')
+          .select(`
+            id,
+            meeting_id,
+            meeting_url,
+            title,
+            class_id,
+            actual_start,
+            scheduled_end,
+            classes:class_id (name)
+          `)
+          .eq('teacher_id', teacherId)
+          .eq('status', 'live')
+          .order('actual_start', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Ignore PGRST116 error (no rows) - that's expected when there's no active call
+        if (error && error.code !== 'PGRST116') {
+          console.error('[StartLiveLesson] Error checking for existing call:', error);
+          return; // Don't update state on error
+        }
+
+        if (liveCall && liveCall.meeting_url) {
+          // Double-check the call hasn't expired
+          if (liveCall.scheduled_end && new Date(liveCall.scheduled_end) < new Date()) {
+            // This call has expired, mark it as ended (in background, don't await)
+            supabase
+              .from('video_calls')
+              .update({ status: 'ended', actual_end: now })
+              .eq('id', liveCall.id)
+              .then(() => console.log('[StartLiveLesson] Marked expired call as ended'))
+              .catch((err) => console.warn('[StartLiveLesson] Failed to mark call as ended:', err));
+            setExistingCall(null);
+            return;
+          }
+          
+          setExistingCall({
+            id: liveCall.id,
+            meetingUrl: liveCall.meeting_url,
+            title: liveCall.title || 'Live Lesson',
+            className: (liveCall.classes as { name: string } | null)?.name || 'Class',
+            classId: liveCall.class_id,
+            startedAt: liveCall.actual_start,
+          });
+        } else {
+          setExistingCall(null);
+        }
+      } catch (err) {
+        // Network error or other issue - just log and continue
+        console.warn('[StartLiveLesson] Error in checkExistingCall:', err);
       }
     };
 

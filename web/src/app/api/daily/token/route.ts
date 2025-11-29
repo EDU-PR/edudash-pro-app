@@ -6,7 +6,7 @@ const DAILY_API_URL = 'https://api.daily.co/v1';
 
 interface TokenRequest {
   roomName: string;
-  userName: string;
+  userName?: string;
   isOwner?: boolean;
 }
 
@@ -19,30 +19,52 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Use getUser() instead of getSession() for secure server-side auth
+    // getSession() is not secure as it doesn't verify with Supabase Auth server
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authError) {
+      console.error('[Daily Token] Auth error:', authError.message);
+      return NextResponse.json({ error: 'Authentication failed', details: authError.message }, { status: 401 });
     }
 
-    const user = session.user;
+    if (!user) {
+      console.error('[Daily Token] No authenticated user');
+      return NextResponse.json({ error: 'Not authenticated. Please sign in again.' }, { status: 401 });
+    }
+
+    console.log('[Daily Token] Authenticated user:', user.id, user.email);
 
     // Get user profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('first_name, last_name, role, preschool_id')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (profileError) {
+      console.error('[Daily Token] Profile fetch error:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    }
 
     if (!profile) {
+      console.error('[Daily Token] Profile not found for user:', user.id);
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
     const body: TokenRequest = await request.json();
     const { roomName, userName, isOwner } = body;
 
+    if (!roomName) {
+      return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
+    }
+
     // Determine if user should be owner (teachers are owners of their rooms)
     const shouldBeOwner = isOwner || ['teacher', 'principal', 'superadmin'].includes(profile.role);
+    const displayName = userName || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Participant';
+
+    console.log('[Daily Token] Creating token for room:', roomName, 'user:', displayName, 'isOwner:', shouldBeOwner);
 
     // Create meeting token via Daily.co API
     const dailyResponse = await fetch(`${DAILY_API_URL}/meeting-tokens`, {
@@ -54,7 +76,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         properties: {
           room_name: roomName,
-          user_name: userName || `${profile.first_name} ${profile.last_name}`.trim() || 'Participant',
+          user_name: displayName,
           user_id: user.id,
           is_owner: shouldBeOwner,
           enable_screenshare: true,
@@ -67,21 +89,28 @@ export async function POST(request: NextRequest) {
     });
 
     if (!dailyResponse.ok) {
-      const error = await dailyResponse.json();
-      console.error('Daily.co token creation failed:', error);
-      return NextResponse.json({ error: 'Failed to create meeting token' }, { status: 500 });
+      const errorData = await dailyResponse.json();
+      console.error('[Daily Token] Daily.co token creation failed:', errorData);
+      return NextResponse.json({ 
+        error: 'Failed to create meeting token',
+        details: errorData.error || errorData.info || 'Unknown error'
+      }, { status: 500 });
     }
 
     const { token } = await dailyResponse.json();
+    console.log('[Daily Token] Token created successfully for user:', user.id);
 
     return NextResponse.json({
       success: true,
       token,
       isOwner: shouldBeOwner,
-      userName: userName || `${profile.first_name} ${profile.last_name}`.trim(),
+      userName: displayName,
     });
   } catch (error) {
-    console.error('Error creating Daily token:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Daily Token] Error creating Daily token:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }

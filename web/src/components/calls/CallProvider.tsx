@@ -81,7 +81,31 @@ export function CallProvider({ children }: CallProviderProps) {
         },
         async (payload: { new: ActiveCall }) => {
           const call = payload.new as ActiveCall;
+          console.log('[CallProvider] Incoming call received:', {
+            callId: call.call_id,
+            callType: call.call_type,
+            status: call.status,
+            meetingUrl: call.meeting_url,
+            callerId: call.caller_id,
+          });
+          
           if (call.status === 'ringing') {
+            // Verify we have the meeting URL
+            if (!call.meeting_url) {
+              console.error('[CallProvider] Incoming call missing meeting_url! Fetching from DB...');
+              // Fetch the full call record if meeting_url is missing
+              const { data: fullCall } = await supabase
+                .from('active_calls')
+                .select('*')
+                .eq('call_id', call.call_id)
+                .single();
+              
+              if (fullCall?.meeting_url) {
+                call.meeting_url = fullCall.meeting_url;
+                console.log('[CallProvider] Got meeting_url from DB:', call.meeting_url);
+              }
+            }
+            
             // Fetch caller name from profiles
             const { data: profile } = await supabase
               .from('profiles')
@@ -94,6 +118,7 @@ export function CallProvider({ children }: CallProviderProps) {
               : 'Unknown';
 
             setIncomingCall({ ...call, caller_name: callerName });
+            console.log('[CallProvider] Incoming call set with meeting_url:', call.meeting_url);
           }
         }
       )

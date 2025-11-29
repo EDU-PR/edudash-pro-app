@@ -31,34 +31,37 @@ export async function POST(request: NextRequest) {
   try {
     // Check if Daily API key is configured
     if (!DAILY_API_KEY) {
-      console.error('DAILY_API_KEY is not configured');
+      console.error('[Daily Rooms] DAILY_API_KEY is not configured');
       return NextResponse.json({ error: 'Video service not configured' }, { status: 500 });
     }
 
     const supabase = await createClient();
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    
+    // Use getUser() instead of getSession() for secure server-side auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError) {
-      console.error('[Daily Rooms] Auth error:', authError);
+      console.error('[Daily Rooms] Auth error:', authError.message);
+      return NextResponse.json({ error: 'Authentication failed', details: authError.message }, { status: 401 });
     }
 
-    if (!session?.user) {
-      console.log('[Daily Rooms] No authenticated session found');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+      console.log('[Daily Rooms] No authenticated user found');
+      return NextResponse.json({ error: 'Not authenticated. Please sign in.' }, { status: 401 });
     }
 
-    const user = session.user;
-    console.log('[Daily Rooms] Authenticated user:', user.id);
+    console.log('[Daily Rooms] Authenticated user:', user.id, user.email);
 
     // Verify user is a teacher or principal
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role, preschool_id')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       console.error('[Daily Rooms] Profile error:', profileError);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
     }
 
     if (!profile || !['teacher', 'principal', 'superadmin'].includes(profile.role)) {
@@ -181,10 +184,13 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Use getUser() instead of getSession() for secure server-side auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authError || !user) {
+      console.error('[Daily Rooms GET] Auth error:', authError?.message);
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -212,13 +218,13 @@ export async function GET(request: NextRequest) {
     const { data: rooms, error } = await query;
 
     if (error) {
-      console.error('Error fetching rooms:', error);
+      console.error('[Daily Rooms GET] Error fetching rooms:', error);
       return NextResponse.json({ error: 'Failed to fetch rooms' }, { status: 500 });
     }
 
     return NextResponse.json({ rooms });
   } catch (error) {
-    console.error('Error in GET rooms:', error);
+    console.error('[Daily Rooms GET] Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

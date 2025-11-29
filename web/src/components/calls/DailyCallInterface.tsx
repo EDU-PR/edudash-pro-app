@@ -85,6 +85,56 @@ export const DailyCallInterface = ({
     getUser();
   }, [supabase]);
 
+  // Listen for call status updates (for caller to know when callee joins)
+  useEffect(() => {
+    if (!currentCallId || isIncoming) return;
+
+    const channel = supabase
+      .channel(`call-status-${currentCallId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'active_calls',
+          filter: `call_id=eq.${currentCallId}`,
+        },
+        (payload: { new: { status: string } }) => {
+          const newStatus = payload.new.status;
+          console.log('[P2P Call] Call status updated:', newStatus);
+          if (newStatus === 'connected') {
+            // Clear timeout since call is answered
+            if (callTimeoutRef.current) {
+              clearTimeout(callTimeoutRef.current);
+              callTimeoutRef.current = null;
+            }
+          } else if (newStatus === 'rejected') {
+            console.log('[P2P Call] Call was rejected');
+            setCallState('ended');
+            setError('Call declined');
+            // Clean up the call
+            if (callObjectRef.current) {
+              try {
+                callObjectRef.current.leave();
+                callObjectRef.current.destroy();
+              } catch (e) {
+                console.warn('[P2P Call] Error cleaning up after rejection:', e);
+              }
+              callObjectRef.current = null;
+            }
+          } else if (newStatus === 'missed') {
+            setCallState('no-answer');
+            setShowRetryButton(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentCallId, isIncoming, supabase]);
+
   // Play/stop ringback tone when ringing
   useEffect(() => {
     if (callState === 'ringing' && !isIncoming) {
@@ -166,18 +216,48 @@ export const DailyCallInterface = ({
 
   // Join Daily.co room
   const joinRoom = useCallback(async (url: string) => {
+    console.log('[P2P Call] Joining room:', url);
     try {
+      // Check for WebRTC support first
+      if (typeof window !== 'undefined' && !navigator.mediaDevices) {
+        throw new Error('Your browser does not support video calls.');
+      }
+
+      // Check if WebRTC is available (might be blocked by browser settings or extensions)
+      try {
+        const testConnection = new RTCPeerConnection();
+        testConnection.close();
+      } catch (rtcError) {
+        console.error('[P2P Call] WebRTC not available:', rtcError);
+        throw new Error('Video calls are blocked in your browser. Please disable any VPN, ad blockers, or privacy extensions that may block WebRTC.');
+      }
+
+      // Clean up existing call object if any
+      if (callObjectRef.current) {
+        try {
+          await callObjectRef.current.leave();
+          await callObjectRef.current.destroy();
+        } catch (e) {
+          console.warn('[P2P Call] Error cleaning up previous call:', e);
+        }
+        callObjectRef.current = null;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       const roomName = url.split('/').pop() || '';
+      console.log('[P2P Call] Getting token for room:', roomName);
       const token = await getMeetingToken(roomName);
 
       if (!token) {
         throw new Error('Failed to get meeting token');
       }
+      console.log('[P2P Call] Token received');
 
       // Create Daily call object
       const callObject = DailyIframe.createCallObject({
         audioSource: true,
         videoSource: initialCallType === 'video',
+        allowMultipleCallInstances: true,
       });
 
       callObjectRef.current = callObject;
@@ -185,6 +265,7 @@ export const DailyCallInterface = ({
       // Set up event listeners
       callObject
         .on('joined-meeting', () => {
+          console.log('[P2P Call] Joined meeting');
           const participants = callObject.participants();
           const local = participants.local;
           setLocalParticipant(local);
@@ -195,11 +276,51 @@ export const DailyCallInterface = ({
           if (localVideoRef.current && local.tracks?.video?.track) {
             localVideoRef.current.srcObject = new MediaStream([local.tracks.video.track]);
           }
+
+          // Check if remote participant is already in the room
+          Object.values(participants).forEach((p: DailyParticipant) => {
+            if (!p.local) {
+              console.log('[P2P Call] Found existing remote participant:', p.user_name);
+              setRemoteParticipant(p);
+              setCallState('connected');
+              
+              // Stop ringback
+              if (ringbackAudioRef.current) {
+                ringbackAudioRef.current.pause();
+                ringbackAudioRef.current.currentTime = 0;
+              }
+              
+              // Clear timeout
+              if (callTimeoutRef.current) {
+                clearTimeout(callTimeoutRef.current);
+                callTimeoutRef.current = null;
+              }
+              
+              // Start timer
+              if (!callTimerRef.current) {
+                callTimerRef.current = setInterval(() => {
+                  setCallDuration((prev) => prev + 1);
+                }, 1000);
+              }
+              
+              // Update remote video
+              if (remoteVideoRef.current && p.tracks?.video?.track) {
+                remoteVideoRef.current.srcObject = new MediaStream([p.tracks.video.track]);
+              }
+            }
+          });
         })
         .on('participant-joined', (event) => {
+          console.log('[P2P Call] Participant joined:', event?.participant?.user_name, 'local:', event?.participant?.local);
           if (event?.participant && !event.participant.local) {
             setRemoteParticipant(event.participant);
             setCallState('connected');
+            
+            // Stop ringback audio immediately
+            if (ringbackAudioRef.current) {
+              ringbackAudioRef.current.pause();
+              ringbackAudioRef.current.currentTime = 0;
+            }
             
             // Clear timeout since call is answered
             if (callTimeoutRef.current) {
@@ -217,6 +338,15 @@ export const DailyCallInterface = ({
             // Update remote video
             if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
               remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+            }
+
+            // Also update call status in database
+            if (currentCallId) {
+              supabase
+                .from('active_calls')
+                .update({ status: 'connected', answered_at: new Date().toISOString() })
+                .eq('call_id', currentCallId)
+                .then(() => console.log('[P2P Call] Updated call status to connected'));
             }
           }
         })
@@ -256,12 +386,14 @@ export const DailyCallInterface = ({
         });
 
       // Join the room
+      console.log('[P2P Call] Caller joining room:', url, 'with token length:', token?.length);
       await callObject.join({
         url,
         token,
         startVideoOff: initialCallType !== 'video',
         startAudioOff: false,
       });
+      console.log('[P2P Call] Caller successfully joined room');
 
       onCallStart?.();
     } catch (err) {
@@ -373,26 +505,38 @@ export const DailyCallInterface = ({
 
   // Answer incoming call
   const answerCall = useCallback(async () => {
+    console.log('[P2P Call] Answering call, meetingUrl:', incomingMeetingUrl, 'callId:', incomingCallId);
+    
     if (!incomingMeetingUrl) {
       setError('No room URL provided');
+      console.error('[P2P Call] No meeting URL for incoming call');
       return;
+    }
+
+    // Store the call ID for status updates
+    if (incomingCallId) {
+      setCurrentCallId(incomingCallId);
     }
 
     try {
       setCallState('connecting');
-      await joinRoom(incomingMeetingUrl);
-      setCallState('connected');
-
-      // Update call status
+      
+      // Update call status first to notify caller
       if (incomingCallId) {
         await supabase
           .from('active_calls')
           .update({ status: 'connected', answered_at: new Date().toISOString() })
           .eq('call_id', incomingCallId);
+        console.log('[P2P Call] Updated call status to connected');
       }
+      
+      await joinRoom(incomingMeetingUrl);
+      // Note: Don't set connected here - let the participant detection handle it
+      console.log('[P2P Call] Join room completed, waiting for participants');
     } catch (err) {
-      console.error('Error answering call:', err);
+      console.error('[P2P Call] Error answering call:', err);
       setCallState('failed');
+      setError('Failed to answer call');
     }
   }, [incomingMeetingUrl, incomingCallId, supabase, joinRoom]);
 
