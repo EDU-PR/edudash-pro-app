@@ -102,15 +102,22 @@ hooks/teacher/
 | `ParentContactsWidget.tsx` | 460 | 158 | ✅ -66% |
 | `useParentMessaging.ts` | 320 | 78 | ✅ -76% |
 | `useChildrenData.ts` | 301 | 129 | ✅ -57% |
+| `useTeacherUnreadMessages.ts` | 213 | 122 | ✅ -43% |
+| `useUnreadMessages.ts` | 211 | 120 | ✅ -43% |
 
-### Hooks (≤200 lines limit) - Low Priority (Not addressed)
+### Phase 3: Unread Message Hooks - COMPLETE ✅
 
-| File | Current Lines | Over Limit By |
-|------|---------------|---------------|
-| `useTeacherUnreadMessages.ts` | 213 | 13 lines |
-| `useUnreadMessages.ts` | 211 | 11 lines |
+#### useTeacherUnreadMessages.ts (213 → 122 lines) ✅
+#### useUnreadMessages.ts (211 → 120 lines) ✅
 
-*These hooks are only slightly over the limit and the overhead of splitting them would add more complexity than it resolves.*
+**Shared types extracted to:**
+```
+hooks/shared/
+├── index.ts (5 lines)
+└── unreadMessagesTypes.ts (80 lines)
+```
+
+Includes shared types (ThreadParticipant, MessageThread, etc.) and utility functions (countUnreadMessages, extractUserThreadData).
 
 ---
 
