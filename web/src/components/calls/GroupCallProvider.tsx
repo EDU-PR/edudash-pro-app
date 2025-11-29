@@ -122,6 +122,8 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[GroupCall] Room creation failed:', response.status, errorData);
+        
         // Provide user-friendly error messages
         if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
           setError('Video calls are not available. Please contact your administrator to configure the video service.');
@@ -129,6 +131,8 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
           setError('Please sign in to create a call room.');
         } else if (response.status === 403) {
           setError('You do not have permission to create call rooms.');
+        } else if (errorData.error?.includes('API key')) {
+          setError('Video service configuration error. Please contact your administrator.');
         } else {
           setError(errorData.message || errorData.error || 'Failed to create room. Please try again.');
         }
