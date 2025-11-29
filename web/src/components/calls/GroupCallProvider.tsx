@@ -121,19 +121,32 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to create room');
+        const errorData = await response.json().catch(() => ({}));
+        // Provide user-friendly error messages
+        if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
+          setError('Video calls are not available. Please contact your administrator to configure the video service.');
+        } else if (response.status === 401) {
+          setError('Please sign in to create a call room.');
+        } else if (response.status === 403) {
+          setError('You do not have permission to create call rooms.');
+        } else {
+          setError(errorData.message || errorData.error || 'Failed to create room. Please try again.');
+        }
+        throw new Error(errorData.error || 'Failed to create room');
       }
 
       const data = await response.json();
       return data.room;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create room';
-      setError(message);
       console.error('Error creating room:', err);
+      // Don't override the user-friendly error message if one was already set
+      if (!error) {
+        setError(message);
+      }
       return null;
     }
-  }, []);
+  }, [error]);
 
   // Join a room
   const joinRoom = useCallback(async (roomUrl: string, userName?: string): Promise<boolean> => {
@@ -273,6 +286,22 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
           console.error('[GroupCall] Load attempt failed:', e);
           setError('Failed to connect to video service. Please check your internet connection.');
           setIsJoining(false);
+        })
+        .on('network-connection', (event) => {
+          // Handle network connection status changes for automatic reconnection
+          if (event?.event === 'interrupted') {
+            console.log('[GroupCall] Network interrupted, Daily.co will attempt auto-reconnection...');
+            setError('Connection interrupted. Reconnecting...');
+          } else if (event?.event === 'connected') {
+            console.log('[GroupCall] Network reconnected successfully');
+            setError(null);
+          }
+        })
+        .on('network-quality-change', (event) => {
+          // Log network quality changes for debugging
+          if (event?.threshold) {
+            console.log('[GroupCall] Network quality:', event.threshold);
+          }
         });
 
       setCallObject(newCallObject);

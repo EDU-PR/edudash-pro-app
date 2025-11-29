@@ -22,7 +22,6 @@ export function IncomingCallOverlay({
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [hasUserInteraction, setHasUserInteraction] = useState(false);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
-  const vibrateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize audio with user gesture fallback
   const initializeAudio = useCallback(() => {
@@ -65,12 +64,13 @@ export function IncomingCallOverlay({
       ringtoneRef.current.pause();
       ringtoneRef.current.currentTime = 0;
     }
-    if (vibrateIntervalRef.current) {
-      clearInterval(vibrateIntervalRef.current);
-      vibrateIntervalRef.current = null;
-    }
+    // Stop any ongoing vibration
     if ('vibrate' in navigator) {
-      navigator.vibrate(0);
+      try {
+        navigator.vibrate(0);
+      } catch (err) {
+        // Ignore vibration errors
+      }
     }
   }, []);
 
@@ -98,7 +98,7 @@ export function IncomingCallOverlay({
     }
   }, [isVisible, initializeAudio]);
 
-  // Play ringtone and vibrate when visible and user has interacted
+  // Play ringtone when visible - vibration is only triggered on user interaction (answer/reject)
   useEffect(() => {
     if (!isVisible) {
       setRingCount(0);
@@ -114,17 +114,8 @@ export function IncomingCallOverlay({
     console.log('[IncomingCall] Incoming call visible, starting ringtone');
     playRingtone();
 
-    const vibratePattern = [200, 100, 200, 100, 200, 500];
-    if ('vibrate' in navigator) {
-      try {
-        navigator.vibrate(vibratePattern);
-        vibrateIntervalRef.current = setInterval(() => {
-          navigator.vibrate(vibratePattern);
-        }, 2000);
-      } catch (err) {
-        console.warn('[IncomingCall] Vibration blocked:', err);
-      }
-    }
+    // NOTE: We no longer call navigator.vibrate() here to avoid browser intervention warnings.
+    // Vibration will be triggered when user taps the answer/reject buttons.
 
     // Retry playing audio every 2 seconds if it failed initially
     const retryInterval = setInterval(() => {
@@ -149,6 +140,34 @@ export function IncomingCallOverlay({
       playRingtone();
     }
   }, [audioInitialized, hasUserInteraction, isVisible, playRingtone]);
+
+  // Handle answer with haptic feedback
+  const handleAnswer = useCallback(() => {
+    // Provide haptic feedback on user gesture (this is allowed)
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(100);
+      } catch (err) {
+        // Ignore vibration errors
+      }
+    }
+    stopRingtone();
+    onAnswer();
+  }, [onAnswer, stopRingtone]);
+
+  // Handle reject with haptic feedback
+  const handleReject = useCallback(() => {
+    // Provide haptic feedback on user gesture (this is allowed)
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(50);
+      } catch (err) {
+        // Ignore vibration errors
+      }
+    }
+    stopRingtone();
+    onReject();
+  }, [onReject, stopRingtone]);
 
   // Visual pulse effect counter
   useEffect(() => {
@@ -274,7 +293,7 @@ export function IncomingCallOverlay({
       >
         {/* Reject button */}
         <button
-          onClick={onReject}
+          onClick={handleReject}
           style={{
             width: 72,
             height: 72,
@@ -296,7 +315,7 @@ export function IncomingCallOverlay({
 
         {/* Accept button */}
         <button
-          onClick={onAnswer}
+          onClick={handleAnswer}
           style={{
             width: 72,
             height: 72,

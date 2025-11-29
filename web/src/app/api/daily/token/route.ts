@@ -14,8 +14,12 @@ interface TokenRequest {
 export async function POST(request: NextRequest) {
   try {
     if (!DAILY_API_KEY) {
-      console.error('[Daily Token] DAILY_API_KEY is not configured');
-      return NextResponse.json({ error: 'Video service not configured' }, { status: 500 });
+      console.error('[Daily Token] DAILY_API_KEY is not configured. Please add your Daily.co API key to the environment variables.');
+      return NextResponse.json({ 
+        error: 'Video service not configured',
+        message: 'Video calls are not available. Please contact your administrator to configure the video service.',
+        code: 'DAILY_API_KEY_MISSING'
+      }, { status: 503 });
     }
 
     const supabase = await createClient();

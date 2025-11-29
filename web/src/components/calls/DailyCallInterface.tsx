@@ -17,6 +17,8 @@ import {
   SwitchCamera,
   Monitor,
   MonitorOff,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 type CallState = 'idle' | 'creating-room' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed' | 'no-answer';
@@ -63,6 +65,7 @@ export const DailyCallInterface = ({
   const [error, setError] = useState<string | null>(null);
   const [roomUrl, setRoomUrl] = useState<string | null>(incomingMeetingUrl || null);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [networkQuality, setNetworkQuality] = useState<'good' | 'fair' | 'poor' | null>(null);
 
   // Daily.co refs
   const callObjectRef = useRef<DailyCall | null>(null);
@@ -71,10 +74,17 @@ export const DailyCallInterface = ({
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Ref to track current call state to avoid stale closure issues
+  const callStateRef = useRef<CallState>('idle');
   
   // Remote participant
   const [remoteParticipant, setRemoteParticipant] = useState<DailyParticipant | null>(null);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
+
+  // Keep callStateRef in sync with callState
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
 
   // Get current user
   useEffect(() => {
@@ -182,7 +192,18 @@ export const DailyCallInterface = ({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create room');
+        const errorData = await response.json().catch(() => ({}));
+        // Handle specific error codes
+        if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
+          setError('Video calls are not available. Please contact your administrator.');
+        } else if (response.status === 401) {
+          setError('Please sign in to make calls.');
+        } else if (response.status === 403) {
+          setError('You do not have permission to make calls.');
+        } else {
+          setError(errorData.message || 'Failed to set up call. Please try again.');
+        }
+        throw new Error(errorData.error || 'Failed to create room');
       }
 
       const data = await response.json();
@@ -203,7 +224,16 @@ export const DailyCallInterface = ({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get token');
+        const errorData = await response.json().catch(() => ({}));
+        // Handle specific error codes
+        if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
+          setError('Video calls are not available. Please contact your administrator.');
+        } else if (response.status === 401) {
+          setError('Please sign in to join calls.');
+        } else {
+          setError(errorData.message || 'Failed to join call. Please try again.');
+        }
+        throw new Error(errorData.error || 'Failed to get token');
       }
 
       const data = await response.json();
@@ -377,12 +407,32 @@ export const DailyCallInterface = ({
         })
         .on('left-meeting', () => {
           setCallState('ended');
+          setNetworkQuality(null);
         })
         .on('error', (e) => {
           console.error('Daily error:', e);
           setError(e?.errorMsg || 'Call error occurred');
           setCallState('failed');
           setShowRetryButton(true);
+        })
+        .on('network-quality-change', (event) => {
+          // Network quality: 'good' | 'low' | 'very-low'
+          if (event?.threshold) {
+            const quality = event.threshold === 'good' ? 'good' : 
+                          event.threshold === 'low' ? 'fair' : 'poor';
+            setNetworkQuality(quality);
+            console.log('[P2P Call] Network quality:', quality);
+          }
+        })
+        .on('network-connection', (event) => {
+          // Handle network connection status changes for reconnection
+          if (event?.event === 'interrupted') {
+            console.log('[P2P Call] Network interrupted, attempting reconnection...');
+            setError('Connection interrupted. Reconnecting...');
+          } else if (event?.event === 'connected') {
+            console.log('[P2P Call] Network reconnected');
+            setError(null);
+          }
         });
 
       // Join the room
@@ -499,9 +549,9 @@ export const DailyCallInterface = ({
       
       setCallState('ringing');
 
-      // Set call timeout
+      // Set call timeout - use callStateRef to avoid stale closure
       callTimeoutRef.current = setTimeout(async () => {
-        if (callState === 'ringing') {
+        if (callStateRef.current === 'ringing') {
           await supabase
             .from('active_calls')
             .update({ status: 'missed', ended_at: new Date().toISOString() })
@@ -518,7 +568,7 @@ export const DailyCallInterface = ({
       setCallState('failed');
       setShowRetryButton(true);
     }
-  }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom, callState]);
+  }, [currentUserId, remoteUserId, initialCallType, supabase, createPrivateRoom, joinRoom]);
 
   // Answer incoming call
   const answerCall = useCallback(async () => {
@@ -807,6 +857,27 @@ export const DailyCallInterface = ({
               >
                 <Video size={12} />
                 {isVideoEnabled ? 'Camera on' : 'Camera off'}
+              </span>
+            )}
+            {/* Network Quality Indicator */}
+            {callState === 'connected' && networkQuality && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: networkQuality === 'good' ? 'rgba(34, 197, 94, 0.2)' : 
+                             networkQuality === 'fair' ? 'rgba(251, 191, 36, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  fontSize: 11,
+                  color: networkQuality === 'good' ? '#22c55e' : 
+                         networkQuality === 'fair' ? '#fbbf24' : '#ef4444',
+                }}
+                title={`Network: ${networkQuality}`}
+              >
+                <Wifi size={12} />
+                {networkQuality}
               </span>
             )}
           </div>
