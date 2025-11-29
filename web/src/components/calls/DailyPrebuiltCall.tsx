@@ -108,8 +108,9 @@ export function DailyPrebuiltCall({
 
     // Configure based on call type
     if (callType === 'voice') {
-      // Voice call configuration (industry standard)
-      // videoSource=false is the primary parameter that disables video capture
+      // Voice call configuration (industry standard for audio-only calls)
+      // videoSource=false disables the camera completely for voice-only mode
+      // UI elements related to video are hidden for cleaner audio-only experience
       params.set('showLeaveButton', 'true');
       params.set('showFullscreenButton', 'false');
       params.set('showLocalVideo', 'false');
@@ -118,7 +119,7 @@ export function DailyPrebuiltCall({
       params.set('showScreenShare', 'false');
       params.set('videoSource', 'false');
     } else {
-      // Video call configuration
+      // Video call configuration with full video capabilities
       params.set('showLeaveButton', 'true');
       params.set('showFullscreenButton', 'true');
       params.set('showLocalVideo', 'true');
