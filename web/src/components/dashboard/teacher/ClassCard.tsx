@@ -11,7 +11,6 @@ interface ClassCardProps {
   upcomingLessons: number;
   onPress: () => void;
   onCallClass?: () => void;
-  classId?: string;
 }
 
 export function ClassCard({
@@ -22,7 +21,6 @@ export function ClassCard({
   upcomingLessons,
   onPress,
   onCallClass,
-  classId,
 }: ClassCardProps) {
   const handleCallClass = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click

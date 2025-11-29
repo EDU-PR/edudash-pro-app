@@ -175,6 +175,12 @@ export function ClassLessonCall({
   // Ref to hold the chat channel for reuse
   const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   
+  // Ref to track showChat state without triggering re-subscriptions
+  const showChatRef = useRef(showChat);
+  useEffect(() => {
+    showChatRef.current = showChat;
+  }, [showChat]);
+  
   // Subscribe to chat messages via realtime broadcast
   useEffect(() => {
     if (!isInCall || !roomName) return;
@@ -182,11 +188,10 @@ export function ClassLessonCall({
     const channel = supabase
       .channel(`chat-${roomName}`)
       .on('broadcast', { event: 'chat-message' }, ({ payload }: { payload: ChatMessage }) => {
-        console.log('[ClassLessonCall] Chat message received:', payload);
         setChatMessages(prev => [...prev, payload]);
         
         // If chat panel is closed, increment unread count
-        if (!showChat) {
+        if (!showChatRef.current) {
           setUnreadMessages(prev => prev + 1);
         }
       })
@@ -198,7 +203,7 @@ export function ClassLessonCall({
       supabase.removeChannel(channel);
       chatChannelRef.current = null;
     };
-  }, [isInCall, roomName, supabase, showChat]);
+  }, [isInCall, roomName, supabase]);
   
   // Auto-scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -214,12 +219,20 @@ export function ClassLessonCall({
     }
   }, [showChat]);
   
+  // Generate unique ID (with fallback for older browsers)
+  const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  };
+  
   // Send chat message
   const sendChatMessage = useCallback(async () => {
     if (!chatInput.trim() || !localParticipant || !chatChannelRef.current) return;
     
     const message: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       sender: localParticipant.session_id,
       senderName: localParticipant.user_name || 'Participant',
       text: chatInput.trim(),
