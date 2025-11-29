@@ -149,7 +149,7 @@ export function CallProvider({ children }: CallProviderProps) {
                     .from('call_signals')
                     .select('payload')
                     .eq('call_id', call.call_id)
-                    .eq('signal_type', 'call-offer')
+                    .eq('signal_type', 'offer')
                     .order('created_at', { ascending: false })
                     .limit(1)
                     .maybeSingle();
@@ -231,7 +231,7 @@ export function CallProvider({ children }: CallProviderProps) {
         },
         (payload: { new: CallSignal }) => {
           const signal = payload.new;
-          if (signal.signal_type !== 'call-offer') return;
+          if (signal.signal_type !== 'offer') return;
 
           const meetingUrl = signal.payload?.meeting_url;
           if (!meetingUrl) return;
@@ -239,12 +239,12 @@ export function CallProvider({ children }: CallProviderProps) {
           setIncomingCall((prev) => {
             if (prev && prev.call_id === signal.call_id) {
               if (prev.meeting_url === meetingUrl) return prev;
-              console.log('[CallProvider] Hydrated meeting_url from call-offer signal');
+              console.log('[CallProvider] Hydrated meeting_url from offer signal');
               return { ...prev, meeting_url: meetingUrl };
             }
 
             // If active_calls payload hasn't arrived yet, create a placeholder entry
-            console.log('[CallProvider] Creating placeholder incoming call from call-offer signal');
+            console.log('[CallProvider] Creating placeholder incoming call from offer signal');
             return {
               id: signal.id,
               call_id: signal.call_id,
@@ -301,7 +301,7 @@ export function CallProvider({ children }: CallProviderProps) {
         .from('call_signals')
         .select('payload')
         .eq('call_id', callId)
-        .eq('signal_type', 'call-offer')
+        .eq('signal_type', 'offer')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
