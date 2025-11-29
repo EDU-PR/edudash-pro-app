@@ -9,7 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
-import { CallInterface, useCallInterface, QuickCallModal } from '@/components/calls';
+import { useCall, QuickCallModal } from '@/components/calls';
 import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
@@ -557,8 +557,8 @@ function ParentMessagesContent() {
     onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
   });
 
-  // Call interface hook
-  const { callState, startVoiceCall, startVideoCall, closeCall } = useCallInterface();
+  // Call interface hook - use Daily.co based calls
+  const { startVoiceCall, startVideoCall } = useCall();
 
   // Typing indicator hook
   const { typingText, startTyping, stopTyping } = useTypingIndicator({ supabase, threadId: selectedThreadId, userId });
@@ -2506,13 +2506,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
           </div>
         )}
       </div>
-      <CallInterface
-        isOpen={callState.isOpen}
-        onClose={closeCall}
-        callType={callState.callType}
-        remoteUserId={callState.remoteUserId}
-        remoteUserName={callState.remoteUserName}
-      />
+      {/* Call interface is now handled by CallProvider wrapping the app */}
       <MessageOptionsMenu
         isOpen={optionsMenuOpen}
         onClose={() => setOptionsMenuOpen(false)}

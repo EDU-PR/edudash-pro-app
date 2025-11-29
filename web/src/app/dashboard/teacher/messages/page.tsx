@@ -11,7 +11,7 @@ import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
 import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
-import { CallInterface, useCallInterface, QuickCallModal } from '@/components/calls';
+import { useCall, QuickCallModal } from '@/components/calls';
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
@@ -385,7 +385,7 @@ function TeacherMessagesPage() {
 
   // Typing indicator and calling
   const { typingText, startTyping, stopTyping } = useTypingIndicator({ supabase, threadId: selectedThreadId, userId });
-  const { callState, startVoiceCall, startVideoCall, closeCall } = useCallInterface();
+  const { startVoiceCall, startVideoCall } = useCall();
 
   // Chat wallpaper state with localStorage persistence
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
@@ -2040,14 +2040,7 @@ function TeacherMessagesPage() {
           )}
         </div>
       </div>
-        {/* Call overlay */}
-        <CallInterface
-          isOpen={callState.isOpen}
-          onClose={closeCall}
-          callType={callState.callType}
-          remoteUserId={callState.remoteUserId}
-          remoteUserName={callState.remoteUserName}
-        />
+        {/* Call interface is now handled by CallProvider wrapping the app */}
         <ChatWallpaperPicker
           isOpen={wallpaperOpen}
           onClose={() => setWallpaperOpen(false)}
