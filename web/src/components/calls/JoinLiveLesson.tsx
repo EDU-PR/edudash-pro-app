@@ -40,6 +40,7 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [showError, setShowError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<number>(Date.now());
 
   // Show error from GroupCallProvider
   useEffect(() => {
@@ -57,77 +58,123 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
     }
   }, [isGroupJoining, joiningId, isInCall, callError]);
 
-  // Fetch live lessons for this student's class
-  useEffect(() => {
-    const fetchLiveLessons = async () => {
-      setLoading(true);
-      
-      const now = new Date().toISOString();
-      
-      // First, clean up any expired calls in this preschool
-      try {
-        await supabase
-          .from('video_calls')
-          .update({ status: 'ended', actual_end: now })
-          .eq('preschool_id', preschoolId)
-          .eq('status', 'live')
-          .lt('scheduled_end', now);
-      } catch (e) {
-        console.warn('[JoinLiveLesson] Cleanup error:', e);
-      }
-      
-      // Only fetch actually LIVE lessons (not scheduled ones that haven't started)
-      let query = supabase
+  // Fetch live lessons function (extracted for reuse)
+  const fetchLiveLessons = async (isInitial: boolean = false) => {
+    if (isInitial) setLoading(true);
+    
+    console.log('[JoinLiveLesson] Fetching live lessons for preschool:', preschoolId, 'class:', classId);
+    
+    const now = new Date().toISOString();
+    
+    // First, clean up any expired calls in this preschool
+    try {
+      await supabase
         .from('video_calls')
-        .select(`
-          id,
-          title,
-          meeting_url,
-          status,
-          scheduled_start,
-          scheduled_end,
-          teacher:teacher_id (first_name, last_name),
-          classes:class_id (name, grade_level)
-        `)
+        .update({ status: 'ended', actual_end: now })
         .eq('preschool_id', preschoolId)
-        .eq('status', 'live') // Only show actually live sessions
-        .gt('scheduled_end', now) // Only show calls that haven't expired
-        .order('scheduled_start', { ascending: true });
+        .eq('status', 'live')
+        .lt('scheduled_end', now);
+    } catch (e) {
+      console.warn('[JoinLiveLesson] Cleanup error:', e);
+    }
+    
+    // Only fetch actually LIVE lessons (not scheduled ones that haven't started)
+    let query = supabase
+      .from('video_calls')
+      .select(`
+        id,
+        title,
+        meeting_url,
+        status,
+        scheduled_start,
+        scheduled_end,
+        teacher:teacher_id (first_name, last_name),
+        classes:class_id (name, grade_level)
+      `)
+      .eq('preschool_id', preschoolId)
+      .eq('status', 'live') // Only show actually live sessions
+      .gt('scheduled_end', now) // Only show calls that haven't expired
+      .order('scheduled_start', { ascending: true });
 
-      // Filter by class if provided
-      if (classId) {
-        query = query.eq('class_id', classId);
-      }
+    // Filter by class if provided
+    if (classId) {
+      query = query.eq('class_id', classId);
+    }
 
-      const { data, error } = await query;
+    const { data, error } = await query;
 
-      if (data) {
-        setLiveLessons(data as unknown as LiveLesson[]);
-      }
-      setLoading(false);
-    };
+    console.log('[JoinLiveLesson] Fetched lessons:', data?.length || 0, error ? `Error: ${error.message}` : '');
+    
+    if (data) {
+      setLiveLessons(data as unknown as LiveLesson[]);
+    }
+    
+    if (isInitial) setLoading(false);
+    setLastRefresh(Date.now());
+  };
 
-    fetchLiveLessons();
+  // Initial fetch and realtime subscription
+  useEffect(() => {
+    fetchLiveLessons(true);
 
-    // Subscribe to real-time updates
+    // Subscribe to real-time updates for ANY change to video_calls in this preschool
+    console.log('[JoinLiveLesson] Setting up realtime subscription for preschool:', preschoolId);
+    
     const channel = supabase
-      .channel('live-lessons')
+      .channel(`live-lessons-${preschoolId}-${Date.now()}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'video_calls',
           filter: `preschool_id=eq.${preschoolId}`,
         },
-        () => {
-          fetchLiveLessons();
+        (payload: { new: Record<string, unknown> }) => {
+          console.log('[JoinLiveLesson] Realtime INSERT:', payload.new);
+          fetchLiveLessons(false);
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'video_calls',
+          filter: `preschool_id=eq.${preschoolId}`,
+        },
+        (payload: { new: Record<string, unknown> }) => {
+          console.log('[JoinLiveLesson] Realtime UPDATE:', payload.new);
+          fetchLiveLessons(false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'video_calls',
+          filter: `preschool_id=eq.${preschoolId}`,
+        },
+        (payload: { old: Record<string, unknown> }) => {
+          console.log('[JoinLiveLesson] Realtime DELETE:', payload.old);
+          fetchLiveLessons(false);
+        }
+      )
+      .subscribe((status: string) => {
+        console.log('[JoinLiveLesson] Realtime subscription status:', status);
+      });
+
+    // Also set up a polling fallback every 10 seconds in case realtime fails
+    const pollInterval = setInterval(() => {
+      console.log('[JoinLiveLesson] Polling for updates...');
+      fetchLiveLessons(false);
+    }, 10000);
 
     return () => {
+      console.log('[JoinLiveLesson] Cleaning up realtime subscription');
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [supabase, preschoolId, classId]);
 
@@ -347,7 +394,7 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
       <div style={{
         background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%)',
         borderRadius: 20,
-        padding: 24,
+        padding: 'clamp(16px, 4vw, 24px)',
         position: 'relative',
         overflow: 'hidden',
         boxShadow: '0 10px 40px rgba(59, 130, 246, 0.3)',
@@ -374,24 +421,25 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <div style={{
-              width: 48,
-              height: 48,
+              width: 'clamp(40px, 10vw, 48px)',
+              height: 'clamp(40px, 10vw, 48px)',
               borderRadius: 14,
               background: 'rgba(255, 255, 255, 0.2)',
               backdropFilter: 'blur(10px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}>
-              <Video style={{ width: 24, height: 24, color: 'white' }} />
+              <Video style={{ width: 'clamp(20px, 5vw, 24px)', height: 'clamp(20px, 5vw, 24px)', color: 'white' }} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'white' }}>
+              <h3 style={{ margin: 0, fontSize: 'clamp(16px, 4vw, 20px)', fontWeight: 700, color: 'white' }}>
                 Live Lessons
               </h3>
-              <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255, 255, 255, 0.8)' }}>
+              <p style={{ margin: '2px 0 0', fontSize: 'clamp(12px, 3vw, 14px)', color: 'rgba(255, 255, 255, 0.8)' }}>
                 Join your teacher&apos;s class
               </p>
             </div>
@@ -400,29 +448,60 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
           {/* Empty State */}
           <div style={{
             textAlign: 'center',
-            padding: '32px 16px',
+            padding: 'clamp(24px, 5vw, 32px) clamp(12px, 3vw, 16px)',
             background: 'rgba(255, 255, 255, 0.1)',
             borderRadius: 16,
             backdropFilter: 'blur(10px)',
           }}>
             <div style={{
-              width: 64,
-              height: 64,
-              margin: '0 auto 16px',
+              width: 'clamp(48px, 12vw, 64px)',
+              height: 'clamp(48px, 12vw, 64px)',
+              margin: '0 auto clamp(12px, 3vw, 16px)',
               borderRadius: '50%',
               background: 'rgba(255, 255, 255, 0.15)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <Bell style={{ width: 32, height: 32, color: 'rgba(255, 255, 255, 0.9)' }} />
+              <Bell style={{ width: 'clamp(24px, 6vw, 32px)', height: 'clamp(24px, 6vw, 32px)', color: 'rgba(255, 255, 255, 0.9)' }} />
             </div>
-            <h4 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600, color: 'white' }}>
+            <h4 style={{ margin: '0 0 8px', fontSize: 'clamp(15px, 4vw, 18px)', fontWeight: 600, color: 'white' }}>
               No Live Lessons Right Now
             </h4>
-            <p style={{ margin: 0, fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 16px', fontSize: 'clamp(12px, 3vw, 14px)', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>
               You&apos;ll get a notification when<br />your teacher starts a lesson
             </p>
+            
+            {/* Manual Refresh Button */}
+            <button
+              onClick={() => {
+                setIsRefreshing(true);
+                fetchLiveLessons(false).finally(() => setIsRefreshing(false));
+              }}
+              disabled={isRefreshing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 16px',
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                borderRadius: 10,
+                fontSize: 'clamp(12px, 3vw, 13px)',
+                fontWeight: 500,
+                color: 'white',
+                cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                opacity: isRefreshing ? 0.7 : 1,
+                transition: 'background 0.2s',
+              }}
+            >
+              <RefreshCw style={{ 
+                width: 14, 
+                height: 14,
+                animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+              }} />
+              {isRefreshing ? 'Checking...' : 'Check for Lessons'}
+            </button>
           </div>
         </div>
       </div>
@@ -434,7 +513,7 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
     <div style={{
       background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%)',
       borderRadius: 20,
-      padding: 24,
+      padding: 'clamp(16px, 4vw, 24px)',
       position: 'relative',
       overflow: 'hidden',
       boxShadow: '0 10px 40px rgba(59, 130, 246, 0.3)',
@@ -451,26 +530,34 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
       }} />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Header - Responsive */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'flex-start', 
+          justifyContent: 'space-between', 
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 48,
-              height: 48,
+              width: 'clamp(40px, 10vw, 48px)',
+              height: 'clamp(40px, 10vw, 48px)',
               borderRadius: 14,
               background: 'rgba(255, 255, 255, 0.2)',
               backdropFilter: 'blur(10px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}>
-              <Video style={{ width: 24, height: 24, color: 'white' }} />
+              <Video style={{ width: 'clamp(20px, 5vw, 24px)', height: 'clamp(20px, 5vw, 24px)', color: 'white' }} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'white' }}>
+              <h3 style={{ margin: 0, fontSize: 'clamp(16px, 4vw, 20px)', fontWeight: 700, color: 'white' }}>
                 Live Lessons
               </h3>
-              <p style={{ margin: '4px 0 0', fontSize: 14, color: 'rgba(255, 255, 255, 0.8)' }}>
+              <p style={{ margin: '2px 0 0', fontSize: 'clamp(12px, 3vw, 14px)', color: 'rgba(255, 255, 255, 0.8)' }}>
                 {liveLessons.length} lesson{liveLessons.length !== 1 ? 's' : ''} available
               </p>
             </div>
@@ -481,13 +568,14 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
             display: 'flex',
             alignItems: 'center',
             gap: 6,
-            padding: '6px 12px',
+            padding: '5px 10px',
             background: 'rgba(239, 68, 68, 0.9)',
             borderRadius: 20,
             animation: 'pulse 2s infinite',
+            flexShrink: 0,
           }}>
-            <Radio style={{ width: 14, height: 14, color: 'white' }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'white' }}>LIVE NOW</span>
+            <Radio style={{ width: 12, height: 12, color: 'white' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>LIVE NOW</span>
           </div>
         </div>
 
@@ -503,15 +591,21 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
               <div
                 key={lesson.id}
                 style={{
-                  padding: 16,
+                  padding: 'clamp(12px, 3vw, 16px)',
                   background: 'rgba(255, 255, 255, 0.95)',
                   borderRadius: 14,
                   boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                {/* Mobile-first layout: stack on small screens */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: 12,
+                }}>
+                  {/* Lesson Info */}
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                       {isLive && (
                         <span style={{
                           display: 'inline-flex',
@@ -523,6 +617,7 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
                           fontSize: 11,
                           fontWeight: 600,
                           color: '#dc2626',
+                          flexShrink: 0,
                         }}>
                           <span style={{
                             width: 6,
@@ -536,9 +631,10 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
                       )}
                       <h4 style={{
                         margin: 0,
-                        fontSize: 16,
+                        fontSize: 'clamp(14px, 3.5vw, 16px)',
                         fontWeight: 600,
                         color: '#1f2937',
+                        lineHeight: 1.3,
                       }}>
                         {lesson.title}
                       </h4>
@@ -547,8 +643,9 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
-                      fontSize: 13,
+                      fontSize: 'clamp(12px, 3vw, 13px)',
                       color: '#6b7280',
+                      flexWrap: 'wrap',
                     }}>
                       <span>{lesson.classes?.name || 'All Classes'}</span>
                       <span>•</span>
@@ -556,21 +653,24 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
                     </div>
                   </div>
                   
+                  {/* Join Button - Full width on mobile */}
                   <button
                     onClick={() => handleJoinLesson(lesson)}
                     disabled={joiningId === lesson.id}
                     style={{
-                      padding: '10px 20px',
+                      width: '100%',
+                      padding: 'clamp(10px, 2.5vw, 12px) clamp(16px, 4vw, 20px)',
                       background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
                       border: 'none',
                       borderRadius: 10,
-                      fontSize: 14,
+                      fontSize: 'clamp(13px, 3.5vw, 14px)',
                       fontWeight: 600,
                       color: 'white',
                       cursor: joiningId === lesson.id ? 'not-allowed' : 'pointer',
                       opacity: joiningId === lesson.id ? 0.7 : 1,
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: 6,
                       transition: 'transform 0.2s, box-shadow 0.2s',
                       boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
@@ -614,6 +714,15 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
+        }
+        @media (min-width: 480px) {
+          .lesson-card-layout {
+            flex-direction: row !important;
+            align-items: center !important;
+          }
+          .join-button {
+            width: auto !important;
+          }
         }
       `}</style>
     </div>
