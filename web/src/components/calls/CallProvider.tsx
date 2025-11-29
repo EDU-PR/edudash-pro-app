@@ -82,6 +82,7 @@ export function CallProvider({ children }: CallProviderProps) {
           filter: `callee_id=eq.${currentUserId}`,
         },
         async (payload: { new: ActiveCall }) => {
+          console.log('[CallProvider] Raw realtime payload:', JSON.stringify(payload.new, null, 2));
           const call = payload.new as ActiveCall;
           console.log('[CallProvider] Incoming call received:', {
             callId: call.call_id,
@@ -92,19 +93,42 @@ export function CallProvider({ children }: CallProviderProps) {
           });
           
           if (call.status === 'ringing') {
-            // Verify we have the meeting URL
-            if (!call.meeting_url) {
-              console.error('[CallProvider] Incoming call missing meeting_url! Fetching from DB...');
-              // Fetch the full call record if meeting_url is missing
-              const { data: fullCall } = await supabase
-                .from('active_calls')
-                .select('*')
-                .eq('call_id', call.call_id)
-                .single();
+            // Always fetch the full call record from DB to ensure we have all fields
+            // Realtime payloads sometimes don't include all columns
+            let meetingUrl = call.meeting_url;
+            
+            if (!meetingUrl) {
+              console.log('[CallProvider] meeting_url not in payload, fetching from DB...');
               
-              if (fullCall?.meeting_url) {
-                call.meeting_url = fullCall.meeting_url;
-                console.log('[CallProvider] Got meeting_url from DB:', call.meeting_url);
+              // Small delay to ensure the record is fully committed
+              await new Promise(resolve => setTimeout(resolve, 200));
+              
+              // Fetch with retry
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const { data: fullCall, error } = await supabase
+                  .from('active_calls')
+                  .select('*')
+                  .eq('call_id', call.call_id)
+                  .single();
+                
+                if (fullCall?.meeting_url) {
+                  meetingUrl = fullCall.meeting_url;
+                  console.log('[CallProvider] Got meeting_url from DB (attempt', attempt + 1, '):', meetingUrl);
+                  break;
+                }
+                
+                if (error) {
+                  console.warn('[CallProvider] DB fetch attempt', attempt + 1, 'failed:', error.message);
+                }
+                
+                // Wait before retry
+                if (attempt < 2) {
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+              }
+              
+              if (!meetingUrl) {
+                console.error('[CallProvider] Failed to get meeting_url after 3 attempts');
               }
             }
             
@@ -119,8 +143,8 @@ export function CallProvider({ children }: CallProviderProps) {
               ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
               : 'Unknown';
 
-            setIncomingCall({ ...call, caller_name: callerName });
-            console.log('[CallProvider] Incoming call set with meeting_url:', call.meeting_url);
+            setIncomingCall({ ...call, meeting_url: meetingUrl, caller_name: callerName });
+            console.log('[CallProvider] Incoming call set with meeting_url:', meetingUrl);
           }
         }
       )
