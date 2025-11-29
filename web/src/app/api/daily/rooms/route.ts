@@ -168,8 +168,7 @@ export async function POST(request: NextRequest) {
       }
       
       return NextResponse.json({ 
-        error: errorMessage,
-        details: errorData 
+        error: errorMessage
       }, { status: dailyResponse.status || 500 });
     }
 
@@ -210,10 +209,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Daily Rooms] Error creating Daily room:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json({ 
-      error: errorMessage,
-      details: error instanceof Error ? error.stack : undefined
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
