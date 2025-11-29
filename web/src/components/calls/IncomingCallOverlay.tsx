@@ -34,6 +34,7 @@ export function IncomingCallOverlay({
       audio.preload = 'auto';
       ringtoneRef.current = audio;
       console.log('[IncomingCall] Ringtone audio initialized at max volume');
+    const [hasUserInteraction, setHasUserInteraction] = useState(false);
     } catch (err) {
       console.warn('[IncomingCall] Failed to initialize audio:', err);
     }
