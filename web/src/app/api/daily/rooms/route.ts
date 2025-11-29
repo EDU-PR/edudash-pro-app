@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     // Generate unique room name
     const roomName = `edudash-${preschoolId.slice(0, 8)}-${Date.now()}`;
 
-    // Create room via Daily.co API
+    // Create room via Daily.co API with improved video quality settings
     const dailyResponse = await fetch(`${DAILY_API_URL}/rooms`, {
       method: 'POST',
       headers: {
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
           enable_recording: enableRecording ? 'cloud' : undefined,
           exp: Math.floor(Date.now() / 1000) + (expiryMinutes * 60),
           eject_at_room_exp: true,
-          // Customize for education
+          // Video quality settings
           start_video_off: false,
           start_audio_off: true, // Students join muted
           owner_only_broadcast: false,
@@ -133,6 +133,14 @@ export async function POST(request: NextRequest) {
           enable_network_ui: true,
           enable_pip_ui: true,
           lang: 'en',
+          // Enhanced video quality settings for classroom use
+          sfu_switchover: 2, // Switch to SFU after 2 participants for better quality
+          // Video encoding settings for better quality
+          video_processing: {
+            background_blur: false, // Disable for better performance
+          },
+          // Better bandwidth management for education
+          autojoin: false,
         },
       }),
     });

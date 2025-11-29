@@ -70,8 +70,20 @@ export function ClassLessonCall({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showParticipantMenu, setShowParticipantMenu] = useState<string | null>(null);
   const [handRaised, setHandRaised] = useState(false);
+  const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set()); // Track all raised hands by session_id
   const containerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+
+  // Get current user ID for raise hand feature
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const getUserId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    getUserId();
+  }, [supabase]);
 
   // Auto-join on mount
   useEffect(() => {
@@ -79,6 +91,66 @@ export function ClassLessonCall({
       joinRoom(roomUrl);
     }
   }, [roomUrl, isInCall, isJoining, joinRoom]);
+
+  // Get room name from URL for raise hand channel
+  const roomName = roomUrl ? roomUrl.split('/').pop() || '' : '';
+  
+  // Subscribe to raise hand events via realtime broadcast
+  useEffect(() => {
+    if (!isInCall || !roomName) return;
+    
+    const channel = supabase
+      .channel(`raise-hand-${roomName}`)
+      .on('broadcast', { event: 'hand-raised' }, (payload: { payload: { sessionId: string; userName: string; raised: boolean } }) => {
+        const { sessionId, raised } = payload.payload;
+        console.log('[ClassLessonCall] Hand raised event:', sessionId, raised);
+        setRaisedHands(prev => {
+          const updated = new Set(prev);
+          if (raised) {
+            updated.add(sessionId);
+          } else {
+            updated.delete(sessionId);
+          }
+          return updated;
+        });
+      })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isInCall, roomName, supabase]);
+  
+  // Toggle raise hand with realtime broadcast
+  const toggleRaiseHand = async () => {
+    if (!localParticipant || !roomName) return;
+    
+    const newRaised = !handRaised;
+    setHandRaised(newRaised);
+    
+    // Update local raised hands set
+    setRaisedHands(prev => {
+      const updated = new Set(prev);
+      if (newRaised) {
+        updated.add(localParticipant.session_id);
+      } else {
+        updated.delete(localParticipant.session_id);
+      }
+      return updated;
+    });
+    
+    // Broadcast to other participants
+    const channel = supabase.channel(`raise-hand-${roomName}`);
+    await channel.send({
+      type: 'broadcast',
+      event: 'hand-raised',
+      payload: {
+        sessionId: localParticipant.session_id,
+        userName: localParticipant.user_name || 'Participant',
+        raised: newRaised,
+      },
+    });
+  };
 
   // Handle leave - mark lesson as ended if teacher leaves
   const handleLeave = async () => {
@@ -243,7 +315,7 @@ export function ClassLessonCall({
                     className="w-24 sm:w-40 h-full flex-shrink-0 bg-gray-800 rounded-md sm:rounded-lg overflow-hidden relative"
                   >
                     <ParticipantVideo participant={participant} className="w-full h-full object-cover" />
-                    <ParticipantOverlay participant={participant} compact />
+                    <ParticipantOverlay participant={participant} compact hasHandRaised={raisedHands.has(participant.session_id)} />
                   </div>
                 ))}
               </div>
@@ -270,10 +342,10 @@ export function ClassLessonCall({
                   key={participant.session_id}
                   className={`bg-gray-800 rounded-lg sm:rounded-xl overflow-hidden relative aspect-video sm:aspect-auto ${
                     participant.owner ? 'ring-2 ring-purple-500' : ''
-                  }`}
+                  } ${raisedHands.has(participant.session_id) ? 'ring-2 ring-yellow-500' : ''}`}
                 >
                   <ParticipantVideo participant={participant} className="w-full h-full object-cover" />
-                  <ParticipantOverlay participant={participant} />
+                  <ParticipantOverlay participant={participant} hasHandRaised={raisedHands.has(participant.session_id)} />
                   {/* Teacher controls for other participants */}
                   {isTeacher && !participant.local && (
                     <div className="absolute top-2 right-2">
@@ -331,21 +403,27 @@ export function ClassLessonCall({
               {participantArray.map((participant) => (
                 <div
                   key={participant.session_id}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-700/50"
+                  className={`flex items-center gap-3 p-3 rounded-lg hover:bg-gray-700/50 ${raisedHands.has(participant.session_id) ? 'bg-yellow-500/20 border border-yellow-500/50' : ''}`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">
-                    {(participant.user_name || 'P').charAt(0).toUpperCase()}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${raisedHands.has(participant.session_id) ? 'bg-yellow-500' : 'bg-gradient-to-br from-purple-500 to-pink-500'}`}>
+                    {raisedHands.has(participant.session_id) ? (
+                      <Hand className="w-5 h-5" />
+                    ) : (
+                      (participant.user_name || 'P').charAt(0).toUpperCase()
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium truncate">
                       {participant.user_name || 'Participant'}
                       {participant.local && ' (You)'}
+                      {raisedHands.has(participant.session_id) && ' ✋'}
                     </p>
                     <p className="text-gray-400 text-xs">
                       {participant.owner ? 'Teacher' : 'Student'}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
+                    {raisedHands.has(participant.session_id) && <Hand className="w-4 h-4 text-yellow-400 animate-pulse" />}
                     {!participant.audio && <MicOff className="w-4 h-4 text-red-400" />}
                     {!participant.video && <VideoOff className="w-4 h-4 text-red-400" />}
                   </div>
@@ -406,16 +484,30 @@ export function ClassLessonCall({
           {isScreenSharing ? <MonitorOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Monitor className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>
 
-        {/* Hand raise (students) */}
+        {/* Hand raise (students) - with count badge for teachers */}
         {!isTeacher && (
           <button
-            onClick={() => setHandRaised(!handRaised)}
+            onClick={toggleRaiseHand}
             className={`p-2.5 sm:p-4 rounded-full transition-colors ${
-              handRaised ? 'bg-yellow-500 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'
+              handRaised ? 'bg-yellow-500 text-white animate-pulse' : 'bg-gray-700 text-white hover:bg-gray-600'
             }`}
             title={handRaised ? 'Lower hand' : 'Raise hand'}
           >
             <Hand className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+        )}
+        
+        {/* Raised hands indicator for teachers */}
+        {isTeacher && raisedHands.size > 0 && (
+          <button
+            onClick={() => setShowParticipants(true)}
+            className="p-2.5 sm:p-4 rounded-full bg-yellow-500 text-white animate-pulse relative"
+            title={`${raisedHands.size} hand${raisedHands.size > 1 ? 's' : ''} raised`}
+          >
+            <Hand className="w-5 h-5 sm:w-6 sm:h-6" />
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full text-xs font-bold flex items-center justify-center">
+              {raisedHands.size}
+            </span>
           </button>
         )}
 
@@ -459,12 +551,33 @@ function ParticipantVideo({
 
   useEffect(() => {
     if (videoRef.current && participant) {
-      const tracks = isScreenShare
+      const mediaStreamTracks: MediaStreamTrack[] = [];
+      
+      // Get video track
+      const videoTracks = isScreenShare
         ? participant.tracks?.screenVideo
         : participant.tracks?.video;
       
-      if (tracks?.track) {
-        videoRef.current.srcObject = new MediaStream([tracks.track]);
+      if (videoTracks?.track) {
+        mediaStreamTracks.push(videoTracks.track);
+      }
+      
+      // Get audio track (important for non-local participants)
+      if (!participant.local && participant.tracks?.audio?.track) {
+        mediaStreamTracks.push(participant.tracks.audio.track);
+      }
+      
+      if (mediaStreamTracks.length > 0) {
+        videoRef.current.srcObject = new MediaStream(mediaStreamTracks);
+        // Ensure audio plays for remote participants
+        if (!participant.local) {
+          videoRef.current.muted = false;
+          videoRef.current.volume = 1.0;
+          // Try to play (may be blocked by autoplay policy)
+          videoRef.current.play().catch(e => {
+            console.warn('[ParticipantVideo] Autoplay blocked:', e);
+          });
+        }
       }
     }
   }, [participant, isScreenShare]);
@@ -494,7 +607,7 @@ function ParticipantVideo({
 }
 
 // Participant overlay with name and status
-function ParticipantOverlay({ participant, compact = false }: { participant: DailyParticipant; compact?: boolean }) {
+function ParticipantOverlay({ participant, compact = false, hasHandRaised = false }: { participant: DailyParticipant; compact?: boolean; hasHandRaised?: boolean }) {
   return (
     <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-1.5' : 'p-2 sm:p-3'} bg-gradient-to-t from-black/70 to-transparent`}>
       <div className="flex items-center justify-between">
@@ -504,6 +617,11 @@ function ParticipantOverlay({ participant, compact = false }: { participant: Dai
           {participant.owner && ' ⭐'}
         </span>
         <div className="flex items-center gap-0.5 sm:gap-1">
+          {hasHandRaised && (
+            <span className={`${compact ? 'p-0.5' : 'p-0.5 sm:p-1'} bg-yellow-500 rounded animate-pulse`}>
+              <Hand className={`${compact ? 'w-2 h-2' : 'w-2.5 h-2.5 sm:w-3 sm:h-3'} text-white`} />
+            </span>
+          )}
           {!participant.audio && (
             <span className={`${compact ? 'p-0.5' : 'p-0.5 sm:p-1'} bg-red-600 rounded`}>
               <MicOff className={`${compact ? 'w-2 h-2' : 'w-2.5 h-2.5 sm:w-3 sm:h-3'} text-white`} />
