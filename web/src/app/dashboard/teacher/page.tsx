@@ -203,6 +203,19 @@ export default function TeacherDashboard() {
             <MessageCircle className="icon20" />
             <span>Message Parents</span>
           </button>
+          {/* Quick Call Button - Moved from FAB */}
+          <button 
+            className="qa" 
+            onClick={() => setShowQuickCallModal(true)}
+            style={{ 
+              background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <Phone className="icon20" />
+            <span>Quick Call</span>
+          </button>
         </div>
       </div>
 
@@ -273,32 +286,6 @@ export default function TeacherDashboard() {
         currentUserId={userId}
         preschoolId={preschoolId}
       />
-
-      {/* Quick Call FAB */}
-      <button
-        onClick={() => setShowQuickCallModal(true)}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-          border: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(34, 197, 94, 0.4), 0 0 24px rgba(34, 197, 94, 0.2)',
-          zIndex: 998,
-          transition: 'transform 0.2s ease',
-        }}
-        className="active:scale-95 hover:scale-105"
-        title="Quick Call"
-      >
-        <Phone size={24} color="white" />
-      </button>
       </TeacherShell>
     </>
   );
