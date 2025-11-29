@@ -236,11 +236,20 @@ export function GroupCallProvider({ children }: GroupCallProviderProps) {
       const { token, userName: displayName } = await tokenResponse.json();
       console.log('[GroupCall] Token received, joining as:', displayName);
 
-      // Create Daily call object with allowMultipleCallInstances as fallback
+      // Create Daily call object with improved video quality settings
       const newCallObject = DailyIframe.createCallObject({
         audioSource: true,
         videoSource: true,
         allowMultipleCallInstances: true, // Allow as fallback for edge cases
+        // Request higher quality video
+        dailyConfig: {
+          // Request HD video when bandwidth allows
+          camSimulcastEncodings: [
+            { maxBitrate: 600000, maxFramerate: 30, scaleResolutionDownBy: 1 }, // High quality
+            { maxBitrate: 200000, maxFramerate: 20, scaleResolutionDownBy: 2 }, // Medium quality
+            { maxBitrate: 80000, maxFramerate: 10, scaleResolutionDownBy: 4 },  // Low quality fallback
+          ],
+        },
       });
 
       // Set up event listeners

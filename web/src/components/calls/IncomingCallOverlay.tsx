@@ -48,6 +48,16 @@ export function IncomingCallOverlay({
     if (ringtoneRef.current) {
       try {
         ringtoneRef.current.currentTime = 0;
+        // On mobile, ensure proper audio context
+        if (typeof AudioContext !== 'undefined' || typeof (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext !== 'undefined') {
+          const AudioContextClass = AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            if (ctx.state === 'suspended') {
+              await ctx.resume();
+            }
+          }
+        }
         await ringtoneRef.current.play();
         setAudioInitialized(true);
         console.log('[IncomingCall] Ringtone playing');
@@ -200,16 +210,18 @@ export function IncomingCallOverlay({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 24,
+        padding: 'clamp(16px, 4vw, 24px)',
+        paddingTop: 'max(env(safe-area-inset-top), clamp(16px, 4vw, 24px))',
+        paddingBottom: 'max(env(safe-area-inset-bottom), clamp(16px, 4vw, 24px))',
       }}
     >
-      {/* Pulsing avatar */}
+      {/* Pulsing avatar - responsive size */}
       <div
         style={{
           position: 'relative',
-          width: 140,
-          height: 140,
-          marginBottom: 32,
+          width: 'clamp(100px, 30vw, 140px)',
+          height: 'clamp(100px, 30vw, 140px)',
+          marginBottom: 'clamp(20px, 6vw, 32px)',
         }}
       >
         {/* Outer pulse rings */}
@@ -221,8 +233,8 @@ export function IncomingCallOverlay({
               top: '50%',
               left: '50%',
               transform: 'translate(-50%, -50%)',
-              width: 140 + i * 30,
-              height: 140 + i * 30,
+              width: `calc(100% + ${i * 30}px)`,
+              height: `calc(100% + ${i * 30}px)`,
               borderRadius: '50%',
               border: `2px solid ${callType === 'video' ? '#3b82f6' : '#22c55e'}`,
               opacity: 0.3 - i * 0.1,
@@ -239,8 +251,8 @@ export function IncomingCallOverlay({
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 120,
-            height: 120,
+            width: '85%',
+            height: '85%',
             borderRadius: '50%',
             background: callType === 'video' 
               ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)'
@@ -252,9 +264,9 @@ export function IncomingCallOverlay({
           }}
         >
           {callType === 'video' ? (
-            <Video size={48} color="white" />
+            <Video style={{ width: 'clamp(32px, 10vw, 48px)', height: 'clamp(32px, 10vw, 48px)' }} color="white" />
           ) : (
-            <Phone size={48} color="white" style={{ animation: 'shake 0.5s ease-in-out infinite' }} />
+            <Phone style={{ width: 'clamp(32px, 10vw, 48px)', height: 'clamp(32px, 10vw, 48px)', animation: 'shake 0.5s ease-in-out infinite' }} color="white" />
           )}
         </div>
       </div>
@@ -262,12 +274,15 @@ export function IncomingCallOverlay({
       {/* Caller info */}
       <h2
         style={{
-          fontSize: 28,
+          fontSize: 'clamp(22px, 6vw, 28px)',
           fontWeight: 700,
           color: 'white',
           margin: 0,
           marginBottom: 8,
           textAlign: 'center',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
       >
         {callerName}
@@ -275,21 +290,21 @@ export function IncomingCallOverlay({
       
       <p
         style={{
-          fontSize: 16,
+          fontSize: 'clamp(14px, 4vw, 16px)',
           color: 'rgba(255, 255, 255, 0.7)',
           margin: 0,
-          marginBottom: 60,
+          marginBottom: 'clamp(40px, 12vw, 60px)',
           textAlign: 'center',
         }}
       >
         Incoming {callType} call...
       </p>
 
-      {/* Action buttons */}
+      {/* Action buttons - mobile responsive gap */}
       <div
         style={{
           display: 'flex',
-          gap: 48,
+          gap: 'clamp(32px, 12vw, 48px)',
           alignItems: 'center',
         }}
       >
@@ -297,8 +312,8 @@ export function IncomingCallOverlay({
         <button
           onClick={handleReject}
           style={{
-            width: 72,
-            height: 72,
+            width: 'clamp(60px, 18vw, 72px)',
+            height: 'clamp(60px, 18vw, 72px)',
             borderRadius: 36,
             background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
             border: 'none',
@@ -312,15 +327,15 @@ export function IncomingCallOverlay({
           onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
-          <PhoneOff size={32} color="white" />
+          <PhoneOff style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
         </button>
 
         {/* Accept button */}
         <button
           onClick={handleAnswer}
           style={{
-            width: 72,
-            height: 72,
+            width: 'clamp(60px, 18vw, 72px)',
+            height: 'clamp(60px, 18vw, 72px)',
             borderRadius: 36,
             background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
             border: 'none',
@@ -336,9 +351,9 @@ export function IncomingCallOverlay({
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           {callType === 'video' ? (
-            <Video size={32} color="white" />
+            <Video style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
           ) : (
-            <Phone size={32} color="white" />
+            <Phone style={{ width: 'clamp(24px, 8vw, 32px)', height: 'clamp(24px, 8vw, 32px)' }} color="white" />
           )}
         </button>
       </div>
@@ -347,14 +362,14 @@ export function IncomingCallOverlay({
       <div
         style={{
           display: 'flex',
-          gap: 48,
-          marginTop: 16,
+          gap: 'clamp(32px, 12vw, 48px)',
+          marginTop: 'clamp(12px, 4vw, 16px)',
         }}
       >
-        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 14, width: 72, textAlign: 'center' }}>
+        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 'clamp(12px, 3.5vw, 14px)', width: 'clamp(60px, 18vw, 72px)', textAlign: 'center' }}>
           Decline
         </span>
-        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 14, width: 72, textAlign: 'center' }}>
+        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 'clamp(12px, 3.5vw, 14px)', width: 'clamp(60px, 18vw, 72px)', textAlign: 'center' }}>
           Accept
         </span>
       </div>

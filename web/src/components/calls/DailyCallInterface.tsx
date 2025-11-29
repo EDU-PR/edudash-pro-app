@@ -333,9 +333,17 @@ export const DailyCallInterface = ({
                 }, 1000);
               }
               
-              // Update remote video
-              if (remoteVideoRef.current && p.tracks?.video?.track) {
-                remoteVideoRef.current.srcObject = new MediaStream([p.tracks.video.track]);
+              // Update remote video and audio - attach both tracks to video element
+              if (remoteVideoRef.current) {
+                const tracks: MediaStreamTrack[] = [];
+                if (p.tracks?.video?.track) tracks.push(p.tracks.video.track);
+                if (p.tracks?.audio?.track) tracks.push(p.tracks.audio.track);
+                if (tracks.length > 0) {
+                  remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                  // Ensure audio plays
+                  remoteVideoRef.current.muted = false;
+                  remoteVideoRef.current.volume = 1.0;
+                }
               }
             }
           });
@@ -365,9 +373,16 @@ export const DailyCallInterface = ({
               }, 1000);
             }
 
-            // Update remote video
-            if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
-              remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+            // Update remote video and audio - attach both tracks
+            if (remoteVideoRef.current) {
+              const tracks: MediaStreamTrack[] = [];
+              if (event.participant.tracks?.video?.track) tracks.push(event.participant.tracks.video.track);
+              if (event.participant.tracks?.audio?.track) tracks.push(event.participant.tracks.audio.track);
+              if (tracks.length > 0) {
+                remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                remoteVideoRef.current.muted = false;
+                remoteVideoRef.current.volume = 1.0;
+              }
             }
 
             // Also update call status in database
@@ -393,8 +408,16 @@ export const DailyCallInterface = ({
             } else {
               setRemoteParticipant(event.participant);
               
-              if (remoteVideoRef.current && event.participant.tracks?.video?.track) {
-                remoteVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
+              // Update remote video and audio
+              if (remoteVideoRef.current) {
+                const tracks: MediaStreamTrack[] = [];
+                if (event.participant.tracks?.video?.track) tracks.push(event.participant.tracks.video.track);
+                if (event.participant.tracks?.audio?.track) tracks.push(event.participant.tracks.audio.track);
+                if (tracks.length > 0) {
+                  remoteVideoRef.current.srcObject = new MediaStream(tracks);
+                  remoteVideoRef.current.muted = false;
+                  remoteVideoRef.current.volume = 1.0;
+                }
               }
             }
           }
@@ -403,6 +426,33 @@ export const DailyCallInterface = ({
           if (event?.participant && !event.participant.local) {
             setRemoteParticipant(null);
             endCall();
+          }
+        })
+        .on('track-started', (event) => {
+          // Handle when audio/video tracks start
+          if (event?.participant && !event.participant.local && event.track) {
+            console.log('[P2P Call] Track started:', event.track.kind, 'from:', event.participant.user_name);
+            if (remoteVideoRef.current) {
+              const currentStream = remoteVideoRef.current.srcObject as MediaStream | null;
+              const tracks: MediaStreamTrack[] = [];
+              
+              // Keep existing tracks and add new one
+              if (currentStream) {
+                currentStream.getTracks().forEach(t => {
+                  if (t.kind !== event.track?.kind) tracks.push(t);
+                });
+              }
+              tracks.push(event.track);
+              
+              remoteVideoRef.current.srcObject = new MediaStream(tracks);
+              remoteVideoRef.current.muted = false;
+              remoteVideoRef.current.volume = 1.0;
+              
+              // Ensure audio plays after user interaction
+              remoteVideoRef.current.play().catch(e => {
+                console.warn('[P2P Call] Autoplay blocked, will retry on user interaction:', e);
+              });
+            }
           }
         })
         .on('left-meeting', () => {
@@ -828,18 +878,21 @@ export const DailyCallInterface = ({
         flexDirection: 'column',
       }}
     >
-      {/* Header */}
+      {/* Header - Mobile responsive */}
       <div
         style={{
-          padding: '16px 20px',
+          padding: 'clamp(12px, 3vw, 16px) clamp(12px, 3vw, 20px)',
+          paddingTop: 'max(env(safe-area-inset-top), clamp(12px, 3vw, 16px))',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 8,
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'white' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: 'clamp(16px, 4vw, 18px)', fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {remoteUserName || 'Unknown'}
             </h3>
             {initialCallType === 'video' && (
@@ -851,12 +904,13 @@ export const DailyCallInterface = ({
                   padding: '2px 8px',
                   borderRadius: 12,
                   background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                  fontSize: 11,
+                  fontSize: 'clamp(10px, 2.5vw, 11px)',
                   color: isVideoEnabled ? '#22c55e' : 'rgba(255, 255, 255, 0.6)',
+                  flexShrink: 0,
                 }}
               >
                 <Video size={12} />
-                {isVideoEnabled ? 'Camera on' : 'Camera off'}
+                <span className="hidden xs:inline">{isVideoEnabled ? 'Camera on' : 'Camera off'}</span>
               </span>
             )}
             {/* Network Quality Indicator */}
@@ -1109,75 +1163,80 @@ export const DailyCallInterface = ({
         )}
       </div>
 
-      {/* Controls */}
+      {/* Controls - Mobile responsive with safe area */}
       <div
         style={{
-          padding: '24px 20px 40px',
+          padding: 'clamp(16px, 4vw, 24px) clamp(12px, 3vw, 20px) clamp(24px, 6vw, 40px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), clamp(24px, 6vw, 40px))',
           display: 'flex',
           justifyContent: 'center',
-          gap: 16,
+          gap: 'clamp(10px, 3vw, 16px)',
+          flexWrap: 'wrap',
         }}
       >
         {/* Mute */}
         <button
           onClick={toggleAudio}
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
-            background: isAudioEnabled ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.3)',
-            border: 'none',
+            background: isAudioEnabled ? 'rgba(255, 255, 255, 0.1)' : 'rgba(239, 68, 68, 0.3)',
+            border: !isAudioEnabled ? '2px solid rgba(239, 68, 68, 0.5)' : 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isAudioEnabled ? <Mic size={24} color="white" /> : <MicOff size={24} color="white" />}
+          {isAudioEnabled ? <Mic size={22} color="white" /> : <MicOff size={22} color="#ef4444" />}
         </button>
 
         {/* Video */}
         <button
           onClick={toggleVideo}
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
-            background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.3)',
+            background: isVideoEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
             border: isVideoEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isVideoEnabled ? <Video size={24} color="#22c55e" /> : <VideoOff size={24} color="white" />}
+          {isVideoEnabled ? <Video size={22} color="#22c55e" /> : <VideoOff size={22} color="white" />}
         </button>
 
-        {/* Screen share */}
+        {/* Screen share - hide on very small screens */}
         <button
           onClick={toggleScreenShare}
+          className="hidden xs:flex"
           style={{
-            width: 56,
-            height: 56,
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
             background: isScreenSharing ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
             border: isScreenSharing ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
-            display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
+            transition: 'all 0.2s',
           }}
         >
-          {isScreenSharing ? <MonitorOff size={24} color="#22c55e" /> : <Monitor size={24} color="white" />}
+          {isScreenSharing ? <MonitorOff size={22} color="#22c55e" /> : <Monitor size={22} color="white" />}
         </button>
 
         {/* End call */}
         <button
           onClick={endCall}
           style={{
-            width: 72,
-            height: 56,
+            width: 'clamp(56px, 15vw, 72px)',
+            height: 'clamp(48px, 12vw, 56px)',
             borderRadius: 28,
             background: '#ef4444',
             border: 'none',
@@ -1186,9 +1245,10 @@ export const DailyCallInterface = ({
             justifyContent: 'center',
             cursor: 'pointer',
             boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+            transition: 'all 0.2s',
           }}
         >
-          <PhoneOff size={28} color="white" />
+          <PhoneOff size={24} color="white" />
         </button>
       </div>
     </div>
