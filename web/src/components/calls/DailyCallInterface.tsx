@@ -179,6 +179,7 @@ export const DailyCallInterface = ({
   // Create a private room for 1-on-1 call
   const createPrivateRoom = useCallback(async (): Promise<string | null> => {
     try {
+      console.log('[P2P Call] Requesting room from /api/daily/rooms...');
       const response = await fetch('/api/daily/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,23 +194,33 @@ export const DailyCallInterface = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('[P2P Call] Room creation failed - Status:', response.status, 'Error:', errorData);
         // Handle specific error codes
         if (errorData.code === 'DAILY_API_KEY_MISSING' || response.status === 503) {
-          setError('Video calls are not available. Please contact your administrator.');
+          setError('Video calls are not available. Please contact your administrator to configure video calling.');
         } else if (response.status === 401) {
           setError('Please sign in to make calls.');
         } else if (response.status === 403) {
-          setError('You do not have permission to make calls.');
+          setError('You do not have permission to make calls. Only teachers can initiate calls.');
         } else {
           setError(errorData.message || 'Failed to set up call. Please try again.');
         }
-        throw new Error(errorData.error || 'Failed to create room');
+        return null;
       }
 
       const data = await response.json();
+      console.log('[P2P Call] Room creation response:', data);
+      
+      if (!data.room?.url) {
+        console.error('[P2P Call] Room created but no URL returned:', data);
+        setError('Failed to get room URL. Please try again.');
+        return null;
+      }
+      
       return data.room.url;
     } catch (err) {
-      console.error('Error creating room:', err);
+      console.error('[P2P Call] Error creating room:', err);
+      setError('Network error. Please check your connection and try again.');
       return null;
     }
   }, [remoteUserName]);
@@ -516,11 +527,19 @@ export const DailyCallInterface = ({
       setError(null);
 
       // Create private room
+      console.log('[P2P Call] Creating private room...');
       const newRoomUrl = await createPrivateRoom();
-      if (!newRoomUrl) {
-        throw new Error('Failed to create room');
+      
+      // CRITICAL: Validate room URL before proceeding
+      if (!newRoomUrl || typeof newRoomUrl !== 'string' || !newRoomUrl.startsWith('https://')) {
+        console.error('[P2P Call] Invalid room URL returned:', newRoomUrl);
+        setError('Failed to create call room. Please try again.');
+        setCallState('failed');
+        setShowRetryButton(true);
+        return;
       }
-
+      
+      console.log('[P2P Call] Room created successfully:', newRoomUrl);
       setRoomUrl(newRoomUrl);
 
       // Generate call ID
