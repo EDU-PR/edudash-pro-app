@@ -117,11 +117,15 @@ export function CallProvider({ children }: CallProviderProps) {
               console.log('[CallProvider] meeting_url not in payload, fetching from DB...');
               
               // Small delay to ensure the record is fully committed
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise(resolve => setTimeout(resolve, 300));
               
-              // Fetch with retry
+              // Fetch with exponential backoff retry (5 attempts with increasing delays)
               let lastError: { message?: string } | null = null;
-              for (let attempt = 0; attempt < 3; attempt++) {
+              const maxAttempts = 5;
+              const baseDelay = 500; // Start with 500ms delay
+              
+              for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                // Try fetching from active_calls first
                 const { data: fullCall, error } = await supabase
                   .from('active_calls')
                   .select('*')
@@ -130,7 +134,7 @@ export function CallProvider({ children }: CallProviderProps) {
                 
                 if (fullCall?.meeting_url) {
                   meetingUrl = fullCall.meeting_url;
-                  console.log('[CallProvider] Got meeting_url from DB (attempt', attempt + 1, '):', meetingUrl);
+                  console.log('[CallProvider] Got meeting_url from active_calls (attempt', attempt + 1, '):', meetingUrl);
                   break;
                 }
                 
@@ -139,14 +143,34 @@ export function CallProvider({ children }: CallProviderProps) {
                   console.warn('[CallProvider] DB fetch attempt', attempt + 1, 'failed:', error.message);
                 }
                 
-                // Wait before retry
-                if (attempt < 2) {
-                  await new Promise(resolve => setTimeout(resolve, 300));
+                // Fallback: Try fetching from call_signals table as backup
+                if (!meetingUrl) {
+                  const { data: signalData } = await supabase
+                    .from('call_signals')
+                    .select('payload')
+                    .eq('call_id', call.call_id)
+                    .eq('signal_type', 'call-offer')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  
+                  if (signalData?.payload?.meeting_url) {
+                    meetingUrl = signalData.payload.meeting_url as string;
+                    console.log('[CallProvider] Got meeting_url from call_signals fallback:', meetingUrl);
+                    break;
+                  }
+                }
+                
+                // Exponential backoff: wait longer between each retry
+                if (attempt < maxAttempts - 1) {
+                  const delay = baseDelay * Math.pow(1.5, attempt); // 500ms, 750ms, 1125ms, 1687ms
+                  console.log(`[CallProvider] Waiting ${Math.round(delay)}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
                 }
               }
               
               if (!meetingUrl) {
-                console.error('[CallProvider] Failed to get meeting_url after 3 attempts', lastError?.message);
+                console.error('[CallProvider] Failed to get meeting_url after', maxAttempts, 'attempts', lastError?.message);
               }
             }
             
@@ -253,14 +277,81 @@ export function CallProvider({ children }: CallProviderProps) {
     setIsCallInterfaceOpen(true);
   }, []);
 
+  // Helper function to fetch meeting URL when it's missing
+  const fetchMeetingUrl = useCallback(async (callId: string): Promise<string | undefined> => {
+    const maxAttempts = 5;
+    const baseDelay = 500;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Try fetching from active_calls first
+      const { data: callData } = await supabase
+        .from('active_calls')
+        .select('meeting_url')
+        .eq('call_id', callId)
+        .single();
+      
+      if (callData?.meeting_url) {
+        console.log('[CallProvider] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');
+        return callData.meeting_url;
+      }
+      
+      // Fallback: Try fetching from call_signals table
+      const { data: signalData } = await supabase
+        .from('call_signals')
+        .select('payload')
+        .eq('call_id', callId)
+        .eq('signal_type', 'call-offer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (signalData?.payload?.meeting_url) {
+        console.log('[CallProvider] fetchMeetingUrl: Got URL from call_signals (attempt', attempt + 1, ')');
+        return signalData.payload.meeting_url as string;
+      }
+      
+      // Exponential backoff
+      if (attempt < maxAttempts - 1) {
+        const delay = baseDelay * Math.pow(1.5, attempt);
+        console.log(`[CallProvider] fetchMeetingUrl: Waiting ${Math.round(delay)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    console.error('[CallProvider] fetchMeetingUrl: Failed after', maxAttempts, 'attempts');
+    return undefined;
+  }, [supabase]);
+
+  // State to track if we're connecting to a call
+  const [isConnecting, setIsConnecting] = useState(false);
+
   // Answer incoming call
   const answerIncomingCall = useCallback(async () => {
     if (!incomingCall) return;
     
-    setAnsweringCall(incomingCall);
+    let callToAnswer = { ...incomingCall };
+    
+    // If meeting_url is missing, try to fetch it
+    if (!callToAnswer.meeting_url) {
+      console.log('[CallProvider] Meeting URL missing, fetching before answering...');
+      setIsConnecting(true);
+      
+      const url = await fetchMeetingUrl(callToAnswer.call_id);
+      
+      if (url) {
+        callToAnswer = { ...callToAnswer, meeting_url: url };
+        console.log('[CallProvider] Successfully fetched meeting URL before answering');
+      } else {
+        console.error('[CallProvider] Could not fetch meeting URL, proceeding anyway');
+      }
+      
+      setIsConnecting(false);
+    }
+    
+    setAnsweringCall(callToAnswer);
     setIncomingCall(null);
     setIsCallInterfaceOpen(true);
-  }, [incomingCall]);
+  }, [incomingCall, fetchMeetingUrl]);
 
   // Reject incoming call
   const rejectIncomingCall = useCallback(async () => {
@@ -410,6 +501,7 @@ export function CallProvider({ children }: CallProviderProps) {
         callType={incomingCall?.call_type || 'voice'}
         onAnswer={answerIncomingCall}
         onReject={rejectIncomingCall}
+        isConnecting={isConnecting}
       />
 
       {/* Call interface for outgoing calls */}

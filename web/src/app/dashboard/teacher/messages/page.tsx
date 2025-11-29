@@ -11,7 +11,7 @@ import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
 import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
-import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
+import { CallInterface, useCallInterface, QuickCallModal } from '@/components/calls';
 import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
@@ -431,6 +431,7 @@ function TeacherMessagesPage() {
   // New Chat modal state
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showQuickCallModal, setShowQuickCallModal] = useState(false);
 
   // Dash AI state
   const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
@@ -1616,16 +1617,24 @@ function TeacherMessagesPage() {
                       <button
                         onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
                         title="Start voice call"
-                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                        className="w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                          boxShadow: '0 4px 12px rgba(34, 197, 94, 0.4)',
+                        }}
                       >
-                        <Phone size={18} />
+                        <Phone size={22} color="white" />
                       </button>
                       <button
                         onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
                         title="Start video call"
-                        className="w-10 h-10 rounded-[10px] bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]"
+                        className="w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                          boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+                        }}
                       >
-                        <Video size={18} />
+                        <Video size={22} color="white" />
                       </button>
                       <button
                         ref={moreButtonRef}
@@ -1643,16 +1652,24 @@ function TeacherMessagesPage() {
                       <button
                         onClick={() => contactParticipant?.user_id && startVoiceCall(contactParticipant.user_id, contactName)}
                         title="Voice call"
-                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                        className="w-11 h-11 rounded-full flex items-center justify-center transition-transform active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                          boxShadow: '0 3px 10px rgba(34, 197, 94, 0.35)',
+                        }}
                       >
-                        <Phone size={18} />
+                        <Phone size={18} color="white" />
                       </button>
                       <button
                         onClick={() => contactParticipant?.user_id && startVideoCall(contactParticipant.user_id, contactName)}
                         title="Video call"
-                        className="w-10 h-10 rounded-[10px] bg-transparent border-none flex items-center justify-center text-[var(--muted)]"
+                        className="w-11 h-11 rounded-full flex items-center justify-center transition-transform active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                          boxShadow: '0 3px 10px rgba(59, 130, 246, 0.35)',
+                        }}
                       >
-                        <Video size={18} />
+                        <Video size={18} color="white" />
                       </button>
                       <button
                         ref={moreButtonRef}
@@ -2091,6 +2108,43 @@ function TeacherMessagesPage() {
           inviterName={profile?.firstName || 'A teacher'}
           preschoolName={profile?.preschoolName}
         />
+        
+        {/* Quick Call Modal */}
+        <QuickCallModal
+          isOpen={showQuickCallModal}
+          onClose={() => setShowQuickCallModal(false)}
+          onVoiceCall={(userId, userName) => startVoiceCall(userId, userName)}
+          onVideoCall={(userId, userName) => startVideoCall(userId, userName)}
+          currentUserId={userId}
+          preschoolId={profile?.preschoolId}
+        />
+        
+        {/* Quick Call FAB - Shows on mobile when no conversation is selected */}
+        {!isDesktop && !selectedThread && (
+          <button
+            onClick={() => setShowQuickCallModal(true)}
+            style={{
+              position: 'fixed',
+              bottom: 'calc(150px + env(safe-area-inset-bottom))',
+              right: 16,
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(34, 197, 94, 0.5), 0 0 30px rgba(34, 197, 94, 0.3)',
+              zIndex: 998,
+              transition: 'transform 0.2s ease',
+            }}
+            className="active:scale-95"
+          >
+            <Phone size={24} color="white" />
+          </button>
+        )}
         
         {/* Voice Recording Overlay */}
         <VoiceRecordingOverlay

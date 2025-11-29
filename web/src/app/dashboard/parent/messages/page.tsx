@@ -9,7 +9,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
-import { CallInterface, useCallInterface } from '@/components/calls/CallInterface';
+import { CallInterface, useCallInterface, QuickCallModal } from '@/components/calls';
 import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
@@ -484,6 +484,7 @@ function ParentMessagesContent() {
   // Modals state
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+  const [quickCallModalOpen, setQuickCallModalOpen] = useState(false);
   
   // Presets mapping (shared)
   const presetMap: Record<string, string> = {
@@ -1833,39 +1834,43 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                             onClick={() => educator?.user_id && startVoiceCall(educator.user_id, educatorName)}
                             title="Voice call"
                             style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 10,
-                              background: 'transparent',
+                              width: 44,
+                              height: 44,
+                              borderRadius: 22,
+                              background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                               border: 'none',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               cursor: 'pointer',
-                              color: '#e2e8f0',
                               padding: 0,
+                              boxShadow: '0 3px 10px rgba(34, 197, 94, 0.35)',
+                              transition: 'transform 0.2s ease',
                             }}
+                            className="active:scale-95"
                           >
-                            <Phone size={18} />
+                            <Phone size={18} color="white" />
                           </button>
                           <button
                             onClick={() => educator?.user_id && startVideoCall(educator.user_id, educatorName)}
                             title="Video call"
                             style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 10,
-                              background: 'transparent',
+                              width: 44,
+                              height: 44,
+                              borderRadius: 22,
+                              background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
                               border: 'none',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               cursor: 'pointer',
-                              color: '#e2e8f0',
                               padding: 0,
+                              boxShadow: '0 3px 10px rgba(59, 130, 246, 0.35)',
+                              transition: 'transform 0.2s ease',
                             }}
+                            className="active:scale-95"
                           >
-                            <Video size={18} />
+                            <Video size={18} color="white" />
                           </button>
                         </>
                       )}
@@ -2556,6 +2561,43 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         currentUserRole={profile?.role || undefined}
         preschoolId={profile?.preschoolId}
       />
+      
+      {/* Quick Call Modal */}
+      <QuickCallModal
+        isOpen={quickCallModalOpen}
+        onClose={() => setQuickCallModalOpen(false)}
+        onVoiceCall={(userId, userName) => startVoiceCall(userId, userName)}
+        onVideoCall={(userId, userName) => startVideoCall(userId, userName)}
+        currentUserId={userId}
+        preschoolId={profile?.preschoolId}
+      />
+      
+      {/* Quick Call FAB - Shows on mobile when no conversation is selected */}
+      {!isDesktop && !currentThread && (
+        <button
+          onClick={() => setQuickCallModalOpen(true)}
+          style={{
+            position: 'fixed',
+            bottom: 'calc(150px + env(safe-area-inset-bottom))',
+            right: 16,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(34, 197, 94, 0.5), 0 0 30px rgba(34, 197, 94, 0.3)',
+            zIndex: 998,
+            transition: 'transform 0.2s ease',
+          }}
+          className="active:scale-95"
+        >
+          <Phone size={24} color="white" />
+        </button>
+      )}
     </ParentShell>
   );
 }
