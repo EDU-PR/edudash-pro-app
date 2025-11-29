@@ -5,8 +5,8 @@
 This document outlines a detailed plan to refactor the teacher and parent dashboard components from monolithic files into modular structures, following WARP.md standards.
 
 **Date Created:** November 2024
-**Status:** Planning Phase
-**Target:** No code changes - structural documentation only
+**Status:** In Progress - Parent Dashboard Hooks Completed ✅
+**Target:** Modularize monolithic files into smaller, maintainable modules
 
 ---
 
@@ -24,9 +24,29 @@ Per project repository custom instructions (defined in `.github/instructions/*.i
 
 ---
 
+## Completed Refactoring ✅
+
+### Parent Dashboard Hooks (Phase 1 - COMPLETE)
+
+#### useParentMessaging.ts (320 → 78 lines) ✅
+**Refactored into:**
+- `types/messagingTypes.ts` (79 lines) - Type definitions
+- `useMessageThreads.ts` (94 lines) - Thread fetching
+- `useMessageMutations.ts` (124 lines) - Send/create operations
+- `useParentMessaging.ts` (78 lines) - Re-exports + useThreadMessages
+
+#### useChildrenData.ts (301 → 129 lines) ✅
+**Refactored into:**
+- `types/childTypes.ts` (42 lines) - Type definitions
+- `useStudentSubscription.ts` (81 lines) - Real-time subscription
+- `lib/utils/childCardBuilder.ts` (60 lines) - Card builder utility
+- `useChildrenData.ts` (129 lines) - Main hook (simplified)
+
+---
+
 ## Current State Analysis
 
-### Files Exceeding Limits
+### Files Exceeding Limits (Still to do)
 
 #### Components (≤400 lines limit)
 
@@ -36,19 +56,22 @@ Per project repository custom instructions (defined in `.github/instructions/*.i
 | `web/src/components/dashboard/teacher/TeacherShell.tsx` | 487 | 87 lines |
 | `web/src/components/dashboard/teacher/ParentContactsWidget.tsx` | 460 | 60 lines |
 
-#### Hooks (≤200 lines limit)
+#### Hooks (≤200 lines limit) - Low Priority
 
 | File | Current Lines | Over Limit By |
 |------|---------------|---------------|
-| `web/src/lib/hooks/parent/useParentMessaging.ts` | 320 | 120 lines |
-| `web/src/lib/hooks/parent/useChildrenData.ts` | 301 | 101 lines |
 | `web/src/lib/hooks/teacher/useTeacherUnreadMessages.ts` | 213 | 13 lines |
 | `web/src/lib/hooks/parent/useUnreadMessages.ts` | 211 | 11 lines |
 
-### Files Within Limits (No Changes Required)
+### Files Now Within Limits ✅
 
 | File | Current Lines | Status |
 |------|---------------|--------|
+| `web/src/lib/hooks/parent/useParentMessaging.ts` | 78 | ✅ Refactored |
+| `web/src/lib/hooks/parent/useChildrenData.ts` | 129 | ✅ Refactored |
+| `web/src/lib/hooks/parent/useMessageThreads.ts` | 94 | ✅ New |
+| `web/src/lib/hooks/parent/useMessageMutations.ts` | 124 | ✅ New |
+| `web/src/lib/hooks/parent/useStudentSubscription.ts` | 81 | ✅ New |
 | `web/src/app/dashboard/teacher/page.tsx` | 263 | ✓ Within limit |
 | `web/src/app/dashboard/parent/page.tsx` | 397 | ✓ Within limit |
 | `web/src/components/dashboard/parent/ParentShell.tsx` | 384 | ✓ Within limit |
