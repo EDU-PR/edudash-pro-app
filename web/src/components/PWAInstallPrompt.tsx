@@ -424,10 +424,10 @@ export function PWAInstallPrompt() {
                 : 'Get notifications & quick access'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ">
             <button
               onClick={handleInstallClick}
-              className="px-5 py-2.5 bg-white text-violet-700 font-bold rounded-xl hover:bg-violet-100 transition-colors text-sm whitespace-nowrap shadow-lg shadow-black/20 border-2 border-white/50"
+              className="px-5 py-2.5 bg-white text-white-700 font-bold rounded-xl hover:bg-violet-100 transition-colors text-sm whitespace-nowrap shadow-lg shadow-black/20 border-2 border-white/50"
             >
               {deferredPrompt ? 'Install' : 'How'}
             </button>
@@ -436,7 +436,7 @@ export function PWAInstallPrompt() {
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
               aria-label="Dismiss"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-red-200" />
             </button>
           </div>
         </div>
