@@ -7,6 +7,7 @@ import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { Bell, CheckCheck, Trash2, AlertCircle, Info, CheckCircle, XCircle, MessageCircle } from 'lucide-react';
+import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 
 interface Notification {
   id: string;
@@ -181,7 +182,7 @@ export default function TeacherNotificationsPage() {
                       {notification.title}
                     </h4>
                     <p style={{ color: 'var(--textMuted)', fontSize: 14, lineHeight: 1.5 }}>
-                      {notification.message}
+                      {getMessageDisplayText(notification.message)}
                     </p>
                     <p style={{ color: 'var(--textLight)', fontSize: 12, marginTop: 8 }}>
                       {new Date(notification.created_at).toLocaleString()}

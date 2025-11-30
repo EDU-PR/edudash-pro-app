@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { Bell, CheckCheck, Trash2, AlertCircle, Info, CheckCircle, XCircle } from 'lucide-react';
+import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 
 interface Notification {
   id: string;
@@ -165,7 +166,7 @@ export default function NotificationsPage() {
                       {notification.title}
                     </h4>
                     <p style={{ color: 'var(--textMuted)', fontSize: 14, lineHeight: 1.5 }}>
-                      {notification.message}
+                      {getMessageDisplayText(notification.message)}
                     </p>
                     <p style={{ color: 'var(--textLight)', fontSize: 12, marginTop: 8 }}>
                       {new Date(notification.created_at).toLocaleString()}
