@@ -76,10 +76,7 @@ export default function RootLayout({
         <PWAInstallPrompt />
         <PWAUpdateChecker />
         <DeploymentNotificationProvider />
-        <NativeAppManager 
-          lockOrientationOnMount={true}
-          enableSounds={true}
-        />
+        <NativeAppManager enableSounds={true} />
         <CallProviderWrapper>
           <ErrorBoundary>{children}</ErrorBoundary>
         </CallProviderWrapper>

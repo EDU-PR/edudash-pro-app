@@ -83,32 +83,16 @@ export function useOrientationLock(
     }
 
     // Check for user preference in storage
+    // NOTE: Orientation lock only works in fullscreen mode on most browsers
+    // So we don't auto-lock - we just track the state for when fullscreen is entered
     try {
       const userPref = localStorage.getItem('orientation-lock-preference');
       if (userPref) {
         setIsUserPreference(true);
-        const { locked, orientation } = JSON.parse(userPref);
-        if (locked && supported) {
-          // Apply user's saved preference
-          (window.screen.orientation as any).lock(orientation).catch(() => {
-            // Lock failed, reset preference
-            try {
-              localStorage.removeItem('orientation-lock-preference');
-            } catch {
-              // Storage access failed, ignore
-            }
-            setIsUserPreference(false);
-          });
-          setIsLocked(locked);
-        }
-      } else if (supported) {
-        // Apply default lock (portrait)
-        (window.screen.orientation as any).lock(defaultOrientation).then(() => {
-          setIsLocked(true);
-        }).catch(() => {
-          // Lock not supported in current context (not fullscreen, etc.)
-          setIsLocked(false);
-        });
+        const { locked } = JSON.parse(userPref);
+        // Just track the preference state, don't try to lock
+        // Locking will fail unless in fullscreen mode
+        setIsLocked(locked);
       }
     } catch {
       // localStorage access failed (private mode, etc.), continue without preferences
