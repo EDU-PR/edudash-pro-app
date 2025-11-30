@@ -315,11 +315,19 @@ export const DailyCallInterface = ({
       }
       console.log('[P2P Call] Token received');
 
-      // Create Daily call object
+      // Create Daily call object with noise and echo cancellation
       const callObject = DailyIframe.createCallObject({
         audioSource: true,
         videoSource: initialCallType === 'video',
         allowMultipleCallInstances: true,
+        dailyConfig: {
+          // Audio constraints for noise suppression, echo cancellation, auto gain
+          userMediaAudioConstraints: {
+            echoCancellation: { ideal: true },
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
+          },
+        },
       });
 
       callObjectRef.current = callObject;

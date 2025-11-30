@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles, TrendingUp } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import Image from 'next/image';
 
 interface PWASplashScreenProps {
   onComplete?: () => void;
@@ -128,12 +129,12 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
             animation: step >= 2 ? 'spin-slow 25s linear infinite reverse' : 'none'
           }} />
           
-          {/* Logo circle */}
+          {/* Logo circle with actual app icon */}
           <div style={{
             width: '140px',
             height: '140px',
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #ec4899 100%)',
+            overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -141,9 +142,16 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
             transform: step >= 1 ? 'scale(1)' : 'scale(0.3)',
             opacity: step >= 1 ? 1 : 0,
             transition: 'all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            animation: step >= 1 ? 'float-gentle 4s ease-in-out infinite, rotate-slow 30s linear infinite' : 'none'
+            animation: step >= 1 ? 'float-gentle 4s ease-in-out infinite' : 'none'
           }}>
-            <TrendingUp size={64} color="white" strokeWidth={2.5} />
+            <Image 
+              src="/icon-192.png" 
+              alt="EduDash Pro" 
+              width={140} 
+              height={140}
+              priority
+              style={{ objectFit: 'cover' }}
+            />
           </div>
 
           {/* Sparkle effect */}
@@ -179,7 +187,7 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
             backgroundClip: 'text',
             letterSpacing: '-0.02em'
           }}>
-            Young Eagles
+            EduDash Pro
           </h1>
           <p style={{
             fontSize: '16px',
@@ -187,7 +195,7 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
             fontWeight: 500,
             letterSpacing: '0.05em'
           }}>
-            Educational Excellence Platform
+            AI-Powered Educational Platform
           </p>
         </div>
       </div>
