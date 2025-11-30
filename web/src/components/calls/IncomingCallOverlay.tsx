@@ -26,17 +26,18 @@ export function IncomingCallOverlay({
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const hasUserInteractionRef = useRef(false);
 
-  // Initialize audio with user gesture fallback
+  // Initialize audio with user gesture fallback - using a proper phone ring sound
   const initializeAudio = useCallback(() => {
     if (ringtoneRef.current) return;
     
     try {
-      const audio = new Audio('/sounds/ringtone.mp3');
+      // Use the longer ringback_old.mp3 as it's a proper phone ring sound (313KB vs 13KB)
+      const audio = new Audio('/sounds/ringback_old.mp3');
       audio.loop = true;
       audio.volume = 1.0; // Maximum volume
       audio.preload = 'auto';
       ringtoneRef.current = audio;
-      console.log('[IncomingCall] Ringtone audio initialized at max volume');
+      console.log('[IncomingCall] Ringtone audio initialized with proper phone ring sound');
     } catch (err) {
       console.warn('[IncomingCall] Failed to initialize audio:', err);
     }

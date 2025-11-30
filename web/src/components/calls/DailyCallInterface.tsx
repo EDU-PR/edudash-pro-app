@@ -148,19 +148,37 @@ export const DailyCallInterface = ({
     };
   }, [currentCallId, isIncoming, supabase]);
 
-  // Play/stop ringback tone when ringing
+  // Play/stop ringback tone when ringing (caller hears this while waiting for answer)
   useEffect(() => {
-    if (callState === 'ringing' && !isIncoming) {
+    if ((callState === 'ringing' || callState === 'connecting') && !isIncoming) {
+      // Use the longer ringback sound for better experience
       if (!ringbackAudioRef.current) {
-        ringbackAudioRef.current = new Audio('/sounds/ringback.mp3');
+        ringbackAudioRef.current = new Audio('/sounds/ringback_old.mp3');
         ringbackAudioRef.current.loop = true;
-        ringbackAudioRef.current.volume = 0.5;
+        ringbackAudioRef.current.volume = 0.8; // Louder ringback
+        ringbackAudioRef.current.preload = 'auto';
       }
-      ringbackAudioRef.current.play().catch(console.warn);
+      
+      // Play ringback - this is what the caller hears
+      const playRingback = async () => {
+        try {
+          ringbackAudioRef.current!.currentTime = 0;
+          await ringbackAudioRef.current!.play();
+          console.log('[P2P Call] Ringback tone playing');
+        } catch (err) {
+          console.warn('[P2P Call] Ringback autoplay blocked, will retry:', err);
+          // Retry after a short delay
+          setTimeout(() => {
+            ringbackAudioRef.current?.play().catch(() => {});
+          }, 500);
+        }
+      };
+      playRingback();
     } else {
       if (ringbackAudioRef.current) {
         ringbackAudioRef.current.pause();
         ringbackAudioRef.current.currentTime = 0;
+        console.log('[P2P Call] Ringback tone stopped');
       }
     }
 
@@ -898,6 +916,22 @@ export const DailyCallInterface = ({
     }
   }, [isScreenSharing]);
 
+  // Toggle speaker (loudspeaker mode)
+  const toggleSpeaker = useCallback(() => {
+    const newSpeakerState = !isSpeakerEnabled;
+    setIsSpeakerEnabled(newSpeakerState);
+    
+    // Update audio element volume - loudspeaker mode increases volume
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0.6;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.volume = newSpeakerState ? 1.0 : 0.6;
+    }
+    
+    console.log('[P2P Call] Speaker mode:', newSpeakerState ? 'ON (loudspeaker)' : 'OFF (earpiece)');
+  }, [isSpeakerEnabled]);
+
   // Start call when opened (for outgoing calls)
   useEffect(() => {
     if (isOpen && callState === 'idle') {
@@ -1332,6 +1366,26 @@ export const DailyCallInterface = ({
           flexWrap: 'wrap',
         }}
       >
+        {/* Speaker/Loudspeaker toggle - especially useful for voice calls */}
+        <button
+          onClick={toggleSpeaker}
+          style={{
+            width: 'clamp(48px, 12vw, 56px)',
+            height: 'clamp(48px, 12vw, 56px)',
+            borderRadius: 28,
+            background: isSpeakerEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+            border: isSpeakerEnabled ? '2px solid rgba(34, 197, 94, 0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          title={isSpeakerEnabled ? 'Speaker On' : 'Speaker Off'}
+        >
+          {isSpeakerEnabled ? <Volume2 size={22} color="#22c55e" /> : <VolumeX size={22} color="white" />}
+        </button>
+
         {/* Mute */}
         <button
           onClick={toggleAudio}
