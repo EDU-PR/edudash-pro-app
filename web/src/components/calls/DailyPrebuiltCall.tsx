@@ -143,7 +143,7 @@ export function DailyPrebuiltCall({
   // Initialize Daily Prebuilt
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
+    const timeoutId: { current: NodeJS.Timeout | null } = { current: null };
 
     const initializePrebuilt = async () => {
       setIsJoining(true);
@@ -168,7 +168,7 @@ export function DailyPrebuiltCall({
         setIframeSrcSet(true);
         
         // Set a timeout in case the iframe never loads
-        timeoutId = setTimeout(() => {
+        timeoutId.current = setTimeout(() => {
           if (isMounted && !frameLoaded) {
             console.error('[DailyPrebuiltCall] Iframe load timeout - iframe may be blocked or URL invalid');
             setLocalError('Video call failed to load. Please check your connection and try again.');
@@ -186,7 +186,7 @@ export function DailyPrebuiltCall({
 
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId.current) clearTimeout(timeoutId.current);
     };
   }, [buildPrebuiltUrl, frameLoaded, roomUrl]);
 

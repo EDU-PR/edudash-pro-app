@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Bell, X, CheckCircle2, Clock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -186,12 +187,12 @@ export default function RegistrationNotifications() {
             {/* Footer */}
             {notifications.length > 0 && (
               <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-                <a
+                <Link
                   href="/admin/registrations"
                   className="block text-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                 >
                   View All Registrations →
-                </a>
+                </Link>
               </div>
             )}
           </div>

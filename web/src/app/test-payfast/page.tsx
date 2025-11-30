@@ -47,6 +47,7 @@ export default function TestPayFastSignature() {
     setParamString(params);
     
     // Generate signature WITHOUT passphrase (sandbox mode)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const crypto = require('crypto');
     const sig = crypto.createHash('md5').update(params).digest('hex');
     setSignature(sig);

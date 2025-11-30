@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // Dynamic import for web-push to handle server-side only
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let webpush: any;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   webpush = require('web-push');
 } catch (e) {
   console.warn('web-push not available');

@@ -46,7 +46,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     let mounted = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
 
     // Add a small delay to prevent rapid successive calls
     const fetchSubscriptionData = async () => {
@@ -198,11 +198,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     };
 
     // Throttle to prevent excessive calls
-    timeoutId = setTimeout(fetchSubscriptionData, 100);
+    timeoutRef.current = setTimeout(fetchSubscriptionData, 100);
 
     return () => {
       mounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [refreshTrigger]); // Add refreshTrigger as dependency
 
