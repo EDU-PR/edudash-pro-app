@@ -4,7 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { 
   Video, Clock, Users, Play, Loader2, X, Sparkles, Radio, Calendar, Bell, 
-  Settings, MessageSquare, Monitor, Lock, Unlock, Mic, ChevronDown, ChevronUp
+  Settings, MessageSquare, Monitor, Lock, Unlock, Mic, ChevronDown, ChevronUp,
+  Camera, CameraOff, MicOff, Hand, Wifi, Globe, Subtitles, Image, PictureInPicture,
+  Shield, Eye, Volume2, Smile, Languages
 } from 'lucide-react';
 import { DailyPrebuiltCall } from './DailyPrebuiltCall';
 import { DailyPrebuiltProvider } from './DailyPrebuiltProvider';
@@ -76,10 +78,38 @@ function StartLiveLessonPrebuiltInner({
 
   // Advanced room options (like Daily dashboard)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [enableRecording, setEnableRecording] = useState(true);
-  const [enableScreenShare, setEnableScreenShare] = useState(true);
-  const [enableChat, setEnableChat] = useState(true);
+  
+  // Privacy & Access
   const [isPrivateRoom, setIsPrivateRoom] = useState(true);
+  const [enableKnocking, setEnableKnocking] = useState(true);
+  const [enablePrejoinUI, setEnablePrejoinUI] = useState(true);
+  
+  // Audio/Video Settings
+  const [camerasOnStart, setCamerasOnStart] = useState(true);
+  const [microphonesOnStart, setMicrophonesOnStart] = useState(false);
+  
+  // Features
+  const [enableScreenShare, setEnableScreenShare] = useState(true);
+  const [enableBreakoutRooms, setEnableBreakoutRooms] = useState(false);
+  const [chatMode, setChatMode] = useState<'off' | 'basic' | 'advanced'>('advanced');
+  const [enableEmojiReactions, setEnableEmojiReactions] = useState(true);
+  
+  // UI Features
+  const [enablePeopleUI, setEnablePeopleUI] = useState(true);
+  const [enableBackgroundEffects, setEnableBackgroundEffects] = useState(true);
+  const [enablePictureInPicture, setEnablePictureInPicture] = useState(true);
+  const [enableHandRaising, setEnableHandRaising] = useState(true);
+  const [enableNetworkUI, setEnableNetworkUI] = useState(true);
+  const [enableNoiseCancellation, setEnableNoiseCancellation] = useState(true);
+  const [enableLiveCaptions, setEnableLiveCaptions] = useState(false);
+  
+  // Recording
+  const [recordingMode, setRecordingMode] = useState<'off' | 'local' | 'cloud'>('off');
+  
+  // Language
+  const [roomLanguage, setRoomLanguage] = useState('en');
+  
+  // Max participants
   const [maxParticipants, setMaxParticipants] = useState(50);
 
   // Get time limit based on tier
@@ -271,17 +301,40 @@ function StartLiveLessonPrebuiltInner({
 
     try {
       // Recording requires premium tier or higher
-      const canRecord = !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && enableRecording;
+      const canRecord = !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && recordingMode !== 'off';
       
       const room = await createRoom({
         name: lessonTitle,
         classId: selectedClass,
         preschoolId,
         maxParticipants,
-        enableRecording: canRecord,
-        enableScreenShare,
-        enableChat,
+        // Privacy & Access
         isPrivate: isPrivateRoom,
+        enableKnocking,
+        enablePrejoinUI,
+        // Audio/Video
+        camerasOnStart,
+        microphonesOnStart,
+        // Features
+        enableScreenShare,
+        enableBreakoutRooms,
+        enableChat: chatMode !== 'off',
+        enableAdvancedChat: chatMode === 'advanced',
+        enableEmojiReactions,
+        // UI Features
+        enablePeopleUI,
+        enableBackgroundEffects,
+        enablePictureInPicture,
+        enableHandRaising,
+        enableNetworkUI,
+        enableNoiseCancellation,
+        enableLiveCaptions,
+        // Recording
+        enableRecording: canRecord,
+        recordingMode: canRecord ? recordingMode : 'off',
+        // Language
+        language: roomLanguage,
+        // Duration
         expiryMinutes: effectiveDuration,
       });
 
@@ -1170,31 +1223,32 @@ function StartLiveLessonPrebuiltInner({
                     background: '#27272a',
                     borderRadius: 12,
                     border: '1px solid #3f3f46',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
                   }}
                 >
+                  {/* PRIVACY & ACCESS SECTION */}
                   <p style={{ margin: '0 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Room Features
+                    Privacy & Access
                   </p>
                   
-                  {/* Recording Toggle */}
+                  {/* Privacy Toggle */}
                   <label
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 10,
-                      cursor: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 'not-allowed' : 'pointer',
+                      cursor: 'pointer',
                       padding: '10px 12px',
-                      background: enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      background: isPrivateRoom ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
                       borderRadius: 8,
                       marginBottom: 8,
-                      opacity: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 0.5 : 1,
                     }}
                   >
                     <input
                       type="checkbox"
-                      checked={enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase())}
-                      onChange={(e) => setEnableRecording(e.target.checked)}
-                      disabled={['free', 'starter'].includes(subscriptionTier.toLowerCase())}
+                      checked={isPrivateRoom}
+                      onChange={(e) => setIsPrivateRoom(e.target.checked)}
                       style={{ display: 'none' }}
                     />
                     <div
@@ -1202,29 +1256,213 @@ function StartLiveLessonPrebuiltInner({
                         width: 20,
                         height: 20,
                         borderRadius: 5,
-                        background: enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? '#7c3aed' : 'transparent',
-                        border: `2px solid ${enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? '#7c3aed' : '#52525b'}`,
+                        background: isPrivateRoom ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${isPrivateRoom ? '#7c3aed' : '#52525b'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}
                     >
-                      {enableRecording && !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && (
-                        <Mic style={{ width: 10, height: 10, color: 'white' }} />
+                      {isPrivateRoom ? (
+                        <Lock style={{ width: 10, height: 10, color: 'white' }} />
+                      ) : (
+                        <Unlock style={{ width: 10, height: 10, color: 'white' }} />
                       )}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Enable Recording</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>{isPrivateRoom ? 'Private' : 'Public'}</span>
                       <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
-                        {['free', 'starter'].includes(subscriptionTier.toLowerCase()) 
-                          ? 'Requires Premium plan or higher'
-                          : 'Cloud recording of the session'}
+                        {isPrivateRoom ? 'Requires a token to join' : 'Anyone with the link can join'}
                       </p>
                     </div>
                   </label>
 
-                  {/* Screen Share Toggle */}
+                  {/* Prejoin UI Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enablePrejoinUI ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enablePrejoinUI}
+                      onChange={(e) => setEnablePrejoinUI(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enablePrejoinUI ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enablePrejoinUI ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enablePrejoinUI && <Eye style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Prejoin UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Configure camera/mic before joining</p>
+                    </div>
+                  </label>
+
+                  {/* Knocking Toggle (for private rooms) */}
+                  {isPrivateRoom && (
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        cursor: 'pointer',
+                        padding: '10px 12px',
+                        background: enableKnocking ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                        borderRadius: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={enableKnocking}
+                        onChange={(e) => setEnableKnocking(e.target.checked)}
+                        style={{ display: 'none' }}
+                      />
+                      <div
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 5,
+                          background: enableKnocking ? '#7c3aed' : 'transparent',
+                          border: `2px solid ${enableKnocking ? '#7c3aed' : '#52525b'}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {enableKnocking && <Shield style={{ width: 10, height: 10, color: 'white' }} />}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Knocking</span>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Users can request access to join</p>
+                      </div>
+                    </label>
+                  )}
+
+                  {/* AUDIO/VIDEO ON START */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Audio/Video on Start
+                  </p>
+
+                  {/* Cameras on Start */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: camerasOnStart ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={camerasOnStart}
+                      onChange={(e) => setCamerasOnStart(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: camerasOnStart ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${camerasOnStart ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {camerasOnStart ? (
+                        <Camera style={{ width: 10, height: 10, color: 'white' }} />
+                      ) : (
+                        <CameraOff style={{ width: 10, height: 10, color: '#52525b' }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Cameras on Start</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
+                        Cameras will be {camerasOnStart ? 'on' : 'off'} when joining
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Microphones on Start */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: microphonesOnStart ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={microphonesOnStart}
+                      onChange={(e) => setMicrophonesOnStart(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: microphonesOnStart ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${microphonesOnStart ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {microphonesOnStart ? (
+                        <Mic style={{ width: 10, height: 10, color: 'white' }} />
+                      ) : (
+                        <MicOff style={{ width: 10, height: 10, color: '#52525b' }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Microphones on Start</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
+                        Microphones will be {microphonesOnStart ? 'on' : 'off'} when joining
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* FEATURES SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Features
+                  </p>
+
+                  {/* Screen Sharing Toggle */}
                   <label
                     style={{
                       display: 'flex',
@@ -1260,11 +1498,11 @@ function StartLiveLessonPrebuiltInner({
                     </div>
                     <div style={{ flex: 1 }}>
                       <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Screen Sharing</span>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Allow sharing your screen</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Participants can share their screens</p>
                     </div>
                   </label>
 
-                  {/* Chat Toggle */}
+                  {/* Breakout Rooms (Beta) */}
                   <label
                     style={{
                       display: 'flex',
@@ -1272,15 +1510,15 @@ function StartLiveLessonPrebuiltInner({
                       gap: 10,
                       cursor: 'pointer',
                       padding: '10px 12px',
-                      background: enableChat ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      background: enableBreakoutRooms ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
                       borderRadius: 8,
                       marginBottom: 8,
                     }}
                   >
                     <input
                       type="checkbox"
-                      checked={enableChat}
-                      onChange={(e) => setEnableChat(e.target.checked)}
+                      checked={enableBreakoutRooms}
+                      onChange={(e) => setEnableBreakoutRooms(e.target.checked)}
                       style={{ display: 'none' }}
                     />
                     <div
@@ -1288,23 +1526,60 @@ function StartLiveLessonPrebuiltInner({
                         width: 20,
                         height: 20,
                         borderRadius: 5,
-                        background: enableChat ? '#7c3aed' : 'transparent',
-                        border: `2px solid ${enableChat ? '#7c3aed' : '#52525b'}`,
+                        background: enableBreakoutRooms ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableBreakoutRooms ? '#7c3aed' : '#52525b'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}
                     >
-                      {enableChat && <MessageSquare style={{ width: 10, height: 10, color: 'white' }} />}
+                      {enableBreakoutRooms && <Users style={{ width: 10, height: 10, color: 'white' }} />}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>In-call Chat</span>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Enable text messaging</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Breakout Rooms</span>
+                        <span style={{ fontSize: 9, padding: '2px 6px', background: '#7c3aed', borderRadius: 4, color: 'white', fontWeight: 600 }}>BETA</span>
+                      </div>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Create smaller private groups</p>
                     </div>
                   </label>
 
-                  {/* Private Room Toggle */}
+                  {/* Text Chat Mode */}
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#fafafa', marginBottom: 6 }}>
+                      Text Chat
+                    </label>
+                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#71717a' }}>Advanced chat includes emoji picker, reactions, and Giphy</p>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[
+                        { value: 'off', label: 'Off' },
+                        { value: 'basic', label: 'Basic' },
+                        { value: 'advanced', label: 'Advanced' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setChatMode(opt.value as 'off' | 'basic' | 'advanced')}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            border: `2px solid ${chatMode === opt.value ? '#7c3aed' : '#3f3f46'}`,
+                            borderRadius: 8,
+                            background: chatMode === opt.value ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: chatMode === opt.value ? '#a78bfa' : '#a1a1aa',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Emoji Reactions */}
                   <label
                     style={{
                       display: 'flex',
@@ -1312,15 +1587,15 @@ function StartLiveLessonPrebuiltInner({
                       gap: 10,
                       cursor: 'pointer',
                       padding: '10px 12px',
-                      background: isPrivateRoom ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      background: enableEmojiReactions ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
                       borderRadius: 8,
-                      marginBottom: 12,
+                      marginBottom: 8,
                     }}
                   >
                     <input
                       type="checkbox"
-                      checked={isPrivateRoom}
-                      onChange={(e) => setIsPrivateRoom(e.target.checked)}
+                      checked={enableEmojiReactions}
+                      onChange={(e) => setEnableEmojiReactions(e.target.checked)}
                       style={{ display: 'none' }}
                     />
                     <div
@@ -1328,64 +1603,411 @@ function StartLiveLessonPrebuiltInner({
                         width: 20,
                         height: 20,
                         borderRadius: 5,
-                        background: isPrivateRoom ? '#7c3aed' : 'transparent',
-                        border: `2px solid ${isPrivateRoom ? '#7c3aed' : '#52525b'}`,
+                        background: enableEmojiReactions ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableEmojiReactions ? '#7c3aed' : '#52525b'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}
                     >
-                      {isPrivateRoom ? (
-                        <Lock style={{ width: 10, height: 10, color: 'white' }} />
-                      ) : (
-                        <Unlock style={{ width: 10, height: 10, color: '#52525b' }} />
-                      )}
+                      {enableEmojiReactions && <Smile style={{ width: 10, height: 10, color: 'white' }} />}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Private Room</span>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
-                        {isPrivateRoom ? 'Only invited participants can join' : 'Anyone with link can join'}
-                      </p>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Emoji Reactions</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Send emojis for non-verbal feedback</p>
                     </div>
                   </label>
 
-                  {/* Max Participants */}
-                  <div>
-                    <label
+                  {/* UI FEATURES SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    UI Features
+                  </p>
+
+                  {/* People UI */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enablePeopleUI ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enablePeopleUI}
+                      onChange={(e) => setEnablePeopleUI(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
                       style={{
-                        display: 'block',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: '#71717a',
-                        marginBottom: 6,
-                        textTransform: 'uppercase',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enablePeopleUI ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enablePeopleUI ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
                       }}
                     >
-                      Max Participants
-                    </label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {[10, 25, 50, 100].map((num) => (
+                      {enablePeopleUI && <Users style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>People UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>View list of all participants</p>
+                    </div>
+                  </label>
+
+                  {/* Background Effects */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableBackgroundEffects ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableBackgroundEffects}
+                      onChange={(e) => setEnableBackgroundEffects(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableBackgroundEffects ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableBackgroundEffects ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableBackgroundEffects && <Image style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Background Effects</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Enable virtual backgrounds</p>
+                    </div>
+                  </label>
+
+                  {/* Picture in Picture */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enablePictureInPicture ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enablePictureInPicture}
+                      onChange={(e) => setEnablePictureInPicture(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enablePictureInPicture ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enablePictureInPicture ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enablePictureInPicture && <PictureInPicture style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Picture in Picture UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Always on top floating view</p>
+                    </div>
+                  </label>
+
+                  {/* Hand Raising */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableHandRaising ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableHandRaising}
+                      onChange={(e) => setEnableHandRaising(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableHandRaising ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableHandRaising ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableHandRaising && <Hand style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Hand Raising</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Request to speak during meeting</p>
+                    </div>
+                  </label>
+
+                  {/* Network UI */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableNetworkUI ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableNetworkUI}
+                      onChange={(e) => setEnableNetworkUI(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableNetworkUI ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableNetworkUI ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableNetworkUI && <Wifi style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Network UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>View network stats during call</p>
+                    </div>
+                  </label>
+
+                  {/* Noise Cancellation */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableNoiseCancellation ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableNoiseCancellation}
+                      onChange={(e) => setEnableNoiseCancellation(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableNoiseCancellation ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableNoiseCancellation ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableNoiseCancellation && <Volume2 style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Noise Cancellation UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Enable noise cancellation controls</p>
+                    </div>
+                  </label>
+
+                  {/* Live Captions */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: enableLiveCaptions ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={enableLiveCaptions}
+                      onChange={(e) => setEnableLiveCaptions(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: enableLiveCaptions ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${enableLiveCaptions ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {enableLiveCaptions && <Subtitles style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Live Captions UI</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>Show live captions (requires transcription)</p>
+                    </div>
+                  </label>
+
+                  {/* RECORDING SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Recording
+                  </p>
+
+                  {/* Recording Mode */}
+                  <div style={{ marginBottom: 8 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#71717a' }}>
+                      {['free', 'starter'].includes(subscriptionTier.toLowerCase()) 
+                        ? 'Recording requires Premium plan or higher'
+                        : 'Any participant can start recording'}
+                    </p>
+                    <div style={{ display: 'flex', gap: 6, opacity: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 0.5 : 1 }}>
+                      {[
+                        { value: 'off', label: 'Off' },
+                        { value: 'local', label: 'Local' },
+                        { value: 'cloud', label: 'Cloud' },
+                      ].map((opt) => (
                         <button
-                          key={num}
+                          key={opt.value}
                           type="button"
-                          onClick={() => setMaxParticipants(num)}
+                          onClick={() => !['free', 'starter'].includes(subscriptionTier.toLowerCase()) && setRecordingMode(opt.value as 'off' | 'local' | 'cloud')}
+                          disabled={['free', 'starter'].includes(subscriptionTier.toLowerCase())}
                           style={{
                             flex: 1,
                             padding: '8px 10px',
-                            border: `2px solid ${maxParticipants === num ? '#7c3aed' : '#3f3f46'}`,
+                            border: `2px solid ${recordingMode === opt.value ? '#7c3aed' : '#3f3f46'}`,
                             borderRadius: 8,
-                            background: maxParticipants === num ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
+                            background: recordingMode === opt.value ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
                             fontSize: 12,
                             fontWeight: 600,
-                            color: maxParticipants === num ? '#a78bfa' : '#a1a1aa',
-                            cursor: 'pointer',
+                            color: recordingMode === opt.value ? '#a78bfa' : '#a1a1aa',
+                            cursor: ['free', 'starter'].includes(subscriptionTier.toLowerCase()) ? 'not-allowed' : 'pointer',
                           }}
                         >
-                          {num}
+                          {opt.label}
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* LANGUAGE SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Language
+                  </p>
+
+                  {/* Language Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <Languages style={{ width: 18, height: 18, color: '#7c3aed' }} />
+                    <select
+                      value={roomLanguage}
+                      onChange={(e) => setRoomLanguage(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        border: '2px solid #3f3f46',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        background: '#1a1a2e',
+                        color: '#fafafa',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="en">English (default)</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                      <option value="de">German</option>
+                      <option value="pt">Portuguese</option>
+                      <option value="it">Italian</option>
+                      <option value="ja">Japanese</option>
+                      <option value="ko">Korean</option>
+                      <option value="zh">Chinese</option>
+                      <option value="ar">Arabic</option>
+                      <option value="hi">Hindi</option>
+                      <option value="nl">Dutch</option>
+                    </select>
+                  </div>
+
+                  {/* MAX PARTICIPANTS */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Max Participants
+                  </p>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[10, 25, 50, 100].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setMaxParticipants(num)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 10px',
+                          border: `2px solid ${maxParticipants === num ? '#7c3aed' : '#3f3f46'}`,
+                          borderRadius: 8,
+                          background: maxParticipants === num ? 'rgba(124, 58, 237, 0.2)' : 'transparent',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: maxParticipants === num ? '#a78bfa' : '#a1a1aa',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {num}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
