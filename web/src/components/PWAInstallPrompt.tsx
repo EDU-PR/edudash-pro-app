@@ -46,11 +46,14 @@ function detectDevice(): DeviceInfo {
   // Browser detection
   let browser: BrowserType = 'other';
   if (/edg/.test(ua)) browser = 'edge';
-  else if (/opr|opera/.test(ua)) browser = 'opera';
+  else if (/opr|opera|opios/.test(ua)) browser = 'opera';
   else if (/samsungbrowser/.test(ua)) browser = 'samsung';
   else if (/firefox|fxios/.test(ua)) browser = 'firefox';
   else if (/safari/.test(ua) && !/chrome/.test(ua)) browser = 'safari';
   else if (/chrome|crios/.test(ua) || vendor.includes('google')) browser = 'chrome';
+  
+  // Check if Opera Mini (limited PWA support)
+  const isOperaMini = /opera mini/i.test(ua);
 
   // Platform type
   const platform: PlatformType = isIOS ? 'ios' : isAndroid ? 'android' : isMobile ? 'other' : 'desktop';
@@ -68,6 +71,7 @@ function detectDevice(): DeviceInfo {
   const supportsInstall = 'BeforeInstallPromptEvent' in window || 
     (browser === 'chrome' && !isIOS) || 
     (browser === 'edge' && !isIOS) ||
+    (browser === 'opera' && !isIOS && !isOperaMini) ||
     (browser === 'samsung');
 
   return {
@@ -138,8 +142,8 @@ export function PWAInstallPrompt() {
     const fallbackTimer = setTimeout(() => {
       if (!deferredPrompt && !info.supportsInstall) {
         // Only show manual install instructions for browsers that don't support native prompt
-        // This is mainly Safari on iOS
-        if (info.isIOS || (info.browser === 'firefox' && !info.isAndroid)) {
+        // This includes Safari on iOS, Opera Mini, and Firefox on desktop
+        if (info.isIOS || (info.browser === 'firefox' && !info.isAndroid) || info.browser === 'opera') {
           setShowPrompt(true);
         }
       }
@@ -312,6 +316,30 @@ export function PWAInstallPrompt() {
                 <div className="flex items-center gap-3 text-slate-200">
                   <div className="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center text-sm font-bold text-violet-400">2</div>
                   <span>Tap &quot;Add page to&quot; → &quot;Home screen&quot;</span>
+                </div>
+              </div>
+            )}
+
+            {/* Opera / Opera Mini Instructions */}
+            {deviceInfo.browser === 'opera' && (
+              <div className="space-y-3">
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-300 text-sm">
+                  <strong>Note:</strong> Opera Mini has limited PWA support. For the best experience, use Chrome or the standard Opera browser.
+                </div>
+                <div className="flex items-center gap-3 text-slate-200">
+                  <div className="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center text-sm font-bold text-violet-400">1</div>
+                  <div className="flex items-center gap-2">
+                    <span>Tap the menu</span>
+                    <div className="inline-flex items-center justify-center w-7 h-7 bg-slate-700 rounded font-bold">⋮</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-slate-200">
+                  <div className="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center text-sm font-bold text-violet-400">2</div>
+                  <span>Tap &quot;Add to Home screen&quot; or &quot;Add to...&quot;</span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-200">
+                  <div className="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center text-sm font-bold text-violet-400">3</div>
+                  <span>Tap &quot;Add&quot; to confirm</span>
                 </div>
               </div>
             )}

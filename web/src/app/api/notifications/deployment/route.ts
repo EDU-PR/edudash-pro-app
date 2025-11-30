@@ -18,12 +18,16 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const secret = process.env.DEPLOYMENT_WEBHOOK_SECRET;
 
-    if (secret && authHeader !== `Bearer ${secret}`) {
-      console.warn('⚠️  Unauthorized deployment notification attempt');
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    // Only require auth if secret is configured
+    // If no secret is set, allow unauthenticated calls (for local dev)
+    if (secret) {
+      if (!authHeader || authHeader !== `Bearer ${secret}`) {
+        console.warn('⚠️  Unauthorized deployment notification attempt');
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
     }
 
     // Get deployment info from request body

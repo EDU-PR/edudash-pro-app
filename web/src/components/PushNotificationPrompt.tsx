@@ -28,6 +28,12 @@ export function PushNotificationPrompt({ onDismiss }: PushNotificationPromptProp
       return;
     }
 
+    // Check if user has already enabled notifications (permission granted)
+    if (permission === 'granted') {
+      setVisible(false);
+      return;
+    }
+
     // Check if user has dismissed recently (within 7 days)
     const dismissed = localStorage.getItem('push-prompt-dismissed');
     if (dismissed) {
@@ -38,6 +44,13 @@ export function PushNotificationPrompt({ onDismiss }: PushNotificationPromptProp
         return;
       }
     }
+    
+    // Check if user clicked "enable" before (even if subscription failed)
+    const enableClicked = localStorage.getItem('push-enable-clicked');
+    if (enableClicked) {
+      setVisible(false);
+      return;
+    }
 
     // Show prompt after a delay
     const timer = setTimeout(() => setVisible(true), 3000);
@@ -46,10 +59,17 @@ export function PushNotificationPrompt({ onDismiss }: PushNotificationPromptProp
 
   const handleEnable = async () => {
     setSubscribing(true);
+    
+    // Mark that user clicked enable (so we don't show again even if subscription fails)
+    localStorage.setItem('push-enable-clicked', new Date().toISOString());
+    
     const success = await subscribe();
     setSubscribing(false);
     
     if (success) {
+      setVisible(false);
+    } else {
+      // Even if subscription failed, hide the prompt since user attempted
       setVisible(false);
     }
   };
