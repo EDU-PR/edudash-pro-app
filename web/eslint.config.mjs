@@ -10,7 +10,16 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals"),
+  {
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "out/**",
+      "build/**",
+      "docs/archived-code/**",
+    ],
+  },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
       // Allow unused variables that start with underscore
@@ -20,8 +29,6 @@ const eslintConfig = [
       }],
       // Allow any type (with warning)
       "@typescript-eslint/no-explicit-any": "warn",
-      // Allow empty interfaces
-      "@typescript-eslint/no-empty-interface": "off",
       // React specific
       "react/no-unescaped-entities": "off",
       "react-hooks/exhaustive-deps": "warn",

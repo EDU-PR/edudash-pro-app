@@ -124,7 +124,7 @@ export async function subscribeToPush(userId: string): Promise<{ success: boolea
     }
 
     // Ensure service worker is registered and active
-    let registration = await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.ready;
     console.log('[Push] Service worker ready:', registration.active?.state);
 
     // Subscribe to push manager with retry

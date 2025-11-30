@@ -451,7 +451,7 @@ export function exportTextToPDF(text: string, title: string = 'Document'): void 
     }
     
     // Bold text (**text**)
-    let textContent = line.replace(/\\*\\*(.+?)\\*\\*/g, '$1');
+    const textContent = line.replace(/\\*\\*(.+?)\\*\\*/g, '$1');
     const isBold = line.includes('**');
     if (isBold) {
       doc.setFont('helvetica', 'bold');
