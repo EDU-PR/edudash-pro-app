@@ -23,6 +23,7 @@ import {
   X,
   Activity,
   BookMarked,
+  FileText,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -125,6 +126,7 @@ export function TeacherShell({
   const nav = [
     { href: '/dashboard/teacher', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/teacher/classes', label: 'My Classes', icon: Users },
+    { href: '/dashboard/teacher/reports', label: 'Progress Reports', icon: FileText },
     { href: '/dashboard/teacher/assignments', label: 'Assignments', icon: ClipboardCheck },
     { href: '/dashboard/teacher/lessons', label: 'Lesson Plans', icon: BookOpen },
     { href: '/dashboard/teacher/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
