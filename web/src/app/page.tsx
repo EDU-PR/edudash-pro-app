@@ -54,8 +54,8 @@ export default function Home() {
     return (
       <div style={{ minHeight: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🦅</div>
-          <h2 style={{ color: '#00f5ff', fontSize: '20px', fontWeight: 700 }}>Young Eagles</h2>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
+          <h2 style={{ color: '#00f5ff', fontSize: '20px', fontWeight: 700 }}>EduDash Pro</h2>
           <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '8px' }}>Loading...</p>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function Home() {
       {/* Sticky Navigation */}
       <header style={{ position: 'sticky', top: 0, zIndex: 1000, background: 'rgba(10, 10, 15, 0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="brand" style={{fontSize: '18px', fontWeight: 700}}>🦅 Young Eagles</div>
+          <div className="brand" style={{fontSize: '18px', fontWeight: 700}}>📚 EduDash Pro</div>
           
           {/* Mobile Menu Button */}
           <button 
@@ -457,7 +457,7 @@ export default function Home() {
       <footer style={{borderTop: '1px solid var(--border)', background: '#0a0a0f', padding: '48px 24px', textAlign: 'center'}}>
         <div className="container" style={{maxWidth: '1200px'}}>
           <div style={{marginBottom: '24px'}}>
-            <h3 style={{fontSize: '20px', fontWeight: 700, marginBottom: '8px'}}>🦅 <span style={{color: 'var(--cyan)'}}>Young Eagles</span></h3>
+            <h3 style={{fontSize: '20px', fontWeight: 700, marginBottom: '8px'}}>📚 <span style={{color: 'var(--cyan)'}}>EduDash Pro</span></h3>
             <p className="muted" style={{fontSize: '13px'}}>Built with ❤️ for South African preschools</p>
           </div>
           <div style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '24px', marginBottom: '32px'}}>
@@ -467,7 +467,7 @@ export default function Home() {
             <a href="https://edudashpro.org.za" target="_blank" rel="noopener noreferrer" className="muted" style={{fontSize: '14px'}}>Contact</a>
           </div>
           <div style={{borderTop: '1px solid var(--border)', paddingTop: '24px'}}>
-            <p style={{color: '#6B7280', fontSize: '13px'}}>© 2025 Young Eagles. All rights reserved.</p>
+            <p style={{color: '#6B7280', fontSize: '13px'}}>© 2025 EduDash Pro. All rights reserved.</p>
           </div>
         </div>
       </footer>
