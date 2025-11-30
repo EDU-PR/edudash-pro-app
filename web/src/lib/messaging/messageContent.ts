@@ -71,3 +71,30 @@ export const isAudioMedia = (content: RichMessageContent): content is MediaMessa
 export const isFileMedia = (content: RichMessageContent): content is MediaMessageContent => {
   return content.kind === 'media' && content.mediaType === 'file';
 };
+
+/**
+ * Get a human-readable display text for a message content string.
+ * Converts __media__ encoded messages to friendly text like "🎤 Voice message"
+ */
+export const getMessageDisplayText = (rawContent: string): string => {
+  if (!rawContent || typeof rawContent !== 'string') {
+    return '';
+  }
+
+  const content = parseMessageContent(rawContent);
+  
+  if (content.kind === 'media') {
+    switch (content.mediaType) {
+      case 'audio':
+        return '🎤 Voice message';
+      case 'image':
+        return '📷 Image';
+      case 'file':
+        return content.name ? `📎 ${content.name}` : '📎 File attachment';
+      default:
+        return '📎 Attachment';
+    }
+  }
+  
+  return content.text;
+};
