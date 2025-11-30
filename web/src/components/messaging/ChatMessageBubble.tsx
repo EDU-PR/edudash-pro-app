@@ -38,11 +38,26 @@ export interface ChatMessage {
   created_at: string;
   read_by?: string[];
   delivered_to?: string[];
+  deleted_at?: string | null;
+  reply_to_id?: string | null;
+  forwarded_from_id?: string | null;
   sender?: {
     first_name: string;
     last_name: string;
     role: string;
   };
+  reply_to?: {
+    content: string;
+    sender?: {
+      first_name: string;
+      last_name: string;
+    };
+  };
+  reactions?: Array<{
+    emoji: string;
+    count: number;
+    hasReacted: boolean;
+  }>;
 }
 
 // Message status types for WhatsApp-style ticks
@@ -58,6 +73,7 @@ interface ChatMessageBubbleProps {
   hideAvatars?: boolean;
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
   isDashAI?: boolean;
+  onReactionClick?: (messageId: string, emoji: string) => void;
 }
 
 // WhatsApp-style tick component
@@ -123,8 +139,44 @@ export const ChatMessageBubble = ({
   hideAvatars = false,
   onContextMenu,
   isDashAI = false,
+  onReactionClick,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
+  
+  // Check if message is deleted
+  if (message.deleted_at) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: isOwn ? 'flex-end' : 'flex-start',
+          maxWidth: '100%',
+          paddingLeft: isDesktop ? 8 : (isOwn ? 0 : 10),
+          paddingRight: isDesktop ? 280 : (isOwn ? 10 : 0),
+          gap: 8,
+          alignItems: 'flex-end',
+        }}
+      >
+        <div
+          style={{
+            padding: isDesktop ? '10px 16px' : '8px 12px',
+            borderRadius: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+            background: 'rgba(100, 116, 139, 0.1)',
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+          }}
+        >
+          <p style={{ 
+            margin: 0, 
+            fontSize: 14, 
+            color: '#64748b', 
+            fontStyle: 'italic' 
+          }}>
+            🚫 This message was deleted
+          </p>
+        </div>
+      </div>
+    );
+  }
   
   // Determine message status for ticks
   const getMessageStatus = (): MessageStatus => {
@@ -320,6 +372,24 @@ export const ChatMessageBubble = ({
           target.addEventListener('touchmove', clearTimer, { once: true });
         }}
       >
+        {/* Forwarded indicator */}
+        {message.forwarded_from_id && (
+          <div style={{ 
+            marginBottom: 6, 
+            fontSize: 11, 
+            color: 'rgba(148, 163, 184, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="15 17 20 12 15 7"></polyline>
+              <path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>
+            </svg>
+            Forwarded
+          </div>
+        )}
+        
         {/* Sender name for received messages */}
         {!isOwn && senderName && (
           <div style={{ 
@@ -333,7 +403,65 @@ export const ChatMessageBubble = ({
           </div>
         )}
         
+        {/* Reply context */}
+        {message.reply_to && (
+          <div style={{
+            padding: '6px 10px',
+            background: 'rgba(0, 0, 0, 0.15)',
+            borderRadius: 8,
+            marginBottom: 8,
+            borderLeft: '3px solid rgba(148, 163, 184, 0.5)',
+          }}>
+            <div style={{ fontSize: 11, color: 'rgba(148, 163, 184, 0.8)', marginBottom: 2, fontWeight: 600 }}>
+              {message.reply_to.sender?.first_name || 'Message'}
+            </div>
+            <p style={{ 
+              margin: 0, 
+              fontSize: 12, 
+              color: 'rgba(148, 163, 184, 0.7)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {message.reply_to.content?.startsWith('__media__') ? '📎 Media' : message.reply_to.content}
+            </p>
+          </div>
+        )}
+        
         {renderBody()}
+        
+        {/* Reactions display */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 4,
+            marginTop: 6,
+          }}>
+            {message.reactions.map((reaction, idx) => (
+              <button
+                key={idx}
+                onClick={() => onReactionClick?.(message.id, reaction.emoji)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 6px',
+                  background: reaction.hasReacted ? 'rgba(59, 130, 246, 0.2)' : 'rgba(100, 116, 139, 0.15)',
+                  border: reaction.hasReacted ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(148, 163, 184, 0.2)',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+              >
+                <span>{reaction.emoji}</span>
+                {reaction.count > 1 && (
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>{reaction.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         
         <div
           style={{
