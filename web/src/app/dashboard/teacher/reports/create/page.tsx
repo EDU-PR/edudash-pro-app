@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -77,6 +77,18 @@ const DEFAULT_MILESTONES: Record<string, boolean> = {
 };
 
 export default function CreateReportPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <CreateReportPageContent />
+    </Suspense>
+  );
+}
+
+function CreateReportPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
