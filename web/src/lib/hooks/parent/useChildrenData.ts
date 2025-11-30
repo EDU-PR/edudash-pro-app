@@ -73,7 +73,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
             .in('assignment_id', assignmentIds);
 
           const submittedIds = new Set(submissions?.map((s: { assignment_id: string }) => s.assignment_id) || []);
-          homeworkPending = assignmentIds.filter((id: string) => !submittedIds.has(id)).length;
+          metrics.homeworkPending = assignmentIds.filter((id: string) => !submittedIds.has(id)).length;
         }
       } catch {}
       // Events count
