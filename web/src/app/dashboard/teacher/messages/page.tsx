@@ -20,6 +20,7 @@ import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
+import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 
 interface MessageThread {
   id: string;
@@ -326,9 +327,7 @@ const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemPro
             }}
           >
             {thread.last_message?.content 
-              ? thread.last_message.content.startsWith('__media__') 
-                ? '📷 Photo' 
-                : thread.last_message.content 
+              ? getMessageDisplayText(thread.last_message.content) 
               : 'No messages yet'}
           </p>
         </div>

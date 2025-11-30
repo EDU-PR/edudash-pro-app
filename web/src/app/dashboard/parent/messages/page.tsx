@@ -17,6 +17,7 @@ import { ChatWallpaperPicker } from '@/components/messaging/ChatWallpaperPicker'
 import { DashAIAvatar, DashAILoading } from '@/components/dash/DashAIAvatar';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
+import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 import { MessageSquare, Send, Search, User, School, Paperclip, Smile, Mic, Loader2, ArrowLeft, Phone, Video, MoreVertical, Trash2, Image, Plus, Sparkles } from 'lucide-react';
 
 interface ParticipantProfile {
@@ -365,9 +366,7 @@ const ThreadItem = ({ thread, isActive, onSelect, onDelete, isDesktop, currentUs
             }}
           >
             {thread.last_message?.content 
-              ? thread.last_message.content.startsWith('__media__') 
-                ? '📷 Photo' 
-                : thread.last_message.content 
+              ? getMessageDisplayText(thread.last_message.content) 
               : 'No messages yet'}
           </p>
           {thread.last_message?.created_at && (
