@@ -1,12 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNotificationSound, playNotificationSound } from '@/hooks/useNotificationSound';
-import { lockOrientation } from '@/hooks/useOrientationLock';
 
 interface NativeAppManagerProps {
-  /** Whether to lock orientation to portrait by default */
-  lockOrientationOnMount?: boolean;
   /** Whether to enable notification sounds */
   enableSounds?: boolean;
   /** Callback when a push message is received while app is in foreground */
@@ -19,29 +16,19 @@ interface NativeAppManagerProps {
  * Component that manages native app-like behavior:
  * - Status bar integration (theme-color updates)
  * - Notification sounds
- * - Screen orientation locking
  * - Push notification handling in foreground
  * - Service worker message handling
+ * 
+ * Note: Orientation locking is NOT applied automatically as it only works
+ * in fullscreen mode on web browsers and should respect device settings.
  */
 export function NativeAppManager({
-  lockOrientationOnMount = true,
   enableSounds = true,
   onPushMessage,
   onNotificationClick,
 }: NativeAppManagerProps) {
   const { playNotification } = useNotificationSound();
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Lock orientation on mount
-  useEffect(() => {
-    if (lockOrientationOnMount) {
-      // Small delay to ensure page is fully loaded
-      const timer = setTimeout(() => {
-        lockOrientation('portrait');
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [lockOrientationOnMount]);
 
   // Handle service worker messages
   useEffect(() => {

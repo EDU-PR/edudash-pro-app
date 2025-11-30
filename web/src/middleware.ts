@@ -94,16 +94,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Refresh session if it exists
-  const { data: { session } } = await supabase.auth.getSession()
-  
-  // If user has a recovery session and is on homepage, redirect to reset-password
-  if (session && pathname === '/' && !tokenHash && !accessToken) {
-    const { data: { user } } = await supabase.auth.getUser()
-    // Check if this is a recovery session (user needs to set password)
-    if (user && user.aud === 'authenticated' && user.recovery_sent_at) {
-      return NextResponse.redirect(new URL('/reset-password', request.url))
-    }
-  }
+  await supabase.auth.getSession()
 
   return response
 }

@@ -133,10 +133,15 @@ export function PWAInstallPrompt() {
     };
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // For browsers that don't fire beforeinstallprompt, show manual instructions
+    // For browsers that don't fire beforeinstallprompt (like Safari iOS), show manual instructions
+    // Only show if: not standalone, doesn't support native install, and is on iOS/Safari
     const fallbackTimer = setTimeout(() => {
-      if (!deferredPrompt) {
-        setShowPrompt(true);
+      if (!deferredPrompt && !info.supportsInstall) {
+        // Only show manual install instructions for browsers that don't support native prompt
+        // This is mainly Safari on iOS
+        if (info.isIOS || (info.browser === 'firefox' && !info.isAndroid)) {
+          setShowPrompt(true);
+        }
       }
     }, 3000);
 
