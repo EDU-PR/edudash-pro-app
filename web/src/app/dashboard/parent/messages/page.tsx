@@ -1399,9 +1399,10 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
       const { data: newThread, error: threadError } = await supabase
         .from('message_threads')
         .insert({
-          type: 'direct',
+          type: 'parent-teacher',
           subject: contactName,
           preschool_id: profile?.preschoolId,
+          created_by: userId,
         })
         .select()
         .single();
