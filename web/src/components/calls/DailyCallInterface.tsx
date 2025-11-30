@@ -464,12 +464,26 @@ export const DailyCallInterface = ({
             }
           }
         })
-        .on('participant-updated', (event) => {
+        .on('participant-updated', async (event) => {
           if (event?.participant) {
             if (event.participant.local) {
               setLocalParticipant(event.participant);
               setIsVideoEnabled(event.participant.video);
-              setIsAudioEnabled(event.participant.audio);
+              
+              // Ensure mic stays enabled - if audio got disabled unexpectedly, re-enable it
+              // This handles edge cases where browser/Daily might disable audio
+              if (!event.participant.audio && callObjectRef.current) {
+                console.log('[P2P Call] Local audio disabled unexpectedly, re-enabling...');
+                try {
+                  await callObjectRef.current.setLocalAudio(true);
+                  setIsAudioEnabled(true);
+                } catch (audioErr) {
+                  console.warn('[P2P Call] Failed to re-enable audio:', audioErr);
+                  setIsAudioEnabled(event.participant.audio);
+                }
+              } else {
+                setIsAudioEnabled(event.participant.audio);
+              }
               
               if (localVideoRef.current && event.participant.tracks?.video?.track) {
                 localVideoRef.current.srcObject = new MediaStream([event.participant.tracks.video.track]);
