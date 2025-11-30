@@ -71,7 +71,6 @@ export const DailyCallInterface = ({
   const callObjectRef = useRef<DailyCall | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null); // Separate audio ref for voice-only calls
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -359,13 +358,6 @@ export const DailyCallInterface = ({
                   remoteVideoRef.current.volume = 1.0;
                 }
               }
-              // ALWAYS attach audio to separate audio element for voice-only calls
-              if (remoteAudioRef.current && p.tracks?.audio?.track) {
-                remoteAudioRef.current.srcObject = new MediaStream([p.tracks.audio.track]);
-                remoteAudioRef.current.muted = false;
-                remoteAudioRef.current.volume = 1.0;
-                remoteAudioRef.current.play().catch(e => console.warn('[P2P Call] Audio autoplay blocked:', e));
-              }
             }
           });
         })
@@ -405,13 +397,6 @@ export const DailyCallInterface = ({
                 remoteVideoRef.current.volume = 1.0;
               }
             }
-            // ALWAYS attach audio to separate audio element for voice-only calls
-            if (remoteAudioRef.current && event.participant.tracks?.audio?.track) {
-              remoteAudioRef.current.srcObject = new MediaStream([event.participant.tracks.audio.track]);
-              remoteAudioRef.current.muted = false;
-              remoteAudioRef.current.volume = 1.0;
-              remoteAudioRef.current.play().catch(e => console.warn('[P2P Call] Audio autoplay blocked:', e));
-            }
 
             // Also update call status in database
             if (currentCallId) {
@@ -447,13 +432,6 @@ export const DailyCallInterface = ({
                   remoteVideoRef.current.volume = 1.0;
                 }
               }
-              // ALWAYS attach audio to separate audio element for voice-only calls
-              if (remoteAudioRef.current && event.participant.tracks?.audio?.track) {
-                remoteAudioRef.current.srcObject = new MediaStream([event.participant.tracks.audio.track]);
-                remoteAudioRef.current.muted = false;
-                remoteAudioRef.current.volume = 1.0;
-                remoteAudioRef.current.play().catch(e => console.warn('[P2P Call] Audio autoplay blocked:', e));
-              }
             }
           }
         })
@@ -467,15 +445,6 @@ export const DailyCallInterface = ({
           // Handle when audio/video tracks start
           if (event?.participant && !event.participant.local && event.track) {
             console.log('[P2P Call] Track started:', event.track.kind, 'from:', event.participant.user_name);
-            
-            // ALWAYS attach audio to separate audio element for voice-only calls
-            if (event.track.kind === 'audio' && remoteAudioRef.current) {
-              remoteAudioRef.current.srcObject = new MediaStream([event.track]);
-              remoteAudioRef.current.muted = false;
-              remoteAudioRef.current.volume = 1.0;
-              remoteAudioRef.current.play().catch(e => console.warn('[P2P Call] Audio autoplay blocked:', e));
-            }
-            
             if (remoteVideoRef.current) {
               const currentStream = remoteVideoRef.current.srcObject as MediaStream | null;
               const tracks: MediaStreamTrack[] = [];
@@ -1209,14 +1178,6 @@ export const DailyCallInterface = ({
             </div>
           </div>
         )}
-
-        {/* Always-present audio element for voice-only calls - ensures audio plays even without video */}
-        <audio
-          ref={remoteAudioRef}
-          autoPlay
-          playsInline
-          style={{ display: 'none' }}
-        />
 
         {/* Remote video */}
         {remoteParticipant?.video ? (

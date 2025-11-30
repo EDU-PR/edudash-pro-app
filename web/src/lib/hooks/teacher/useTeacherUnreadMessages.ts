@@ -1,54 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-
-interface UseTeacherUnreadMessagesReturn {
-  unreadCount: number;
-  loading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-}
-
-interface ThreadParticipant {
-  user_id: string;
-  role: string;
-  last_read_at: string | null;
-}
-
-interface MessageThread {
-  id: string;
-  message_participants: ThreadParticipant[];
-}
-
-interface MessagePayload {
-  id: string;
-  thread_id: string;
-  sender_id: string;
-  content: string;
-  created_at: string;
-}
-
-interface ThreadData {
-  threadId: string;
-  lastReadAt: string;
-}
-
-interface MessageRecord {
-  id: string;
-  thread_id: string;
-  created_at: string;
-}
-
 /**
  * Hook to get and track unread message count for a teacher user.
  * Subscribes to real-time updates to show new message indicators immediately.
+ * Types extracted to shared/unreadMessagesTypes.ts
  */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import {
+  type UnreadMessagesReturn,
+  type MessageThread,
+  type MessagePayload,
+  extractUserThreadData,
+  countUnreadMessages,
+} from '@/lib/hooks/shared';
+
 export function useTeacherUnreadMessages(
   userId: string | undefined,
   preschoolId: string | undefined
-): UseTeacherUnreadMessagesReturn {
+): UnreadMessagesReturn {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,16 +36,12 @@ export function useTeacherUnreadMessages(
     try {
       setLoading(true);
       setError(null);
-
       const supabase = supabaseRef.current;
 
       // Get all threads the teacher is a participant in within their preschool
       const { data: threads, error: threadsError } = await supabase
         .from('message_threads')
-        .select(`
-          id,
-          message_participants!inner(user_id, role, last_read_at)
-        `)
+        .select('id, message_participants!inner(user_id, role, last_read_at)')
         .eq('preschool_id', preschoolId);
 
       if (threadsError) {
@@ -87,31 +55,15 @@ export function useTeacherUnreadMessages(
         return;
       }
 
-      // Filter to threads where user is a participant with role 'teacher' and get their last_read_at
-      const teacherThreadsData = threads
-        .filter((thread: MessageThread) =>
-          thread.message_participants?.some(
-            (p: ThreadParticipant) => p.user_id === userId && p.role === 'teacher'
-          )
-        )
-        .map((thread: MessageThread) => {
-          const teacherParticipant = thread.message_participants?.find(
-            (p: ThreadParticipant) => p.user_id === userId && p.role === 'teacher'
-          );
-          return {
-            threadId: thread.id,
-            lastReadAt: teacherParticipant?.last_read_at || '2000-01-01',
-          };
-        });
-
+      // Filter to threads where user is a teacher participant
+      const teacherThreadsData = extractUserThreadData(threads as MessageThread[], userId, 'teacher');
       if (teacherThreadsData.length === 0) {
         setUnreadCount(0);
         return;
       }
 
-      // Get all messages from teacher's threads that they didn't send in a single query
-      const threadIds = teacherThreadsData.map((t: ThreadData) => t.threadId);
-      
+      // Get all messages from teacher's threads that they didn't send
+      const threadIds = teacherThreadsData.map((t) => t.threadId);
       const { data: unreadMessages, error: countError } = await supabase
         .from('messages')
         .select('id, thread_id, created_at')
@@ -124,16 +76,7 @@ export function useTeacherUnreadMessages(
         return;
       }
 
-      // Filter messages by checking if they're newer than the teacher's last_read_at for that thread
-      let totalUnread = 0;
-      if (unreadMessages) {
-        totalUnread = unreadMessages.filter((msg: MessageRecord) => {
-          const threadData = teacherThreadsData.find((t: ThreadData) => t.threadId === msg.thread_id);
-          return threadData && new Date(msg.created_at) > new Date(threadData.lastReadAt);
-        }).length;
-      }
-
-      setUnreadCount(totalUnread);
+      setUnreadCount(countUnreadMessages(unreadMessages, teacherThreadsData));
     } catch (err) {
       console.error('Failed to load teacher unread messages:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
@@ -143,31 +86,18 @@ export function useTeacherUnreadMessages(
     }
   }, [userId, preschoolId]);
 
-  // Initial load
-  useEffect(() => {
-    loadUnreadCount();
-  }, [loadUnreadCount]);
+  useEffect(() => { loadUnreadCount(); }, [loadUnreadCount]);
 
   // Real-time subscription for new messages
   useEffect(() => {
     if (!userId || !preschoolId) return;
-
     const supabase = supabaseRef.current;
 
-    // Subscribe to new messages across all threads user participates in
     const channel = supabase
       .channel(`teacher-unread-messages-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
         async (payload: RealtimePostgresChangesPayload<MessagePayload>) => {
           const newMessage = payload.new as MessagePayload;
-          // Check if this message is in a thread the teacher participates in
-          // and the teacher is not the sender
           if (newMessage.sender_id !== userId) {
             const { data: participant } = await supabase
               .from('message_participants')
@@ -176,38 +106,17 @@ export function useTeacherUnreadMessages(
               .eq('user_id', userId)
               .eq('role', 'teacher')
               .maybeSingle();
-
-            if (participant) {
-              // Teacher is a participant, refresh unread count
-              loadUnreadCount();
-            }
+            if (participant) loadUnreadCount();
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'message_participants',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          // Teacher's participant record was updated (likely last_read_at)
-          loadUnreadCount();
-        }
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_participants', filter: `user_id=eq.${userId}` },
+        () => loadUnreadCount()
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [userId, preschoolId, loadUnreadCount]);
 
-  return {
-    unreadCount,
-    loading,
-    error,
-    refetch: loadUnreadCount,
-  };
+  return { unreadCount, loading, error, refetch: loadUnreadCount };
 }
