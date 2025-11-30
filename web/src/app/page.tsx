@@ -155,7 +155,7 @@ export default function Home() {
           </div>
           <h1 className="heroTitle">
             Educational dashboard for <br />
-            <span className="accent">South African preschools</span>
+            <span className="accent">South African Education</span>
           </h1>
           <p className="heroLead">
             Engage every student, empower every teacher, and connect every parent with <strong style={{color: 'var(--cyan)'}}>AI-enhanced tools</strong> built for South Africa.
