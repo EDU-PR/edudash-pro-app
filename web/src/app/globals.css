@@ -40,6 +40,10 @@
   --success: #22c55e;
   --warning: #f59e0b;
   
+  /* Design System - Accent Colors */
+  --cyan: #00f5ff;
+  --cyan-800: #00bcd4;
+  
   /* Layout dimensions */
   --topnav-h: 56px;
   --conversations-w: 0px;
@@ -1217,11 +1221,6 @@ textarea.input { min-height: 80px; padding: 10px 12px; resize: vertical; line-he
    LANDING PAGE STYLES
    =================================== */
 
-:root {
-  --cyan: #00f5ff;
-  --cyan-800: #00bcd4;
-}
-
 /* Hero Section */
 .landingHero {
   padding: 60px 0 80px;
@@ -1312,14 +1311,6 @@ textarea.input { min-height: 80px; padding: 10px 12px; resize: vertical; line-he
 .featureCard:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-}
-
-/* Ensure inline border styles take precedence over default */
-.featureCard[style*="border:"],
-.featureCard[style*="border "] {
-  border-width: inherit;
-  border-style: inherit;
-  border-color: inherit;
 }
 
 .featureIcon {
