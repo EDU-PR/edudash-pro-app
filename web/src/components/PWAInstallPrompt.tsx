@@ -97,13 +97,20 @@ export function PWAInstallPrompt() {
     }
 
     // Check if user recently dismissed
-    const dismissedTime = localStorage.getItem('pwa-prompt-dismissed');
-    if (dismissedTime) {
-      const timeSinceDismissed = Date.now() - parseInt(dismissedTime);
-      const fourHours = 4 * 60 * 60 * 1000;
-      if (timeSinceDismissed < fourHours) {
-        return;
+    try {
+      const dismissedTime = localStorage.getItem('pwa-prompt-dismissed');
+      if (dismissedTime) {
+        const parsedTime = parseInt(dismissedTime, 10);
+        if (!isNaN(parsedTime)) {
+          const timeSinceDismissed = Date.now() - parsedTime;
+          const fourHours = 4 * 60 * 60 * 1000;
+          if (timeSinceDismissed < fourHours) {
+            return;
+          }
+        }
       }
+    } catch {
+      // localStorage access failed, continue showing prompt
     }
 
     // Handle native install prompt (Chrome, Edge, Samsung, Opera on Android)
@@ -162,7 +169,11 @@ export function PWAInstallPrompt() {
   const handleDismiss = useCallback(() => {
     setShowPrompt(false);
     setShowExpandedInstructions(false);
-    localStorage.setItem('pwa-prompt-dismissed', Date.now().toString());
+    try {
+      localStorage.setItem('pwa-prompt-dismissed', Date.now().toString());
+    } catch {
+      // Storage access failed, dismiss without persisting
+    }
   }, []);
 
   // Don't render if already installed or info not loaded

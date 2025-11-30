@@ -195,7 +195,11 @@ export function showInAppNotification(
       playNotificationSound('notification', { vibrate });
     }
   } else if (vibrate && 'vibrate' in navigator) {
-    navigator.vibrate([200, 100, 200]);
+    try {
+      navigator.vibrate([200, 100, 200]);
+    } catch {
+      // Vibration not supported or failed
+    }
   }
 
   // Create notification element
@@ -339,11 +343,19 @@ export function showInAppNotification(
   };
 }
 
-// Helper to escape HTML
+// Helper to escape HTML - uses pure string replacement for safety
 function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  const escapeMap: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;',
+  };
+  return text.replace(/[&<>"'`=/]/g, (char) => escapeMap[char] || char);
 }
 
 export default NativeAppManager;

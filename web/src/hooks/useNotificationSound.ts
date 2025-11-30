@@ -191,8 +191,34 @@ export function useNotificationSound() {
 
 /**
  * Global singleton instance for use outside React components
+ * Uses WeakRef pattern to allow garbage collection when not in use
  */
 let globalAudioInstances: Map<SoundType, HTMLAudioElement> | null = null;
+let globalCleanupScheduled = false;
+
+function scheduleGlobalCleanup(): void {
+  if (globalCleanupScheduled || typeof window === 'undefined') return;
+  
+  globalCleanupScheduled = true;
+  
+  // Clean up after 5 minutes of inactivity
+  setTimeout(() => {
+    if (globalAudioInstances) {
+      globalAudioInstances.forEach((audio) => {
+        if (audio.paused) {
+          audio.src = '';
+        }
+      });
+      // Only clear if all are paused
+      const allPaused = Array.from(globalAudioInstances.values()).every(a => a.paused);
+      if (allPaused) {
+        globalAudioInstances.clear();
+        globalAudioInstances = null;
+      }
+    }
+    globalCleanupScheduled = false;
+  }, 5 * 60 * 1000);
+}
 
 function getGlobalAudio(type: SoundType): HTMLAudioElement {
   if (typeof window === 'undefined') {
@@ -210,6 +236,9 @@ function getGlobalAudio(type: SoundType): HTMLAudioElement {
     audio.volume = 0.7;
     globalAudioInstances.set(type, audio);
   }
+
+  // Schedule cleanup when audio is used
+  scheduleGlobalCleanup();
 
   return audio;
 }
