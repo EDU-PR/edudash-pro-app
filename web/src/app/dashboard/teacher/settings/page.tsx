@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
-import { User, Bell, Lock, Globe, Moon, Sun, LogOut, Camera, Phone, Mail, Check, X, Loader2 } from 'lucide-react';
+import { User, Bell, Lock, Globe, Moon, LogOut, Camera, Phone, Mail, Check, X, Loader2, ChevronRight } from 'lucide-react';
 
 export default function TeacherSettingsPage() {
   const router = useRouter();
@@ -198,253 +198,277 @@ export default function TeacherSettingsPage() {
     router.push('/sign-in');
   };
 
+  // Toggle component for better UX
+  const Toggle = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
+    <button
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${
+        enabled ? 'bg-purple-600' : 'bg-gray-600'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+          enabled ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+
   if (loading || profileLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+          <p className="text-gray-400 text-sm">Loading settings...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <TeacherShell tenantSlug={slug} userEmail={userEmail} hideHeader={true}>
-      <div className="container">
-        {/* Success Banner */}
-        {saveSuccess && (
-          <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-in">
-            <Check className="w-5 h-5" />
-            <span>Changes saved successfully!</span>
+      {/* Success Toast */}
+      {saveSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+            <Check className="w-4 h-4" />
           </div>
-        )}
-        
-        <div className="section">
-          <h1 className="h1">Settings</h1>
-          <p className="muted">Manage your account preferences</p>
+          <span className="font-medium">Changes saved successfully!</span>
         </div>
-        <div className="section">
-          <div className="grid gap-6 max-w-3xl">
+      )}
 
-            {/* Profile Settings */}
-            <div className="card p-md">
-              <div className="flex items-center gap-3 mb-6">
-                <User className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Profile</h2>
-              </div>
-              <div className="space-y-5">
-                {/* Profile Picture */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-4">Profile Picture</label>
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      {uploadingAvatar ? (
-                        <div className="w-20 h-20 rounded-full bg-gray-700 flex items-center justify-center">
-                          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                        </div>
-                      ) : avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt="Profile"
-                          className="w-20 h-20 rounded-full object-cover border-2 border-blue-500"
-                        />
-                      ) : (
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-blue-500">
-                          {fullName?.[0]?.toUpperCase() || userEmail?.[0]?.toUpperCase() || 'T'}
-                        </div>
-                      )}
-                      <label className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center cursor-pointer shadow-lg transition-colors">
-                        <Camera className="w-4 h-4 text-white" />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarUpload}
-                          className="hidden"
-                          disabled={uploadingAvatar}
-                        />
-                      </label>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-300 mb-1">Upload a profile picture</p>
-                      <p className="text-xs text-gray-500">JPG, PNG or GIF (Max 2MB)</p>
-                    </div>
-                  </div>
-                </div>
+      <div className="max-w-3xl mx-auto px-6 py-10 space-y-6">
+        {/* Page Header */}
+        <div className="mb-2">
+          <h1 className="text-3xl font-bold text-white">Settings</h1>
+          <p className="text-gray-400 mt-1">Manage your account preferences</p>
+        </div>
 
-                {/* Email (Read-only) */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={userEmail}
-                    disabled
-                    className="w-full bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm cursor-not-allowed opacity-60"
-                  />
-                </div>
-                
-                {/* Full Name */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                {/* Phone Number */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2 flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. +27 82 123 4567"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Used for notifications and account recovery</p>
-                </div>
-                
-                {saveError && (
-                  <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 flex items-start gap-2">
-                    <X className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-200">{saveError}</p>
-                  </div>
-                )}
-                
-                <button 
-                  onClick={handleSaveProfile}
-                  disabled={saving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
+        {/* Profile Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-gray-700/50 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <User className="w-5 h-5 text-blue-400" />
             </div>
+            Profile
+          </h2>
 
-            {/* Notifications */}
-            <div className="card p-md">
-              <div className="flex items-center gap-3 mb-6">
-                <Bell className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Notifications</h2>
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Email Notifications</div>
-                    <div className="text-xs text-gray-400">Receive updates via email</div>
-                  </div>
-                  <button 
-                    onClick={() => setEmailNotifications(!emailNotifications)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${emailNotifications ? 'bg-blue-600' : 'bg-gray-600'}`}
-                  >
-                    <span className={`${emailNotifications ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition`} />
-                  </button>
+          {/* Profile Picture */}
+          <div className="flex items-center gap-5 mb-6 pb-6 border-b border-gray-700/50">
+            <div className="relative">
+              {uploadingAvatar ? (
+                <div className="w-20 h-20 rounded-full bg-gray-700 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Push Notifications</div>
-                    <div className="text-xs text-gray-400">Receive push notifications</div>
-                  </div>
-                  <button 
-                    onClick={() => setPushNotifications(!pushNotifications)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pushNotifications ? 'bg-blue-600' : 'bg-gray-600'}`}
-                  >
-                    <span className={`${pushNotifications ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition`} />
-                  </button>
+              ) : avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="Profile"
+                  className="w-20 h-20 rounded-full object-cover ring-4 ring-purple-500/30"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white text-2xl font-bold ring-4 ring-purple-500/30">
+                  {fullName?.[0]?.toUpperCase() || userEmail?.[0]?.toUpperCase() || 'T'}
                 </div>
-              </div>
+              )}
+              <label className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 hover:bg-purple-500 rounded-full flex items-center justify-center cursor-pointer shadow-lg transition-all duration-200 hover:scale-110">
+                <Camera className="w-4 h-4 text-white" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                  disabled={uploadingAvatar}
+                />
+              </label>
             </div>
-
-            {/* Appearance */}
-            <div className="card p-md">
-              <div className="flex items-center gap-3 mb-6">
-                {darkMode ? <Moon className="w-5 h-5 text-blue-500" /> : <Sun className="w-5 h-5 text-blue-500" />}
-                <h2 className="text-lg font-semibold">Appearance</h2>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">Dark Mode</div>
-                  <div className="text-xs text-gray-400">Toggle dark mode</div>
-                </div>
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-600'}`}
-                >
-                  <span className={`${darkMode ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Language */}
-            <div className="card p-md">
-              <div className="flex items-center gap-3 mb-6">
-                <Globe className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Language</h2>
-              </div>
-              <select 
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="en-ZA">English (South Africa)</option>
-                <option value="af-ZA">Afrikaans</option>
-                <option value="zu-ZA">Zulu</option>
-                <option value="xh-ZA">Xhosa</option>
-                <option value="st-ZA">Sesotho</option>
-                <option value="tn-ZA">Setswana</option>
-              </select>
-            </div>
-
-            {/* Security */}
-            <div className="card p-md">
-              <div className="flex items-center gap-3 mb-6">
-                <Lock className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Security</h2>
-              </div>
-              <button 
-                onClick={() => setShowPasswordModal(true)}
-                className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors text-left flex items-center justify-between"
-              >
-                <span>Change Password</span>
-                <Lock className="w-4 h-4 text-gray-400" />
-              </button>
-            </div>
-
-            {/* Sign Out */}
-            <div className="card p-md border-2 border-red-900/30">
-              <div className="flex items-center gap-3 mb-6">
-                <LogOut className="w-5 h-5 text-red-500" />
-                <h2 className="text-lg font-semibold">Sign Out</h2>
-              </div>
-              <p className="text-sm text-gray-400 mb-4">Sign out from your account on this device.</p>
-              <button
-                onClick={handleSignOut}
-                disabled={signingOut}
-                className="w-full px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-700 disabled:to-gray-700 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:cursor-not-allowed shadow-lg hover:shadow-red-600/30"
-              >
-                <LogOut className="w-4 h-4" />
-                {signingOut ? 'Signing out...' : 'Sign Out'}
-              </button>
+            <div>
+              <p className="text-white font-medium">Upload a profile picture</p>
+              <p className="text-gray-400 text-sm">JPG, PNG or GIF (Max 2MB)</p>
             </div>
           </div>
+
+          {/* Form Fields */}
+          <div className="space-y-5">
+            {/* Email */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
+                <Mail className="w-4 h-4 text-gray-500" />
+                Email
+              </label>
+              <input
+                type="email"
+                value={userEmail}
+                disabled
+                className="w-full bg-gray-900/50 text-gray-400 rounded-xl px-4 py-3 border border-gray-700 cursor-not-allowed"
+              />
+            </div>
+
+            {/* Full Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
+              <input
+                type="text"
+                placeholder="Enter your full name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full bg-gray-700/60 text-gray-100 rounded-xl px-4 py-3 border border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 outline-none placeholder:text-gray-500"
+              />
+            </div>
+
+            {/* Phone Number */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
+                <Phone className="w-4 h-4 text-gray-500" />
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                placeholder="e.g. +27 82 123 4567"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="w-full bg-gray-700/60 text-gray-100 rounded-xl px-4 py-3 border border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 outline-none placeholder:text-gray-500"
+              />
+              <p className="text-xs text-gray-500 mt-2">Used for notifications and account recovery</p>
+            </div>
+
+            {saveError && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                <X className="w-5 h-5 text-red-400 shrink-0" />
+                <p className="text-sm text-red-300">{saveError}</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleSaveProfile}
+              disabled={saving}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl text-sm font-semibold text-white transition-all duration-200 flex items-center gap-2 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+
+        {/* Notifications Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-gray-700/50 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+              <Bell className="w-5 h-5 text-amber-400" />
+            </div>
+            Notifications
+          </h2>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between py-4 border-b border-gray-700/50">
+              <div>
+                <p className="text-white font-medium">Email Notifications</p>
+                <p className="text-gray-400 text-sm mt-0.5">Receive updates via email</p>
+              </div>
+              <Toggle enabled={emailNotifications} onChange={() => setEmailNotifications(!emailNotifications)} />
+            </div>
+
+            <div className="flex items-center justify-between py-4">
+              <div>
+                <p className="text-white font-medium">Push Notifications</p>
+                <p className="text-gray-400 text-sm mt-0.5">Receive push notifications</p>
+              </div>
+              <Toggle enabled={pushNotifications} onChange={() => setPushNotifications(!pushNotifications)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Appearance Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-gray-700/50 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+              <Moon className="w-5 h-5 text-purple-400" />
+            </div>
+            Appearance
+          </h2>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-white font-medium">Dark Mode</p>
+              <p className="text-gray-400 text-sm mt-0.5">Toggle dark mode theme</p>
+            </div>
+            <Toggle enabled={darkMode} onChange={() => setDarkMode(!darkMode)} />
+          </div>
+        </div>
+
+        {/* Language Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-gray-700/50 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+              <Globe className="w-5 h-5 text-green-400" />
+            </div>
+            Language
+          </h2>
+
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="w-full bg-gray-700/60 text-gray-100 rounded-xl px-4 py-3 border border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 outline-none cursor-pointer appearance-none"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.5em 1.5em' }}
+          >
+            <option value="en-ZA">English (South Africa)</option>
+            <option value="af-ZA">Afrikaans</option>
+            <option value="zu-ZA">Zulu</option>
+            <option value="xh-ZA">Xhosa</option>
+            <option value="st-ZA">Sesotho</option>
+            <option value="tn-ZA">Setswana</option>
+          </select>
+        </div>
+
+        {/* Security Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-gray-700/50 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+              <Lock className="w-5 h-5 text-cyan-400" />
+            </div>
+            Security
+          </h2>
+
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            className="w-full px-4 py-4 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 hover:border-gray-500 rounded-xl text-white font-medium transition-all duration-200 flex items-center justify-between group"
+          >
+            <span>Change Password</span>
+            <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
+          </button>
+        </div>
+
+        {/* Sign Out Section */}
+        <div className="bg-gray-800/60 p-6 rounded-2xl shadow-xl border border-red-500/20 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+              <LogOut className="w-5 h-5 text-red-400" />
+            </div>
+            Sign Out
+          </h2>
+
+          <p className="text-gray-400 text-sm mb-5">Sign out from your account on this device.</p>
+
+          <button
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="w-full px-4 py-3.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 hover:shadow-red-500/30 hover:scale-[1.01] active:scale-[0.99]"
+          >
+            <LogOut className="w-5 h-5" />
+            {signingOut ? 'Signing out...' : 'Sign Out'}
+          </button>
         </div>
       </div>
-      
+
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-700">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-700 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold flex items-center gap-2">
-                <Lock className="w-5 h-5 text-blue-500" />
+              <h3 className="text-xl font-semibold text-white flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-cyan-400" />
+                </div>
                 Change Password
               </h3>
               <button
@@ -454,42 +478,42 @@ export default function TeacherSettingsPage() {
                   setNewPassword('');
                   setConfirmPassword('');
                 }}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="w-9 h-9 rounded-xl bg-gray-700 hover:bg-gray-600 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-2">New Password</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">New Password</label>
                 <input
                   type="password"
                   placeholder="Enter new password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-gray-700/60 text-gray-100 rounded-xl px-4 py-3 border border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 outline-none placeholder:text-gray-500"
                 />
               </div>
-              
+
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Confirm Password</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Confirm Password</label>
                 <input
                   type="password"
                   placeholder="Confirm new password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-gray-700/60 text-gray-100 rounded-xl px-4 py-3 border border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 outline-none placeholder:text-gray-500"
                 />
               </div>
-              
+
               {passwordError && (
-                <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 flex items-start gap-2">
-                  <X className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-200">{passwordError}</p>
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                  <X className="w-5 h-5 text-red-400 shrink-0" />
+                  <p className="text-sm text-red-300">{passwordError}</p>
                 </div>
               )}
-              
+
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => {
@@ -498,14 +522,14 @@ export default function TeacherSettingsPage() {
                     setNewPassword('');
                     setConfirmPassword('');
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-xl text-white font-medium transition-all duration-200"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePasswordChange}
                   disabled={changingPassword || !newPassword || !confirmPassword}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2"
                 >
                   {changingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
                   {changingPassword ? 'Changing...' : 'Change Password'}

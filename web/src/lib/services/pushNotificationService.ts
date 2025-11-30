@@ -184,7 +184,7 @@ export async function subscribeToPush(userId: string): Promise<{ success: boolea
         topics: getDefaultTopics(profile?.role),
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'user_id,endpoint',
+        onConflict: 'endpoint',
       });
 
     if (error) {

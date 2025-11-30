@@ -139,7 +139,7 @@ export function PushNotificationSubscribe() {
           user_agent: navigator.userAgent,
           updated_at: new Date().toISOString(),
         }, {
-          onConflict: 'push_subscriptions_user_endpoint_key',
+          onConflict: 'endpoint',
           ignoreDuplicates: false,
         });
 

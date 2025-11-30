@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       topics: topics || ['updates'],
       updated_at: new Date().toISOString(),
     }, {
-      onConflict: 'push_subscriptions_endpoint_key',
+      onConflict: 'endpoint',
       ignoreDuplicates: false,
     });
 
