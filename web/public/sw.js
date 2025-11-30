@@ -1,6 +1,6 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20251130162429';
+const SW_VERSION = 'v20251130165244';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -123,7 +123,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         return cached || fetch(request).then((response) => {
-          if (response.ok) {
+          // Only cache complete responses (200 OK), not partial (206) or errors
+          if (response.ok && response.status === 200) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
               cache.put(request, responseClone);
@@ -141,7 +142,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(request).then((cached) => {
         const fetchPromise = fetch(request).then((response) => {
-          if (response.ok) {
+          // Only cache complete responses (200 OK), not partial (206) or errors
+          if (response.ok && response.status === 200) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
               cache.put(request, responseClone);

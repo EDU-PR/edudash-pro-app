@@ -2285,7 +2285,8 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                         <DashAILoading size={36} />
                       </div>
                     )}
-                    <div ref={messagesEndRef} />
+                    {/* Spacer for bottom padding on mobile */}
+                    <div ref={messagesEndRef} style={{ height: isDesktop ? 16 : 100, flexShrink: 0 }} />
                   </div>
                 )}
               </div>
