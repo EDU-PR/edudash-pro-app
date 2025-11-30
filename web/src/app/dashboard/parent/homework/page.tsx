@@ -168,8 +168,13 @@ export default function HomeworkPage() {
         if (hwError) throw hwError;
 
         // Fetch submissions for this student
+<<<<<<< HEAD
         const assignmentIds = assignments?.map((assignment: { id: string }) => assignment.id) || [];
         const submissionsResponse = assignmentIds.length > 0 ? await supabase
+=======
+        const assignmentIds = assignments?.map((a: { id: string }) => a.id) || [];
+        const { data: submissions } = assignmentIds.length > 0 ? await supabase
+>>>>>>> acd7f6b (chore: Archive legacy files and create REFACTOR_2.md)
           .from('homework_submissions')
           .select('*')
           .eq('student_id', activeChildId)
@@ -179,10 +184,18 @@ export default function HomeworkPage() {
         const submissions = (submissionsResponse.data || []) as HomeworkSubmission[];
 
         // Attach submissions to assignments
+<<<<<<< HEAD
         const enrichedAssignments: HomeworkAssignment[] = assignments?.map((assignment: HomeworkAssignmentRecord) => ({
           ...assignment,
           homework_submissions: submissions?.filter((submission: HomeworkSubmission) => submission.assignment_id === assignment.id) || [],
           submissions: submissions?.filter((submission: HomeworkSubmission) => submission.assignment_id === assignment.id) || []
+=======
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const enrichedAssignments = assignments?.map((assignment: any) => ({
+          ...assignment,
+          homework_submissions: submissions?.filter((s: { assignment_id: string }) => s.assignment_id === assignment.id) || [],
+          submissions: submissions?.filter((s: { assignment_id: string }) => s.assignment_id === assignment.id) || []
+>>>>>>> acd7f6b (chore: Archive legacy files and create REFACTOR_2.md)
         })) || [];
         
         const data: HomeworkAssignment[] = enrichedAssignments;

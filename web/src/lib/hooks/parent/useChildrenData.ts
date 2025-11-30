@@ -54,14 +54,26 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
     if (child.class_id) {
       // Homework count
       try {
-        const { data: assignments } = await supabase.from('homework_assignments').select('id')
-          .eq('class_id', child.class_id).eq('preschool_id', child.preschool_id).gte('due_date', today);
-        if (assignments?.length) {
-          const ids = assignments.map((a: HomeworkAssignmentRow) => a.id);
-          const { data: subs } = await supabase.from('homework_submissions').select('assignment_id')
-            .eq('student_id', child.id).eq('preschool_id', child.preschool_id).in('assignment_id', ids);
-          const done = new Set(subs?.map((s: HomeworkSubmissionRow) => s.assignment_id) || []);
-          metrics.homeworkPending = ids.filter((id: string) => !done.has(id)).length;
+        // Fetch assignments for the class
+        const { data: assignments } = await supabase
+          .from('homework_assignments')
+          .select('id')
+          .eq('class_id', child.class_id)
+          .eq('preschool_id', child.preschool_id)
+          .gte('due_date', today);
+
+        if (assignments && assignments.length > 0) {
+          const assignmentIds = assignments.map((a: { id: string }) => a.id);
+          // Check which ones have been submitted
+          const { data: submissions } = await supabase
+            .from('homework_submissions')
+            .select('assignment_id')
+            .eq('student_id', child.id)
+            .eq('preschool_id', child.preschool_id)
+            .in('assignment_id', assignmentIds);
+
+          const submittedIds = new Set(submissions?.map((s: { assignment_id: string }) => s.assignment_id) || []);
+          homeworkPending = assignmentIds.filter((id: string) => !submittedIds.has(id)).length;
         }
       } catch {}
       // Events count

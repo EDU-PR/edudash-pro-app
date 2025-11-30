@@ -1,0 +1,1362 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
+import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft } from 'lucide-react';
+import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
+import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
+import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
+
+interface MessageThread {
+  id: string;
+  type: string;
+  subject: string;
+  student_id: string | null;
+  last_message_at: string;
+  student?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+  };
+  participants?: Array<{
+    user_id: string;
+    role: string;
+    user_profile?: {
+      first_name: string;
+      last_name: string;
+      role: string;
+    };
+  }>;
+  message_participants?: Array<{
+    user_id: string;
+    role: string;
+    last_read_at?: string;
+    user_profile?: {
+      first_name: string;
+      last_name: string;
+      role: string;
+    };
+  }>;
+  last_message?: {
+    content: string;
+    created_at: string;
+    sender_id: string;
+  };
+  unread_count?: number;
+}
+
+const CONTACT_PANEL_WIDTH = 296; // 280 rail + 16px gutter
+
+const formatMessageTime = (timestamp: string): string => {
+  const now = new Date();
+  const messageTime = new Date(timestamp);
+  const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
+  
+  if (diffInHours < 1) {
+    return 'Just now';
+  } else if (diffInHours < 24) {
+    return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffInHours < 168) {
+    return messageTime.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+};
+
+interface ThreadItemProps {
+  thread: MessageThread;
+  isActive: boolean;
+  onSelect: () => void;
+}
+
+const ThreadItem = ({ thread, isActive, onSelect }: ThreadItemProps) => {
+  const participants = thread.message_participants || thread.participants || [];
+  const parentParticipant = participants.find((p) => p.role === 'parent');
+  const parentName = parentParticipant?.user_profile
+    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
+    : 'Parent';
+  const studentName = thread.student
+    ? `${thread.student.first_name} ${thread.student.last_name}`
+    : null;
+  const hasUnread = (thread.unread_count || 0) > 0;
+  
+  const getInitials = (name: string) => {
+    if (!name || name.trim() === '') return '?';
+    const parts = name.trim().split(' ').filter(part => part.length > 0);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return parts[0]?.[0]?.toUpperCase() || '?';
+  };
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`flex items-center gap-3 p-3 mb-2 rounded-xl cursor-pointer transition-all ${
+        isActive 
+          ? 'bg-surface-2 border border-primary/30 shadow-md' 
+          : 'hover:bg-surface/50 border border-transparent'
+      }`}
+    >
+      <div
+        className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 ${
+          isActive ? 'bg-primary shadow-lg' : 'bg-surface-2'
+        }`}
+      >
+        {getInitials(parentName)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-center mb-1">
+          <span className={`text-sm font-semibold truncate ${hasUnread ? 'text-primary' : 'text-white'}`}>
+            {parentName}
+          </span>
+          {thread.last_message?.created_at && (
+            <span className={`text-xs ml-2 ${hasUnread ? 'text-primary font-medium' : 'text-muted'}`}>
+              {formatMessageTime(thread.last_message.created_at)}
+            </span>
+          )}
+        </div>
+        {studentName && (
+          <p className="text-xs text-cyan mb-1 truncate">
+            📚 {studentName}
+          </p>
+        )}
+        <p className={`text-xs truncate ${hasUnread ? 'text-white/80' : 'text-muted'}`}>
+          {thread.last_message?.content || 'No messages yet'}
+        </p>
+      </div>
+      {hasUnread && (
+        <div className="min-w-[22px] h-[22px] rounded-full bg-primary flex items-center justify-center px-2 shadow-md">
+          <span className="text-white text-xs font-bold">
+            {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default function TeacherMessagesPage() {
+  const router = useRouter();
+  useBodyScrollLock(true);
+  const supabase = createClient();
+  const [userId, setUserId] = useState<string>();
+  const [authLoading, setAuthLoading] = useState(true);
+  const [threads, setThreads] = useState<MessageThread[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const selectedThreadIdRef = useRef<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { profile, loading: profileLoading } = useUserProfile(userId);
+  const { slug: tenantSlug } = useTenantSlug(userId);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+  }, [selectedThreadId]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
+  // Call useComposerEnhancements early to satisfy Rules of Hooks
+  const {
+    emojiButtonRef,
+    emojiPickerRef,
+    showEmojiPicker,
+    setShowEmojiPicker,
+    handleEmojiSelect,
+    triggerFilePicker,
+    fileInputRef,
+    handleAttachmentChange,
+    attachmentUploading,
+    isRecording,
+    handleMicClick,
+    statusMessage,
+  } = useComposerEnhancements({
+    supabase,
+    threadId: selectedThreadId,
+    userId,
+    onRefresh: () => {
+      setRefreshTrigger(prev => prev + 1);
+    },
+    onEmojiInsert: (emoji) => setMessageText((prev) => `${prev}${emoji}`),
+  });
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/sign-in');
+        return;
+      }
+      setUserId(session.user.id);
+      setAuthLoading(false);
+    };
+    initAuth();
+  }, [router, supabase]);
+
+  useEffect(() => {
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const markThreadAsRead = useCallback(async (threadId: string) => {
+    if (!userId) return;
+    try {
+      // Call the database function to mark all messages as read
+      await supabase.rpc('mark_thread_messages_as_read', {
+        thread_id: threadId,
+        reader_id: userId,
+      });
+    } catch (err) {
+      console.error('Error marking thread as read:', err);
+    }
+  }, [supabase, userId]);
+
+  // Mark thread as read when selected (with delay to ensure messages are loaded)
+  useEffect(() => {
+    if (selectedThreadId && userId) {
+      // Mark as read and trigger refresh
+      const markAndRefresh = async () => {
+        await markThreadAsRead(selectedThreadId);
+        // Wait a bit for DB to update, then trigger refresh
+        setTimeout(() => {
+          setRefreshTrigger(prev => prev + 1);
+        }, 300);
+      };
+      
+      // Delay slightly to ensure messages are loaded first
+      setTimeout(markAndRefresh, 500);
+    }
+  }, [selectedThreadId, userId, markThreadAsRead]);
+
+  const fetchMessages = useCallback(async (threadId: string) => {
+    setMessagesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`
+          id,
+          thread_id,
+          sender_id,
+          content,
+          created_at,
+          read_by,
+          sender:profiles(first_name, last_name, role)
+        `)
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setMessages(data || []);
+      await markThreadAsRead(threadId);
+      setTimeout(() => scrollToBottom(), 80);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [markThreadAsRead, supabase]);
+
+  const fetchThreads = useCallback(async () => {
+    if (!userId || !profile?.preschoolId) return;
+    
+    setThreadsLoading(true);
+    setError(null);
+    
+    try {
+      const { data: threads, error: threadsError } = await supabase
+        .from('message_threads')
+        .select(`
+          id,
+          type,
+          subject,
+          student_id,
+          last_message_at,
+          student:students(id, first_name, last_name),
+          message_participants!inner(
+            user_id,
+            role,
+            last_read_at,
+            user_profile:profiles(first_name, last_name, role)
+          )
+        `)
+        .eq('preschool_id', profile.preschoolId)
+        .order('last_message_at', { ascending: false });
+      
+      if (threadsError) throw threadsError;
+      
+      // Filter threads where teacher is a participant
+      const teacherThreads = (threads || []).filter((thread: any) => 
+        thread.message_participants?.some((p: any) => 
+          p.user_id === userId && p.role === 'teacher'
+        )
+      );
+      
+      // Get last message and unread count for each thread
+      const threadsWithDetails = await Promise.all(
+        teacherThreads.map(async (thread: any) => {
+          // Get last message
+          const { data: lastMessage } = await supabase
+            .from('messages')
+            .select('content, created_at, sender_id')
+            .eq('thread_id', thread.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          
+          // Get unread count
+          const teacherParticipant = thread.message_participants?.find(
+            (p: any) => p.user_id === userId && p.role === 'teacher'
+          );
+          
+          let unreadCount = 0;
+          if (teacherParticipant) {
+            const { count } = await supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('thread_id', thread.id)
+              .neq('sender_id', userId)
+              .gt('created_at', teacherParticipant.last_read_at || '2000-01-01');
+            
+            unreadCount = count || 0;
+          }
+          
+          return {
+            ...thread,
+            last_message: lastMessage,
+            unread_count: unreadCount,
+          };
+        })
+      );
+      
+      setThreads(threadsWithDetails);
+      // Don't auto-select threads - let user choose
+      // Only ensure selection is still valid if one exists
+      if (selectedThreadId) {
+        const stillSelected = threadsWithDetails.some((t) => t.id === selectedThreadId);
+        if (!stillSelected) {
+          setSelectedThreadId(null);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching threads:', err);
+      setError(err.message);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [profile?.preschoolId, selectedThreadId, supabase, userId]);
+
+  const refreshConversation = useCallback(() => {
+    if (selectedThreadId) {
+      fetchMessages(selectedThreadId);
+      fetchThreads();
+    }
+  }, [fetchMessages, fetchThreads, selectedThreadId]);
+
+  useEffect(() => {
+    if (userId && profile?.preschoolId) {
+      fetchThreads();
+    }
+  }, [userId, profile?.preschoolId, fetchThreads, refreshTrigger]);
+
+  useEffect(() => {
+    if (selectedThreadId) {
+      fetchMessages(selectedThreadId);
+    }
+  }, [selectedThreadId, fetchMessages]);
+
+  useEffect(() => {
+    if (!selectedThreadId) return;
+
+    const channel = supabase
+      .channel(`teacher-messages:${selectedThreadId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${selectedThreadId}`,
+        },
+        () => {
+          fetchMessages(selectedThreadId);
+          fetchThreads(); // Refresh thread list to update unread counts
+          // Scroll to bottom after a brief delay to allow DOM update
+          setTimeout(() => scrollToBottom(), 100);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedThreadId, supabase, fetchMessages, fetchThreads]);
+
+  // Stable keyboard listener with empty deps array - MUST be before any conditional returns
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (
+        (event.key.toLowerCase() === 'x' || event.key === 'Escape') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        if (selectedThreadIdRef.current) {
+          setSelectedThreadId(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  // Early return for loading states
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Regular functions and computed values after hooks and early returns
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageText.trim() || !selectedThreadId || !userId) return;
+
+    setSending(true);
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          thread_id: selectedThreadId,
+          sender_id: userId,
+          content: messageText.trim(),
+          content_type: 'text',
+        });
+
+      if (error) throw error;
+
+      await supabase
+        .from('message_threads')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', selectedThreadId);
+
+      setMessageText('');
+      setRefreshTrigger(prev => prev + 1);
+      
+      // Scroll to bottom after sending
+      setTimeout(() => scrollToBottom(), 100);
+    } catch (err: any) {
+      console.error('Error sending message:', err);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Compute derived values
+  const filteredThreads = threads.filter((thread) => {
+    if (!searchQuery) return true;
+
+    const query = searchQuery.toLowerCase();
+    const participants = thread.message_participants || thread.participants || [];
+    const participant = participants.find((p: any) => p.role === 'parent');
+    const participantName = participant?.user_profile
+      ? `${participant.user_profile.first_name} ${participant.user_profile.last_name}`.toLowerCase()
+      : '';
+    const studentName = thread.student
+      ? `${thread.student.first_name} ${thread.student.last_name}`.toLowerCase()
+      : '';
+    const lastMessage = thread.last_message?.content.toLowerCase() || '';
+
+    return (
+      participantName.includes(query) ||
+      studentName.includes(query) ||
+      lastMessage.includes(query) ||
+      thread.subject.toLowerCase().includes(query)
+    );
+  });
+
+  const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
+  const selectedThread = threads.find((thread) => thread.id === selectedThreadId);
+  const selectedParticipants = selectedThread?.message_participants || selectedThread?.participants || [];
+  const parentParticipant = selectedParticipants?.find((p: any) => p.role === 'parent');
+  const parentName = parentParticipant?.user_profile
+    ? `${parentParticipant.user_profile.first_name} ${parentParticipant.user_profile.last_name}`.trim()
+    : 'Parent';
+
+  const handleClearSelection = () => {
+    setSelectedThreadId(null);
+    // Refresh threads to update unread counts
+    fetchThreads();
+
+    // On mobile, don't use router.back() - just clear selection to show contact list
+    // Router navigation is not needed since we're staying on the same page
+  };
+
+  return (
+    <>
+      <style jsx global>{`
+        /* Hide the header on teacher messages page */
+        body:has(.teacher-messages-page) .topbar,
+        body:has(.teacher-messages-page) header.topbar {
+          display: none !important;
+        }
+        .teacher-messages-page {
+          background: rgba(17, 24, 39, 0.98) !important;
+          position: relative;
+          z-index: 10;
+        }
+      `}</style>
+      <TeacherShell
+        tenantSlug={tenantSlug}
+        userEmail={profile?.email}
+        userName={profile?.firstName}
+        preschoolName={profile?.preschoolName}
+        preschoolId={profile?.preschoolId}
+        userId={userId}
+        unreadCount={totalUnread}
+        contentStyle={{ padding: 0, overflow: 'hidden' }}
+      >
+        <div
+          className="teacher-messages-page"
+          style={{
+            display: 'flex',
+          height: '100vh',
+          overflow: 'hidden',
+          width: '100%',
+          margin: 0,
+          boxSizing: 'border-box',
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Mobile: Show thread list when no selection, otherwise show chat */}
+          {!isDesktop && !selectedThread ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Mobile contacts header with back arrow */}
+              <div style={{ 
+                padding: '16px 12px', 
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                background: '#111827',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                zIndex: 1000,
+              }}>
+                <button
+                  onClick={() => router.push('/dashboard/teacher')}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    background: 'transparent',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--text-primary)',
+                    padding: 0,
+                  }}
+                >
+                  <ArrowLeft size={22} />
+                </button>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  Messages
+                </h2>
+              </div>
+              
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 8px', paddingTop: '80px' }}>
+                <div style={{ position: 'relative', marginBottom: 16, padding: '0 8px' }}>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                    color: 'var(--text)',
+                    fontSize: 15,
+                  }}
+                />
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: 20,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                  }}
+                />
+              </div>
+              {threadsLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div className="spinner" style={{ margin: '0 auto' }}></div>
+                </div>
+              ) : filteredThreads.length > 0 ? (
+                filteredThreads.map((thread) => (
+                  <ThreadItem
+                    key={thread.id}
+                    thread={thread}
+                    isActive={false}
+                    onSelect={() => setSelectedThreadId(thread.id)}
+                  />
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <MessageCircle size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
+                  <p style={{ color: 'var(--muted)', fontSize: 15 }}>No conversations yet</p>
+                </div>
+                )}
+              </div>
+            </div>
+          ) : selectedThread ? (
+            <>
+              <div
+                style={{
+                  position: isDesktop ? 'relative' : 'fixed',
+                  top: isDesktop ? 'auto' : 0,
+                  left: isDesktop ? 'auto' : 0,
+                  right: isDesktop ? 'auto' : 0,
+                  zIndex: isDesktop ? 'auto' : 1000,
+                  padding: isDesktop ? '20px 28px' : '16px 12px',
+                  borderBottom: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  background: isDesktop
+                    ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%)'
+                    : '#111827',
+                  backdropFilter: 'blur(12px)',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: isDesktop ? 18 : 12,
+                  boxShadow: isDesktop ? '0 2px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                }}
+              >
+                {!isDesktop && (
+                  <button
+                    onClick={handleClearSelection}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      background: 'rgba(100, 116, 139, 0.1)',
+                      border: '1px solid rgba(148, 163, 184, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#e2e8f0',
+                      padding: 0,
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
+                )}
+                <div
+                  style={{
+                    width: isDesktop ? 52 : 44,
+                    height: isDesktop ? 52 : 44,
+                    borderRadius: isDesktop ? 26 : 22,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                    fontSize: isDesktop ? 17 : 14,
+                    fontWeight: 600,
+                    color: '#fff',
+                  }}
+                >
+                  {parentName.trim().split(' ').filter(n => n.length > 0).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ 
+                    margin: 0, 
+                    fontSize: isDesktop ? 18 : 16, 
+                    fontWeight: 700, 
+                    color: '#f1f5f9',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {parentName}
+                  </h2>
+                  {selectedThread.student && (
+                    <p style={{ 
+                      margin: '4px 0 0', 
+                      fontSize: isDesktop ? 13 : 12, 
+                      color: '#a78bfa', 
+                      fontWeight: 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                      <span>📚</span>
+                      <span>{selectedThread.student.first_name} {selectedThread.student.last_name}</span>
+                    </p>
+                  )}
+                </div>
+                {isDesktop && (
+                  <button
+                    onClick={handleClearSelection}
+                    style={{
+                      border: '1px solid rgba(148, 163, 184, 0.2)',
+                      borderRadius: 10,
+                      padding: '8px 14px',
+                      background: 'rgba(100, 116, 139, 0.1)',
+                      color: '#94a3b8',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <ArrowLeft size={16} />
+                    Clear chat
+                  </button>
+                )}
+              </div>
+
+              <div
+                className="hide-scrollbar"
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: isDesktop ? '28px 0px' : '16px 8px',
+                  paddingTop: isDesktop ? '32px' : '128px',
+                  paddingBottom: isDesktop ? 100 : 80,
+                  paddingRight: isDesktop ? 340 : 0,
+                  background: 'var(--bg)',
+                }}
+              >
+                {messagesLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+                    <div className="spinner"></div>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      textAlign: 'center',
+                      minHeight: 300,
+                      padding: 40,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '40px 32px',
+                        borderRadius: 'var(--radius-xl)',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        boxShadow: 'var(--shadow-lg)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 72,
+                          height: 72,
+                          margin: '0 auto 20px',
+                          borderRadius: 36,
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 4px 16px rgba(99, 102, 241, 0.2)',
+                        }}
+                      >
+                        <Send size={30} color="#818cf8" />
+                      </div>
+                      <p style={{ color: '#f1f5f9', marginBottom: 10, fontSize: 17, fontWeight: 600 }}>Start a conversation</p>
+                      <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
+                        Send a message below to connect with this parent.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: isDesktop ? 20 : 16 }}>
+                    {messages.map((message) => {
+                      const isOwn = message.sender_id === userId;
+                      const senderName = message.sender
+                        ? `${message.sender.first_name} ${message.sender.last_name}`
+                        : 'Unknown';
+                      
+                      // Get other participant IDs (excluding current user) for read status
+                      const otherParticipantIds = selectedParticipants
+                        .filter((p: any) => p.user_id !== userId)
+                        .map((p: any) => p.user_id);
+
+                      return (
+                        <ChatMessageBubble
+                          key={message.id}
+                          message={message}
+                          isOwn={isOwn}
+                          isDesktop={isDesktop}
+                          formattedTime={formatMessageTime(message.created_at)}
+                          senderName={!isOwn ? senderName : undefined}
+                          otherParticipantIds={otherParticipantIds}
+                        />
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  position: isDesktop ? 'absolute' : 'fixed',
+                  bottom: 0,
+                  left: 0,
+                  right: isDesktop ? 320 : 0,
+                  padding: isDesktop ? '16px 28px' : '12px 12px',
+                  background: isDesktop 
+                    ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)'
+                    : 'rgba(15, 23, 42, 0.98)',
+                  backdropFilter: 'blur(12px)',
+                  borderTop: isDesktop ? '1px solid rgba(148, 163, 184, 0.1)' : 'none',
+                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.15)',
+                  zIndex: 50,
+                }}
+              >
+                <input
+                  type="file"
+                  accept="image/*,audio/*,video/*"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleAttachmentChange}
+                />
+                <form onSubmit={handleSendMessage} style={{ position: 'relative' }}>
+                  {showEmojiPicker && (
+                    <div
+                      ref={emojiPickerRef}
+                      style={{
+                        position: 'absolute',
+                        bottom: 70,
+                        left: 12,
+                        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        borderRadius: 16,
+                        padding: 12,
+                        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, 1fr)',
+                        gap: 8,
+                        zIndex: 20,
+                      }}
+                    >
+                      {EMOJI_OPTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => handleEmojiSelect(emoji)}
+                          style={{
+                            fontSize: 22,
+                            lineHeight: 1,
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            padding: 6,
+                            borderRadius: 8,
+                            transition: 'background 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(100, 116, 139, 0.2)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', maxWidth: isDesktop ? 800 : 900, margin: '0 auto', position: 'relative' }}>
+                    {/* Desktop: Icons outside input */}
+                    {isDesktop && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          ref={emojiButtonRef}
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            background: 'rgba(100, 116, 139, 0.1)',
+                            border: '1px solid rgba(148, 163, 184, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#94a3b8',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <Smile size={22} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={triggerFilePicker}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 22,
+                            background: 'rgba(100, 116, 139, 0.1)',
+                            border: '1px solid rgba(148, 163, 184, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: '#94a3b8',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <Paperclip size={18} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Mobile: Emoji button next to input */}
+                    {!isDesktop && (
+                      <button
+                        type="button"
+                        ref={emojiButtonRef}
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 21,
+                          background: 'rgba(100, 116, 139, 0.1)',
+                          border: '1px solid rgba(148, 163, 184, 0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: '#94a3b8',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Smile size={20} />
+                      </button>
+                    )}
+
+                    {/* Input field with attachment icon inside on mobile */}
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      {/* Mobile: Attachment icon inside input when no text */}
+                      {!isDesktop && !messageText.trim() && (
+                        <div style={{ 
+                          position: 'absolute', 
+                          left: 14, 
+                          top: '50%', 
+                          transform: 'translateY(-50%)',
+                          zIndex: 1,
+                          pointerEvents: 'auto'
+                        }}>
+                          <button
+                            type="button"
+                            onClick={triggerFilePicker}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              background: 'transparent',
+                              border: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#64748b',
+                              padding: 0,
+                            }}
+                          >
+                            <Paperclip size={18} />
+                          </button>
+                        </div>
+                      )}
+
+                      <textarea
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        placeholder="Type a message..."
+                        disabled={sending || attachmentUploading}
+                        rows={1}
+                        style={{
+                          width: '100%',
+                          padding: isDesktop ? '14px 20px' : (messageText.trim() ? '14px 54px 14px 22px' : '14px 54px 14px 48px'),
+                          borderRadius: 26,
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-2)',
+                          color: 'var(--text)',
+                          fontSize: 15,
+                          outline: 'none',
+                          resize: 'none',
+                          maxHeight: 120,
+                          fontFamily: 'inherit',
+                          transition: 'border-color 0.2s ease',
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage(e);
+                          }
+                        }}
+                      />
+
+                      {/* Mobile: Right icon inside input (mic or send) */}
+                      {!isDesktop && (
+                        <div style={{
+                          position: 'absolute',
+                          right: 8,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          zIndex: 1,
+                        }}>
+                          {messageText.trim() ? (
+                            <button
+                              type="submit"
+                              disabled={sending || attachmentUploading}
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 19,
+                                background: sending || attachmentUploading
+                                  ? '#475569'
+                                  : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
+                                boxShadow: sending || attachmentUploading ? 'none' : '0 3px 10px rgba(59, 130, 246, 0.35)',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              {sending || attachmentUploading ? (
+                                <Loader2 size={18} className="animate-spin" color="#fff" />
+                              ) : (
+                                <Send size={18} color="#fff" />
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleMicClick}
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 19,
+                                background: isRecording 
+                                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                                  : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isRecording 
+                                  ? '0 3px 10px rgba(245, 158, 11, 0.35)' 
+                                  : '0 3px 10px rgba(34, 197, 94, 0.35)',
+                              }}
+                            >
+                              <Mic size={20} color="white" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Desktop: Send/Mic button outside */}
+                    {isDesktop && (
+                      messageText.trim() ? (
+                        <button
+                          type="submit"
+                          disabled={sending || attachmentUploading}
+                          style={{
+                            width: 50,
+                            height: 50,
+                            borderRadius: 25,
+                            background:
+                              sending || attachmentUploading
+                                ? '#475569'
+                                : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: sending || attachmentUploading ? 'not-allowed' : 'pointer',
+                            boxShadow:
+                              sending || attachmentUploading ? 'none' : '0 4px 14px rgba(59, 130, 246, 0.4)',
+                            transition: 'all 0.2s ease',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {sending || attachmentUploading ? (
+                            <Loader2 size={20} className="animate-spin" color="#fff" />
+                          ) : (
+                            <Send size={20} color="#fff" />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleMicClick}
+                          style={{
+                            width: 50,
+                            height: 50,
+                            borderRadius: 25,
+                            background: isRecording 
+                              ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                              : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            flexShrink: 0,
+                            boxShadow: isRecording 
+                              ? '0 4px 14px rgba(245, 158, 11, 0.4)' 
+                              : '0 4px 14px rgba(34, 197, 94, 0.4)',
+                          }}
+                        >
+                          <Mic size={22} color="white" />
+                        </button>
+                      )
+                    )}
+                  </div>
+                </form>
+                {statusMessage && (
+                  <p style={{ marginTop: 10, fontSize: 13, color: '#f87171', textAlign: 'center' }}>{statusMessage}</p>
+                )}
+              </div>
+            </>
+          ) : (
+            isDesktop && (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                paddingRight: 320,
+                background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: 360,
+                  padding: 40,
+                  borderRadius: 20,
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: '0 20px 80px rgba(15, 23, 42, 0.25)',
+                }}
+              >
+                <div style={{ 
+                  width: 120, 
+                  height: 120, 
+                  margin: '0 auto 24px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3)'
+                }}>
+                  <svg width="60" height="60" viewBox="0 0 100 100" fill="none">
+                    <path d="M20 30L50 60L80 30" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M20 50L50 80L80 50" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity="0.7"/>
+                  </svg>
+                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'white', marginBottom: 12, textAlign: 'center' }}>
+                  EduDash Pro Messages
+                </h2>
+                <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 15, lineHeight: 1.5, textAlign: 'center' }}>
+                  Send private, secure messages between parents and teachers.
+                </p>
+              </div>
+            </div>
+            )
+          )}
+        </div>
+
+        {isDesktop && (
+          <div
+            style={{
+              position: 'fixed',
+              right: 0,
+              top: 'var(--topnav-h)',
+              bottom: 0,
+              width: 320,
+              borderLeft: '1px solid rgba(148, 163, 184, 0.1)',
+              background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 20,
+              boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.15)',
+            }}
+          >
+            <div style={{ 
+              padding: '20px 16px 16px', 
+              borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+              background: 'rgba(15, 23, 42, 0.5)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: 18, 
+                  fontWeight: 700, 
+                  color: '#f1f5f9',
+                  letterSpacing: '-0.01em',
+                }}>
+                  Conversations
+                </h3>
+                {totalUnread > 0 && (
+                  <span style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 12,
+                    boxShadow: '0 2px 6px rgba(59, 130, 246, 0.3)',
+                  }}>
+                    {totalUnread} new
+                  </span>
+                )}
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px 12px 42px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    color: '#e2e8f0',
+                    fontSize: 14,
+                    outline: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                />
+                <Search
+                  size={18}
+                  color="#64748b"
+                  style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 10px' }}>
+              {threadsLoading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div className="spinner" style={{ margin: '0 auto' }}></div>
+                </div>
+              ) : error ? (
+                <div style={{ textAlign: 'center', padding: 32 }}>
+                  <p style={{ color: '#f87171', fontSize: 14, marginBottom: 16 }}>Failed to load messages</p>
+                  <button 
+                    className="btn btnSecondary" 
+                    onClick={fetchThreads}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      color: '#60a5fa',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : filteredThreads.length > 0 ? (
+                filteredThreads.map((thread) => (
+                  <ThreadItem
+                    key={thread.id}
+                    thread={thread}
+                    isActive={thread.id === selectedThreadId}
+                    onSelect={() => setSelectedThreadId(thread.id)}
+                  />
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div style={{
+                    width: 64,
+                    height: 64,
+                    margin: '0 auto 16px',
+                    borderRadius: 32,
+                    background: 'rgba(100, 116, 139, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <MessageCircle size={28} color="#64748b" />
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: 15, fontWeight: 500 }}>No conversations yet</p>
+                  <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Messages will appear here</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </TeacherShell>
+    </>
+  );
+}
