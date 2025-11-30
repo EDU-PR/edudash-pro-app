@@ -2050,7 +2050,8 @@ function TeacherMessagesPage() {
                         </div>
                       </div>
                     )}
-                    <div ref={messagesEndRef} />
+                    {/* Spacer for bottom padding on mobile */}
+                    <div ref={messagesEndRef} style={{ height: isDesktop ? 16 : 100, flexShrink: 0 }} />
                   </div>
                 )}
                 </div>
