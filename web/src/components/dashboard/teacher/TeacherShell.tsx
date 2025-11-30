@@ -130,7 +130,6 @@ export function TeacherShell({
     { href: '/dashboard/teacher/assignments', label: 'Assignments', icon: ClipboardCheck },
     { href: '/dashboard/teacher/lessons', label: 'Lesson Plans', icon: BookOpen },
     { href: '/dashboard/teacher/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
-    { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
     { href: '/dashboard/teacher/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -302,10 +301,37 @@ export function TeacherShell({
       {mobileNavOpen && (
         <>
           <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.85)',
+              zIndex: 9998,
+              display: 'none',
+            }}
             className="mobile-nav-overlay"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="mobile-nav-drawer">
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: '80%',
+              maxWidth: 320,
+              background: 'var(--surface-1)',
+              zIndex: 9999,
+              overflowY: 'auto',
+              padding: 'var(--space-4)',
+              display: 'none',
+              animation: 'slideInLeft 0.3s ease-out',
+            }}
+            className="mobile-nav-drawer"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
               <button 
@@ -362,10 +388,36 @@ export function TeacherShell({
       {rightSidebar && mobileWidgetsOpen && (
         <>
           <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.85)',
+              zIndex: 9998,
+              display: 'none',
+            }}
             className="mobile-widgets-overlay"
             onClick={() => setMobileWidgetsOpen(false)}
           />
-          <div className="mobile-widgets-drawer">
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: '85%',
+              maxWidth: 400,
+              background: 'var(--surface-1)',
+              zIndex: 9999,
+              display: 'flex',
+              flexDirection: 'column',
+              animation: 'slideInRight 0.3s ease-out',
+            }}
+            className="mobile-widgets-drawer"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Sticky Header */}
             <div style={{ 
               display: 'flex', 
@@ -384,7 +436,7 @@ export function TeacherShell({
                 className="iconBtn"
                 aria-label="Close"
               >
-                <X className="icon20" />
+                <X className="icon20 text-red-500" />
               </button>
             </div>
             
@@ -405,51 +457,6 @@ export function TeacherShell({
       <PushNotificationPrompt />
 
       <style jsx>{`
-        .mobile-nav-overlay,
-        .mobile-widgets-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.85);
-          z-index: 9998;
-        }
-        .mobile-nav-drawer {
-          position: fixed;
-          top: 0;
-          left: 0;
-          bottom: 0;
-          width: 80%;
-          max-width: 320px;
-          background: var(--surface-1);
-          z-index: 9999;
-          overflow-y: auto;
-          padding: var(--space-4);
-          animation: slideInLeft 0.3s ease-out;
-        }
-        .mobile-widgets-drawer {
-          position: fixed;
-          top: 0;
-          right: 0;
-          bottom: 0;
-          width: 85%;
-          max-width: 400px;
-          background: var(--surface-1);
-          z-index: 9999;
-          display: flex;
-          flex-direction: column;
-          animation: slideInRight 0.3s ease-out;
-        }
-        @media (min-width: 1024px) {
-          /* Hide mobile drawers on desktop */
-          .mobile-nav-overlay,
-          .mobile-nav-drawer,
-          .mobile-widgets-overlay,
-          .mobile-widgets-drawer {
-            display: none !important;
-          }
-        }
         @media (max-width: 1023px) {
           /* Show mobile navigation button */
           .mobile-nav-btn {
@@ -458,6 +465,16 @@ export function TeacherShell({
           /* Hide desktop back button on mobile, use hamburger instead */
           .desktop-back-btn {
             display: none !important;
+          }
+          /* Show overlays and drawers */
+          .mobile-nav-overlay,
+          .mobile-nav-drawer,
+          .mobile-widgets-overlay {
+            display: block !important;
+          }
+          /* Mobile widgets drawer needs flex for sticky header */
+          .mobile-widgets-drawer {
+            display: flex !important;
           }
         }
         @keyframes slideInLeft {

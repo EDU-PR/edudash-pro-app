@@ -273,6 +273,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           />
           <div 
             className="mobile-nav-drawer"
+            onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
