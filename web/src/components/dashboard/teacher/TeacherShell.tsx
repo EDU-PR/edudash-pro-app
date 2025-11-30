@@ -27,6 +27,7 @@ import {
 import { TierBadge } from '@/components/ui/TierBadge';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useBackButton } from '@/hooks/useBackButton';
+import { badgeManager } from '@/lib/utils/notification-badge';
 
 interface TeacherShellProps {
   tenantSlug?: string;
@@ -87,6 +88,9 @@ export function TeacherShell({
         .eq('is_read', false);
       
       setNotificationCount(count || 0);
+      
+      // Update app badge with notification count
+      badgeManager.setUnreadNotifications(count || 0);
     };
 
     fetchNotificationCount();

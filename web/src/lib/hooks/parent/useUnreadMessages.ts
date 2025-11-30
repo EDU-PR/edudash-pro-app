@@ -3,6 +3,7 @@
 /**
  * Hook to get and track unread message count for a parent user.
  * Subscribes to real-time updates to show new message indicators immediately.
+ * Also updates the PWA app badge with the unread count.
  * Types extracted to shared/unreadMessagesTypes.ts
  */
 
@@ -16,6 +17,7 @@ import {
   extractUserThreadData,
   countUnreadMessages,
 } from '@/lib/hooks/shared';
+import { badgeManager } from '@/lib/utils/notification-badge';
 
 export function useUnreadMessages(
   userId: string | undefined,
@@ -76,6 +78,9 @@ export function useUnreadMessages(
       }
 
       setUnreadCount(countUnreadMessages(unreadMessages, userThreadsData));
+      
+      // Update app badge with unread message count
+      badgeManager.setUnreadMessages(countUnreadMessages(unreadMessages, userThreadsData));
     } catch (err) {
       console.error('Failed to load unread messages:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');

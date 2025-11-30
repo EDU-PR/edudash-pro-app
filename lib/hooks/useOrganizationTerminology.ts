@@ -113,5 +113,6 @@ export function useOrgType() {
     isCommunityOrg: terminology.orgType === 'community_org',
     isTrainingCenter: terminology.orgType === 'training_center',
     isTutoringCenter: terminology.orgType === 'tutoring_center',
+    isSkillsDevelopment: terminology.orgType === 'skills_development',
   }), [terminology.orgType]);
 }

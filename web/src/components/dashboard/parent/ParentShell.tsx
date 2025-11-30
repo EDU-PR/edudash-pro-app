@@ -23,6 +23,7 @@ import {
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useBackButton } from '@/hooks/useBackButton';
+import { badgeManager } from '@/lib/utils/notification-badge';
 
 interface ParentShellProps {
   tenantSlug?: string;
@@ -80,6 +81,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         .eq('is_read', false);
       
       setNotificationCount(count || 0);
+      
+      // Update app badge with notification count
+      badgeManager.setUnreadNotifications(count || 0);
     };
 
     fetchNotificationCount();

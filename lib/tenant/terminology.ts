@@ -115,6 +115,19 @@ export const TERMINOLOGY_MAPS: Record<OrganizationType, TerminologyMap> = {
     institution: 'Tutoring Center',
     level: 'Level',
   },
+  
+  skills_development: {
+    member: 'Learner',
+    members: 'Learners',
+    instructor: 'Facilitator',
+    instructors: 'Facilitators',
+    guardian: 'Sponsor',
+    guardians: 'Sponsors',
+    group: 'Programme',
+    groups: 'Programmes',
+    institution: 'Skills Centre',
+    level: 'Level',
+  },
 };
 
 /**

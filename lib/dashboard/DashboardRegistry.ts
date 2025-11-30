@@ -13,6 +13,13 @@ import type { OrganizationType } from '@/lib/types/organization';
 import type { AgeGroup } from '@/lib/hooks/useAgeGroup';
 
 /**
+ * Organization type groups for widget visibility
+ * Extracted to constants to reduce duplication and ease maintenance
+ */
+const CERTIFICATION_ORG_TYPES: OrganizationType[] = ['corporate', 'training_center', 'skills_development'];
+const SPORTS_ORG_TYPES: OrganizationType[] = ['sports_club'];
+
+/**
  * Widget definition in the registry
  */
 export interface WidgetManifest {
@@ -67,6 +74,7 @@ export function getHubType(role: string): HubType {
     employee: 'learner',
     trainee: 'learner',
     member: 'learner',
+    learner: 'learner',
     
     // Instructor hub
     teacher: 'instructor',
@@ -75,6 +83,7 @@ export function getHubType(role: string): HubType {
     professor: 'instructor',
     tutor: 'instructor',
     instructor: 'instructor',
+    facilitator: 'instructor',
     
     // Guardian hub
     parent: 'guardian',
@@ -89,6 +98,8 @@ export function getHubType(role: string): HubType {
     superadmin: 'admin',
     club_admin: 'admin',
     center_admin: 'admin',
+    centre_director: 'admin',
+    department_head: 'admin',
     manager: 'admin',
   };
   
@@ -107,7 +118,7 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       description: 'View important announcements',
       Component: require('@/components/dashboard/cards/AnnouncementsCard').default,
       featureKey: 'announcements',
-      roles: ['student', 'athlete', 'employee', 'trainee', 'member'],
+      roles: ['student', 'athlete', 'employee', 'trainee', 'member', 'learner'],
       order: 10,
     },
     {
@@ -116,7 +127,7 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       description: 'View your schedule',
       Component: require('@/components/dashboard/cards/ScheduleCard').default,
       featureKey: 'schedule_timetable',
-      roles: ['student', 'athlete', 'employee', 'trainee'],
+      roles: ['student', 'athlete', 'employee', 'trainee', 'learner'],
       order: 20,
     },
     {
@@ -125,7 +136,7 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       description: 'View and submit assignments',
       Component: require('@/components/dashboard/cards/AssignmentsCard').default,
       featureKey: 'assignments_tasks',
-      roles: ['student', 'employee', 'trainee'],
+      roles: ['student', 'employee', 'trainee', 'learner'],
       ageGroups: ['teen', 'adult'], // Children don't see this
       order: 30,
     },
@@ -135,7 +146,7 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       description: 'View your grades and progress',
       Component: require('@/components/dashboard/cards/GradesCard').default,
       featureKey: 'grades_reports',
-      roles: ['student', 'employee'],
+      roles: ['student', 'employee', 'learner'],
       ageGroups: ['teen', 'adult'],
       order: 40,
     },
@@ -146,7 +157,7 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       Component: require('@/components/dashboard/cards/FixturesCard').default,
       featureKey: 'teams_fixtures',
       roles: ['athlete'],
-      orgTypes: ['sports_club' as OrganizationType],
+      orgTypes: SPORTS_ORG_TYPES,
       order: 25,
     },
     {
@@ -155,26 +166,115 @@ const widgetRegistry: Record<HubType, WidgetManifest[]> = {
       description: 'View and download certificates',
       Component: require('@/components/dashboard/cards/CertificationsCard').default,
       featureKey: 'certifications',
-      roles: ['employee', 'trainee'],
-      orgTypes: ['corporate' as OrganizationType, 'training_center' as OrganizationType],
+      roles: ['employee', 'trainee', 'learner'],
+      orgTypes: CERTIFICATION_ORG_TYPES,
       ageGroups: ['adult'],
       order: 35,
     },
   ],
   
   instructor: [
-    // Instructor widgets would go here
-    // For now, empty - use existing dashboards
+    // Facilitator/Instructor widgets for skills development and other orgs
+    {
+      key: 'announcements',
+      name: 'Announcements',
+      description: 'View and manage announcements',
+      Component: require('@/components/dashboard/cards/AnnouncementsCard').default,
+      featureKey: 'announcements',
+      roles: ['teacher', 'coach', 'trainer', 'professor', 'tutor', 'instructor', 'facilitator'],
+      order: 10,
+    },
+    {
+      key: 'schedule',
+      name: 'Schedule',
+      description: 'View and manage your teaching schedule',
+      Component: require('@/components/dashboard/cards/ScheduleCard').default,
+      featureKey: 'schedule_timetable',
+      roles: ['teacher', 'coach', 'trainer', 'professor', 'tutor', 'instructor', 'facilitator'],
+      order: 20,
+    },
+    {
+      key: 'assignments',
+      name: 'Assignments',
+      description: 'Manage and grade assignments',
+      Component: require('@/components/dashboard/cards/AssignmentsCard').default,
+      featureKey: 'assignments_tasks',
+      roles: ['teacher', 'trainer', 'professor', 'tutor', 'instructor', 'facilitator'],
+      order: 30,
+    },
+    {
+      key: 'grades',
+      name: 'Grades',
+      description: 'Manage learner grades and assessments',
+      Component: require('@/components/dashboard/cards/GradesCard').default,
+      featureKey: 'grades_reports',
+      roles: ['teacher', 'trainer', 'professor', 'tutor', 'instructor', 'facilitator'],
+      order: 40,
+    },
+    {
+      key: 'certifications',
+      name: 'Certifications',
+      description: 'Issue and manage certificates',
+      Component: require('@/components/dashboard/cards/CertificationsCard').default,
+      featureKey: 'certifications',
+      roles: ['trainer', 'instructor', 'facilitator'],
+      orgTypes: CERTIFICATION_ORG_TYPES,
+      order: 35,
+    },
   ],
   
   guardian: [
-    // Guardian widgets would go here
-    // For now, empty - use existing dashboards
+    // Sponsor widgets for skills development
+    {
+      key: 'announcements',
+      name: 'Announcements',
+      description: 'View important announcements',
+      Component: require('@/components/dashboard/cards/AnnouncementsCard').default,
+      featureKey: 'announcements',
+      roles: ['parent', 'guardian', 'sponsor'],
+      order: 10,
+    },
+    {
+      key: 'grades',
+      name: 'Progress Reports',
+      description: 'View learner progress and grades',
+      Component: require('@/components/dashboard/cards/GradesCard').default,
+      featureKey: 'grades_reports',
+      roles: ['parent', 'guardian', 'sponsor'],
+      order: 20,
+    },
+    {
+      key: 'certifications',
+      name: 'Certificates',
+      description: 'View earned certificates',
+      Component: require('@/components/dashboard/cards/CertificationsCard').default,
+      featureKey: 'certifications',
+      roles: ['sponsor'],
+      orgTypes: ['skills_development' as OrganizationType],
+      order: 30,
+    },
   ],
   
   admin: [
-    // Admin widgets would go here
-    // For now, empty - use existing dashboards
+    // Centre Director / Admin widgets
+    {
+      key: 'announcements',
+      name: 'Announcements',
+      description: 'Manage organizational announcements',
+      Component: require('@/components/dashboard/cards/AnnouncementsCard').default,
+      featureKey: 'announcements',
+      roles: ['principal', 'dean', 'director', 'admin', 'superadmin', 'club_admin', 'center_admin', 'centre_director', 'department_head', 'manager'],
+      order: 10,
+    },
+    {
+      key: 'schedule',
+      name: 'Schedule Overview',
+      description: 'View organizational schedules',
+      Component: require('@/components/dashboard/cards/ScheduleCard').default,
+      featureKey: 'schedule_timetable',
+      roles: ['principal', 'dean', 'director', 'admin', 'superadmin', 'centre_director', 'department_head'],
+      order: 20,
+    },
   ],
 };
 

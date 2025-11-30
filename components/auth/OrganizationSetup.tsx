@@ -57,6 +57,11 @@ const ORGANIZATION_TYPES: Array<{ value: OrganizationType; label: string; descri
     description: 'Professional or vocational training'
   },
   {
+    value: 'skills_development',
+    label: 'Skills Development Centre',
+    description: 'Skills development & vocational training for adults (18+)'
+  },
+  {
     value: 'other',
     label: 'Other',
     description: 'Other type of educational institution'

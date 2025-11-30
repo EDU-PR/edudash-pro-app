@@ -14,7 +14,8 @@ export type OrganizationType =
   | 'sports_club'
   | 'community_org'
   | 'training_center'
-  | 'tutoring_center';
+  | 'tutoring_center'
+  | 'skills_development';
 
 /**
  * Organization information
