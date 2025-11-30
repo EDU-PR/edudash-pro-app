@@ -72,7 +72,7 @@ export function OfflineIndicator({
       className={`
         fixed left-0 right-0 z-50 px-4 py-2
         transition-all duration-300 ease-in-out
-        ${isOnline ? 'animate-in slide-in-from-top-2' : 'animate-in slide-in-from-top-2'}
+        animate-in slide-in-from-top-2
       `}
       style={positionStyles}
     >

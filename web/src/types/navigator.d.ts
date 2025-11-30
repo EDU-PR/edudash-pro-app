@@ -2,13 +2,6 @@
  * Extended Navigator interface with Badge API and Wake Lock API support
  */
 
-interface NavigatorWithBadge extends Navigator {
-  /** Set the app badge count */
-  setAppBadge?: (count?: number) => Promise<void>;
-  /** Clear the app badge */
-  clearAppBadge?: () => Promise<void>;
-}
-
 interface WakeLockSentinel extends EventTarget {
   /** Whether the wake lock has been released */
   readonly released: boolean;
@@ -23,10 +16,6 @@ interface WakeLock {
   request: (type: 'screen') => Promise<WakeLockSentinel>;
 }
 
-interface NavigatorWithWakeLock extends Navigator {
-  wakeLock?: WakeLock;
-}
-
 // Extend the global Navigator interface
 declare global {
   interface Navigator {
@@ -36,4 +25,4 @@ declare global {
   }
 }
 
-export type { NavigatorWithBadge, NavigatorWithWakeLock, WakeLockSentinel, WakeLock };
+export type { WakeLockSentinel, WakeLock };

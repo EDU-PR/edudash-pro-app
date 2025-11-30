@@ -154,12 +154,6 @@ export function NativeAppManager({
       }
 
       wakeLockRef.current = await navigator.wakeLock.request('screen');
-      
-      // Handle visibility change - re-acquire wake lock when page becomes visible
-      wakeLockRef.current.addEventListener('release', () => {
-        wakeLockRef.current = null;
-      });
-
       return true;
     } catch {
       // Wake lock request failed (e.g., low battery, page not visible)
