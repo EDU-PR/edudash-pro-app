@@ -426,6 +426,13 @@ function TeacherMessagesPage() {
   const [messageActionsOpen, setMessageActionsOpen] = useState(false);
   const [messageActionsPosition, setMessageActionsPosition] = useState({ x: 0, y: 0 });
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  
+  // Reply context state
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  
+  // Forward modal state
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
 
   // New Chat modal state
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -1200,12 +1207,23 @@ function TeacherMessagesPage() {
   const handleReplyMessage = () => {
     const msg = messages.find(m => m.id === selectedMessageId);
     if (msg) {
-      alert(`Reply to: "${msg.content}"\n\n(Reply functionality coming soon)`);
+      setReplyingTo(msg);
+      setMessageActionsOpen(false);
+      // Focus the input
+      setTimeout(() => {
+        const input = document.querySelector('.wa-composer-input') as HTMLTextAreaElement;
+        if (input) input.focus();
+      }, 100);
     }
   };
 
   const handleForwardMessage = () => {
-    alert('Forward message functionality coming soon!');
+    const msg = messages.find(m => m.id === selectedMessageId);
+    if (msg) {
+      setForwardingMessage(msg);
+      setForwardModalOpen(true);
+    }
+    setMessageActionsOpen(false);
   };
 
   const handleEditMessage = () => {
@@ -1230,15 +1248,32 @@ function TeacherMessagesPage() {
   };
 
   const handleDeleteMessage = async () => {
-    if (!selectedMessageId || !confirm('Delete this message? This cannot be undone.')) return;
+    if (!selectedMessageId) return;
+    const msg = messages.find(m => m.id === selectedMessageId);
+    if (!msg) return;
+    
+    const isOwnMessage = msg.sender_id === userId;
+    
+    if (!confirm(isOwnMessage ? 'Delete this message?' : 'Delete this message for you?')) return;
+    
     try {
-      await supabase.from('messages').delete().eq('id', selectedMessageId);
+      if (isOwnMessage) {
+        // Soft delete by setting deleted_at
+        await supabase
+          .from('messages')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', selectedMessageId)
+          .eq('sender_id', userId);
+      } else {
+        // For messages from others, just hide locally
+        setMessages(prev => prev.filter(m => m.id !== selectedMessageId));
+      }
       setRefreshTrigger(prev => prev + 1);
-      alert('Message deleted.');
     } catch (err) {
       console.error('Error deleting message:', err);
       alert('Failed to delete message.');
     }
+    setMessageActionsOpen(false);
   };
 
   const handleCopyMessage = () => {
@@ -1252,8 +1287,34 @@ function TeacherMessagesPage() {
     }
   };
 
-  const handleReactToMessage = () => {
-    alert('Message reactions coming soon!');
+  const handleReactToMessage = async (emoji?: string) => {
+    if (!selectedMessageId || !emoji || !userId) return;
+    
+    try {
+      // Toggle reaction
+      const { data: existing } = await supabase
+        .from('message_reactions')
+        .select('id')
+        .eq('message_id', selectedMessageId)
+        .eq('user_id', userId)
+        .eq('emoji', emoji)
+        .single();
+
+      if (existing) {
+        await supabase.from('message_reactions').delete().eq('id', existing.id);
+      } else {
+        await supabase.from('message_reactions').insert({
+          message_id: selectedMessageId,
+          user_id: userId,
+          emoji: emoji,
+        });
+      }
+      
+      setRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error('Error reacting to message:', err);
+    }
+    setMessageActionsOpen(false);
   };
 
   return (
@@ -2066,8 +2127,121 @@ function TeacherMessagesPage() {
           onEdit={handleEditMessage}
           onDelete={handleDeleteMessage}
           onCopy={handleCopyMessage}
-          onReact={handleReactToMessage}
+          onReact={(emoji) => handleReactToMessage(emoji)}
+          isMobile={!isDesktop}
+          messageContent={messages.find(m => m.id === selectedMessageId)?.content}
         />
+        
+        {/* Forward Message Modal */}
+        {forwardModalOpen && forwardingMessage && (
+          <div
+            onClick={() => setForwardModalOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.6)',
+              zIndex: 3000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                borderRadius: 16,
+                padding: 20,
+                width: '100%',
+                maxWidth: 400,
+                maxHeight: '80vh',
+                overflow: 'auto',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+              }}
+            >
+              <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 18, fontWeight: 600 }}>
+                Forward Message
+              </h3>
+              <div style={{
+                padding: 12,
+                background: 'rgba(100, 116, 139, 0.1)',
+                borderRadius: 12,
+                marginBottom: 16,
+                borderLeft: '3px solid #3b82f6',
+              }}>
+                <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>
+                  {forwardingMessage.content.startsWith('__media__') ? '📎 Media attachment' : forwardingMessage.content}
+                </p>
+              </div>
+              <p style={{ margin: '0 0 12px', color: '#94a3b8', fontSize: 14 }}>
+                Select a conversation to forward to:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {threads.filter(t => t.id !== selectedThreadId).slice(0, 5).map((thread) => {
+                  const otherParticipant = thread.message_participants?.find(p => p.user_id !== userId);
+                  const name = otherParticipant?.user_profile 
+                    ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+                    : 'Unknown';
+                  return (
+                    <button
+                      key={thread.id}
+                      onClick={async () => {
+                        try {
+                          const { error } = await supabase
+                            .from('messages')
+                            .insert({
+                              thread_id: thread.id,
+                              sender_id: userId,
+                              content: forwardingMessage.content,
+                              forwarded_from_id: forwardingMessage.id,
+                            });
+                          if (error) throw error;
+                          setForwardModalOpen(false);
+                          setForwardingMessage(null);
+                          alert('Message forwarded!');
+                        } catch (err) {
+                          console.error('Error forwarding message:', err);
+                          alert('Failed to forward message.');
+                        }
+                      }}
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(100, 116, 139, 0.1)',
+                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: '#e2e8f0',
+                        fontSize: 14,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => setForwardModalOpen(false)}
+                style={{
+                  width: '100%',
+                  marginTop: 16,
+                  padding: '12px 16px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  color: '#ef4444',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* New Chat Modal */}
         <NewChatModal

@@ -470,6 +470,13 @@ function ParentMessagesContent() {
   const [optionsMenuAnchor, setOptionsMenuAnchor] = useState<HTMLElement | null>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   
+  // Reply context state
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  
+  // Forward modal state
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+  
   // Dash AI state
   const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
   const [dashAILoading, setDashAILoading] = useState(false);
@@ -1298,9 +1305,13 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         sender_id: userId,
         content: messageText.trim(),
         content_type: 'text',
+        reply_to_id: replyingTo?.id || null,
       });
 
       if (error) throw error;
+      
+      // Clear reply context after sending
+      setReplyingTo(null);
 
       await supabase
         .from('message_threads')
@@ -1367,7 +1378,12 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
   const handleReplyMessage = (messageId: string) => {
     const message = messages.find(m => m.id === messageId);
     if (message) {
-      alert('Reply feature coming soon!');
+      setReplyingTo(message);
+      // Focus the input field
+      setTimeout(() => {
+        const input = document.querySelector('.wa-composer-input') as HTMLTextAreaElement;
+        if (input) input.focus();
+      }, 100);
     }
     setMessageActionsOpen(false);
   };
@@ -1375,7 +1391,8 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
   const handleForwardMessage = (messageId: string) => {
     const message = messages.find(m => m.id === messageId);
     if (message) {
-      alert('Forward feature coming soon!');
+      setForwardingMessage(message);
+      setForwardModalOpen(true);
     }
     setMessageActionsOpen(false);
   };
@@ -1404,16 +1421,27 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
 
   const handleDeleteMessage = async (messageId: string) => {
     const message = messages.find(m => m.id === messageId);
-    if (!message || message.sender_id !== userId) return;
+    if (!message) return;
+    
+    // Only message sender can delete, or "delete for me" which hides the message
+    const isOwnMessage = message.sender_id === userId;
 
-    if (confirm('Are you sure you want to delete this message?')) {
+    if (confirm(isOwnMessage ? 'Delete this message?' : 'Delete this message for you?')) {
       try {
-        const { error } = await supabase
-          .from('messages')
-          .delete()
-          .eq('id', messageId);
+        if (isOwnMessage) {
+          // Soft delete by setting deleted_at
+          const { error } = await supabase
+            .from('messages')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', messageId)
+            .eq('sender_id', userId);
 
-        if (error) throw error;
+          if (error) throw error;
+        } else {
+          // For messages from others, we could implement "delete for me"
+          // For now, just hide it locally
+          setMessages(prev => prev.filter(m => m.id !== messageId));
+        }
         setRefreshTrigger(prev => prev + 1);
       } catch (err) {
         console.error('Error deleting message:', err);
@@ -1432,8 +1460,40 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
     setMessageActionsOpen(false);
   };
 
-  const handleReactToMessage = (messageId: string) => {
-    alert('Reactions feature coming soon!');
+  const handleReactToMessage = async (messageId: string, emoji?: string) => {
+    if (!emoji || !userId) return;
+    
+    try {
+      // Toggle reaction - if exists, remove it; if not, add it
+      const { data: existing } = await supabase
+        .from('message_reactions')
+        .select('id')
+        .eq('message_id', messageId)
+        .eq('user_id', userId)
+        .eq('emoji', emoji)
+        .single();
+
+      if (existing) {
+        // Remove reaction
+        await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('id', existing.id);
+      } else {
+        // Add reaction
+        await supabase
+          .from('message_reactions')
+          .insert({
+            message_id: messageId,
+            user_id: userId,
+            emoji: emoji,
+          });
+      }
+      
+      setRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error('Error reacting to message:', err);
+    }
     setMessageActionsOpen(false);
   };
 
@@ -2096,6 +2156,56 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                   style={{ display: 'none' }}
                   onChange={handleAttachmentChange}
                 />
+                
+                {/* Reply Preview Bar */}
+                {replyingTo && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%)',
+                    borderRadius: '12px 12px 0 0',
+                    marginBottom: -2,
+                    borderLeft: '3px solid #3b82f6',
+                    gap: 10,
+                  }}>
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600, marginBottom: 2 }}>
+                        Replying to {replyingTo.sender_id === userId ? 'yourself' : (replyingTo.sender?.first_name || 'message')}
+                      </div>
+                      <p style={{
+                        margin: 0,
+                        fontSize: 13,
+                        color: '#94a3b8',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {replyingTo.content.startsWith('__media__') ? '📎 Media' : replyingTo.content}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 4,
+                        cursor: 'pointer',
+                        color: '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                
                 <form onSubmit={handleSendMessage} style={{ position: 'relative', marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div
@@ -2536,8 +2646,123 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         onEdit={() => selectedMessageId && handleEditMessage(selectedMessageId)}
         onDelete={() => selectedMessageId && handleDeleteMessage(selectedMessageId)}
         onCopy={() => selectedMessageId && handleCopyMessage(selectedMessageId)}
-        onReact={() => selectedMessageId && handleReactToMessage(selectedMessageId)}
+        onReact={(emoji) => selectedMessageId && handleReactToMessage(selectedMessageId, emoji)}
+        isMobile={!isDesktop}
+        messageContent={messages.find(m => m.id === selectedMessageId)?.content}
       />
+      
+      {/* Forward Message Modal */}
+      {forwardModalOpen && forwardingMessage && (
+        <div
+          onClick={() => setForwardModalOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 3000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              borderRadius: 16,
+              padding: 20,
+              width: '100%',
+              maxWidth: 400,
+              maxHeight: '80vh',
+              overflow: 'auto',
+              border: '1px solid rgba(148, 163, 184, 0.15)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 16px', color: '#e2e8f0', fontSize: 18, fontWeight: 600 }}>
+              Forward Message
+            </h3>
+            <div style={{
+              padding: 12,
+              background: 'rgba(100, 116, 139, 0.1)',
+              borderRadius: 12,
+              marginBottom: 16,
+              borderLeft: '3px solid #3b82f6',
+            }}>
+              <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>
+                {forwardingMessage.content.startsWith('__media__') ? '📎 Media attachment' : forwardingMessage.content}
+              </p>
+            </div>
+            <p style={{ margin: '0 0 12px', color: '#94a3b8', fontSize: 14 }}>
+              Select a conversation to forward to:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {threads.filter(t => t.id !== selectedThreadId).slice(0, 5).map((thread) => {
+                const otherParticipant = thread.message_participants?.find(p => p.user_id !== userId);
+                const name = otherParticipant?.profiles 
+                  ? `${otherParticipant.profiles.first_name} ${otherParticipant.profiles.last_name}`.trim()
+                  : 'Unknown';
+                return (
+                  <button
+                    key={thread.id}
+                    onClick={async () => {
+                      try {
+                        const { error } = await supabase
+                          .from('messages')
+                          .insert({
+                            thread_id: thread.id,
+                            sender_id: userId,
+                            content: forwardingMessage.content,
+                            forwarded_from_id: forwardingMessage.id,
+                          });
+                        if (error) throw error;
+                        setForwardModalOpen(false);
+                        setForwardingMessage(null);
+                        alert('Message forwarded!');
+                      } catch (err) {
+                        console.error('Error forwarding message:', err);
+                        alert('Failed to forward message.');
+                      }
+                    }}
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(100, 116, 139, 0.1)',
+                      border: '1px solid rgba(148, 163, 184, 0.15)',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: '#e2e8f0',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setForwardModalOpen(false)}
+              style={{
+                width: '100%',
+                marginTop: 16,
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 12,
+                cursor: 'pointer',
+                color: '#ef4444',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      
       <InviteContactModal
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
