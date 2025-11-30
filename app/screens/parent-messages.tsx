@@ -16,6 +16,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { useParentThreads, MessageThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
+import { getMessageDisplayText } from '@/lib/utils/messageContent';
 
 // Format timestamp for message threads
 const formatMessageTime = (timestamp: string): string => {
@@ -170,7 +171,7 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onPress }) => {
         
         {thread.last_message ? (
           <Text style={styles.lastMessage} numberOfLines={2}>
-            {thread.last_message.content}
+            {getMessageDisplayText(thread.last_message.content)}
           </Text>
         ) : (
           <Text style={[styles.lastMessage, { fontStyle: 'italic' }]} numberOfLines={2}>
