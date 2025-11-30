@@ -6,7 +6,7 @@ import {
   Video, Clock, Users, Play, Loader2, X, Sparkles, Radio, Calendar, Bell, 
   Settings, MessageSquare, Monitor, Lock, Unlock, Mic, ChevronDown, ChevronUp,
   Camera, CameraOff, MicOff, Hand, Wifi, Globe, Subtitles, Image, PictureInPicture,
-  Shield, Eye, Volume2, Smile, Languages
+  Shield, Eye, Volume2, Smile, Languages, Crown, UserPlus
 } from 'lucide-react';
 import { DailyPrebuiltCall } from './DailyPrebuiltCall';
 import { DailyPrebuiltProvider } from './DailyPrebuiltProvider';
@@ -105,6 +105,13 @@ function StartLiveLessonPrebuiltInner({
   
   // Recording
   const [recordingMode, setRecordingMode] = useState<'off' | 'local' | 'cloud'>('off');
+  
+  // Owner Only Broadcast - Only meeting owners can screen share, record and use camera/mic
+  const [ownerOnlyBroadcast, setOwnerOnlyBroadcast] = useState(false);
+  
+  // Co-host (Additional Teacher)
+  const [coHostEmail, setCoHostEmail] = useState('');
+  const [coHosts, setCoHosts] = useState<string[]>([]);
   
   // Language
   const [roomLanguage, setRoomLanguage] = useState('en');
@@ -245,6 +252,34 @@ function StartLiveLessonPrebuiltInner({
     maxParticipants?: number;
     enableRecording?: boolean;
     expiryMinutes?: number;
+    // Privacy & Access
+    isPrivate?: boolean;
+    enableKnocking?: boolean;
+    enablePrejoinUI?: boolean;
+    // Audio/Video
+    camerasOnStart?: boolean;
+    microphonesOnStart?: boolean;
+    // Features
+    enableScreenShare?: boolean;
+    enableBreakoutRooms?: boolean;
+    enableChat?: boolean;
+    enableAdvancedChat?: boolean;
+    enableEmojiReactions?: boolean;
+    // UI Features
+    enablePeopleUI?: boolean;
+    enableBackgroundEffects?: boolean;
+    enablePictureInPicture?: boolean;
+    enableHandRaising?: boolean;
+    enableNetworkUI?: boolean;
+    enableNoiseCancellation?: boolean;
+    enableLiveCaptions?: boolean;
+    // Recording mode
+    recordingMode?: 'off' | 'local' | 'cloud';
+    // Owner Controls
+    ownerOnlyBroadcast?: boolean;
+    coHosts?: string[];
+    // Language
+    language?: string;
   }) => {
     try {
       const response = await fetch('/api/daily/rooms', {
@@ -332,6 +367,9 @@ function StartLiveLessonPrebuiltInner({
         // Recording
         enableRecording: canRecord,
         recordingMode: canRecord ? recordingMode : 'off',
+        // Owner Controls
+        ownerOnlyBroadcast,
+        coHosts,
         // Language
         language: roomLanguage,
         // Duration
@@ -1944,6 +1982,167 @@ function StartLiveLessonPrebuiltInner({
                       ))}
                     </div>
                   </div>
+
+                  {/* OWNER ONLY BROADCAST SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Owner Controls
+                  </p>
+
+                  {/* Owner Only Broadcast Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      padding: '10px 12px',
+                      background: ownerOnlyBroadcast ? 'rgba(124, 58, 237, 0.15)' : 'transparent',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={ownerOnlyBroadcast}
+                      onChange={(e) => setOwnerOnlyBroadcast(e.target.checked)}
+                      style={{ display: 'none' }}
+                    />
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: ownerOnlyBroadcast ? '#7c3aed' : 'transparent',
+                        border: `2px solid ${ownerOnlyBroadcast ? '#7c3aed' : '#52525b'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {ownerOnlyBroadcast && <Crown style={{ width: 10, height: 10, color: 'white' }} />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>Owner Only Broadcast</span>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#71717a' }}>
+                        Only owners can screen share, record & use camera/mic
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* CO-HOST SECTION */}
+                  <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Co-Host (Additional Teacher)
+                  </p>
+
+                  {/* Add Co-Host Input */}
+                  <div style={{ marginBottom: 8 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#71717a' }}>
+                      Add another teacher as a co-host with owner permissions
+                    </p>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="email"
+                        value={coHostEmail}
+                        onChange={(e) => setCoHostEmail(e.target.value)}
+                        placeholder="Teacher email address"
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          border: '2px solid #3f3f46',
+                          borderRadius: 8,
+                          fontSize: 13,
+                          background: '#1a1a2e',
+                          color: '#fafafa',
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (coHostEmail.trim() && coHostEmail.includes('@') && !coHosts.includes(coHostEmail.trim())) {
+                            setCoHosts([...coHosts, coHostEmail.trim()]);
+                            setCoHostEmail('');
+                          }
+                        }}
+                        disabled={!coHostEmail.trim() || !coHostEmail.includes('@')}
+                        style={{
+                          padding: '10px 14px',
+                          border: 'none',
+                          borderRadius: 8,
+                          background: coHostEmail.trim() && coHostEmail.includes('@') ? '#7c3aed' : '#3f3f46',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: 'white',
+                          cursor: coHostEmail.trim() && coHostEmail.includes('@') ? 'pointer' : 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <UserPlus style={{ width: 14, height: 14 }} />
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Co-Hosts List */}
+                  {coHosts.length > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      {coHosts.map((email, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            background: 'rgba(124, 58, 237, 0.1)',
+                            borderRadius: 8,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                background: '#7c3aed',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Crown style={{ width: 14, height: 14, color: 'white' }} />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: 12, fontWeight: 500, color: '#fafafa' }}>{email}</span>
+                              <p style={{ margin: 0, fontSize: 10, color: '#71717a' }}>Co-Host</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCoHosts(coHosts.filter((_, i) => i !== index))}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 6,
+                              border: 'none',
+                              background: 'rgba(220, 38, 38, 0.2)',
+                              color: '#fca5a5',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <X style={{ width: 12, height: 12 }} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* LANGUAGE SECTION */}
                   <p style={{ margin: '16px 0 12px', fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
