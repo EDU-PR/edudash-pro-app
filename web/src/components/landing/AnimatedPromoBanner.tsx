@@ -19,7 +19,7 @@ const PROMO_MESSAGES = [
     headline: 'Parents - Join the Movement',
     subheadline: '50% OFF First 6 Months',
     description: 'Be among the first 1000 parents to join EduDash Pro',
-    features: 'Unlimited exam prep, AI tutoring & textbook library',
+    features: 'Unlimited learning tools, AI tutoring & textbook library',
     cta: 'Start Free Trial',
     ctaLink: '/sign-up/parent',
     ctaStyle: 'primary',
@@ -206,7 +206,7 @@ export function AnimatedPromoBanner() {
               e.currentTarget.style.transform = 'scale(1)';
             }}
           >
-            📝 Free Exam Prep
+            📚 Learning Resources
           </Link>
         </div>
       </div>
