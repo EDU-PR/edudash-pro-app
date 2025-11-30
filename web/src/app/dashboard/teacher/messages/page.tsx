@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Plus, Sparkles } from 'lucide-react';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Plus, Sparkles, Reply, X } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
@@ -78,6 +78,65 @@ const formatMessageTime = (timestamp: string | undefined | null): string => {
   if (diffInHours < 168) return messageTime.toLocaleDateString([], { weekday: 'short' });
   return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
+
+// Helper to get date separator label (Today, Yesterday, Weekday, or Date)
+const getDateSeparatorLabel = (timestamp: string): string => {
+  const messageDate = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  // Reset time parts for comparison
+  const messageDateOnly = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+  
+  if (messageDateOnly.getTime() === todayOnly.getTime()) {
+    return 'Today';
+  }
+  if (messageDateOnly.getTime() === yesterdayOnly.getTime()) {
+    return 'Yesterday';
+  }
+  
+  // Check if within the last 7 days - show weekday name
+  const daysDiff = Math.floor((todayOnly.getTime() - messageDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysDiff < 7) {
+    return messageDate.toLocaleDateString([], { weekday: 'long' });
+  }
+  
+  // Older than a week - show full date
+  return messageDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+};
+
+// Helper to get date key for grouping
+const getDateKey = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+// Date Separator Component
+const DateSeparator = ({ label }: { label: string }) => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px 0',
+  }}>
+    <div style={{
+      background: 'rgba(30, 41, 59, 0.8)',
+      backdropFilter: 'blur(8px)',
+      padding: '6px 14px',
+      borderRadius: 8,
+      fontSize: 12,
+      fontWeight: 500,
+      color: 'rgba(148, 163, 184, 0.9)',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      border: '1px solid rgba(148, 163, 184, 0.1)',
+    }}>
+      {label}
+    </div>
+  </div>
+);
 
 interface ThreadItemProps {
   thread: MessageThread;
@@ -583,35 +642,110 @@ function TeacherMessagesPage() {
           sender_id,
           content,
           created_at,
-          read_by
+          read_by,
+          deleted_at,
+          reply_to_id,
+          forwarded_from_id
         `)
         .eq('thread_id', threadId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true });
       
       // Fetch sender profiles separately to avoid ambiguous FK issue
-      if (!error && data && data.length > 0) {
-        const senderIds = [...new Set(data.map((m: any) => m.sender_id))];
+      let messagesWithDetails = data || [];
+      if (!error && messagesWithDetails.length > 0) {
+        const senderIds = [...new Set(messagesWithDetails.map((m: any) => m.sender_id))];
         const { data: senderProfiles } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, role')
           .in('id', senderIds);
         
         const profileMap = new Map((senderProfiles || []).map((p: any) => [p.id, p]));
-        data.forEach((msg: any) => {
-          msg.sender = profileMap.get(msg.sender_id) || null;
+        messagesWithDetails = messagesWithDetails.map((msg: any) => ({
+          ...msg,
+          sender: profileMap.get(msg.sender_id) || null,
+        }));
+      }
+      
+      // Fetch reply_to message content for messages that are replies
+      const replyIds = messagesWithDetails
+        .filter((m: any) => m.reply_to_id)
+        .map((m: any) => m.reply_to_id);
+      
+      if (replyIds.length > 0) {
+        const { data: replyMessages } = await supabase
+          .from('messages')
+          .select('id, content, sender_id')
+          .in('id', replyIds);
+        
+        // Get sender profiles for replies
+        const replySenderIds = [...new Set((replyMessages || []).map((r: any) => r.sender_id))];
+        const { data: replySenderProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', replySenderIds);
+        
+        const replySenderMap = new Map((replySenderProfiles || []).map((p: any) => [p.id, p]));
+        const replyMap = new Map((replyMessages || [])
+          .map((r: any) => [r.id, {
+            ...r,
+            sender: replySenderMap.get(r.sender_id),
+          }]));
+        
+        messagesWithDetails = messagesWithDetails.map((msg: any) => ({
+          ...msg,
+          reply_to: msg.reply_to_id ? replyMap.get(msg.reply_to_id) : null,
+        }));
+      }
+      
+      // Fetch reactions for all messages
+      const messageIds = messagesWithDetails.map((m: any) => m.id);
+      if (messageIds.length > 0) {
+        const { data: reactions } = await supabase
+          .from('message_reactions')
+          .select('message_id, emoji, user_id')
+          .in('message_id', messageIds);
+        
+        // Group reactions by message and emoji
+        const reactionMap = new Map<string, Map<string, { count: number; users: string[] }>>();
+        (reactions || []).forEach((r: any) => {
+          if (!reactionMap.has(r.message_id)) {
+            reactionMap.set(r.message_id, new Map());
+          }
+          const msgReactions = reactionMap.get(r.message_id)!;
+          if (!msgReactions.has(r.emoji)) {
+            msgReactions.set(r.emoji, { count: 0, users: [] });
+          }
+          const emojiData = msgReactions.get(r.emoji)!;
+          emojiData.count++;
+          emojiData.users.push(r.user_id);
+        });
+        
+        messagesWithDetails = messagesWithDetails.map((msg: any) => {
+          const msgReactions = reactionMap.get(msg.id);
+          if (!msgReactions) return { ...msg, reactions: [] };
+          
+          const reactionsArray = Array.from(msgReactions.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.users.includes(userId || ''),
+          }));
+          
+          return { ...msg, reactions: reactionsArray };
         });
       }
 
       if (error) throw error;
-      setMessages(data || []);
+      setMessages(messagesWithDetails);
       await markThreadAsRead(threadId);
-      setTimeout(() => scrollToBottom(), 80);
+      // Instant scroll to bottom when opening chat (no animation)
+      setTimeout(() => scrollToBottom(true), 10);
     } catch (err) {
-      // Silent fail for messages fetch
+      console.error('Error fetching messages:', err);
     } finally {
       setMessagesLoading(false);
     }
-  }, [markThreadAsRead, supabase]);
+  }, [markThreadAsRead, supabase, userId]);
 
   const getThreadContactKey = (thread: MessageThread, currentUserId: string | undefined) => {
     const participants = thread.message_participants || thread.participants || [];
@@ -1074,14 +1208,21 @@ function TeacherMessagesPage() {
 
     setSending(true);
     try {
+      const insertData: Record<string, unknown> = {
+        thread_id: selectedThreadId,
+        sender_id: userId,
+        content: messageText.trim(),
+        content_type: 'text',
+      };
+      
+      // Include reply_to_id if replying to a message
+      if (replyingTo?.id) {
+        insertData.reply_to_id = replyingTo.id;
+      }
+      
       const { error } = await supabase
         .from('messages')
-        .insert({
-          thread_id: selectedThreadId,
-          sender_id: userId,
-          content: messageText.trim(),
-          content_type: 'text',
-        });
+        .insert(insertData);
 
       if (error) throw error;
 
@@ -1091,6 +1232,7 @@ function TeacherMessagesPage() {
         .eq('id', selectedThreadId);
 
       setMessageText('');
+      setReplyingTo(null); // Clear reply context after sending
       setRefreshTrigger(prev => prev + 1);
       setTimeout(() => scrollToBottom(), 100);
     } catch (err: any) {
@@ -1315,6 +1457,20 @@ function TeacherMessagesPage() {
       console.error('Error reacting to message:', err);
     }
     setMessageActionsOpen(false);
+  };
+
+  // Scroll to a specific message (used when clicking on reply context)
+  const scrollToMessage = (messageId: string) => {
+    const messageElement = document.getElementById(`message-${messageId}`);
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Briefly highlight the message
+      messageElement.style.transition = 'background 0.3s ease';
+      messageElement.style.background = 'rgba(59, 130, 246, 0.2)';
+      setTimeout(() => {
+        messageElement.style.background = 'transparent';
+      }, 1500);
+    }
   };
 
   return (
@@ -1822,7 +1978,7 @@ function TeacherMessagesPage() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4">
-                    {displayMessages.map((message) => {
+                    {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
                         ? `${message.sender.first_name} ${message.sender.last_name}`
@@ -1831,18 +1987,31 @@ function TeacherMessagesPage() {
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
 
+                      // Check if we need to show a date separator
+                      const currentDateKey = getDateKey(message.created_at);
+                      const prevMessage = index > 0 ? displayMessages[index - 1] : null;
+                      const prevDateKey = prevMessage ? getDateKey(prevMessage.created_at) : null;
+                      const showDateSeparator = currentDateKey !== prevDateKey;
+
                       return (
-                        <ChatMessageBubble
-                          key={message.id}
-                          message={message}
-                          isOwn={isOwn}
-                          isDesktop={isDesktop}
-                          formattedTime={formatMessageTime(message.created_at)}
-                          senderName={!isOwn ? senderName : undefined}
-                          otherParticipantIds={otherParticipantIds}
-                          hideAvatars={!isDesktop}
-                          onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
-                        />
+                        <div key={message.id}>
+                          {showDateSeparator && (
+                            <DateSeparator label={getDateSeparatorLabel(message.created_at)} />
+                          )}
+                          <div id={`message-${message.id}`}>
+                            <ChatMessageBubble
+                              message={message}
+                              isOwn={isOwn}
+                              isDesktop={isDesktop}
+                              formattedTime={formatMessageTime(message.created_at)}
+                              senderName={!isOwn ? senderName : undefined}
+                              otherParticipantIds={otherParticipantIds}
+                              hideAvatars={!isDesktop}
+                              onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
+                              onReplyClick={scrollToMessage}
+                            />
+                          </div>
+                        </div>
                       );
                     })}
                     
@@ -1910,6 +2079,31 @@ function TeacherMessagesPage() {
                   className="hidden"
                   onChange={handleAttachmentChange}
                 />
+                
+                {/* Reply Preview Bar */}
+                {replyingTo && (
+                  <div className="flex items-center gap-3 mb-2 p-3 bg-[var(--surface-2)] rounded-xl border-l-4 border-blue-500">
+                    <Reply size={18} className="text-blue-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-blue-400 font-medium mb-0.5">
+                        Replying to {replyingTo.sender?.first_name || 'message'}
+                      </div>
+                      <div className="text-sm text-[var(--muted)] truncate">
+                        {replyingTo.content?.startsWith('__media__') 
+                          ? '📎 Media'
+                          : (replyingTo.content?.substring(0, 50) + (replyingTo.content && replyingTo.content.length > 50 ? '...' : ''))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="p-1.5 hover:bg-[var(--surface)] rounded-full transition"
+                    >
+                      <X size={16} className="text-[var(--muted)]" />
+                    </button>
+                  </div>
+                )}
+                
                 <form onSubmit={handleSendMessage} className="relative" style={{ marginLeft: isDesktop ? 0 : '-8px' }}>
                   {showEmojiPicker && (
                     <div

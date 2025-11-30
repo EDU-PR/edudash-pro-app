@@ -110,6 +110,65 @@ const formatMessageTime = (timestamp: string | undefined | null): string => {
   });
 };
 
+// Helper to get date separator label (Today, Yesterday, Weekday, or Date)
+const getDateSeparatorLabel = (timestamp: string): string => {
+  const messageDate = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  // Reset time parts for comparison
+  const messageDateOnly = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+  
+  if (messageDateOnly.getTime() === todayOnly.getTime()) {
+    return 'Today';
+  }
+  if (messageDateOnly.getTime() === yesterdayOnly.getTime()) {
+    return 'Yesterday';
+  }
+  
+  // Check if within the last 7 days - show weekday name
+  const daysDiff = Math.floor((todayOnly.getTime() - messageDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysDiff < 7) {
+    return messageDate.toLocaleDateString([], { weekday: 'long' });
+  }
+  
+  // Older than a week - show full date
+  return messageDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+};
+
+// Helper to get date key for grouping
+const getDateKey = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+// Date Separator Component
+const DateSeparator = ({ label }: { label: string }) => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '12px 0',
+  }}>
+    <div style={{
+      background: 'rgba(30, 41, 59, 0.8)',
+      backdropFilter: 'blur(8px)',
+      padding: '6px 14px',
+      borderRadius: 8,
+      fontSize: 12,
+      fontWeight: 500,
+      color: 'rgba(148, 163, 184, 0.9)',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+      border: '1px solid rgba(148, 163, 184, 0.1)',
+    }}>
+      {label}
+    </div>
+  </div>
+);
+
 interface ThreadItemProps {
   thread: MessageThread;
   isActive: boolean;
@@ -534,8 +593,8 @@ function ParentMessagesContent() {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
   // Call useComposerEnhancements early to satisfy Rules of Hooks
@@ -956,21 +1015,97 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
           content,
           created_at,
           read_by,
+          deleted_at,
+          reply_to_id,
+          forwarded_from_id,
           sender:profiles(first_name, last_name, role)
         `)
         .eq('thread_id', threadId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      
+      let messagesWithDetails = data || [];
+      
+      // Fetch reply_to message content for messages that are replies
+      const replyIds = messagesWithDetails
+        .filter((m: any) => m.reply_to_id)
+        .map((m: any) => m.reply_to_id);
+      
+      if (replyIds.length > 0) {
+        const { data: replyMessages } = await supabase
+          .from('messages')
+          .select('id, content, sender_id')
+          .in('id', replyIds);
+        
+        // Get sender profiles for replies
+        const replySenderIds = [...new Set((replyMessages || []).map((r: any) => r.sender_id))];
+        const { data: replySenderProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', replySenderIds);
+        
+        const replySenderMap = new Map((replySenderProfiles || []).map((p: any) => [p.id, p]));
+        const replyMap = new Map((replyMessages || [])
+          .map((r: any) => [r.id, {
+            ...r,
+            sender: replySenderMap.get(r.sender_id),
+          }]));
+        
+        messagesWithDetails = messagesWithDetails.map((msg: any) => ({
+          ...msg,
+          reply_to: msg.reply_to_id ? replyMap.get(msg.reply_to_id) : null,
+        }));
+      }
+      
+      // Fetch reactions for all messages
+      const messageIds = messagesWithDetails.map((m: any) => m.id);
+      if (messageIds.length > 0) {
+        const { data: reactions } = await supabase
+          .from('message_reactions')
+          .select('message_id, emoji, user_id')
+          .in('message_id', messageIds);
+        
+        // Group reactions by message and emoji
+        const reactionMap = new Map<string, Map<string, { count: number; users: string[] }>>();
+        (reactions || []).forEach((r: any) => {
+          if (!reactionMap.has(r.message_id)) {
+            reactionMap.set(r.message_id, new Map());
+          }
+          const msgReactions = reactionMap.get(r.message_id)!;
+          if (!msgReactions.has(r.emoji)) {
+            msgReactions.set(r.emoji, { count: 0, users: [] });
+          }
+          const emojiData = msgReactions.get(r.emoji)!;
+          emojiData.count++;
+          emojiData.users.push(r.user_id);
+        });
+        
+        messagesWithDetails = messagesWithDetails.map((msg: any) => {
+          const msgReactions = reactionMap.get(msg.id);
+          if (!msgReactions) return { ...msg, reactions: [] };
+          
+          const reactionsArray = Array.from(msgReactions.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.users.includes(userId || ''),
+          }));
+          
+          return { ...msg, reactions: reactionsArray };
+        });
+      }
+      
+      setMessages(messagesWithDetails);
       await markThreadAsRead(threadId);
-      setTimeout(() => scrollToBottom(), 80);
+      // Instant scroll to bottom when opening chat (no animation)
+      setTimeout(() => scrollToBottom(true), 10);
     } catch (err) {
-      // Silent fail for messages fetch
+      console.error('Error fetching messages:', err);
     } finally {
       setMessagesLoading(false);
     }
-  }, [markThreadAsRead, supabase, loadDashAIMessages]);
+  }, [markThreadAsRead, supabase, loadDashAIMessages, userId]);
 
   const refreshConversation = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
@@ -1495,6 +1630,20 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
       console.error('Error reacting to message:', err);
     }
     setMessageActionsOpen(false);
+  };
+
+  // Scroll to a specific message (used when clicking on reply context)
+  const scrollToMessage = (messageId: string) => {
+    const messageElement = document.getElementById(`message-${messageId}`);
+    if (messageElement) {
+      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Briefly highlight the message
+      messageElement.style.transition = 'background 0.3s ease';
+      messageElement.style.background = 'rgba(59, 130, 246, 0.2)';
+      setTimeout(() => {
+        messageElement.style.background = 'transparent';
+      }, 1500);
+    }
   };
 
   const totalUnread = threads.reduce((sum, thread) => sum + (thread.unread_count || 0), 0);
@@ -2088,7 +2237,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: isDesktop ? 20 : 16 }}>
-                    {displayMessages.map((message) => {
+                    {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const isDashAIMessage = message.sender_id === DASH_AI_USER_ID;
                       const senderName = isDashAIMessage 
@@ -2102,19 +2251,32 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
 
+                      // Check if we need to show a date separator
+                      const currentDateKey = getDateKey(message.created_at);
+                      const prevMessage = index > 0 ? displayMessages[index - 1] : null;
+                      const prevDateKey = prevMessage ? getDateKey(prevMessage.created_at) : null;
+                      const showDateSeparator = currentDateKey !== prevDateKey;
+
                       return (
-                        <ChatMessageBubble
-                          key={message.id}
-                          message={message}
-                          isOwn={isOwn}
-                          isDesktop={isDesktop}
-                          formattedTime={formatMessageTime(message.created_at)}
-                          senderName={!isOwn ? senderName : undefined}
-                          otherParticipantIds={otherParticipantIds}
-                          hideAvatars={!isDesktop}
-                          onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
-                          isDashAI={isDashAIMessage}
-                        />
+                        <div key={message.id}>
+                          {showDateSeparator && (
+                            <DateSeparator label={getDateSeparatorLabel(message.created_at)} />
+                          )}
+                          <div id={`message-${message.id}`}>
+                            <ChatMessageBubble
+                              message={message}
+                              isOwn={isOwn}
+                              isDesktop={isDesktop}
+                              formattedTime={formatMessageTime(message.created_at)}
+                              senderName={!isOwn ? senderName : undefined}
+                              otherParticipantIds={otherParticipantIds}
+                              hideAvatars={!isDesktop}
+                              onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}
+                              isDashAI={isDashAIMessage}
+                              onReplyClick={scrollToMessage}
+                            />
+                          </div>
+                        </div>
                       );
                     })}
                     {/* Dash AI Loading indicator */}

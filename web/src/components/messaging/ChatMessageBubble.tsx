@@ -74,6 +74,7 @@ interface ChatMessageBubbleProps {
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
   isDashAI?: boolean;
   onReactionClick?: (messageId: string, emoji: string) => void;
+  onReplyClick?: (messageId: string) => void;
 }
 
 // WhatsApp-style tick component
@@ -140,6 +141,7 @@ export const ChatMessageBubble = ({
   onContextMenu,
   isDashAI = false,
   onReactionClick,
+  onReplyClick,
 }: ChatMessageBubbleProps) => {
   const content = parseMessageContent(message.content);
   
@@ -403,15 +405,26 @@ export const ChatMessageBubble = ({
           </div>
         )}
         
-        {/* Reply context */}
+        {/* Reply context - clickable to scroll to original message */}
         {message.reply_to && (
-          <div style={{
-            padding: '6px 10px',
-            background: 'rgba(0, 0, 0, 0.15)',
-            borderRadius: 8,
-            marginBottom: 8,
-            borderLeft: '3px solid rgba(148, 163, 184, 0.5)',
-          }}>
+          <div 
+            onClick={() => message.reply_to_id && onReplyClick?.(message.reply_to_id)}
+            style={{
+              padding: '6px 10px',
+              background: 'rgba(0, 0, 0, 0.15)',
+              borderRadius: 8,
+              marginBottom: 8,
+              borderLeft: '3px solid rgba(148, 163, 184, 0.5)',
+              cursor: message.reply_to_id ? 'pointer' : 'default',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (message.reply_to_id) e.currentTarget.style.background = 'rgba(0, 0, 0, 0.25)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.15)';
+            }}
+          >
             <div style={{ fontSize: 11, color: 'rgba(148, 163, 184, 0.8)', marginBottom: 2, fontWeight: 600 }}>
               {message.reply_to.sender?.first_name || 'Message'}
             </div>
@@ -430,52 +443,65 @@ export const ChatMessageBubble = ({
         
         {renderBody()}
         
-        {/* Reactions display */}
-        {message.reactions && message.reactions.length > 0 && (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 4,
-            marginTop: 6,
-          }}>
-            {message.reactions.map((reaction, idx) => (
-              <button
-                key={idx}
-                onClick={() => onReactionClick?.(message.id, reaction.emoji)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  padding: '2px 6px',
-                  background: reaction.hasReacted ? 'rgba(59, 130, 246, 0.2)' : 'rgba(100, 116, 139, 0.15)',
-                  border: reaction.hasReacted ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(148, 163, 184, 0.2)',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  fontSize: 14,
-                }}
-              >
-                <span>{reaction.emoji}</span>
-                {reaction.count > 1 && (
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>{reaction.count}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-        
+        {/* Footer with reactions and timestamp on opposite corners */}
         <div
           style={{
             marginTop: content.kind === 'media' ? 2 : 3,
-            fontSize: 10,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: isOwn ? 'flex-end' : 'flex-start',
-            gap: 4,
-            color: isOwn ? 'rgba(255, 255, 255, 0.6)' : 'rgba(148, 163, 184, 0.7)',
+            justifyContent: 'space-between',
+            gap: 8,
+            flexDirection: isOwn ? 'row' : 'row-reverse',
           }}
         >
-          <span>{formattedTime}</span>
-          {isOwn && <MessageTicks status={messageStatus} />}
+          {/* Timestamp side */}
+          <div
+            style={{
+              fontSize: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              color: isOwn ? 'rgba(255, 255, 255, 0.6)' : 'rgba(148, 163, 184, 0.7)',
+              flexShrink: 0,
+            }}
+          >
+            <span>{formattedTime}</span>
+            {isOwn && <MessageTicks status={messageStatus} />}
+          </div>
+          
+          {/* Reactions side - opposite corner from timestamp */}
+          {message.reactions && message.reactions.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 3,
+              justifyContent: isOwn ? 'flex-start' : 'flex-end',
+            }}>
+              {message.reactions.map((reaction, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => onReactionClick?.(message.id, reaction.emoji)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    padding: '1px 5px',
+                    background: reaction.hasReacted ? 'rgba(59, 130, 246, 0.25)' : 'rgba(100, 116, 139, 0.2)',
+                    border: reaction.hasReacted ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(148, 163, 184, 0.15)',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
+                >
+                  <span>{reaction.emoji}</span>
+                  {reaction.count > 1 && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{reaction.count}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
