@@ -1,6 +1,6 @@
 /* EduDash Pro Service Worker - PWA Support */
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20251130003124';
+const SW_VERSION = 'v20251130012706';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -27,6 +27,10 @@ self.addEventListener('install', (event) => {
           '/manifest.webmanifest',
           '/icon-192.png',
           '/icon-512.png',
+          // Pre-cache notification sounds for instant playback
+          '/sounds/notification.mp3',
+          '/sounds/ringtone.mp3',
+          '/sounds/ringback.mp3',
         ];
         
         const cachePromises = urlsToCache.map(async (url) => {
@@ -114,8 +118,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const dest = request.destination;
 
-  // Cache-first for static assets (images, fonts)
-  if (dest === 'image' || dest === 'font') {
+  // Cache-first for static assets (images, fonts, audio)
+  if (dest === 'image' || dest === 'font' || dest === 'audio' || url.pathname.startsWith('/sounds/')) {
     event.respondWith(
       caches.match(request).then((cached) => {
         return cached || fetch(request).then((response) => {
@@ -162,7 +166,7 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Push notification event - display notification
+// Push notification event - display notification with sound
 self.addEventListener('push', (event) => {
   console.log('[SW] Push event received');
   
@@ -184,22 +188,30 @@ self.addEventListener('push', (event) => {
       const payload = event.data.json();
       console.log('[SW] Push payload:', payload);
       
+      // Determine if this is a call notification
+      const isCall = payload.type === 'call' || payload.data?.type === 'call' || 
+                     payload.type === 'live-lesson' || payload.data?.type === 'live-lesson';
+      
       notificationData = {
         title: payload.title || notificationData.title,
         body: payload.body || notificationData.body,
         icon: payload.icon || notificationData.icon,
         badge: payload.badge || notificationData.badge,
-        data: payload.data || notificationData.data,
+        data: {
+          ...payload.data,
+          url: payload.data?.url || notificationData.data.url,
+          type: payload.type || payload.data?.type,
+        },
         tag: payload.tag || `notif-${Date.now()}`,
-        requireInteraction: payload.requireInteraction || false,
+        requireInteraction: isCall || payload.requireInteraction || false,
         renotify: true, // Always renotify for important updates
-        silent: false,
-        vibrate: payload.type === 'call' ? [200, 100, 200, 100, 200] : [200, 100, 200],
+        silent: false, // Never silent - we want system notification sound
+        vibrate: isCall ? [500, 200, 500, 200, 500] : [200, 100, 200],
         // Add actions for call notifications
-        actions: payload.type === 'call' || payload.data?.type === 'call' ? [
+        actions: isCall ? [
           { action: 'join', title: '📹 Join Now' },
           { action: 'dismiss', title: 'Dismiss' }
-        ] : payload.type === 'message' || payload.data?.type === 'message' ? [
+        ] : (payload.type === 'message' || payload.data?.type === 'message') ? [
           { action: 'view', title: '💬 View' },
           { action: 'dismiss', title: 'Dismiss' }
         ] : undefined,
@@ -223,6 +235,17 @@ self.addEventListener('push', (event) => {
     actions: notificationData.actions,
   }).then(() => {
     console.log('[SW] Notification shown successfully');
+    
+    // Notify all open clients about the push (for in-app handling)
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'PUSH_RECEIVED',
+            ...notificationData,
+          });
+        });
+      });
   }).catch((err) => {
     console.error('[SW] Failed to show notification:', err);
   });

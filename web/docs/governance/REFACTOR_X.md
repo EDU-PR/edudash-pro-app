@@ -145,7 +145,7 @@
 - All remaining files with 🟢 Low priority
 
 ### Immediate Action: Delete Legacy Files
-- `components/dash-chat/ChatInterface-old.tsx` - 866 lines (marked for deletion)
+- ~~`components/dash-chat/ChatInterface-old.tsx` - 866 lines~~ ✅ **DELETED**
 
 ---
 
@@ -200,8 +200,27 @@ After:
 - [ ] Phase 2: High priority files refactored
 - [ ] Phase 3: Medium priority files refactored
 - [ ] Phase 4: Low priority files refactored
-- [ ] Legacy files deleted
+- [x] Legacy files deleted ✅ (`ChatInterface-old.tsx` removed)
 - [ ] All files under WARP.md limits
+
+---
+
+## 🔧 PWA Native App Enhancements (November 30, 2025)
+
+### Completed Enhancements:
+- [x] Enhanced `manifest.ts` with full PWA configuration (display_override, icons, shortcuts, screenshots)
+- [x] Added `NativeAppManager` component for native-like behavior management
+- [x] Created `useNotificationSound` hook for notification audio feedback
+- [x] Created `useOrientationLock` hook for screen orientation control
+- [x] Enhanced `PWAInstallPrompt` with comprehensive cross-browser support:
+  - iOS Safari instructions
+  - iOS Chrome redirect to Safari
+  - Android Chrome/Edge/Firefox/Samsung Browser instructions
+  - Desktop Chrome/Edge instructions
+- [x] Updated service worker to cache notification sounds
+- [x] Added in-app push notification forwarding to clients
+- [x] Enhanced layout.tsx with additional PWA meta tags
+- [x] Orientation lock (portrait) enabled by default
 
 ---
 

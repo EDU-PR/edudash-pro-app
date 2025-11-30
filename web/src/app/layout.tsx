@@ -8,6 +8,7 @@ import { PWAUpdateChecker } from "@/components/PWAUpdateChecker";
 import { DeploymentNotificationProvider } from "@/components/DeploymentNotificationProvider";
 import { PWASplashScreen } from "@/components/PWASplashScreen";
 import { CallProviderWrapper } from "@/components/calls/CallProviderWrapper";
+import { NativeAppManager } from "@/components/NativeAppManager";
 import 'katex/dist/katex.min.css';
 
 const geistSans = Geist({
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
   description: "Educational dashboard for South African preschools",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "EduDash Pro",
   },
   icons: {
@@ -47,6 +48,7 @@ export function generateViewport() {
     userScalable: false,
     viewportFit: "cover",
     themeColor: "#111111",
+    interactiveWidget: "resizes-visual",
   };
 }
 
@@ -61,8 +63,12 @@ export default function RootLayout({
         {/* Next.js automatically adds manifest link from manifest.ts */}
         <meta name="theme-color" content="#111111" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="EduDash Pro" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="msapplication-tap-highlight" content="no" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <PWASplashScreen />
@@ -70,6 +76,10 @@ export default function RootLayout({
         <PWAInstallPrompt />
         <PWAUpdateChecker />
         <DeploymentNotificationProvider />
+        <NativeAppManager 
+          lockOrientationOnMount={true}
+          enableSounds={true}
+        />
         <CallProviderWrapper>
           <ErrorBoundary>{children}</ErrorBoundary>
         </CallProviderWrapper>
