@@ -19,6 +19,7 @@ import {
   Sparkles,
   BookOpen,
   Clipboard,
+  CreditCard,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -144,6 +145,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
         { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
+        { href: '/dashboard/parent/payments', label: 'Payments', icon: CreditCard },
         { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
         { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },
       ];

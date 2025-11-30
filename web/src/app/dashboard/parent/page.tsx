@@ -18,6 +18,7 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
+import { DashAICard } from '@/components/dashboard/parent/DashAICard';
 import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
 
 export default function ParentDashboard() {
@@ -249,6 +250,11 @@ export default function ParentDashboard() {
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
           />
+        )}
+
+        {/* Dash AI Card - Show for all parents with children */}
+        {hasAnyChild && (
+          <DashAICard variant="compact" />
         )}
 
         {/* Homework Card - Show if organization-linked */}

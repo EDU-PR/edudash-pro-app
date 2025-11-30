@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight, Phone, Mail, Check, X, Loader2 } from 'lucide-react';
+import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight, Phone, Mail, Check, X, Loader2, Users, MessageCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -32,9 +32,15 @@ export default function SettingsPage() {
   // Notification preferences
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(false);
+  const [whatsappNotifications, setWhatsappNotifications] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   
   // Language preference
   const [language, setLanguage] = useState('en-ZA');
+  
+  // Linked children
+  const [linkedChildren, setLinkedChildren] = useState<any[]>([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   
   // Password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -53,7 +59,7 @@ export default function SettingsPage() {
       
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, phone, avatar_url')
+        .select('full_name, phone, avatar_url, preferences')
         .eq('id', userId)
         .single();
       
@@ -61,11 +67,129 @@ export default function SettingsPage() {
         setFullName(data.full_name || '');
         setPhoneNumber(data.phone || '');
         setAvatarUrl(data.avatar_url || null);
+        
+        // Load preferences
+        const prefs = data.preferences || {};
+        setEmailNotifications(prefs.email_notifications !== false);
+        setPushNotifications(prefs.push_notifications === true);
+        setWhatsappNotifications(prefs.whatsapp_notifications === true);
+        setLanguage(prefs.language || 'en-ZA');
+        setDarkMode(prefs.dark_mode !== false);
       }
     };
     
     loadProfileData();
   }, [userId, supabase]);
+  
+  // Load linked children
+  useEffect(() => {
+    const loadLinkedChildren = async () => {
+      if (!userId) return;
+      
+      setLoadingChildren(true);
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, first_name, last_name, grade, class:classes(name)')
+          .eq('parent_id', userId);
+        
+        if (data && !error) {
+          setLinkedChildren(data);
+        }
+      } catch (err) {
+        console.error('Failed to load children:', err);
+      } finally {
+        setLoadingChildren(false);
+      }
+    };
+    
+    loadLinkedChildren();
+  }, [userId, supabase]);
+  
+  // Save notification preferences
+  const saveNotificationPreferences = async () => {
+    if (!userId) return;
+    
+    try {
+      setSavingPreferences(true);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          preferences: {
+            email_notifications: emailNotifications,
+            push_notifications: pushNotifications,
+            whatsapp_notifications: whatsappNotifications,
+            language: language,
+            dark_mode: darkMode,
+          }
+        })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error: any) {
+      console.error('Failed to save preferences:', error);
+      setSaveError(error.message || 'Failed to save preferences');
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+  
+  // Handle dark mode toggle with persistence
+  const handleDarkModeToggle = async () => {
+    const newValue = !darkMode;
+    setDarkMode(newValue);
+    
+    // Apply to document
+    if (newValue) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    
+    // Save to database
+    if (userId) {
+      await supabase
+        .from('profiles')
+        .update({
+          preferences: {
+            email_notifications: emailNotifications,
+            push_notifications: pushNotifications,
+            whatsapp_notifications: whatsappNotifications,
+            language: language,
+            dark_mode: newValue,
+          }
+        })
+        .eq('id', userId);
+    }
+  };
+  
+  // Handle language change with persistence
+  const handleLanguageChange = async (newLanguage: string) => {
+    setLanguage(newLanguage);
+    
+    // Save to database
+    if (userId) {
+      await supabase
+        .from('profiles')
+        .update({
+          preferences: {
+            email_notifications: emailNotifications,
+            push_notifications: pushNotifications,
+            whatsapp_notifications: whatsappNotifications,
+            language: newLanguage,
+            dark_mode: darkMode,
+          }
+        })
+        .eq('id', userId);
+        
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
+  };
   
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -422,7 +546,79 @@ export default function SettingsPage() {
                     <span className="toggleThumb" style={{ transform: pushNotifications ? 'translateX(20px)' : 'translateX(0)' }} />
                   </button>
                 </div>
+                <div className="listItem">
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>WhatsApp Notifications</div>
+                    <div className="muted" style={{ fontSize: 12 }}>Receive updates via WhatsApp</div>
+                  </div>
+                  <button 
+                    onClick={() => setWhatsappNotifications(!whatsappNotifications)}
+                    className={`toggle ${whatsappNotifications ? 'toggleActive' : ''}`}
+                  >
+                    <span className="toggleThumb" style={{ transform: whatsappNotifications ? 'translateX(20px)' : 'translateX(0)' }} />
+                  </button>
+                </div>
               </div>
+              <button 
+                onClick={saveNotificationPreferences}
+                disabled={savingPreferences}
+                className="btn btnSecondary" 
+                style={{ marginTop: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', opacity: savingPreferences ? 0.6 : 1 }}
+              >
+                {savingPreferences && <Loader2 className="icon16 animate-spin" />}
+                {savingPreferences ? 'Saving...' : 'Save Notification Preferences'}
+              </button>
+            </div>
+
+            {/* Linked Children */}
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <Users className="icon20" style={{ color: 'var(--primary)' }} />
+                  <h2 className="h2" style={{ margin: 0 }}>Linked Children</h2>
+                </div>
+                <button 
+                  onClick={() => router.push('/dashboard/parent/register-child')}
+                  className="btn btnSmall btnPrimary"
+                >
+                  Add Child
+                </button>
+              </div>
+              {loadingChildren ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-4)' }}>
+                  <Loader2 className="icon20 animate-spin" style={{ color: 'var(--muted)' }} />
+                </div>
+              ) : linkedChildren.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--muted)' }}>
+                  <p>No children linked to your account yet.</p>
+                  <button 
+                    onClick={() => router.push('/dashboard/parent/register-child')}
+                    className="btn btnPrimary"
+                    style={{ marginTop: 'var(--space-3)' }}
+                  >
+                    Register a Child
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+                  {linkedChildren.map((child) => (
+                    <div key={child.id} className="listItem" style={{ cursor: 'pointer' }} onClick={() => router.push(`/dashboard/parent/children/${child.id}`)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                        <div className="avatar" style={{ width: 40, height: 40, fontSize: 14 }}>
+                          {child.first_name?.[0]}{child.last_name?.[0]}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{child.first_name} {child.last_name}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {child.grade || 'No grade'} {child.class?.name ? `• ${child.class.name}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="icon20" style={{ color: 'var(--textMuted)' }} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Subscription & Billing */}
@@ -456,7 +652,7 @@ export default function SettingsPage() {
                   <div className="muted" style={{ fontSize: 12 }}>Toggle dark mode</div>
                 </div>
                 <button
-                  onClick={() => setDarkMode(!darkMode)}
+                  onClick={handleDarkModeToggle}
                   className={`toggle ${darkMode ? 'toggleActive' : ''}`}
                 >
                   <span
@@ -475,7 +671,7 @@ export default function SettingsPage() {
               </div>
               <select 
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) => handleLanguageChange(e.target.value)}
                 className="input"
               >
                 <option value="en-ZA">English (South Africa)</option>

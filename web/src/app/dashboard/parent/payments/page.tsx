@@ -17,6 +17,7 @@ import {
   FileText,
   Info,
   ArrowLeft,
+  History,
 } from 'lucide-react';
 
 interface Payment {
@@ -450,15 +451,67 @@ export default function PaymentsPage() {
 
           {activeTab === 'upload' && (
             <div>
-              <h2 className="h2" style={{ marginBottom: 'var(--space-4)' }}>Upload Proof of Payment</h2>
+              <h2 className="h2" style={{ marginBottom: 'var(--space-4)' }}>Proof of Payment</h2>
               
-              <div className="card" style={{ padding: 'var(--space-5)' }}>
+              {/* Quick Actions Card */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
+                <div 
+                  className="card" 
+                  style={{ 
+                    padding: 'var(--space-5)', 
+                    cursor: 'pointer',
+                    border: '2px solid var(--primary)',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => router.push('/dashboard/parent/payments/pop-upload')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(124, 58, 237, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <Upload className="w-10 h-10" style={{ color: 'var(--primary)', marginBottom: 'var(--space-3)' }} />
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>Upload New Proof</h3>
+                  <p className="muted" style={{ fontSize: 14 }}>
+                    Submit a new proof of payment for verification
+                  </p>
+                </div>
+
+                <div 
+                  className="card" 
+                  style={{ 
+                    padding: 'var(--space-5)', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => router.push('/dashboard/parent/payments/pop-history')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.borderColor = 'var(--primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                  }}
+                >
+                  <History className="w-10 h-10" style={{ color: 'var(--muted)', marginBottom: 'var(--space-3)' }} />
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>View History</h3>
+                  <p className="muted" style={{ fontSize: 14 }}>
+                    Check the status of your submitted uploads
+                  </p>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div className="card" style={{ padding: 'var(--space-4)' }}>
                 <div style={{
                   padding: 'var(--space-4)',
                   background: 'rgba(59, 130, 246, 0.1)',
                   border: '1px solid rgba(59, 130, 246, 0.3)',
                   borderRadius: 'var(--radius-2)',
-                  marginBottom: 'var(--space-5)',
                 }}>
                   <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
                     <Info className="w-5 h-5" style={{ color: '#3b82f6', flexShrink: 0, marginTop: 2 }} />
@@ -466,84 +519,13 @@ export default function PaymentsPage() {
                       <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 'var(--space-1)' }}>Upload Guidelines</h3>
                       <ul className="muted" style={{ fontSize: 13, paddingLeft: 'var(--space-4)', margin: 0 }}>
                         <li>Accepted formats: PDF, JPG, PNG</li>
-                        <li>Maximum file size: 5MB</li>
+                        <li>Maximum file size: 10MB</li>
                         <li>Include payment reference number if available</li>
                         <li>School will review and confirm payment within 24-48 hours</li>
                       </ul>
                     </div>
                   </div>
                 </div>
-
-                <div style={{ marginBottom: 'var(--space-4)' }}>
-                  <label style={{ display: 'block', fontWeight: 600, marginBottom: 'var(--space-2)', fontSize: 14 }}>
-                    Select Payment
-                  </label>
-                  <select
-                    style={{
-                      width: '100%',
-                      padding: 'var(--space-3)',
-                      borderRadius: 'var(--radius-2)',
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontSize: 14,
-                    }}>
-                    <option value="">Choose a payment...</option>
-                    {upcomingPayments.map((payment) => (
-                      <option key={payment.id} value={payment.id}>
-                        {payment.description} - {formatCurrency(payment.amount)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: 'var(--space-4)' }}>
-                  <label style={{ display: 'block', fontWeight: 600, marginBottom: 'var(--space-2)', fontSize: 14 }}>
-                    Reference Number (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., TXN123456"
-                    style={{
-                      width: '100%',
-                      padding: 'var(--space-3)',
-                      borderRadius: 'var(--radius-2)',
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontSize: 14,
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: 'var(--space-5)' }}>
-                  <label style={{ display: 'block', fontWeight: 600, marginBottom: 'var(--space-2)', fontSize: 14 }}>
-                    Upload File
-                  </label>
-                  <div style={{
-                    border: '2px dashed var(--border)',
-                    borderRadius: 'var(--radius-2)',
-                    padding: 'var(--space-6)',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    background: 'var(--surface)',
-                  }}>
-                    <Upload className="w-8 h-8" style={{ color: 'var(--primary)', margin: '0 auto var(--space-3)' }} />
-                    <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 'var(--space-1)' }}>Click to upload or drag and drop</p>
-                    <p className="muted" style={{ fontSize: 12 }}>PDF, JPG or PNG (max 5MB)</p>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      style={{ display: 'none' }}
-                      id="file-upload"
-                    />
-                  </div>
-                </div>
-
-                <button className="btn btnPrimary" style={{ width: '100%' }}>
-                  <Upload className="icon16" />
-                  Submit Proof of Payment
-                </button>
               </div>
             </div>
           )}
