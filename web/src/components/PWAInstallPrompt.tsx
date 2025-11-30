@@ -394,7 +394,7 @@ export function PWAInstallPrompt() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleInstallClick}
-              className="px-4 py-2 bg-white text-violet-600 font-semibold rounded-lg hover:bg-violet-50 transition-colors text-sm whitespace-nowrap"
+              className="px-5 py-2.5 bg-white text-violet-700 font-bold rounded-xl hover:bg-violet-100 transition-colors text-sm whitespace-nowrap shadow-lg shadow-black/20 border-2 border-white/50"
             >
               {deferredPrompt ? 'Install' : 'How'}
             </button>
