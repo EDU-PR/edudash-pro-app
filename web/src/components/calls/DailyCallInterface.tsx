@@ -334,13 +334,28 @@ export const DailyCallInterface = ({
 
       // Set up event listeners
       callObject
-        .on('joined-meeting', () => {
+        .on('joined-meeting', async () => {
           console.log('[P2P Call] Joined meeting');
           const participants = callObject.participants();
           const local = participants.local;
           setLocalParticipant(local);
           setIsVideoEnabled(local.video);
-          setIsAudioEnabled(local.audio);
+          
+          // Ensure audio is enabled after joining (fix for mic appearing muted by default)
+          // Daily.co may report local.audio as false initially while audio track is being set up
+          if (!local.audio) {
+            console.log('[P2P Call] Audio not enabled yet, explicitly enabling microphone...');
+            try {
+              await callObject.setLocalAudio(true);
+              setIsAudioEnabled(true);
+              console.log('[P2P Call] Microphone enabled successfully');
+            } catch (audioErr) {
+              console.warn('[P2P Call] Failed to enable audio:', audioErr);
+              setIsAudioEnabled(false);
+            }
+          } else {
+            setIsAudioEnabled(local.audio);
+          }
           
           // Update local video
           if (localVideoRef.current && local.tracks?.video?.track) {
