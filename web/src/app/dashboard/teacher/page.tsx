@@ -187,6 +187,10 @@ export default function TeacherDashboard() {
       <div className="section">
         <div className="sectionTitle">Quick actions</div>
         <div className="grid2">
+          <button className="qa" onClick={() => router.push('/dashboard/teacher/reports')}>
+            <FileText className="icon20" />
+            <span>Progress Reports</span>
+          </button>
           <button className="qa" onClick={() => router.push('/dashboard/teacher/lessons')}>
             <BookOpen className="icon20" />
             <span>Create Lesson Plan</span>
