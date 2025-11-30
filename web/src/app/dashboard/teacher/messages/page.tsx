@@ -1298,7 +1298,7 @@ function TeacherMessagesPage() {
         .eq('message_id', selectedMessageId)
         .eq('user_id', userId)
         .eq('emoji', emoji)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         await supabase.from('message_reactions').delete().eq('id', existing.id);

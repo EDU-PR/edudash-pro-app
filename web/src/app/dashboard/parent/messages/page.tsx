@@ -1471,7 +1471,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         .eq('message_id', messageId)
         .eq('user_id', userId)
         .eq('emoji', emoji)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         // Remove reaction
