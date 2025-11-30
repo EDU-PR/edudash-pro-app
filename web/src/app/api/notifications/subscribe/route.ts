@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Store subscription in database
+    // Use endpoint as unique key since same device can have different users
     const { error } = await supabase.from('push_subscriptions').upsert({
       user_id: userId || null,
       endpoint: subscription.endpoint,
@@ -32,7 +33,8 @@ export async function POST(request: NextRequest) {
       topics: topics || ['updates'],
       updated_at: new Date().toISOString(),
     }, {
-      onConflict: 'endpoint',
+      onConflict: 'push_subscriptions_endpoint_key',
+      ignoreDuplicates: false,
     });
 
     if (error) {

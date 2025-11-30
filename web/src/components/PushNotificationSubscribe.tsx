@@ -137,13 +137,18 @@ export function PushNotificationSubscribe() {
           p256dh: subscriptionJson.keys!.p256dh!,
           auth: subscriptionJson.keys!.auth!,
           user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString(),
         }, {
-          onConflict: 'user_id,endpoint',
+          onConflict: 'push_subscriptions_user_endpoint_key',
+          ignoreDuplicates: false,
         });
 
       if (error) {
+        console.error('[Push] Failed to save subscription:', error);
         throw new Error('Failed to save notification subscription');
       }
+
+      console.log('[Push] Subscription saved successfully for user:', userId);
 
       setIsSubscribed(true);
     } catch (error) {
