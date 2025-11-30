@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useNotificationSound, playNotificationSound } from '@/hooks/useNotificationSound';
+import type { WakeLockSentinel } from '@/types/navigator';
 
 interface NativeAppManagerProps {
   /** Whether to enable notification sounds */
   enableSounds?: boolean;
   /** Callback when a push message is received while app is in foreground */
-  onPushMessage?: (data: any) => void;
+  onPushMessage?: (data: unknown) => void;
   /** Callback when notification is clicked */
   onNotificationClick?: (url: string, type?: string) => void;
+  /** Whether to keep the screen on (useful during calls) */
+  keepScreenOn?: boolean;
 }
 
 /**
@@ -18,6 +21,7 @@ interface NativeAppManagerProps {
  * - Notification sounds
  * - Push notification handling in foreground
  * - Service worker message handling
+ * - Wake lock management for keeping screen on during calls
  * 
  * Note: Orientation locking is NOT applied automatically as it only works
  * in fullscreen mode on web browsers and should respect device settings.
@@ -26,9 +30,10 @@ export function NativeAppManager({
   enableSounds = true,
   onPushMessage,
   onNotificationClick,
+  keepScreenOn = false,
 }: NativeAppManagerProps) {
   const { playNotification } = useNotificationSound();
-  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Handle service worker messages
   useEffect(() => {
@@ -136,30 +141,75 @@ export function NativeAppManager({
     };
   }, []);
 
-  // Handle wake lock (keep screen on during calls)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  // Acquire wake lock - keeps screen on during calls
+  const acquireWakeLock = useCallback(async (): Promise<boolean> => {
+    if (typeof window === 'undefined' || !navigator.wakeLock) {
+      return false;
+    }
 
-    // Wake lock will be managed by call components
-    // This is just setup for the API availability
-
-    const checkWakeLockSupport = async () => {
-      if ('wakeLock' in navigator) {
-        console.log('[NativeApp] Wake lock is supported');
+    try {
+      // Release existing wake lock if any
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        await wakeLockRef.current.release();
       }
-    };
 
-    checkWakeLockSupport();
+      wakeLockRef.current = await navigator.wakeLock.request('screen');
+      
+      // Handle visibility change - re-acquire wake lock when page becomes visible
+      wakeLockRef.current.addEventListener('release', () => {
+        wakeLockRef.current = null;
+      });
+
+      return true;
+    } catch {
+      // Wake lock request failed (e.g., low battery, page not visible)
+      return false;
+    }
   }, []);
 
-  // Clear any pending notification timeouts on unmount
+  // Release wake lock
+  const releaseWakeLock = useCallback(async (): Promise<void> => {
+    if (wakeLockRef.current && !wakeLockRef.current.released) {
+      try {
+        await wakeLockRef.current.release();
+      } catch {
+        // Release failed, but we can ignore this
+      }
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  // Handle wake lock based on keepScreenOn prop
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.wakeLock) return;
+
+    if (keepScreenOn) {
+      acquireWakeLock();
+
+      // Re-acquire wake lock when page becomes visible again
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && keepScreenOn) {
+          acquireWakeLock();
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        releaseWakeLock();
+      };
+    } else {
+      releaseWakeLock();
+    }
+  }, [keepScreenOn, acquireWakeLock, releaseWakeLock]);
+
+  // Cleanup wake lock on unmount
   useEffect(() => {
     return () => {
-      if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current);
-      }
+      releaseWakeLock();
     };
-  }, []);
+  }, [releaseWakeLock]);
 
   return null; // This is a logic-only component
 }
