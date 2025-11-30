@@ -82,13 +82,14 @@ export function usePOPUploads(
   const [uploads, setUploads] = useState<POPUpload[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
 
   const fetchUploads = useCallback(async () => {
     if (!userId) return;
     
     setLoading(true);
     setError(null);
+    
+    const supabase = createClient();
     
     try {
       let query = supabase
@@ -126,7 +127,7 @@ export function usePOPUploads(
     } finally {
       setLoading(false);
     }
-  }, [userId, filters.upload_type, filters.status, filters.student_id, supabase]);
+  }, [userId, filters.upload_type, filters.status, filters.student_id]);
 
   return { uploads, loading, error, refetch: fetchUploads };
 }

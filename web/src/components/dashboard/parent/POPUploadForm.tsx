@@ -29,18 +29,21 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleFileSelect = (file: File) => {
+    setValidationError(null);
+    
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      alert('Only PDF and image files (JPG, PNG) are allowed');
+      setValidationError('Only PDF and image files (JPG, PNG) are allowed');
       return;
     }
     
     // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB');
+      setValidationError('File size must be less than 10MB');
       return;
     }
     
@@ -70,9 +73,10 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
     
     if (!selectedFile || !selectedChild) {
-      alert('Please select a file and child');
+      setValidationError('Please select a file and child');
       return;
     }
     
@@ -319,7 +323,7 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
       </div>
 
       {/* Error Message */}
-      {error && (
+      {(error || validationError) && (
         <div style={{
           padding: 12,
           background: 'rgba(239, 68, 68, 0.1)',
@@ -331,7 +335,7 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
           gap: 8,
         }}>
           <X size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
-          <p style={{ fontSize: 14, color: '#ef4444', margin: 0 }}>{error}</p>
+          <p style={{ fontSize: 14, color: '#ef4444', margin: 0 }}>{validationError || error}</p>
         </div>
       )}
 
