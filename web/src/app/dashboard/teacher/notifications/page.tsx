@@ -85,10 +85,16 @@ export default function TeacherNotificationsPage() {
   const deleteNotification = async (id: string) => {
     if (!userId) return;
 
-    await supabase
+    const { error } = await supabase
       .from('notifications')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Failed to delete notification:', error);
+      return;
+    }
 
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
