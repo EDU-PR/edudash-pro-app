@@ -19,9 +19,10 @@
 
 | Lines | File | Overflow | Priority |
 |-------|------|----------|----------|
+| **2311** | `components/calls/StartLiveLessonPrebuilt.tsx` | +1911 | 🔴 Critical |
 | **1465** | `components/dashboard/exam-prep/ExamPrepWidget.tsx` | +1065 | 🔴 Critical |
+| **1414** | `components/calls/DailyCallInterface.tsx` | +1014 | 🔴 Critical |
 | **1403** | `components/calls/CallInterface.tsx` | +1003 | 🔴 Critical |
-| **1375** | `components/calls/DailyCallInterface.tsx` | +975 | 🔴 Critical |
 | **1181** | `components/dashboard/exam-prep/ExamInteractiveView.tsx` | +781 | 🔴 Critical |
 | **1175** | `components/calls/StartLiveLesson.tsx` | +775 | 🔴 Critical |
 | **1107** | `components/dashboard/exam-prep/ConversationalExamBuilder.tsx` | +707 | 🔴 Critical |
@@ -45,7 +46,19 @@
 | **403** | `components/dash-chat/ConversationList.tsx` | +3 | 🟢 Low |
 | **402** | `components/dashboard/principal/PrincipalShell.tsx` | +2 | 🟢 Low |
 
-**Total Components:** 25 files
+**Total Components:** 26 files
+
+---
+
+## 🗑️ Archived Files to Delete
+
+| Lines | File | Reason |
+|-------|------|--------|
+| **1375** | `components/calls/_archived/DailyCallInterface.tsx` | Superseded by active version |
+| **836** | `components/calls/_archived/ClassLessonCall.tsx` | Superseded by active version |
+| **476** | `components/calls/_archived/GroupCallProvider.tsx` | Superseded by active version |
+
+**Action:** Delete entire `_archived` folder after confirming no dependencies.
 
 ---
 
@@ -107,11 +120,12 @@
 
 | Category | Count | Worst Offender | Lines |
 |----------|-------|----------------|-------|
-| Components | **25** | `ExamPrepWidget.tsx` | 1465 |
+| Components | **26** | `StartLiveLessonPrebuilt.tsx` | 2311 |
 | Pages | **22** | `parent/messages/page.tsx` | 2627 |
 | Hooks | **3** | `useChatLogic.ts` | 503 |
 | Services | **2** | `examParser.ts` | 591 |
-| **Total** | **52** | - | - |
+| Archived | **3** | (to delete) | 2687 |
+| **Total** | **53** | - | - |
 
 ---
 
@@ -119,15 +133,16 @@
 
 ### Phase 1: Critical (>2x over limit)
 1. `app/dashboard/parent/messages/page.tsx` - 2627 lines (5.2x)
-2. `app/dashboard/teacher/messages/page.tsx` - 2174 lines (4.3x)
-3. `components/dashboard/exam-prep/ExamPrepWidget.tsx` - 1465 lines (3.7x)
-4. `components/calls/CallInterface.tsx` - 1403 lines (3.5x)
-5. `components/calls/DailyCallInterface.tsx` - 1375 lines (3.4x)
-6. `components/dashboard/exam-prep/ExamInteractiveView.tsx` - 1181 lines (3.0x)
-7. `components/calls/StartLiveLesson.tsx` - 1175 lines (2.9x)
-8. `components/dashboard/exam-prep/ConversationalExamBuilder.tsx` - 1107 lines (2.8x)
-9. `app/dashboard/principal/registrations/page.tsx` - 1018 lines (2.0x)
-10. `app/dashboard/principal/registrations/[id]/page.tsx` - 1007 lines (2.0x)
+2. `components/calls/StartLiveLessonPrebuilt.tsx` - 2311 lines (5.8x)
+3. `app/dashboard/teacher/messages/page.tsx` - 2174 lines (4.3x)
+4. `components/dashboard/exam-prep/ExamPrepWidget.tsx` - 1465 lines (3.7x)
+5. `components/calls/DailyCallInterface.tsx` - 1414 lines (3.5x)
+6. `components/calls/CallInterface.tsx` - 1403 lines (3.5x)
+7. `components/dashboard/exam-prep/ExamInteractiveView.tsx` - 1181 lines (3.0x)
+8. `components/calls/StartLiveLesson.tsx` - 1175 lines (2.9x)
+9. `components/dashboard/exam-prep/ConversationalExamBuilder.tsx` - 1107 lines (2.8x)
+10. `app/dashboard/principal/registrations/page.tsx` - 1018 lines (2.0x)
+11. `app/dashboard/principal/registrations/[id]/page.tsx` - 1007 lines (2.0x)
 
 ### Phase 2: High Priority (1.5x - 2x over limit)
 - `components/dashboard/AskAIWidget.tsx` - 959 lines
@@ -146,6 +161,12 @@
 
 ### Immediate Action: Delete Legacy Files
 - ~~`components/dash-chat/ChatInterface-old.tsx` - 866 lines~~ ✅ **DELETED**
+
+### Archived Files (Keep for now - documented in `_archived/README.md`)
+- `components/calls/_archived/DailyCallInterface.tsx` - 1375 lines (superseded by Prebuilt)
+- `components/calls/_archived/ClassLessonCall.tsx` - 836 lines (superseded by Prebuilt)
+- `components/calls/_archived/GroupCallProvider.tsx` - 476 lines (superseded by Prebuilt)
+> **Note:** These are documented backups from 2025-11-29 migration to Daily Prebuilt. May be restored if Prebuilt doesn't meet standards.
 
 ---
 
@@ -224,4 +245,4 @@ After:
 
 ---
 
-*Last updated: November 30, 2025*
+*Last updated: November 30, 2025 (verified)*
