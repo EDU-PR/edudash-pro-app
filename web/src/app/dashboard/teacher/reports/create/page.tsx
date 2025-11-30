@@ -117,7 +117,7 @@ export default function CreateReportPage() {
   // Calculate completion percentage
   const calculateCompletion = useCallback(() => {
     let filled = 0;
-    let total = 5;
+    const total = 5;
     
     if (reportPeriod) filled++;
     if (overallGrade) filled++;
