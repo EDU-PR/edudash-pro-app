@@ -1316,15 +1316,19 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
           : 'Someone';
         
         try {
+          // Convert raw message content to display-friendly text (handles __media__ encoded content)
+          const notificationBody = getMessageDisplayText(messageText.trim());
+          const truncatedBody = notificationBody.length > 50 
+            ? notificationBody.slice(0, 50) + '...' 
+            : notificationBody;
+          
           await fetch('/api/notifications/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               userId: otherParticipant.user_id,
               title: `New message from ${senderName}`,
-              body: messageText.trim().length > 50 
-                ? messageText.trim().slice(0, 50) + '...' 
-                : messageText.trim(),
+              body: truncatedBody,
               tag: `message-${selectedThreadId}`,
               type: 'message',
               requireInteraction: false,
