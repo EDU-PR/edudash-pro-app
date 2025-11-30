@@ -236,6 +236,13 @@ self.addEventListener('push', (event) => {
   }).then(() => {
     console.log('[SW] Notification shown successfully');
     
+    // Set app badge to indicate unread notification (red dot on app icon)
+    if ('setAppBadge' in navigator) {
+      navigator.setAppBadge(1).catch((err) => {
+        console.warn('[SW] Failed to set app badge:', err);
+      });
+    }
+    
     // Notify all open clients about the push (for in-app handling)
     return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clients) => {
@@ -257,6 +264,13 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event.action);
   event.notification.close();
+  
+  // Clear app badge when notification is clicked
+  if ('clearAppBadge' in navigator) {
+    navigator.clearAppBadge().catch((err) => {
+      console.warn('[SW] Failed to clear app badge:', err);
+    });
+  }
 
   // Handle action buttons
   if (event.action === 'dismiss') {

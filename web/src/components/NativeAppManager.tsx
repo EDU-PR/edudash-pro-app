@@ -87,11 +87,11 @@ export function NativeAppManager({
     };
   }, [enableSounds, playNotification, onPushMessage, onNotificationClick]);
 
-  // Handle visibility change to update status bar
+  // Handle visibility change to update status bar and clear badge
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const updateThemeColor = (visible: boolean) => {
+    const updateThemeColor = () => {
       const metaThemeColor = document.querySelector('meta[name="theme-color"]');
       if (metaThemeColor) {
         // Keep consistent dark theme
@@ -100,7 +100,14 @@ export function NativeAppManager({
     };
 
     const handleVisibilityChange = () => {
-      updateThemeColor(!document.hidden);
+      updateThemeColor();
+      
+      // Clear app badge when user returns to the app
+      if (!document.hidden && 'clearAppBadge' in navigator) {
+        (navigator as any).clearAppBadge().catch(() => {
+          // Badge API not supported or failed
+        });
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
