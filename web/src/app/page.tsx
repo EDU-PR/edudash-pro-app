@@ -82,7 +82,7 @@ export default function Home() {
           <nav style={{display: 'flex', alignItems: 'center', gap: '28px'}} className="desktop-nav">
             <button onClick={() => scrollToSection('features')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Features</button>
             <button onClick={() => scrollToSection('dash-ai')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Dash AI</button>
-            <Link href="/exam-prep" style={{background: 'none', border: 0, color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.2s'}}>📝 Exam Prep</Link>
+            <Link href="/exam-prep" style={{background: 'none', border: 0, color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.2s'}}>📚 Study Hub</Link>
             <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Pricing</button>
             <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>FAQ</button>
             <PWAInstallButton />
@@ -96,7 +96,7 @@ export default function Home() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <button onClick={() => scrollToSection('features')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Features</button>
               <button onClick={() => scrollToSection('dash-ai')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Dash AI</button>
-              <Link href="/exam-prep" style={{color: '#fbbf24', fontSize: '16px', fontWeight: 600, textAlign: 'left', padding: '8px 0', textDecoration: 'none', display: 'block'}}>📝 Exam Prep (New!)</Link>
+              <Link href="/exam-prep" style={{color: '#fbbf24', fontSize: '16px', fontWeight: 600, textAlign: 'left', padding: '8px 0', textDecoration: 'none', display: 'block'}}>📚 Study Hub</Link>
               <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Pricing</button>
               <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>FAQ</button>
               <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '16px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
