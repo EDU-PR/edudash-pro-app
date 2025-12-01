@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useTransition } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -48,6 +48,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [hasOrganization, setHasOrganization] = useState(hasOrganizationProp || false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -291,19 +292,23 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <Link 
+                  <button 
                     key={it.href} 
-                    href={it.href}
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => setMobileNavOpen(false)}
-                    style={{ width: '100%', textDecoration: 'none' }}
+                    onClick={() => {
+                      // Start navigation first
+                      router.push(it.href);
+                      // Close drawer after navigation starts (small delay to prevent unmount)
+                      setTimeout(() => setMobileNavOpen(false), 50);
+                    }}
+                    style={{ width: '100%' }}
                   >
                     <Icon className="navIcon" />
                     <span>{it.label}</span>
                     {typeof it.badge === 'number' && it.badge > 0 && (
                       <span className="navItemBadge badgeNumber">{it.badge}</span>
                     )}
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
