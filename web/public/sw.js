@@ -182,7 +182,7 @@ self.addEventListener('push', (event) => {
     data: { url: '/dashboard', timestamp: Date.now() },
     tag: 'default',
     requireInteraction: false,
-    renotify: true, // Always re-notify to ensure visibility
+    renotify: false, // Default to false to prevent spam; will be set true for important notifications
     silent: false,
     vibrate: [200, 100, 200],
   };
@@ -193,9 +193,14 @@ self.addEventListener('push', (event) => {
       const payload = event.data.json();
       console.log('[SW] Push payload received:', JSON.stringify(payload));
       
-      // Determine if this is a call notification
+      // Determine notification importance for renotify behavior
       const isCall = payload.type === 'call' || payload.data?.type === 'call' || 
                      payload.type === 'live-lesson' || payload.data?.type === 'live-lesson';
+      const isMessage = payload.type === 'message' || payload.data?.type === 'message';
+      const isAnnouncement = payload.type === 'announcement' || payload.data?.type === 'announcement';
+      
+      // Only renotify for important/time-sensitive notifications (calls, messages, announcements)
+      const shouldRenotify = isCall || isMessage || isAnnouncement;
       
       notificationData = {
         title: payload.title || notificationData.title,
@@ -210,14 +215,14 @@ self.addEventListener('push', (event) => {
         },
         tag: payload.tag || `notif-${Date.now()}`,
         requireInteraction: isCall || payload.requireInteraction || false,
-        renotify: true, // Always renotify for important updates
+        renotify: shouldRenotify, // Only renotify for important notifications
         silent: false, // Never silent - we want system notification sound
         vibrate: isCall ? [500, 200, 500, 200, 500] : [200, 100, 200],
         // Add actions for call notifications
         actions: isCall ? [
           { action: 'join', title: '📹 Join Now' },
           { action: 'dismiss', title: 'Dismiss' }
-        ] : (payload.type === 'message' || payload.data?.type === 'message') ? [
+        ] : isMessage ? [
           { action: 'view', title: '💬 View' },
           { action: 'dismiss', title: 'Dismiss' }
         ] : undefined,

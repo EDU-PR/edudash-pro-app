@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
+// Constants for fee calculations
+const FEE_CUTOFF_DAY = 7; // Day of month after which we show next month's fees
+const CENTS_TO_CURRENCY = 100; // Conversion factor from cents to currency units (e.g., cents to rands)
+
 export interface UrgentMetrics {
   feesDue: {
     amount: number;
@@ -101,8 +105,8 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
             let dueMonth = now.getMonth();
             let dueYear = now.getFullYear();
             
-            // If past the 7th, show next month's fee
-            if (currentDay > 7) {
+            // If past the fee cutoff day, show next month's fee
+            if (currentDay > FEE_CUTOFF_DAY) {
               dueMonth++;
               if (dueMonth > 11) {
                 dueMonth = 0;
@@ -113,7 +117,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
             const dueDate = `${dueYear}-${String(dueMonth + 1).padStart(2, '0')}-01`;
             
             feesDue = {
-              amount: feeStructure.amount_cents / 100, // Convert cents to rands
+              amount: feeStructure.amount_cents / CENTS_TO_CURRENCY,
               dueDate: dueDate,
               overdue: false,
             };
