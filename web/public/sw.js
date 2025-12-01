@@ -169,26 +169,29 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Push notification event - display notification with sound
+// CRITICAL: This handler runs even when the app/browser is closed (background mode)
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push event received');
+  console.log('[SW] Push event received - waking up service worker');
   
+  // Default notification data
   let notificationData = {
     title: 'EduDash Pro',
     body: 'You have a new notification',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    data: { url: '/dashboard' },
+    data: { url: '/dashboard', timestamp: Date.now() },
     tag: 'default',
     requireInteraction: false,
-    renotify: false,
+    renotify: true, // Always re-notify to ensure visibility
     silent: false,
     vibrate: [200, 100, 200],
   };
 
+  // Parse push payload if present
   if (event.data) {
     try {
       const payload = event.data.json();
-      console.log('[SW] Push payload:', payload);
+      console.log('[SW] Push payload received:', JSON.stringify(payload));
       
       // Determine if this is a call notification
       const isCall = payload.type === 'call' || payload.data?.type === 'call' || 
@@ -203,6 +206,7 @@ self.addEventListener('push', (event) => {
           ...payload.data,
           url: payload.data?.url || notificationData.data.url,
           type: payload.type || payload.data?.type,
+          timestamp: Date.now(),
         },
         tag: payload.tag || `notif-${Date.now()}`,
         requireInteraction: isCall || payload.requireInteraction || false,
@@ -223,43 +227,51 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  // Force show notification even when app is in focus
-  const promiseChain = self.registration.showNotification(notificationData.title, {
-    body: notificationData.body,
-    icon: notificationData.icon,
-    badge: notificationData.badge,
-    data: notificationData.data,
-    tag: notificationData.tag,
-    requireInteraction: notificationData.requireInteraction,
-    renotify: notificationData.renotify,
-    silent: notificationData.silent,
-    vibrate: notificationData.vibrate,
-    actions: notificationData.actions,
-  }).then(() => {
-    console.log('[SW] Notification shown successfully');
-    
-    // Set app badge to indicate unread notification (red dot on app icon)
-    if ('setAppBadge' in navigator) {
-      navigator.setAppBadge(1).catch((err) => {
-        console.warn('[SW] Failed to set app badge:', err);
-      });
-    }
-    
-    // Notify all open clients about the push (for in-app handling)
-    return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clients) => {
+  // CRITICAL: Use event.waitUntil to keep the service worker alive until notification is shown
+  // This is essential for background/closed app scenarios
+  event.waitUntil(
+    (async () => {
+      try {
+        // Show the notification
+        await self.registration.showNotification(notificationData.title, {
+          body: notificationData.body,
+          icon: notificationData.icon,
+          badge: notificationData.badge,
+          data: notificationData.data,
+          tag: notificationData.tag,
+          requireInteraction: notificationData.requireInteraction,
+          renotify: notificationData.renotify,
+          silent: notificationData.silent,
+          vibrate: notificationData.vibrate,
+          actions: notificationData.actions,
+        });
+        
+        console.log('[SW] Notification shown successfully');
+        
+        // Set app badge to indicate unread notification (red dot on app icon)
+        if ('setAppBadge' in navigator) {
+          try {
+            await navigator.setAppBadge(1);
+          } catch (err) {
+            console.warn('[SW] Failed to set app badge:', err);
+          }
+        }
+        
+        // Notify all open clients about the push (for in-app handling)
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
         clients.forEach((client) => {
           client.postMessage({
             type: 'PUSH_RECEIVED',
             ...notificationData,
           });
         });
-      });
-  }).catch((err) => {
-    console.error('[SW] Failed to show notification:', err);
-  });
-
-  event.waitUntil(promiseChain);
+        
+        console.log('[SW] Push handling complete, notified', clients.length, 'clients');
+      } catch (err) {
+        console.error('[SW] Failed to show notification:', err);
+      }
+    })()
+  );
 });
 
 // Notification click event - open app

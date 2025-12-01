@@ -58,29 +58,70 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
         throw new Error('Student not found');
       }
 
-      // Fetch outstanding fees from payments table
+      // Fetch outstanding fees from student_fees table (or fallback to school_fee_structures)
       let feesDue: { amount: number; dueDate: string | null; overdue: boolean } | null = null;
       try {
-        const { data: payments, error: paymentsError } = await supabase
-          .from('payments')
-          .select('amount, created_at, status')
+        // First, try to get fees from student_fees table (specific fees assigned to student)
+        const { data: studentFees, error: studentFeesError } = await supabase
+          .from('student_fees')
+          .select('*')
           .eq('student_id', childId)
-          .eq('preschool_id', studentData.preschool_id)
-          .in('status', ['pending', 'overdue'])
-          .order('created_at', { ascending: true })
+          .in('payment_status', ['unpaid', 'partial', 'overdue'])
+          .order('due_date', { ascending: true })
           .limit(1)
           .maybeSingle();
 
-        if (!paymentsError && payments && payments.amount > 0) {
-          const isOverdue = payments.status === 'overdue';
+        if (!studentFeesError && studentFees && studentFees.amount > 0) {
+          const dueDate = new Date(studentFees.due_date);
+          const now = new Date();
+          const gracePeriod = studentFees.grace_period_days || 7;
+          const daysPastDue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          const isOverdue = daysPastDue > gracePeriod;
+          
           feesDue = {
-            amount: payments.amount,
-            dueDate: null,
-            overdue: isOverdue,
+            amount: studentFees.amount,
+            dueDate: studentFees.due_date,
+            overdue: isOverdue || studentFees.payment_status === 'overdue',
           };
+        } else if (studentData.preschool_id) {
+          // Fallback: If no student_fees exist, check school_fee_structures for monthly tuition
+          const { data: feeStructure, error: feeStructureError } = await supabase
+            .from('school_fee_structures')
+            .select('*')
+            .eq('preschool_id', studentData.preschool_id)
+            .eq('is_active', true)
+            .eq('fee_category', 'tuition')
+            .limit(1)
+            .maybeSingle();
+
+          if (!feeStructureError && feeStructure && feeStructure.amount_cents > 0) {
+            // Calculate next due date (1st of current or next month)
+            const now = new Date();
+            const currentDay = now.getDate();
+            let dueMonth = now.getMonth();
+            let dueYear = now.getFullYear();
+            
+            // If past the 7th, show next month's fee
+            if (currentDay > 7) {
+              dueMonth++;
+              if (dueMonth > 11) {
+                dueMonth = 0;
+                dueYear++;
+              }
+            }
+            
+            const dueDate = `${dueYear}-${String(dueMonth + 1).padStart(2, '0')}-01`;
+            
+            feesDue = {
+              amount: feeStructure.amount_cents / 100, // Convert cents to rands
+              dueDate: dueDate,
+              overdue: false,
+            };
+          }
         }
       } catch (err) {
-        // Silently handle - payments table may not exist yet
+        // Silently handle - student_fees or school_fee_structures table may not exist yet
+        console.warn('[useChildMetrics] Could not fetch fees:', err);
       }
 
       // Pending homework

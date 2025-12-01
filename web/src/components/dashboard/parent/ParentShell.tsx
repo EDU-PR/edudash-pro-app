@@ -294,7 +294,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   <button 
                     key={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => { setMobileNavOpen(false); window.location.href = it.href; }}
+                    onClick={() => { setMobileNavOpen(false); router.push(it.href); }}
                     style={{ width: '100%' }}
                   >
                     <Icon className="navIcon" />
