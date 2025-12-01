@@ -21,6 +21,8 @@ import {
   X,
   Activity,
   BookMarked,
+  Megaphone,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -69,11 +71,14 @@ export function PrincipalShell({
     { href: '/dashboard/principal/teachers', label: 'Teachers', icon: School },
     { href: '/dashboard/principal/registrations', label: 'Registrations', icon: UserPlus },
     { href: '/dashboard/principal/campaigns', label: 'Campaigns', icon: Activity },
+    { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
+    { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },
     { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
     { href: '/dashboard/principal/reports', label: 'Reports', icon: FileText },
     { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
     { href: '/dashboard/principal/settings', label: 'Settings', icon: Settings },
+    { href: '/dashboard/principal/test-notifications', label: 'Test Notifications', icon: Bell },
   ];
 
   // Check if we should show back button (not on dashboard home)

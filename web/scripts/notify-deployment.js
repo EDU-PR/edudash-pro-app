@@ -30,7 +30,8 @@ if (environment === 'development' && !webhookUrl.includes('vercel')) {
 }
 
 if (!webhookSecret) {
-  console.log('⚠️  DEPLOYMENT_WEBHOOK_SECRET not set - notification might fail');
+  console.log('⚠️  DEPLOYMENT_WEBHOOK_SECRET not set - using anonymous mode (may fail on production)');
+  console.log('   To enable authenticated notifications, set DEPLOYMENT_WEBHOOK_SECRET in Vercel env vars');
 }
 
 console.log(`🚀 Sending deployment notification to: ${webhookUrl}`);

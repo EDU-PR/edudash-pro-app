@@ -43,6 +43,20 @@ export default function SettingsPage() {
 
   const quickActions = [
     {
+      label: 'School Profile',
+      description: 'Manage school information, contact details, and address',
+      icon: Settings,
+      onClick: () => router.push('/dashboard/principal/settings/school-profile'),
+      color: '#3b82f6',
+    },
+    {
+      label: 'Fee Structure',
+      description: 'Configure registration fees, tuition, and other charges',
+      icon: CreditCard,
+      onClick: () => router.push('/dashboard/principal/settings/fees'),
+      color: '#10b981',
+    },
+    {
       label: 'Report Card Configuration',
       description: 'Customize school branding, logo, and report card layout',
       icon: FileText,
