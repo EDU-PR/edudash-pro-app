@@ -92,7 +92,7 @@ export function TeacherShell({
 
       <PushNotificationPrompt />
 
-      <style jsx>{`
+      <style jsx global>{`
         @media (max-width: 1023px) {
           .mobile-nav-btn { display: grid !important; }
           .desktop-back-btn { display: none !important; }

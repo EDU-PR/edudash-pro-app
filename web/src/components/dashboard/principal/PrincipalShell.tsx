@@ -344,7 +344,7 @@ export function PrincipalShell({
         </>
       )}
 
-      <style jsx>{`
+      <style jsx global>{`
         /* Adjust grid layout when right sidebar is hidden */
         .frame-no-right {
           grid-template-columns: 1fr !important;

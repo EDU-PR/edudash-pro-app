@@ -5,7 +5,6 @@
  * Extracted from TeacherShell.tsx
  */
 
-import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { X, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -18,7 +17,7 @@ interface TeacherMobileNavProps {
 }
 
 export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps) {
-  const router = useRouter();
+  const router = useRouter(); // Keep for sign-out
   const pathname = usePathname();
   const supabase = createClient();
 
@@ -35,7 +34,6 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
           bottom: 0,
           background: 'rgba(0, 0, 0, 0.85)',
           zIndex: 9998,
-          display: 'none',
         }}
         className="mobile-nav-overlay"
         onClick={onClose}
@@ -52,7 +50,6 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
           zIndex: 9999,
           overflowY: 'auto',
           padding: 'var(--space-4)',
-          display: 'none',
           animation: 'slideInLeft 0.3s ease-out',
         }}
         className="mobile-nav-drawer"
@@ -69,18 +66,23 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
             const Icon = it.icon as any;
             const active = pathname === it.href || pathname?.startsWith(it.href + '/');
             return (
-              <Link 
+              <button 
                 key={it.href} 
-                href={it.href} 
                 className={`navItem ${active ? 'navItemActive' : ''}`}
-                onClick={onClose}
+                onClick={() => { 
+                  console.log('🔗 Nav clicked:', it.href);
+                  onClose();
+                  // Force navigation using window.location since router.push isn't working
+                  window.location.href = it.href;
+                }}
+                style={{ width: '100%' }}
               >
                 <Icon className="navIcon" />
                 <span>{it.label}</span>
                 {typeof it.badge === 'number' && it.badge > 0 && (
                   <span className="navItemBadge badgeNumber">{it.badge}</span>
                 )}
-              </Link>
+              </button>
             );
           })}
         </nav>

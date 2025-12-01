@@ -273,7 +273,6 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           />
           <div 
             className="mobile-nav-drawer"
-            onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
@@ -292,18 +291,18 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <Link 
+                  <button 
                     key={it.href} 
-                    href={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => setMobileNavOpen(false)}
+                    onClick={() => { setMobileNavOpen(false); window.location.href = it.href; }}
+                    style={{ width: '100%' }}
                   >
                     <Icon className="navIcon" />
                     <span>{it.label}</span>
                     {typeof it.badge === 'number' && it.badge > 0 && (
                       <span className="navItemBadge badgeNumber">{it.badge}</span>
                     )}
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
@@ -330,7 +329,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       {/* Push Notification Prompt */}
       <PushNotificationPrompt />
 
-      <style jsx>{`
+      <style jsx global>{`
         /* Mobile nav button - hidden by default on desktop */
         .mobile-nav-btn {
           display: none;
