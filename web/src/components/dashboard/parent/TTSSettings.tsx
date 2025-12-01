@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Volume2, VolumeX, User, Users } from 'lucide-react';
 import { useTTS, TTSQuota } from '@/hooks/useTTS';
 import { createClient } from '@/lib/supabase/client';
@@ -10,6 +11,7 @@ interface TTSSettingsProps {
 }
 
 export function TTSSettings({ userId }: TTSSettingsProps) {
+  const router = useRouter();
   const { voicePreference, setVoice, userTier, checkQuota } = useTTS(userId);
   const [quota, setQuota] = useState<TTSQuota | null>(null);
   const [loading, setLoading] = useState(true);
@@ -243,8 +245,8 @@ export function TTSSettings({ userId }: TTSSettingsProps) {
           <button
             className="btn btnPrimary"
             onClick={() => {
-              // Navigate to upgrade page
-              window.location.href = '/dashboard/parent/upgrade';
+              // Navigate to upgrade page using Next.js router
+              router.push('/dashboard/parent/upgrade');
             }}
             style={{
               fontSize: 13,

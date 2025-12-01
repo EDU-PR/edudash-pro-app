@@ -577,11 +577,19 @@ button {
   }
 }
 
-/* Full-width container for parent dashboard - 10px padding from edges */
+/* Full-width container for parent dashboard - 6px padding from edges on mobile */
 .container.parent-dashboard-main {
   max-width: none !important;
-  padding-left: 10px !important;
-  padding-right: 10px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+
+/* Increase padding slightly on larger screens */
+@media (min-width: 640px) {
+  .container.parent-dashboard-main {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
 }
 
 /* Make children cards span wider */
