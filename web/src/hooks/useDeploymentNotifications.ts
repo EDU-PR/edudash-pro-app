@@ -42,14 +42,31 @@ export function useDeploymentNotifications() {
         }
 
         // Subscribe to 'updates' topic for deployment notifications
-        await fetch('/api/notifications/subscribe', {
+        const subJSON = subscription.toJSON();
+        
+        const response = await fetch('/api/notifications/subscribe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // Include cookies for authentication
           body: JSON.stringify({
-            subscription,
+            subscription: {
+              endpoint: subscription.endpoint,
+              keys: {
+                p256dh: subJSON.keys?.p256dh || '',
+                auth: subJSON.keys?.auth || '',
+              }
+            },
             topics: ['updates'],
           }),
         });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.warn('📵 [Notifications] Failed to subscribe to updates:', error);
+          return;
+        }
 
         console.log('📢 [Notifications] Subscribed to deployment updates');
       } catch (error) {

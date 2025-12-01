@@ -280,8 +280,12 @@ function SignInFormWithParams() {
         </div>
 
         <div style={{ marginTop: 20, paddingTop: 20, textAlign: "center" }}>
-          <p style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 1.5 }}>Looking to register a school? <a href="#" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</a></p>
-          <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 10, lineHeight: 1.5 }}>Looking to onboard an organization? <a href="#" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</a></p>
+          <p style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 1.5 }}>
+            Looking to register a school? <Link href="/sign-up/principal" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</Link>
+          </p>
+          <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 10, lineHeight: 1.5 }}>
+            Looking to onboard an organization? <Link href="/sign-up/principal" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</Link>
+          </p>
         </div>
 
         <div style={{ marginTop: 24, textAlign: "center" }}>
