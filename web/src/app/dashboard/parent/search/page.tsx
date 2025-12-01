@@ -59,9 +59,9 @@ function SearchContent() {
         return;
       }
 
-      const childIds = children.map(c => c.id);
-      const preschoolIds = [...new Set(children.map(c => c.preschool_id).filter(Boolean))];
-      const classIds = [...new Set(children.map(c => c.class_id).filter(Boolean))];
+      const childIds = children.map((c: any) => c.id);
+      const preschoolIds = [...new Set(children.map((c: any) => c.preschool_id).filter(Boolean))];
+      const classIds = [...new Set(children.map((c: any) => c.class_id).filter(Boolean))];
 
       // Search children
       const matchingChildren = children.filter(child =>
