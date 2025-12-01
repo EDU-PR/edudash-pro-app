@@ -64,12 +64,12 @@ function SearchContent() {
       const classIds = [...new Set(children.map((c: any) => c.class_id).filter(Boolean))];
 
       // Search children
-      const matchingChildren = children.filter(child =>
+      const matchingChildren = children.filter((child: any) =>
         `${child.first_name} ${child.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
         child.grade?.toLowerCase().includes(searchQuery.toLowerCase())
       );
 
-      matchingChildren.forEach(child => {
+      matchingChildren.forEach((child: any) => {
         results.push({
           id: child.id,
           type: 'child',
@@ -89,7 +89,7 @@ function SearchContent() {
           .order('due_date', { ascending: false })
           .limit(10);
 
-        homework?.forEach(hw => {
+        homework?.forEach((hw: any) => {
           results.push({
             id: hw.id,
             type: 'homework',
@@ -112,7 +112,7 @@ function SearchContent() {
           .order('created_at', { ascending: false })
           .limit(10);
 
-        messages?.forEach(msg => {
+        messages?.forEach((msg: any) => {
           results.push({
             id: msg.id,
             type: 'message',
