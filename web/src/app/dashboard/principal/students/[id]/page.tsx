@@ -78,8 +78,18 @@ export default function StudentDetailPage() {
 
   const studentId = params.id as string;
 
+  // Guard: Prevent treating "enroll" as a student ID
+  useEffect(() => {
+    if (studentId === 'enroll') {
+      // This is handled by the /enroll route, not this dynamic [id] page
+      return;
+    }
+  }, [studentId]);
+
   // Auth check
   useEffect(() => {
+    if (studentId === 'enroll') return; // Skip auth check for enroll route
+    
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -89,10 +99,12 @@ export default function StudentDetailPage() {
       setUserId(session.user.id);
     };
     initAuth();
-  }, [router, supabase]);
+  }, [router, supabase, studentId]);
 
   // Load student details
   useEffect(() => {
+    if (studentId === 'enroll') return; // Skip for enroll route
+    
     if (!preschoolId || !studentId) {
       console.log('Waiting for preschoolId or studentId...', { preschoolId, studentId });
       return;
@@ -250,6 +262,11 @@ export default function StudentDetailPage() {
     const months = Math.floor(((today.getTime() - birth.getTime()) / (30.44 * 24 * 60 * 60 * 1000)) % 12);
     return `${years} years, ${months} months`;
   };
+
+  // Guard: Don't render if this is the enroll route
+  if (studentId === 'enroll') {
+    return null; // Let the /enroll route handle this
+  }
 
   if (loading) {
     return (
