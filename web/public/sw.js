@@ -1,6 +1,7 @@
 /* EduDash Pro Service Worker - PWA Support */
+
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20251201141440';
+const SW_VERSION = 'v20251201142342';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -20,14 +21,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then(async (cache) => {
-        // Try to cache each file individually to avoid complete failure
         const urlsToCache = [
           OFFLINE_URL,
           '/manifest.json',
           '/manifest.webmanifest',
           '/icon-192.png',
           '/icon-512.png',
-          // Pre-cache notification sounds for instant playback
           '/sounds/notification.mp3',
           '/sounds/ringtone.mp3',
           '/sounds/ringback.mp3',
@@ -83,20 +82,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   
-  // Only handle GET requests
   if (request.method !== 'GET') return;
-
-  // Skip Chrome extension and devtools requests
   if (request.url.startsWith('chrome-extension://') || request.url.includes('chrome-devtools://')) {
     return;
   }
 
-  // Network-first for HTML navigation (app shell pattern)
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful HTML responses
           if (response.ok) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
@@ -106,7 +100,6 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Offline - try cache, then offline page
           return caches.match(request)
             .then((cached) => cached || caches.match(OFFLINE_URL))
             .then((response) => response || Response.error());
@@ -118,12 +111,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const dest = request.destination;
 
-  // Cache-first for static assets (images, fonts, audio)
   if (dest === 'image' || dest === 'font' || dest === 'audio' || url.pathname.startsWith('/sounds/')) {
     event.respondWith(
       caches.match(request).then((cached) => {
         return cached || fetch(request).then((response) => {
-          // Only cache complete responses (200 OK), not partial (206) or errors
           if (response.ok && response.status === 200) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
@@ -137,12 +128,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for scripts, styles
   if (dest === 'script' || dest === 'style') {
     event.respondWith(
       caches.match(request).then((cached) => {
         const fetchPromise = fetch(request).then((response) => {
-          // Only cache complete responses (200 OK), not partial (206) or errors
           if (response.ok && response.status === 200) {
             const responseClone = response.clone();
             caches.open(RUNTIME_CACHE).then((cache) => {
@@ -157,7 +146,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for API calls and other requests
   if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
     event.respondWith(
       fetch(request)
@@ -173,7 +161,6 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   console.log('[SW] Push event received - waking up service worker');
   
-  // Default notification data
   let notificationData = {
     title: 'EduDash Pro',
     body: 'You have a new notification',
@@ -182,27 +169,26 @@ self.addEventListener('push', (event) => {
     data: { url: '/dashboard', timestamp: Date.now() },
     tag: 'default',
     requireInteraction: false,
-    renotify: false, // Default to false to prevent spam; will be set true for important notifications
+    renotify: false,
     silent: false,
     vibrate: [200, 100, 200],
+    actions: []
   };
 
-  // Parse push payload if present
   if (event.data) {
     try {
       const payload = event.data.json();
       console.log('[SW] Push payload received:', JSON.stringify(payload));
       
-      // Determine notification importance for renotify behavior
       const isCall = payload.type === 'call' || payload.data?.type === 'call' || 
                      payload.type === 'live-lesson' || payload.data?.type === 'live-lesson';
       const isMessage = payload.type === 'message' || payload.data?.type === 'message';
       const isAnnouncement = payload.type === 'announcement' || payload.data?.type === 'announcement';
       
-      // Only renotify for important/time-sensitive notifications (calls, messages, announcements)
       const shouldRenotify = isCall || isMessage || isAnnouncement;
       
       notificationData = {
+        ...notificationData, // Spread defaults first
         title: payload.title || notificationData.title,
         body: payload.body || notificationData.body,
         icon: payload.icon || notificationData.icon,
@@ -215,147 +201,62 @@ self.addEventListener('push', (event) => {
         },
         tag: payload.tag || `notif-${Date.now()}`,
         requireInteraction: isCall || payload.requireInteraction || false,
-        renotify: shouldRenotify, // Only renotify for important notifications
-        silent: false, // Never silent - we want system notification sound
+        renotify: shouldRenotify,
         vibrate: isCall ? [500, 200, 500, 200, 500] : [200, 100, 200],
-        // Add actions for call notifications
+        // *** SYNTAX FIX: Ensure actions array is correctly defined and closed ***
         actions: isCall ? [
           { action: 'join', title: '📹 Join Now' },
           { action: 'dismiss', title: 'Dismiss' }
         ] : isMessage ? [
           { action: 'view', title: '💬 View' },
-          { action: 'dismiss', title: 'Dismiss' }
-        ] : undefined,
+          { action: 'close', title: 'Close' }
+        ] : []
       };
+
     } catch (e) {
-      console.error('[SW] Failed to parse push notification payload:', e);
+      console.error('[SW] Failed to parse push JSON payload:', e);
     }
   }
 
-  // CRITICAL: Use event.waitUntil to keep the service worker alive until notification is shown
-  // This is essential for background/closed app scenarios
+  // *** CRITICAL FIX: Actually display the notification using event.waitUntil ***
   event.waitUntil(
-    (async () => {
-      try {
-        // Show the notification
-        await self.registration.showNotification(notificationData.title, {
-          body: notificationData.body,
-          icon: notificationData.icon,
-          badge: notificationData.badge,
-          data: notificationData.data,
-          tag: notificationData.tag,
-          requireInteraction: notificationData.requireInteraction,
-          renotify: notificationData.renotify,
-          silent: notificationData.silent,
-          vibrate: notificationData.vibrate,
-          actions: notificationData.actions,
-        });
-        
-        console.log('[SW] Notification shown successfully');
-        
-        // Set app badge to indicate unread notification (red dot on app icon)
-        if ('setAppBadge' in navigator) {
-          try {
-            await navigator.setAppBadge(1);
-          } catch (err) {
-            console.warn('[SW] Failed to set app badge:', err);
-          }
-        }
-        
-        // Notify all open clients about the push (for in-app handling)
-        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        clients.forEach((client) => {
-          client.postMessage({
-            type: 'PUSH_RECEIVED',
-            ...notificationData,
-          });
-        });
-        
-        console.log('[SW] Push handling complete, notified', clients.length, 'clients');
-      } catch (err) {
-        console.error('[SW] Failed to show notification:', err);
-      }
-    })()
-  );
-});
-
-// Notification click event - open app
-self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked:', event.action);
-  event.notification.close();
-  
-  // Clear app badge when notification is clicked
-  if ('clearAppBadge' in navigator) {
-    navigator.clearAppBadge().catch((err) => {
-      console.warn('[SW] Failed to clear app badge:', err);
-    });
-  }
-
-  // Handle action buttons
-  if (event.action === 'dismiss') {
-    return; // Just close the notification
-  }
-
-  const urlToOpen = event.notification.data?.url || '/dashboard';
-  const notificationType = event.notification.data?.type;
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        console.log('[SW] Found clients:', clientList.length);
-        
-        // Try to find an existing window with our app
-        for (const client of clientList) {
-          // Check if this is one of our app windows
-          if ((client.url.includes('localhost:3000') || client.url.includes('edudashpro')) && 'focus' in client) {
-            // Navigate the existing window to the target URL
-            client.postMessage({
-              type: 'NOTIFICATION_CLICK',
-              url: urlToOpen,
-              notificationType: notificationType,
-            });
-            return client.focus();
-          }
-        }
-        
-        // No existing window found, open a new one
-        if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
-        }
+    self.registration.showNotification(notificationData.title, notificationData)
+      .catch(error => {
+        console.error('[SW] Failed to show notification:', error);
       })
   );
 });
 
-// Push subscription change event - update subscription
-self.addEventListener('pushsubscriptionchange', (event) => {
-  event.waitUntil(
-    self.registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(
-        'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE'
-      ),
-    })
-    .then((subscription) => {
-      // Send new subscription to server
-      return fetch('/api/push/update-subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(subscription),
-      });
-    })
-  );
-});
+// *** CRITICAL ADDITION: Handle clicks on the notification actions/body ***
+self.addEventListener('notificationclick', (event) => {
+    const clickedNotification = event.notification;
+    const action = event.action; // 'join', 'dismiss', 'view', 'close', or empty for main body click
+    const urlToOpen = clickedNotification.data.url || '/dashboard';
 
-// Helper function to convert VAPID key
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
-    .replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+    console.log(`[SW] Notification clicked. Action: ${action}, URL: ${urlToOpen}`);
+    
+    // Close the notification as soon as it's clicked
+    clickedNotification.close();
+
+    // Prevent the service worker from terminating until we open/focus a window
+    event.waitUntil(
+        // Match all existing window clients (tabs/windows of your PWA)
+        clients.matchAll({ type: 'window' }).then((clientList) => {
+            // Check if any client is already open at the target URL
+            for (const client of clientList) {
+                // Focus an existing tab if possible
+                if (client.url.includes(urlToOpen) && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            // If no suitable tab is open, or it's a new action requiring a new context, open a new window/tab
+            if (clients.openWindow) {
+                if (action === 'join') {
+                    // Append a query param to the URL so the app knows how to handle the deep link
+                    return clients.openWindow(`${urlToOpen}?action=join`);
+                }
+                return clients.openWindow(urlToOpen);
+            }
+        })
+    );
+});
