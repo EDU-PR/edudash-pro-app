@@ -20,6 +20,7 @@ import {
   BookOpen,
   Clipboard,
   CreditCard,
+  Megaphone,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -142,6 +143,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       // Organization-linked parents see school-focused nav
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/parent/announcements', label: 'Announcements', icon: Megaphone },
         { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
