@@ -18,7 +18,8 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb, Search } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity } from 'lucide-react';
+import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 
 export default function ParentDashboard() {
   const router = useRouter();
@@ -266,6 +267,22 @@ export default function ParentDashboard() {
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
           />
+        )}
+
+        {/* Recent Activity Feed */}
+        {hasAnyChild && userId && (
+          <CollapsibleSection 
+            title="Recent Activity" 
+            icon={Activity} 
+            isOpen={openSection === 'activity'}
+            onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
+          >
+            <ActivityFeed 
+              userId={userId} 
+              activeChildId={activeChildId || undefined}
+              limit={8}
+            />
+          </CollapsibleSection>
         )}
 
         {/* Homework Card - Show if organization-linked */}
