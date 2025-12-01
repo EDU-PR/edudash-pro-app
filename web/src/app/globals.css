@@ -35,6 +35,11 @@
   /* Design System - Borders */
   --border: rgba(255, 255, 255, 0.1);
   
+  /* Design System - Inputs */
+  --input-bg: #1f2937;
+  --card: #111827;
+  --card-hover: #1f2937;
+  
   /* Design System - Status Colors */
   --danger: #ef4444;
   --success: #22c55e;

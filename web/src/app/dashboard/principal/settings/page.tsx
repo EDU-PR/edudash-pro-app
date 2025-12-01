@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { Settings, User, Lock, Bell, Globe, CreditCard } from 'lucide-react';
+import { Settings, User, Lock, Bell, Globe, CreditCard, FileText } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -40,6 +40,16 @@ export default function SettingsPage() {
       </PrincipalShell>
     );
   }
+
+  const quickActions = [
+    {
+      label: 'Report Card Configuration',
+      description: 'Customize school branding, logo, and report card layout',
+      icon: FileText,
+      onClick: () => router.push('/dashboard/principal/settings/report-card'),
+      color: '#8b5cf6',
+    },
+  ];
 
   const settingSections = [
     {
@@ -93,6 +103,56 @@ export default function SettingsPage() {
     <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={profile?.preschoolId} hideRightSidebar={true}>
       <div className="section">
         <h1 className="h1">Settings</h1>
+
+        {/* Quick Actions */}
+        <div style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.label}
+                onClick={action.onClick}
+                className="card"
+                style={{
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  border: '2px solid transparent',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = action.color;
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'transparent';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      background: `${action.color}20`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={24} style={{ color: action.color }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ marginBottom: 4 }}>{action.label}</h3>
+                    <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+                      {action.description}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
         <div style={{ display: 'grid', gap: 24 }}>
           {settingSections.map((section) => {
