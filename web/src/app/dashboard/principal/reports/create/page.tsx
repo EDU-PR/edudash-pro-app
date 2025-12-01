@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
+import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { 
   FileText, 
   Save, 
@@ -102,9 +102,6 @@ function CreateReportPageContent() {
   const [student, setStudent] = useState<Student | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [loadingAiSuggestions, setLoadingAiSuggestions] = useState(false);
-  const [schoolBranding, setSchoolBranding] = useState<any>(null);
 
   // Form state
   const [reportCategory, setReportCategory] = useState<'general' | 'school_readiness'>('general');
@@ -143,52 +140,6 @@ function CreateReportPageContent() {
     return Math.round((filled / total) * 100);
   }, [reportPeriod, overallGrade, teacherComments, strengths, areasForImprovement, readinessNotes, recommendations, reportCategory]);
 
-  // Generate AI suggestions for teacher comments
-  const generateAiSuggestions = useCallback(async (currentText: string, context: 'comments' | 'strengths' | 'improvements') => {
-    if (!student || currentText.length < 10) {
-      setAiSuggestions([]);
-      return;
-    }
-
-    setLoadingAiSuggestions(true);
-    try {
-      // Simulated AI suggestions - in production, this would call Dash AI
-      const suggestions: Record<string, string[]> = {
-        comments: [
-          `${student.first_name} shows consistent engagement in classroom activities`,
-          `${student.first_name} demonstrates strong understanding of key concepts`,
-          `${student.first_name} actively participates in group discussions and collaborative work`,
-          `${student.first_name} has shown remarkable progress this term`,
-        ],
-        strengths: [
-          'Excellent problem-solving abilities',
-          'Strong communication and social skills',
-          'Shows creativity in arts and crafts',
-          'Demonstrates leadership qualities',
-        ],
-        improvements: [
-          'Could benefit from more practice with fine motor skills',
-          'Would improve with additional focus during circle time',
-          'Needs encouragement to share with peers',
-          'Could work on following multi-step instructions',
-        ],
-      };
-      
-      // Filter suggestions based on what's already typed
-      const contextSuggestions = suggestions[context] || [];
-      const filtered = contextSuggestions.filter(s => 
-        !currentText.toLowerCase().includes(s.substring(0, 20).toLowerCase())
-      );
-      
-      setAiSuggestions(filtered.slice(0, 3));
-    } catch (err) {
-      console.error('AI suggestions error:', err);
-      setAiSuggestions([]);
-    } finally {
-      setLoadingAiSuggestions(false);
-    }
-  }, [student]);
-
   useEffect(() => {
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -205,30 +156,6 @@ function CreateReportPageContent() {
   // Load student data
   useEffect(() => {
     if (!preschoolId || !studentIdParam) return;
-
-    const loadBranding = async () => {
-      try {
-        const { data: preschool } = await supabase
-          .from('preschools')
-          .select('name, logo_url, address, phone, email, website_url, settings')
-          .eq('id', preschoolId)
-          .single();
-
-        if (preschool) {
-          setSchoolBranding({
-            name: preschool.name,
-            logo_url: preschool.logo_url,
-            address: preschool.address,
-            phone: preschool.phone,
-            email: preschool.email,
-            website_url: preschool.website_url,
-            ...(preschool.settings || {}),
-          });
-        }
-      } catch (err) {
-        console.error('Error loading school branding:', err);
-      }
-    };
 
     const loadStudent = async () => {
       try {
@@ -271,7 +198,6 @@ function CreateReportPageContent() {
       }
     };
 
-    loadBranding();
     loadStudent();
   }, [preschoolId, studentIdParam, supabase]);
 
@@ -595,21 +521,8 @@ function CreateReportPageContent() {
       <body>
         <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
-            ${schoolBranding?.show_logo !== false && schoolBranding?.logo_url ? `
-              <img src="${schoolBranding.logo_url}" alt="School Logo" style="max-height: 80px; margin-bottom: 16px;" onerror="this.style.display='none'" />
-            ` : ''}
-            <h1 style="color: #1f2937; font-size: 28px; margin-bottom: 8px;">${schoolBranding?.report_card_header || 'Progress Report'}</h1>
-            <p style="color: #6b7280; font-size: 16px; font-weight: 600;">${schoolBranding?.name || preschoolName || 'School'}</p>
-            ${schoolBranding?.show_address !== false && schoolBranding?.address ? `
-              <p style="color: #6b7280; font-size: 12px; margin-top: 8px;">${schoolBranding.address}</p>
-            ` : ''}
-            ${schoolBranding?.show_contact !== false && (schoolBranding?.phone || schoolBranding?.email) ? `
-              <p style="color: #6b7280; font-size: 12px;">
-                ${schoolBranding.phone ? `Tel: ${schoolBranding.phone}` : ''}
-                ${schoolBranding.phone && schoolBranding.email ? ' | ' : ''}
-                ${schoolBranding.email ? `Email: ${schoolBranding.email}` : ''}
-              </p>
-            ` : ''}
+            <h1 style="color: #1f2937; font-size: 28px; margin-bottom: 8px;">Progress Report</h1>
+            <p style="color: #6b7280; font-size: 14px;">${preschoolName || 'School'}</p>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
@@ -672,22 +585,8 @@ function CreateReportPageContent() {
                 <p style="margin: 0; font-weight: 600;">${teacherName}</p>
                 <p style="margin: 4px 0 0 0; color: #6b7280; font-size: 12px;">${currentDate}</p>
               </div>
-              ${schoolBranding?.show_principal_signature !== false && schoolBranding?.principal_name ? `
-                <div style="text-align: right;">
-                  ${schoolBranding.principal_signature_url ? `
-                    <img src="${schoolBranding.principal_signature_url}" alt="Signature" style="max-height: 50px; margin-bottom: 8px;" onerror="this.style.display='none'" />
-                  ` : ''}
-                  <p style="margin: 0; font-weight: 600;">${schoolBranding.principal_name}</p>
-                  <p style="margin: 4px 0 0 0; color: #6b7280; font-size: 12px;">Principal</p>
-                </div>
-              ` : ''}
             </div>
           </div>
-          ${schoolBranding?.report_card_footer ? `
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-              <p style="margin: 0; color: #6b7280; font-size: 11px;">${schoolBranding.report_card_footer}</p>
-            </div>
-          ` : ''}
         </div>
       </body>
       </html>
@@ -712,34 +611,34 @@ function CreateReportPageContent() {
 
   if (loading || profileLoading) {
     return (
-      <TeacherShell
+      <PrincipalShell
         tenantSlug={tenantSlug}
         userName={userName}
         preschoolName={preschoolName}
         preschoolId={preschoolId}
-        userId={userId}
+        
       >
         <div className="flex items-center justify-center min-h-[400px]">
           <p className="text-slate-400">Loading...</p>
         </div>
-      </TeacherShell>
+      </PrincipalShell>
     );
   }
 
   if (!student) {
     return (
-      <TeacherShell
+      <PrincipalShell
         tenantSlug={tenantSlug}
         userName={userName}
         preschoolName={preschoolName}
         preschoolId={preschoolId}
-        userId={userId}
+        
       >
         <div className="section">
           <button 
             className="btn btnSecondary" 
             onClick={() => router.back()}
-            style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}
           >
             <ArrowLeft size={18} />
             Back
@@ -752,17 +651,17 @@ function CreateReportPageContent() {
             </p>
           </div>
         </div>
-      </TeacherShell>
+      </PrincipalShell>
     );
   }
 
   return (
-    <TeacherShell
+    <PrincipalShell
       tenantSlug={tenantSlug}
       userName={userName}
       preschoolName={preschoolName}
       preschoolId={preschoolId}
-      userId={userId}
+      
     >
       <div className="section">
         {/* Header */}
@@ -824,82 +723,8 @@ function CreateReportPageContent() {
         </div>
 
         {/* Report Type Selection */}
-        {/* Dash AI Auto-Generate */}
-        <div className="card" style={{ 
-          marginBottom: 24,
-          background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-          color: 'white',
-          border: 'none'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <div style={{ fontSize: 24 }}>⚡</div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Dash AI Report Assistant</h3>
-              </div>
-              <p style={{ margin: 0, fontSize: 14, opacity: 0.95 }}>
-                Let AI help you create a comprehensive progress report based on student data and performance history.
-              </p>
-            </div>
-            <button 
-              onClick={async () => {
-                if (!student) return;
-                if (loadingAiSuggestions) return;
-                
-                if (!confirm(`Generate a complete progress report for ${student.first_name}?\\n\\nDash AI will analyze student data and fill in all sections automatically. You can review and edit afterwards.`)) {
-                  return;
-                }
-                
-                setLoadingAiSuggestions(true);
-                try {
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  
-                  setOverallGrade('B+');
-                  setTeacherComments(`${student.first_name} has shown consistent progress throughout this term. They demonstrate strong engagement in classroom activities and actively participates in group discussions. Their enthusiasm for learning is evident in their daily interactions and completed assignments.`);
-                  setStrengths(`• Excellent communication and social skills
-• Shows creativity in arts and crafts activities
-• Demonstrates strong problem-solving abilities
-• Eager to help classmates and share materials`);
-                  setAreasForImprovement(`• Could benefit from more practice with fine motor skills
-• Would improve with additional focus during circle time
-• Needs encouragement to complete tasks independently`);
-                  
-                  const aiSubjects: Record<string, { grade: string; comments: string }> = {
-                    'Numbers & Counting': { grade: 'B+', comments: 'Shows good understanding of numbers 1-20' },
-                    'Language & Communication': { grade: 'A', comments: 'Excellent vocabulary and expression' },
-                    'Creative Arts': { grade: 'A', comments: 'Very creative and enthusiastic' },
-                    'Physical Development': { grade: 'B', comments: 'Good gross motor skills, fine motor needs work' },
-                  };
-                  setSubjects(aiSubjects);
-                  
-                  alert('✨ Report generated successfully! Please review and edit as needed.');
-                } catch (err) {
-                  alert('Failed to generate report. Please try again.');
-                } finally {
-                  setLoadingAiSuggestions(false);
-                }
-              }}
-              disabled={loadingAiSuggestions || !student}
-              style={{ 
-                padding: '12px 24px',
-                borderRadius: 8,
-                border: 'none',
-                background: 'white',
-                color: '#7c3aed',
-                fontWeight: 600,
-                cursor: loadingAiSuggestions ? 'not-allowed' : 'pointer',
-                fontSize: 14,
-                whiteSpace: 'nowrap',
-                opacity: loadingAiSuggestions ? 0.7 : 1
-              }}
-            >
-              {loadingAiSuggestions ? '⏳ Generating...' : '⚡ Auto-Generate Report'}
-            </button>
-          </div>
-        </div>
-
         <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileText size={20} />
             Report Type
           </h3>
@@ -986,19 +811,7 @@ function CreateReportPageContent() {
         {/* Teacher Comments */}
         <div className="card" style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ margin: 0 }}>Teacher Comments *</h3>
-              <div style={{ 
-                fontSize: 11, 
-                padding: '3px 8px', 
-                borderRadius: 4, 
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                color: 'white',
-                fontWeight: 600
-              }}>
-                ⚡ Dash AI
-              </div>
-            </div>
+            <h3 style={{ margin: 0 }}>Teacher Comments *</h3>
             <span style={{ 
               fontSize: 12, 
               color: teacherComments.length > CHAR_LIMITS.teacherComments * 0.9 ? '#ef4444' : 'var(--muted)' 
@@ -1013,7 +826,6 @@ function CreateReportPageContent() {
                 setTeacherComments(e.target.value);
               }
             }}
-            onFocus={() => generateAiSuggestions(teacherComments, 'comments')}
             placeholder="General comments about the student's progress..."
             rows={4}
             style={{ 
@@ -1021,54 +833,11 @@ function CreateReportPageContent() {
               padding: 12,
               borderRadius: 8,
               border: '1px solid var(--border)',
-              backgroundColor: 'var(--input-bg)',
+              background: 'var(--card)',
               color: 'var(--foreground)',
               resize: 'vertical'
             }}
           />
-          {aiSuggestions.length > 0 && (
-            <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#8b5cf6' }}>💡 Dash AI Suggestions:</div>
-              {aiSuggestions.map((suggestion, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    const newText = teacherComments ? `${teacherComments} ${suggestion}` : suggestion;
-                    if (newText.length <= CHAR_LIMITS.teacherComments) {
-                      setTeacherComments(newText);
-                      setAiSuggestions([]);
-                    }
-                  }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: 8,
-                    marginBottom: 4,
-                    borderRadius: 4,
-                    border: '1px solid rgba(139, 92, 246, 0.3)',
-                    background: 'var(--card)',
-                    color: 'var(--foreground)',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-                    e.currentTarget.style.color = 'white';
-                    e.currentTarget.style.borderColor = '#8b5cf6';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--card)';
-                    e.currentTarget.style.color = 'var(--foreground)';
-                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)';
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Strengths */}
@@ -1139,50 +908,37 @@ function CreateReportPageContent() {
         {reportCategory === 'general' && (
           <div className="card" style={{ marginBottom: 24 }}>
             <h3 style={{ marginBottom: 16 }}>Subject Performance</h3>
-            <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {Object.entries(subjects).map(([subject, data]) => (
-                <div key={subject} style={{ 
-                  padding: 16, 
-                  background: 'var(--card-hover)', 
-                  borderRadius: 8,
-                  border: '1px solid var(--border)'
-                }}>
-                  <h4 style={{ margin: '0 0 12px 0', color: 'var(--primary)', fontSize: 15, fontWeight: 600 }}>{subject}</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div>
-                      <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Grade</label>
-                      <input
-                        type="text"
-                        value={data.grade}
-                        onChange={(e) => updateSubject(subject, 'grade', e.target.value)}
-                        placeholder="e.g., A, B+, Excellent"
-                        style={{ 
-                          width: '100%',
-                          padding: 8,
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                          backgroundColor: 'var(--input-bg)',
-                          color: 'var(--foreground)'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>Comments</label>
-                      <input
-                        type="text"
-                        value={data.comments}
-                        onChange={(e) => updateSubject(subject, 'comments', e.target.value)}
-                        placeholder="Brief comments..."
-                        style={{ 
-                          width: '100%',
-                          padding: 8,
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                          backgroundColor: 'var(--input-bg)',
-                          color: 'var(--foreground)'
-                        }}
-                      />
-                    </div>
+                <div key={subject} style={{ padding: 16, background: 'var(--card-hover)', borderRadius: 8 }}>
+                  <h4 style={{ margin: '0 0 12px 0', color: 'var(--primary)' }}>{subject}</h4>
+                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '120px 1fr' }}>
+                    <input
+                      type="text"
+                      value={data.grade}
+                      onChange={(e) => updateSubject(subject, 'grade', e.target.value)}
+                      placeholder="Grade"
+                      style={{ 
+                        padding: 8,
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--card)',
+                        color: 'var(--foreground)'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={data.comments}
+                      onChange={(e) => updateSubject(subject, 'comments', e.target.value)}
+                      placeholder="Comments for this subject"
+                      style={{ 
+                        padding: 8,
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--card)',
+                        color: 'var(--foreground)'
+                      }}
+                    />
                   </div>
                 </div>
               ))}
@@ -1324,7 +1080,7 @@ function CreateReportPageContent() {
 
             {/* Recommendations */}
             <div className="card" style={{ marginBottom: 24 }}>
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Lightbulb size={20} color="#8b5cf6" />
                 Recommendations for Parents/School
               </h3>
@@ -1342,7 +1098,7 @@ function CreateReportPageContent() {
                   padding: 12,
                   borderRadius: 8,
                   border: '1px solid var(--border)',
-                  backgroundColor: 'var(--input-bg)',
+                  background: '#f5f3ff',
                   color: 'var(--foreground)',
                   resize: 'vertical'
                 }}
@@ -1353,8 +1109,8 @@ function CreateReportPageContent() {
 
         {/* Action Buttons */}
         <div className="card" style={{ 
-          marginTop: 20, 
-          marginBottom: 8,
+          marginTop: 32, 
+          marginBottom: 24,
           borderTop: '2px solid var(--primary)',
           boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)'
         }}>
@@ -1450,6 +1206,6 @@ function CreateReportPageContent() {
           </div>
         </div>
       )}
-    </TeacherShell>
+    </PrincipalShell>
   );
 }

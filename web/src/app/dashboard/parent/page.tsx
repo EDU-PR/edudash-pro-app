@@ -18,7 +18,8 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity } from 'lucide-react';
+import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 
 export default function ParentDashboard() {
   const router = useRouter();
@@ -164,6 +165,23 @@ export default function ParentDashboard() {
       hasOrganization={hasOrganization}
     >
       <div className="container parent-dashboard-main">
+        {/* Search Bar */}
+        <div style={{ marginTop: 0, marginBottom: '20px' }}>
+          <div style={{ position: 'relative' }}>
+            <Search className="searchIcon icon16" />
+            <input
+              className="searchInput"
+              placeholder="Search homework, messages, children..."
+              onKeyDown={(e) => {
+                const t = e.target as HTMLInputElement;
+                if (e.key === 'Enter' && t.value.trim()) {
+                  router.push(`/dashboard/parent/search?q=${encodeURIComponent(t.value.trim())}`);
+                }
+              }}
+            />
+          </div>
+        </div>
+
         {/* Header */}
         <DashboardHeader userName={userName} greeting={greeting} />
 
@@ -249,6 +267,22 @@ export default function ParentDashboard() {
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
           />
+        )}
+
+        {/* Recent Activity Feed */}
+        {hasAnyChild && userId && (
+          <CollapsibleSection 
+            title="Recent Activity" 
+            icon={Activity} 
+            isOpen={openSection === 'activity'}
+            onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
+          >
+            <ActivityFeed 
+              userId={userId} 
+              activeChildId={activeChildId || undefined}
+              limit={8}
+            />
+          </CollapsibleSection>
         )}
 
         {/* Homework Card - Show if organization-linked */}
