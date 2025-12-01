@@ -139,8 +139,14 @@ function PrincipalSignUpForm() {
     setLoading(true);
 
     try {
+      // Check if API URL is configured
+      const apiUrl = process.env.NEXT_PUBLIC_EDUSITEPRO_API_URL;
+      if (!apiUrl) {
+        throw new Error('EduSitePro API URL not configured. Please set NEXT_PUBLIC_EDUSITEPRO_API_URL in your environment variables.');
+      }
+
       // Submit to EduSitePro for SuperAdmin approval
-      const response = await fetch(process.env.NEXT_PUBLIC_EDUSITEPRO_API_URL + '/api/organizations/register', {
+      const response = await fetch(apiUrl + '/api/organizations/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -174,10 +180,22 @@ function PrincipalSignUpForm() {
         }),
       });
 
-      const data = await response.json();
+      // Handle empty or invalid responses
+      const text = await response.text();
+      let data;
+      
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', text);
+        throw new Error(
+          `Cannot connect to EduSitePro API at ${apiUrl}. ` +
+          'Please ensure EduSitePro is running on port 3002 (npm run dev in edusitepro directory).'
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit registration');
+        throw new Error(data.error || `Server error: ${response.status} ${response.statusText}`);
       }
 
       console.log('Organization registration submitted:', data);
