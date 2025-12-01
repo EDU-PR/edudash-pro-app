@@ -139,8 +139,8 @@ function PrincipalSignUpForm() {
     setLoading(true);
 
     try {
-      // Call the API endpoint to create the organization, campus, and admin account
-      const response = await fetch('/api/auth/sign-up-principal', {
+      // Submit to EduSitePro for SuperAdmin approval
+      const response = await fetch(process.env.NEXT_PUBLIC_EDUSITEPRO_API_URL + '/api/organizations/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -177,16 +177,16 @@ function PrincipalSignUpForm() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create account');
+        throw new Error(data.error || 'Failed to submit registration');
       }
 
-      console.log('Organization account created:', data);
+      console.log('Organization registration submitted:', data);
 
-      // Redirect to email verification page
-      router.push('/sign-up/verify-email?email=' + encodeURIComponent(email));
+      // Redirect to pending approval page
+      router.push('/sign-up/pending-approval?email=' + encodeURIComponent(email));
     } catch (err: any) {
       console.error('Sign up error:', err);
-      setError(err.message || 'Failed to create account');
+      setError(err.message || 'Failed to submit registration');
     } finally {
       setLoading(false);
     }
