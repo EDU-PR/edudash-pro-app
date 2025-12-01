@@ -72,8 +72,7 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
                 onClick={() => { 
                   console.log('🔗 Nav clicked:', it.href);
                   onClose();
-                  // Force navigation using window.location since router.push isn't working
-                  window.location.href = it.href;
+                  router.push(it.href);
                 }}
                 style={{ width: '100%' }}
               >

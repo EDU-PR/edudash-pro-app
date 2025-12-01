@@ -192,6 +192,60 @@ export async function POST(request: NextRequest) {
       // Still return the room URL even if DB fails
     }
 
+    // Send push notifications to participants
+    // If classId is provided, notify all parents of students in that class
+    // Otherwise, this is a P2P call (check if recipient info is in the request)
+    try {
+      if (classId) {
+        // Get all students in the class
+        const { data: students } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id, first_name')
+          .eq('class_id', classId)
+          .eq('preschool_id', preschoolId);
+
+        if (students && students.length > 0) {
+          // Collect unique parent/guardian IDs
+          const parentIds = new Set<string>();
+          students.forEach(student => {
+            if (student.parent_id) parentIds.add(student.parent_id);
+            if (student.guardian_id) parentIds.add(student.guardian_id);
+          });
+
+          // Get caller name
+          const callerName = profile?.role === 'teacher' 
+            ? `Teacher ${user.email?.split('@')[0] || 'Teacher'}`
+            : user.email?.split('@')[0] || 'Someone';
+
+          // Send push notification to all parents via our notification API
+          if (parentIds.size > 0) {
+            await fetch(`${request.nextUrl.origin}/api/notifications/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userIds: Array.from(parentIds),
+                title: `Live Lesson Starting`,
+                body: `${callerName} is starting a live lesson in ${name}`,
+                type: 'live-lesson',
+                url: room.url,
+                requireInteraction: true,
+                data: {
+                  roomUrl: room.url,
+                  roomName: room.name,
+                  callId: lessonRoom?.id || room.name,
+                  classId,
+                },
+              }),
+            });
+            console.log(`[Daily Rooms] Sent notifications to ${parentIds.size} parents`);
+          }
+        }
+      }
+    } catch (notifError) {
+      console.error('[Daily Rooms] Failed to send notifications:', notifError);
+      // Don't fail the room creation if notifications fail
+    }
+
     return NextResponse.json({
       success: true,
       room: {

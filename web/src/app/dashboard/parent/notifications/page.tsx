@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { Bell, CheckCheck, Trash2, AlertCircle, Info, CheckCircle, XCircle } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, AlertCircle, Info, CheckCircle, XCircle, Filter, BookOpen, School, Settings } from 'lucide-react';
 import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 
 interface Notification {
@@ -18,12 +18,15 @@ interface Notification {
   metadata?: any;
 }
 
+type FilterType = 'all' | 'unread' | 'homework' | 'school' | 'system';
+
 export default function NotificationsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterType>('all');
 
   useEffect(() => {
     const init = async () => {
@@ -107,12 +110,36 @@ export default function NotificationsPage() {
     }
   };
 
+  const getCategoryFromMetadata = (notification: Notification): FilterType => {
+    const meta = notification.metadata;
+    if (meta?.category) return meta.category;
+    
+    // Infer from title/message
+    const text = `${notification.title} ${notification.message}`.toLowerCase();
+    if (text.includes('homework') || text.includes('assignment')) return 'homework';
+    if (text.includes('school') || text.includes('class') || text.includes('teacher')) return 'school';
+    if (text.includes('system') || text.includes('account') || text.includes('setting')) return 'system';
+    
+    return 'all';
+  };
+
+  const filteredNotifications = notifications.filter(notification => {
+    if (filter === 'all') return true;
+    if (filter === 'unread') return !notification.is_read;
+    
+    const category = getCategoryFromMetadata(notification);
+    return category === filter;
+  });
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const homeworkCount = notifications.filter(n => getCategoryFromMetadata(n) === 'homework').length;
+  const schoolCount = notifications.filter(n => getCategoryFromMetadata(n) === 'school').length;
+  const systemCount = notifications.filter(n => getCategoryFromMetadata(n) === 'system').length;
 
   return (
     <ParentShell hideHeader={true}>
       <div className="section">
-        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h1 className="h1">Notifications</h1>
             <p style={{ color: 'var(--textLight)', marginTop: 8 }}>
@@ -127,22 +154,135 @@ export default function NotificationsPage() {
           )}
         </div>
 
+        {/* Filter Tabs */}
+        <div style={{ 
+          display: 'flex', 
+          gap: 8, 
+          marginBottom: 24, 
+          overflowX: 'auto', 
+          paddingBottom: 8,
+          borderBottom: '1px solid var(--border)'
+        }}>
+          <button
+            onClick={() => setFilter('all')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: filter === 'all' ? 'var(--primary)' : 'transparent',
+              color: filter === 'all' ? 'white' : 'var(--text)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <Filter className="icon16" />
+            All ({notifications.length})
+          </button>
+          <button
+            onClick={() => setFilter('unread')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: filter === 'unread' ? 'var(--primary)' : 'transparent',
+              color: filter === 'unread' ? 'white' : 'var(--text)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <Bell className="icon16" />
+            Unread ({unreadCount})
+          </button>
+          <button
+            onClick={() => setFilter('homework')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: filter === 'homework' ? 'var(--primary)' : 'transparent',
+              color: filter === 'homework' ? 'white' : 'var(--text)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <BookOpen className="icon16" />
+            Homework ({homeworkCount})
+          </button>
+          <button
+            onClick={() => setFilter('school')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: filter === 'school' ? 'var(--primary)' : 'transparent',
+              color: filter === 'school' ? 'white' : 'var(--text)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <School className="icon16" />
+            School ({schoolCount})
+          </button>
+          <button
+            onClick={() => setFilter('system')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: filter === 'system' ? 'var(--primary)' : 'transparent',
+              color: filter === 'system' ? 'white' : 'var(--text)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <Settings className="icon16" />
+            System ({systemCount})
+          </button>
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60 }}>
             <div className="spinner" style={{ margin: '0 auto' }}></div>
             <p style={{ color: 'var(--textLight)', marginTop: 16 }}>Loading notifications...</p>
           </div>
-        ) : notifications.length === 0 ? (
+        ) : filteredNotifications.length === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: 60 }}>
             <Bell className="icon48" style={{ margin: '0 auto', color: 'var(--textLight)' }} />
             <h3 style={{ marginTop: 16 }}>No notifications</h3>
             <p style={{ color: 'var(--textLight)', marginTop: 8 }}>
-              You're all caught up! We'll notify you here when there's something new.
+              {filter === 'all' 
+                ? "You're all caught up! We'll notify you here when there's something new."
+                : `No ${filter} notifications found.`}
             </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {notifications.map((notification) => (
+            {filteredNotifications.map((notification) => (
               <div
                 key={notification.id}
                 className="card"

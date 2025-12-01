@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useTransition } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -20,6 +20,7 @@ import {
   BookOpen,
   Clipboard,
   CreditCard,
+  Megaphone,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -48,6 +49,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [hasOrganization, setHasOrganization] = useState(hasOrganizationProp || false);
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -141,6 +143,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       // Organization-linked parents see school-focused nav
       return [
         { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/parent/announcements', label: 'Announcements', icon: Megaphone },
         { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
@@ -294,7 +297,17 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   <button 
                     key={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => { setMobileNavOpen(false); window.location.href = it.href; }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('[ParentShell] Navigating to:', it.href);
+                      // Close drawer immediately
+                      setMobileNavOpen(false);
+                      // Navigate after a tiny delay to ensure drawer animation starts
+                      requestAnimationFrame(() => {
+                        router.push(it.href);
+                      });
+                    }}
                     style={{ width: '100%' }}
                   >
                     <Icon className="navIcon" />

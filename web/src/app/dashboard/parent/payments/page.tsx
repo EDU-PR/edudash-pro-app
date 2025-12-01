@@ -42,7 +42,7 @@ interface StudentFee {
   due_date: string;
   grace_period_days?: number;
   paid_date?: string;
-  payment_status: 'unpaid' | 'partial' | 'paid' | 'overdue' | 'refunded' | 'waived';
+  status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
   payment_method?: string;
   student?: {
     first_name: string;
@@ -316,7 +316,7 @@ export default function PaymentsPage() {
               amount: monthlyFee.amount_cents / 100, // Convert cents to rands
               due_date: dueDate,
               grace_period_days: 7, // Default 7 days grace period, principal can change this
-              payment_status: 'unpaid',
+              status: 'pending',
             }]);
           }
         } else {
@@ -354,11 +354,11 @@ export default function PaymentsPage() {
 
   // Calculate upcoming and paid fees
   const upcomingFees = useMemo(() => {
-    return studentFees.filter(f => f.payment_status === 'unpaid' || f.payment_status === 'overdue' || f.payment_status === 'partial');
+    return studentFees.filter(f => f.status === 'pending' || f.status === 'overdue' || f.status === 'partially_paid');
   }, [studentFees]);
 
   const paidFees = useMemo(() => {
-    return studentFees.filter(f => f.payment_status === 'paid');
+    return studentFees.filter(f => f.status === 'paid');
   }, [studentFees]);
 
   // Calculate outstanding balance
@@ -371,7 +371,7 @@ export default function PaymentsPage() {
     return children.find(c => c.id === selectedChildId);
   }, [children, selectedChildId]);
 
-  const getStatusBadge = (status: StudentFee['payment_status']) => {
+  const getStatusBadge = (status: StudentFee['status']) => {
     switch (status) {
       case 'paid':
         return (
@@ -390,8 +390,8 @@ export default function PaymentsPage() {
             Paid
           </span>
         );
-      case 'unpaid':
-      case 'partial':
+      case 'pending':
+      case 'partially_paid':
         return (
           <span style={{
             display: 'inline-flex',
@@ -405,7 +405,7 @@ export default function PaymentsPage() {
             fontWeight: 600,
           }}>
             <Clock className="w-3 h-3" />
-            {status === 'partial' ? 'Partial' : 'Pending'}
+            {status === 'partially_paid' ? 'Partial' : 'Pending'}
           </span>
         );
       case 'overdue':
@@ -787,7 +787,7 @@ export default function PaymentsPage() {
                               <div style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 'var(--space-2)', color: feeStatus.color }}>
                                 {formatCurrency(fee.amount)}
                               </div>
-                              {getStatusBadge(fee.payment_status)}
+                              {getStatusBadge(fee.status)}
                             </div>
                           </div>
                           {/* Warning for late payments */}
@@ -895,7 +895,7 @@ export default function PaymentsPage() {
                                 {formatCurrency(fee.amount)}
                               </td>
                               <td style={{ padding: 'var(--space-3)', textAlign: 'center' }}>
-                                {getStatusBadge(fee.payment_status)}
+                                {getStatusBadge(fee.status)}
                               </td>
                             </tr>
                           ))}

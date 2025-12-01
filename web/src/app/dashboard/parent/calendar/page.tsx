@@ -6,7 +6,19 @@ import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { useChildCalendarEvents } from '@/lib/hooks/parent/useCalendar';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
-import { Calendar as CalendarIcon, Clock, BookOpen, School, Users, Sparkles } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, BookOpen, School, Users, Sparkles, ChevronLeft, ChevronRight, List, Grid } from 'lucide-react';
+
+type ViewMode = 'month' | 'list';
+
+// Get days in month
+const getDaysInMonth = (year: number, month: number) => {
+  return new Date(year, month + 1, 0).getDate();
+};
+
+// Get first day of month (0 = Sunday, 6 = Saturday)
+const getFirstDayOfMonth = (year: number, month: number) => {
+  return new Date(year, month, 1).getDay();
+};
 
 // Group events by date
 const groupEventsByDate = (events: any[]) => {
@@ -62,6 +74,8 @@ export default function CalendarPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [currentDate, setCurrentDate] = useState(new Date());
   
   // Get parent dashboard data
   const {
@@ -86,6 +100,47 @@ export default function CalendarPage() {
   const sortedDates = useMemo(() => {
     return Object.keys(groupedEvents).sort();
   }, [groupedEvents]);
+
+  // Calendar grid data
+  const calendarDays = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDay = getFirstDayOfMonth(year, month);
+    
+    const days = [];
+    
+    // Add empty cells for days before first day
+    for (let i = 0; i < firstDay; i++) {
+      days.push(null);
+    }
+    
+    // Add all days in month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayEvents = groupedEvents[dateStr] || [];
+      days.push({
+        day,
+        dateStr,
+        events: dayEvents,
+        isToday: dateStr === new Date().toISOString().split('T')[0],
+      });
+    }
+    
+    return days;
+  }, [currentDate, groupedEvents]);
+
+  const goToPreviousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
+  };
 
   useEffect(() => {
     (async () => {
@@ -114,13 +169,57 @@ export default function CalendarPage() {
     >
       <div className="container">
         {/* Header */}
-        <div className="section">
-          <h1 className="h1">Calendar</h1>
-          <p className="muted">
-            {hasOrganization 
-              ? 'View upcoming school events and important dates' 
-              : 'Plan your learning schedule and study sessions'}
-          </p>
+        <div className="section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h1 className="h1">Calendar</h1>
+            <p className="muted">
+              {hasOrganization 
+                ? 'View upcoming school events and important dates' 
+                : 'Plan your learning schedule and study sessions'}
+            </p>
+          </div>
+          
+          {/* View Mode Toggle */}
+          <div style={{ display: 'flex', gap: 8, border: '1px solid var(--border)', borderRadius: 8, padding: 4 }}>
+            <button
+              onClick={() => setViewMode('month')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 6,
+                border: 'none',
+                background: viewMode === 'month' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'month' ? 'white' : 'var(--text)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              <Grid className="icon16" />
+              Month
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 6,
+                border: 'none',
+                background: viewMode === 'list' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'list' ? 'white' : 'var(--text)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              <List className="icon16" />
+              List
+            </button>
+          </div>
         </div>
 
         {/* Child Selector */}
@@ -153,6 +252,168 @@ export default function CalendarPage() {
         {/* School Calendar (For hasOrganization) */}
         {hasOrganization && (
           <>
+            {/* Month Navigation */}
+            {viewMode === 'month' && (
+              <div className="section">
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: 24,
+                  padding: 16,
+                  background: 'var(--cardBg)',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)'
+                }}>
+                  <button
+                    onClick={goToPreviousMonth}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface)',
+                      color: 'var(--text)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ChevronLeft className="icon20" />
+                  </button>
+                  
+                  <div style={{ textAlign: 'center' }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>
+                      {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </h2>
+                    <button
+                      onClick={goToToday}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: 6,
+                        border: '1px solid var(--primary)',
+                        background: 'transparent',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Today
+                    </button>
+                  </div>
+                  
+                  <button
+                    onClick={goToNextMonth}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface)',
+                      color: 'var(--text)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ChevronRight className="icon20" />
+                  </button>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="card" style={{ padding: 16 }}>
+                  {/* Day Headers */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(7, 1fr)', 
+                    gap: 8,
+                    marginBottom: 8
+                  }}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} style={{ 
+                        textAlign: 'center', 
+                        fontSize: 12, 
+                        fontWeight: 600,
+                        color: 'var(--textLight)',
+                        padding: '8px 0'
+                      }}>
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Calendar Days */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(7, 1fr)', 
+                    gap: 8
+                  }}>
+                    {calendarDays.map((dayData, index) => {
+                      if (!dayData) {
+                        return <div key={`empty-${index}`} style={{ minHeight: 80 }} />;
+                      }
+                      
+                      const hasEvents = dayData.events.length > 0;
+                      
+                      return (
+                        <div
+                          key={dayData.dateStr}
+                          style={{
+                            minHeight: 80,
+                            padding: 8,
+                            borderRadius: 8,
+                            border: dayData.isToday ? '2px solid var(--primary)' : '1px solid var(--border)',
+                            background: dayData.isToday ? 'var(--primary-subtle)' : hasEvents ? 'var(--surface)' : 'transparent',
+                            cursor: hasEvents ? 'pointer' : 'default',
+                            position: 'relative',
+                          }}
+                        >
+                          <div style={{ 
+                            fontSize: 14, 
+                            fontWeight: dayData.isToday ? 600 : 500,
+                            color: dayData.isToday ? 'var(--primary)' : 'var(--text)',
+                            marginBottom: 4
+                          }}>
+                            {dayData.day}
+                          </div>
+                          
+                          {dayData.events.slice(0, 3).map((event: any, i: number) => (
+                            <div
+                              key={event.id}
+                              style={{
+                                fontSize: 10,
+                                padding: '2px 4px',
+                                borderRadius: 4,
+                                background: event.event_type === 'homework' ? 'var(--warning)' : 'var(--primary)',
+                                color: 'white',
+                                marginBottom: 2,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={event.title}
+                            >
+                              {event.title.replace('📚 ', '')}
+                            </div>
+                          ))}
+                          
+                          {dayData.events.length > 3 && (
+                            <div style={{ 
+                              fontSize: 10, 
+                              color: 'var(--textLight)',
+                              marginTop: 2,
+                              fontWeight: 500
+                            }}>
+                              +{dayData.events.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {eventsLoading && (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <div className="spinner" style={{ margin: '0 auto' }}></div>
@@ -165,7 +426,7 @@ export default function CalendarPage() {
               </div>
             )}
 
-            {!eventsLoading && !error && events && events.length > 0 && (
+            {!eventsLoading && !error && events && events.length > 0 && viewMode === 'list' && (
               <div className="section">
                 {sortedDates.map(dateStr => {
                   const dayEvents = groupedEvents[dateStr];
