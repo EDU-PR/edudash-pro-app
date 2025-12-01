@@ -35,7 +35,16 @@ export default function TestNotificationsPage() {
       // Get the service worker registration
       const registration = await navigator.serviceWorker.ready;
       
-      // Subscribe to push notifications
+      // IMPORTANT: Unsubscribe from any existing subscription first
+      // This fixes "Registration failed - A subscription with a different applicationServerKey already exists"
+      const existingSubscription = await registration.pushManager.getSubscription();
+      if (existingSubscription) {
+        console.log('[Test Notifications] Unsubscribing from old subscription...');
+        await existingSubscription.unsubscribe();
+        console.log('[Test Notifications] Old subscription removed');
+      }
+      
+      // Subscribe to push notifications with current VAPID key
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 
         'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE';
       
@@ -75,21 +84,39 @@ export default function TestNotificationsPage() {
     const subJSON = subscription.toJSON();
     
     try {
+      console.log('[Test Notifications] Saving subscription:', {
+        endpoint: subscription.endpoint,
+        hasKeys: !!subJSON.keys,
+        p256dh: subJSON.keys?.p256dh?.substring(0, 20) + '...',
+        auth: subJSON.keys?.auth?.substring(0, 20) + '...'
+      });
+
       const response = await fetch('/api/notifications/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          endpoint: subscription.endpoint,
-          p256dh: subJSON.keys?.p256dh,
-          auth: subJSON.keys?.auth
+          subscription: {
+            endpoint: subscription.endpoint,
+            keys: {
+              p256dh: subJSON.keys?.p256dh || '',
+              auth: subJSON.keys?.auth || ''
+            }
+          },
+          topics: ['test', 'updates'], // Include 'updates' to allow anonymous subscription
+          // userId will be extracted from session by the API
         })
       });
 
+      const data = await response.json();
+      console.log('[Test Notifications] Subscription response:', data);
+
       if (!response.ok) {
-        console.error('Failed to save subscription to database');
+        console.error('Failed to save subscription to database:', data);
+        throw new Error(data.error || 'Failed to save subscription');
       }
     } catch (error) {
       console.error('Error saving subscription:', error);
+      throw error;
     }
   };
 
@@ -100,30 +127,47 @@ export default function TestNotificationsPage() {
 
     try {
       const title = customTitle || getDefaultTitle(notificationType);
-      const body = customBody || getDefaultBody(notificationType);
+      const bodyText = customBody || getDefaultBody(notificationType);
+
+      console.log('[Test Notifications] Sending notification:', {
+        topic: 'test',
+        type: notificationType,
+        title,
+        body: bodyText
+      });
 
       const response = await fetch('/api/notifications/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          topic: 'test', // Send to all subscriptions with 'test' topic
           type: notificationType,
           title,
-          body,
+          body: bodyText, // Use 'body' as the API expects
+          icon: '/icon-192.png',
+          url: '/dashboard/principal',
+          requireInteraction: notificationType === 'call',
           data: {
             url: '/dashboard/principal',
-            type: notificationType
+            type: notificationType,
+            timestamp: Date.now()
           }
         })
       });
 
       const data = await response.json();
+      console.log('[Test Notifications] Send response:', data);
 
       if (response.ok) {
-        setResult({ success: true, message: `Test ${notificationType} notification sent successfully!` });
+        setResult({ 
+          success: true, 
+          message: `Test ${notificationType} notification sent! (${data.sent || 0} devices)` 
+        });
       } else {
         setResult({ success: false, message: `Failed: ${data.error || 'Unknown error'}` });
       }
     } catch (error) {
+      console.error('[Test Notifications] Send error:', error);
       setResult({ success: false, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` });
     } finally {
       setSending(false);

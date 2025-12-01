@@ -53,9 +53,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body: SendNotificationRequest = await request.json();
+    console.log('[Send API] Request received:', JSON.stringify(body, null, 2));
+    
     const { userId, userIds, preschoolId, topic, title, body: notifBody, icon, url, tag, type, requireInteraction, data } = body;
 
     if (!title || !notifBody) {
+      console.error('[Send API] Missing title or body');
       return NextResponse.json(
         { error: 'Title and body are required' },
         { status: 400 }
@@ -71,17 +74,23 @@ export async function POST(request: NextRequest) {
     // Build query for subscriptions
     let query = supabase
       .from('push_subscriptions')
-      .select('endpoint, p256dh, auth, user_id');
+      .select('endpoint, p256dh, auth, user_id')
+      .eq('is_active', true);
 
     if (userId) {
+      console.log('[Send API] Filtering by userId:', userId);
       query = query.eq('user_id', userId);
     } else if (userIds && userIds.length > 0) {
+      console.log('[Send API] Filtering by userIds:', userIds);
       query = query.in('user_id', userIds);
     } else if (preschoolId) {
+      console.log('[Send API] Filtering by preschoolId:', preschoolId);
       query = query.eq('preschool_id', preschoolId);
     } else if (topic) {
+      console.log('[Send API] Filtering by topic:', topic);
       query = query.contains('topics', [topic]);
     } else {
+      console.error('[Send API] No target specified');
       return NextResponse.json(
         { error: 'Must specify userId, userIds, preschoolId, or topic' },
         { status: 400 }
@@ -91,12 +100,14 @@ export async function POST(request: NextRequest) {
     const { data: subscriptions, error: fetchError } = await query;
 
     if (fetchError) {
-      console.error('Failed to fetch subscriptions:', fetchError);
+      console.error('[Send API] Failed to fetch subscriptions:', fetchError);
       return NextResponse.json(
         { error: 'Failed to fetch subscriptions' },
         { status: 500 }
       );
     }
+
+    console.log('[Send API] Found subscriptions:', subscriptions?.length || 0);
 
     if (!subscriptions || subscriptions.length === 0) {
       return NextResponse.json({
