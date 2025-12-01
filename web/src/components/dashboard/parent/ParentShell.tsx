@@ -295,11 +295,16 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   <button 
                     key={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => {
-                      // Start navigation first
-                      router.push(it.href);
-                      // Close drawer after navigation starts (small delay to prevent unmount)
-                      setTimeout(() => setMobileNavOpen(false), 50);
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('[ParentShell] Navigating to:', it.href);
+                      // Close drawer immediately
+                      setMobileNavOpen(false);
+                      // Navigate after a tiny delay to ensure drawer animation starts
+                      requestAnimationFrame(() => {
+                        router.push(it.href);
+                      });
                     }}
                     style={{ width: '100%' }}
                   >
