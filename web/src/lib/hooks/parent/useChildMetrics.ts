@@ -70,7 +70,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
           .from('student_fees')
           .select('*')
           .eq('student_id', childId)
-          .in('payment_status', ['unpaid', 'partial', 'overdue'])
+          .in('status', ['pending', 'partially_paid', 'overdue'])
           .order('due_date', { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -85,7 +85,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
           feesDue = {
             amount: studentFees.amount,
             dueDate: studentFees.due_date,
-            overdue: isOverdue || studentFees.payment_status === 'overdue',
+            overdue: isOverdue || studentFees.status === 'overdue',
           };
         } else if (studentData.preschool_id) {
           // Fallback: If no student_fees exist, check school_fee_structures for monthly tuition

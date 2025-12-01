@@ -291,18 +291,19 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <button 
+                  <Link 
                     key={it.href} 
+                    href={it.href}
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => { setMobileNavOpen(false); router.push(it.href); }}
-                    style={{ width: '100%' }}
+                    onClick={() => setMobileNavOpen(false)}
+                    style={{ width: '100%', textDecoration: 'none' }}
                   >
                     <Icon className="navIcon" />
                     <span>{it.label}</span>
                     {typeof it.badge === 'number' && it.badge > 0 && (
                       <span className="navItemBadge badgeNumber">{it.badge}</span>
                     )}
-                  </button>
+                  </Link>
                 );
               })}
             </nav>
