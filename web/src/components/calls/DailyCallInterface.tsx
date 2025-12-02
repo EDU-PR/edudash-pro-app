@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import DailyIframe, { DailyCall, DailyParticipant } from '@daily-co/daily-js';
+import RingtoneService from '@/lib/services/ringtoneService';
 import {
   Phone,
   PhoneOff,
@@ -58,7 +59,8 @@ export const DailyCallInterface = ({
   const [callState, setCallState] = useState<CallState>('idle');
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialCallType === 'video');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
+  // Default: Video calls use loudspeaker (true), voice calls use earpiece (false)
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(initialCallType === 'video');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
@@ -149,43 +151,43 @@ export const DailyCallInterface = ({
   }, [currentCallId, isIncoming, supabase]);
 
   // Play/stop ringback tone when ringing (caller hears this while waiting for answer)
+  // Uses user's custom ringtone preferences
   useEffect(() => {
     if ((callState === 'ringing' || callState === 'connecting') && !isIncoming) {
-      // Use the longer ringback sound for better experience
-      if (!ringbackAudioRef.current) {
-        ringbackAudioRef.current = new Audio('/sounds/ringback_old.mp3');
-        ringbackAudioRef.current.loop = true;
-        ringbackAudioRef.current.volume = 0.8; // Louder ringback
-        ringbackAudioRef.current.preload = 'auto';
-      }
-      
-      // Play ringback - this is what the caller hears
+      // Play custom ringback - this is what the caller hears (KRING-KRING)
       const playRingback = async () => {
         try {
-          ringbackAudioRef.current!.currentTime = 0;
-          await ringbackAudioRef.current!.play();
-          console.log('[P2P Call] Ringback tone playing');
+          // Use RingtoneService to play user's selected ringback
+          const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
+          ringbackAudioRef.current = audio;
+          console.log('[P2P Call] Custom ringback tone playing');
         } catch (err) {
           console.warn('[P2P Call] Ringback autoplay blocked, will retry:', err);
           // Retry after a short delay
-          setTimeout(() => {
-            ringbackAudioRef.current?.play().catch(() => {});
+          setTimeout(async () => {
+            try {
+              const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
+              ringbackAudioRef.current = audio;
+            } catch (retryErr) {
+              console.error('[P2P Call] Failed to play ringback:', retryErr);
+            }
           }, 500);
         }
       };
       playRingback();
     } else {
+      // Stop ringback using service
       if (ringbackAudioRef.current) {
-        ringbackAudioRef.current.pause();
-        ringbackAudioRef.current.currentTime = 0;
+        RingtoneService.stopRingtone(ringbackAudioRef.current);
+        ringbackAudioRef.current = null;
         console.log('[P2P Call] Ringback tone stopped');
       }
     }
 
     return () => {
       if (ringbackAudioRef.current) {
-        ringbackAudioRef.current.pause();
-        ringbackAudioRef.current.currentTime = 0;
+        RingtoneService.stopRingtone(ringbackAudioRef.current);
+        ringbackAudioRef.current = null;
       }
     };
   }, [callState, isIncoming]);
@@ -316,6 +318,7 @@ export const DailyCallInterface = ({
       console.log('[P2P Call] Token received');
 
       // Create Daily call object with noise and echo cancellation
+      // For voice-only calls, disable video to prevent loudspeaker routing
       const callObject = DailyIframe.createCallObject({
         audioSource: true,
         videoSource: initialCallType === 'video',
@@ -327,6 +330,13 @@ export const DailyCallInterface = ({
             noiseSuppression: { ideal: true },
             autoGainControl: { ideal: true },
           },
+          // For voice-only calls, explicitly request earpiece routing (mobile browsers)
+          ...(initialCallType === 'voice' && {
+            camAndMicOpts: {
+              // Disable video completely for voice calls to force earpiece routing
+              videoSource: false,
+            },
+          }),
         },
       });
 
@@ -404,7 +414,8 @@ export const DailyCallInterface = ({
               if (remoteAudioRef.current && p.tracks?.audio?.track) {
                 remoteAudioRef.current.srcObject = new MediaStream([p.tracks.audio.track]);
                 remoteAudioRef.current.muted = false;
-                remoteAudioRef.current.volume = 1.0;
+                // Set volume based on speaker mode: voice calls default to earpiece (0.7), video calls to speaker (1.0)
+                remoteAudioRef.current.volume = initialCallType === 'voice' ? 0.7 : 1.0;
                 remoteAudioRef.current.play().catch(e => console.warn('[P2P Call] Audio autoplay blocked:', e));
               }
             }
@@ -954,19 +965,27 @@ export const DailyCallInterface = ({
   }, [isScreenSharing]);
 
   // Toggle speaker (loudspeaker mode)
+  // Note: On mobile browsers, audio routing to earpiece vs loudspeaker is controlled
+  // by the presence of a <video> element. For true voice calls:
+  // - Earpiece mode: Audio plays through phone earpiece (speaker OFF)
+  // - Loudspeaker mode: Audio plays through phone speaker (speaker ON)
+  // Web browsers don't support direct audio routing control like native apps,
+  // but we control volume and provide visual feedback to the user.
   const toggleSpeaker = useCallback(() => {
     const newSpeakerState = !isSpeakerEnabled;
     setIsSpeakerEnabled(newSpeakerState);
     
-    // Update audio element volume - loudspeaker mode increases volume
+    // Adjust volume for speaker mode - loudspeaker uses full volume, earpiece uses lower
+    // This provides better audio balance for each mode
+    const targetVolume = newSpeakerState ? 1.0 : 0.7;
     if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0.6;
+      remoteAudioRef.current.volume = targetVolume;
     }
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.volume = newSpeakerState ? 1.0 : 0.6;
+      remoteVideoRef.current.volume = targetVolume;
     }
     
-    console.log('[P2P Call] Speaker mode:', newSpeakerState ? 'ON (loudspeaker)' : 'OFF (earpiece)');
+    console.log('[P2P Call] Speaker mode:', newSpeakerState ? 'ON (loudspeaker)' : 'OFF (earpiece)', 'volume:', targetVolume);
   }, [isSpeakerEnabled]);
 
   // Start call when opened (for outgoing calls)

@@ -558,6 +558,22 @@ export default function SettingsPage() {
                     <span className="toggleThumb" style={{ transform: whatsappNotifications ? 'translateX(20px)' : 'translateX(0)' }} />
                   </button>
                 </div>
+                
+                {/* Call Ringtones Link */}
+                <div 
+                  className="listItem" 
+                  style={{ cursor: 'pointer', background: 'var(--surface-variant)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}
+                  onClick={() => router.push('/dashboard/parent/settings/ringtones')}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                      <Phone className="icon16" />
+                      Call Ringtones
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>Customize ringtones and call sounds</div>
+                  </div>
+                  <ChevronRight className="icon16" style={{ color: 'var(--muted)' }} />
+                </div>
               </div>
               <button 
                 onClick={saveNotificationPreferences}

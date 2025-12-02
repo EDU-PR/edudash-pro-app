@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
-import { User, Bell, Lock, Globe, Moon, Sun, LogOut, Camera, Phone, Mail, Check, X, Loader2 } from 'lucide-react';
+import { User, Bell, Lock, Globe, Moon, Sun, LogOut, Camera, Phone, Mail, Check, X, Loader2, ChevronRight } from 'lucide-react';
 
 export default function TeacherSettingsPage() {
   const router = useRouter();
@@ -359,6 +359,21 @@ export default function TeacherSettingsPage() {
                   >
                     <span className={`${pushNotifications ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition`} />
                   </button>
+                </div>
+                
+                {/* Call Ringtones Link */}
+                <div 
+                  className="flex items-center justify-between p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-750 transition-colors"
+                  onClick={() => router.push('/dashboard/teacher/settings/ringtones')}
+                >
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      Call Ringtones
+                    </div>
+                    <div className="text-xs text-gray-400">Customize ringtones and call sounds</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
                 </div>
               </div>
             </div>

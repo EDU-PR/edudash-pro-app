@@ -2,6 +2,7 @@
 
 import { Phone, PhoneOff, Video, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import RingtoneService from '@/lib/services/ringtoneService';
 
 interface IncomingCallOverlayProps {
   callerName?: string;
@@ -26,55 +27,25 @@ export function IncomingCallOverlay({
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const hasUserInteractionRef = useRef(false);
 
-  // Initialize audio with user gesture fallback - using a proper phone ring sound
-  const initializeAudio = useCallback(() => {
-    if (ringtoneRef.current) return;
-    
+  // Try to play ringtone using RingtoneService (user's custom preferences)
+  const playRingtone = useCallback(async () => {
     try {
-      // Use the longer ringback_old.mp3 as it's a proper phone ring sound (313KB vs 13KB)
-      const audio = new Audio('/sounds/ringback_old.mp3');
-      audio.loop = true;
-      audio.volume = 1.0; // Maximum volume
-      audio.preload = 'auto';
+      // Use RingtoneService to play user's selected incoming ringtone
+      const audio = await RingtoneService.playRingtone('incoming', { loop: true });
       ringtoneRef.current = audio;
-      console.log('[IncomingCall] Ringtone audio initialized with proper phone ring sound');
+      setAudioInitialized(true);
+      console.log('[IncomingCall] Custom ringtone playing');
     } catch (err) {
-      console.warn('[IncomingCall] Failed to initialize audio:', err);
+      console.warn('[IncomingCall] Ringtone autoplay blocked, will play on interaction:', err);
+      // Will try again when user interacts with the page
     }
   }, []);
 
-  // Try to play ringtone
-  const playRingtone = useCallback(async () => {
-    if (!ringtoneRef.current) {
-      initializeAudio();
-    }
-    
-    if (ringtoneRef.current) {
-      try {
-        ringtoneRef.current.currentTime = 0;
-        // Resume AudioContext if suspended (required for mobile browsers)
-        const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (AudioContextClass) {
-          const ctx = new AudioContextClass();
-          if (ctx.state === 'suspended') {
-            await ctx.resume();
-          }
-        }
-        await ringtoneRef.current.play();
-        setAudioInitialized(true);
-        console.log('[IncomingCall] Ringtone playing');
-      } catch (err) {
-        console.warn('[IncomingCall] Ringtone autoplay blocked, will play on interaction:', err);
-        // Will try again when user interacts with the page
-      }
-    }
-  }, [initializeAudio]);
-
-  // Stop ringtone
+  // Stop ringtone using RingtoneService
   const stopRingtone = useCallback(() => {
     if (ringtoneRef.current) {
-      ringtoneRef.current.pause();
-      ringtoneRef.current.currentTime = 0;
+      RingtoneService.stopRingtone(ringtoneRef.current);
+      ringtoneRef.current = null;
     }
     // Stop any ongoing vibration - only if user has interacted (browser security requirement)
     // See: https://www.chromestatus.com/feature/5644273861001216
