@@ -60,6 +60,8 @@ export default function TeacherSettingsPage() {
   
   // Load profile data
   useEffect(() => {
+    let isMounted = true;
+    
     const loadProfileData = async () => {
       if (!userId) return;
       
@@ -69,7 +71,7 @@ export default function TeacherSettingsPage() {
         .eq('id', userId)
         .single();
       
-      if (data && !error) {
+      if (data && !error && isMounted) {
         setFullName(data.full_name || '');
         setPhoneNumber(data.phone || '');
         setAvatarUrl(data.avatar_url || null);
@@ -77,6 +79,20 @@ export default function TeacherSettingsPage() {
     };
     
     loadProfileData();
+    
+    // Reload when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadProfileData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [userId, supabase]);
   
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {

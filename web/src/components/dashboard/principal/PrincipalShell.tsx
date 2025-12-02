@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useBackButton } from '@/hooks/useBackButton';
 import {
   MessageCircle,
   Users,
@@ -58,6 +59,12 @@ export function PrincipalShell({
   const [mobileWidgetsOpen, setMobileWidgetsOpen] = useState(false);
   const avatarLetter = useMemo(() => (userName?.[0] || userEmail?.[0] || 'P').toUpperCase(), [userName, userEmail]);
   
+  // Prevent back button from logging out
+  useBackButton({
+    fallbackRoute: '/dashboard/principal',
+    protectedRoutes: ['/dashboard/principal'],
+  });
+  
   // Count pending notifications/activity
   const activityCount = useMemo(() => {
     // TODO: Calculate from actual widgets (child registrations, parent approvals, etc.)
@@ -78,7 +85,6 @@ export function PrincipalShell({
     { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
     { href: '/dashboard/principal/settings', label: 'Settings', icon: Settings },
-    { href: '/dashboard/principal/test-notifications', label: 'Test Notifications', icon: Bell },
   ];
 
   // Check if we should show back button (not on dashboard home)

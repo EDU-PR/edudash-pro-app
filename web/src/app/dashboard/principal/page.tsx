@@ -466,22 +466,6 @@ export default function PrincipalDashboard() {
             <Calendar className="icon20" />
             <span>School Calendar</span>
           </button>
-          <button 
-            className="qa" 
-            onClick={async () => {
-              await showLocalNotification({
-                title: '🔔 Test Notification',
-                body: 'Push notifications are working perfectly!',
-                icon: '/icon-192.png',
-                type: 'general',
-                data: { url: '/dashboard/principal' },
-              });
-            }}
-            style={{ borderLeft: '3px solid #10b981' }}
-          >
-            <Bell className="icon20" />
-            <span>Test Notification</span>
-          </button>
         </div>
       </div>
 

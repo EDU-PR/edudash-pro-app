@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { createClient } from '@/lib/supabase/client';
 import { DailyCallInterface } from './DailyCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
+import { IncomingCallStatusBar } from './IncomingCallStatusBar';
 
 interface ActiveCall {
   id: string;
@@ -495,6 +496,15 @@ export function CallProvider({ children }: CallProviderProps) {
           </div>
         </div>
       )}
+
+      {/* Status bar notification for incoming calls */}
+      <IncomingCallStatusBar
+        isVisible={!!incomingCall && !answeringCall}
+        callerName={incomingCall?.caller_name || 'Unknown Caller'}
+        appName="EduDash Pro"
+        onAnswer={answerIncomingCall}
+        onReject={rejectIncomingCall}
+      />
 
       {/* Incoming call overlay */}
       <IncomingCallOverlay

@@ -187,10 +187,26 @@ self.addEventListener('push', (event) => {
       
       const shouldRenotify = isCall || isMessage || isAnnouncement;
       
+      // Enhanced title for calls to show app name and caller
+      let notificationTitle = payload.title || notificationData.title;
+      if (isCall && payload.data?.caller_name) {
+        notificationTitle = `📞 EduDash Pro - Incoming Call`;
+      } else if (isCall) {
+        notificationTitle = `📞 EduDash Pro - Incoming Call`;
+      }
+      
+      // Enhanced body for calls
+      let notificationBody = payload.body || notificationData.body;
+      if (isCall && payload.data?.caller_name) {
+        notificationBody = `${payload.data.caller_name} is calling...`;
+      } else if (isCall) {
+        notificationBody = 'Someone is calling you...';
+      }
+      
       notificationData = {
         ...notificationData, // Spread defaults first
-        title: payload.title || notificationData.title,
-        body: payload.body || notificationData.body,
+        title: notificationTitle,
+        body: notificationBody,
         icon: payload.icon || notificationData.icon,
         badge: payload.badge || notificationData.badge,
         data: {
@@ -199,14 +215,14 @@ self.addEventListener('push', (event) => {
           type: payload.type || payload.data?.type,
           timestamp: Date.now(),
         },
-        tag: payload.tag || `notif-${Date.now()}`,
+        tag: isCall ? 'incoming-call' : (payload.tag || `notif-${Date.now()}`),
         requireInteraction: isCall || payload.requireInteraction || false,
         renotify: shouldRenotify,
-        vibrate: isCall ? [500, 200, 500, 200, 500] : [200, 100, 200],
+        vibrate: isCall ? [500, 200, 500, 200, 500, 200, 500] : [200, 100, 200],
         // *** SYNTAX FIX: Ensure actions array is correctly defined and closed ***
         actions: isCall ? [
-          { action: 'join', title: '📹 Join Now' },
-          { action: 'dismiss', title: 'Dismiss' }
+          { action: 'join', title: '📞 Answer' },
+          { action: 'dismiss', title: '✕ Reject' }
         ] : isMessage ? [
           { action: 'view', title: '💬 View' },
           { action: 'close', title: 'Close' }

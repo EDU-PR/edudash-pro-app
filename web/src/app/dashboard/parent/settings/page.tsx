@@ -54,6 +54,8 @@ export default function SettingsPage() {
 
   // Load profile data directly from database
   useEffect(() => {
+    let isMounted = true;
+    
     const loadProfileData = async () => {
       if (!userId) return;
       
@@ -63,7 +65,7 @@ export default function SettingsPage() {
         .eq('id', userId)
         .single();
       
-      if (data && !error) {
+      if (data && !error && isMounted) {
         setFullName(`${data.first_name || ''} ${data.last_name || ''}`.trim());
         setPhoneNumber(data.phone || '');
         setAvatarUrl(data.avatar_url || null);
@@ -79,6 +81,20 @@ export default function SettingsPage() {
     };
     
     loadProfileData();
+    
+    // Reload when page becomes visible (user navigates back)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadProfileData();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [userId, supabase]);
   
   // Load linked children
