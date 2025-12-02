@@ -130,10 +130,10 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
         marginBottom: '2rem' 
       }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 600 }}>
+          <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>
             Ringtone Settings
           </h1>
-          <p style={{ margin: '0.5rem 0 0', color: '#666', fontSize: '0.95rem' }}>
+          <p style={{ margin: '0.5rem 0 0', color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
             Customize your call ringtones and sounds
           </p>
         </div>
@@ -145,6 +145,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
               background: 'transparent',
               cursor: 'pointer',
               padding: '0.5rem',
+              color: 'var(--text-primary)',
             }}
             aria-label="Close"
           >
@@ -157,11 +158,11 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
       <section style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
           <Phone size={20} style={{ color: '#10b981' }} />
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
             Incoming Call Ringtone
           </h2>
         </div>
-        <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
           The sound you hear when someone calls you
         </p>
 
@@ -175,11 +176,11 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 padding: '1rem',
                 border: preferences.incomingRingtone === option.type 
                   ? '2px solid #10b981' 
-                  : '1px solid #e5e7eb',
+                  : '1px solid var(--border)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                background: preferences.incomingRingtone === option.type ? '#f0fdf4' : 'white',
+                background: preferences.incomingRingtone === option.type ? 'var(--success-light, #f0fdf4)' : 'var(--surface-1)',
               }}
             >
               <input
@@ -191,10 +192,10 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 style={{ marginRight: '0.75rem' }}
               />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>
+                <div style={{ fontWeight: 500, marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
                   {option.label}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                   {option.description}
                 </div>
               </div>
@@ -207,7 +208,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
 
         {/* Custom upload for incoming */}
         {preferences.incomingRingtone === 'custom' && (
-          <div style={{ marginTop: '1rem', padding: '1rem', background: '#f9fafb', borderRadius: '8px' }}>
+          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--surface-2)', borderRadius: '8px' }}>
             <input
               ref={fileInputIncomingRef}
               type="file"
@@ -226,13 +227,14 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.75rem 1rem',
-                border: '1px dashed #d1d5db',
+                border: '1px dashed var(--border)',
                 borderRadius: '6px',
-                background: 'white',
+                background: 'var(--surface-1)',
                 cursor: uploadingIncoming ? 'not-allowed' : 'pointer',
                 width: '100%',
                 justifyContent: 'center',
                 opacity: uploadingIncoming ? 0.6 : 1,
+                color: 'var(--text-primary)',
               }}
             >
               <Upload size={18} />
@@ -283,7 +285,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
             padding: '0.75rem 1.5rem',
             border: '1px solid #10b981',
             borderRadius: '6px',
-            background: 'white',
+            background: 'var(--surface-1)',
             color: '#10b981',
             cursor: previewingType === 'incoming' ? 'not-allowed' : 'pointer',
             fontWeight: 500,
@@ -298,11 +300,11 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
       <section style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
           <Bell size={20} style={{ color: '#3b82f6' }} />
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
             Outgoing Call Ringback
           </h2>
         </div>
-        <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
           The sound you hear while waiting for someone to answer (KRING-KRING)
         </p>
 
@@ -316,11 +318,11 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 padding: '1rem',
                 border: preferences.outgoingRingback === option.type 
                   ? '2px solid #3b82f6' 
-                  : '1px solid #e5e7eb',
+                  : '1px solid var(--border)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                background: preferences.outgoingRingback === option.type ? '#eff6ff' : 'white',
+                background: preferences.outgoingRingback === option.type ? 'var(--info-light, #eff6ff)' : 'var(--surface-1)',
               }}
             >
               <input
@@ -332,10 +334,10 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 style={{ marginRight: '0.75rem' }}
               />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>
+                <div style={{ fontWeight: 500, marginBottom: '0.25rem', color: 'var(--text-primary)' }}>
                   {option.label}
                 </div>
-                <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                   {option.description}
                 </div>
               </div>
@@ -348,7 +350,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
 
         {/* Custom upload for outgoing */}
         {preferences.outgoingRingback === 'custom' && (
-          <div style={{ marginTop: '1rem', padding: '1rem', background: '#f9fafb', borderRadius: '8px' }}>
+          <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--surface-2)', borderRadius: '8px' }}>
             <input
               ref={fileInputOutgoingRef}
               type="file"
@@ -367,13 +369,14 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.75rem 1rem',
-                border: '1px dashed #d1d5db',
+                border: '1px dashed var(--border)',
                 borderRadius: '6px',
-                background: 'white',
+                background: 'var(--surface-1)',
                 cursor: uploadingOutgoing ? 'not-allowed' : 'pointer',
                 width: '100%',
                 justifyContent: 'center',
                 opacity: uploadingOutgoing ? 0.6 : 1,
+                color: 'var(--text-primary)',
               }}
             >
               <Upload size={18} />
@@ -390,8 +393,8 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
         {/* Volume control */}
         <div style={{ marginTop: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <Volume2 size={18} />
-            <label style={{ fontSize: '0.9rem', fontWeight: 500 }}>
+            <Volume2 size={18} style={{ color: 'var(--text-secondary)' }} />
+            <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Volume: {Math.round(preferences.outgoingVolume * 100)}%
             </label>
           </div>
@@ -412,7 +415,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
             checked={preferences.vibrateOnOutgoing}
             onChange={e => handleUpdate({ vibrateOnOutgoing: e.target.checked })}
           />
-          <span style={{ fontSize: '0.95rem' }}>Vibrate when dialing</span>
+          <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>Vibrate when dialing</span>
         </label>
 
         {/* Preview button */}
@@ -424,7 +427,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
             padding: '0.75rem 1.5rem',
             border: '1px solid #3b82f6',
             borderRadius: '6px',
-            background: 'white',
+            background: 'var(--surface-1)',
             color: '#3b82f6',
             cursor: previewingType === 'outgoing' ? 'not-allowed' : 'pointer',
             fontWeight: 500,
@@ -438,8 +441,8 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
       {/* Info note */}
       <div style={{ 
         padding: '1rem', 
-        background: '#f0f9ff', 
-        border: '1px solid #bae6fd', 
+        background: 'var(--info-light, #f0f9ff)', 
+        border: '1px solid var(--info-border, #bae6fd)', 
         borderRadius: '8px',
         fontSize: '0.9rem',
         color: '#075985'

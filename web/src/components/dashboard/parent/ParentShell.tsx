@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect, useTransition } from 'react';
+import { useMemo, useState, useEffect, useTransition, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -21,6 +21,10 @@ import {
   Clipboard,
   CreditCard,
   Megaphone,
+  User,
+  UserCircle2,
+  ChevronDown,
+  Phone,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -50,6 +54,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [notificationCount, setNotificationCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -62,6 +68,17 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
   // Show sidebar navigation for parent dashboard
   const showSidebar = true;
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Get user ID
   useEffect(() => {
@@ -223,7 +240,156 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   </span>
                 )}
               </button>
-              <div className="avatar">{avatarLetter}</div>
+              <div ref={profileMenuRef} style={{ position: 'relative' }}>
+                <button 
+                  className="avatar" 
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  style={{ cursor: 'pointer', border: 'none', background: 'inherit' }}
+                  aria-label="Profile menu"
+                >
+                  {avatarLetter}
+                </button>
+                
+                {/* Profile Dropdown Menu */}
+                {showProfileMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    minWidth: 200,
+                    background: 'var(--surface-1)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    overflow: 'hidden',
+                  }}>
+                    {/* User Info */}
+                    <div style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid var(--border)',
+                    }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
+                        {userName || 'Parent'}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {userEmail}
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        router.push('/dashboard/parent/children');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <Users size={16} style={{ color: 'var(--text-secondary)' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        My Children
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        router.push('/dashboard/parent/settings');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <Settings size={16} style={{ color: 'var(--text-secondary)' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        Settings
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        router.push('/dashboard/parent/settings/ringtones');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <Phone size={16} style={{ color: 'var(--text-secondary)' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        Ringtones
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        setShowProfileMenu(false);
+                        await supabase.auth.signOut();
+                        router.push('/sign-in');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--danger-light, #fee2e2)';
+                        e.currentTarget.style.color = 'var(--danger, #ef4444)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = 'inherit';
+                      }}
+                    >
+                      <LogOut size={16} style={{ color: 'var(--danger, #ef4444)' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500 }}>
+                        Sign Out
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>

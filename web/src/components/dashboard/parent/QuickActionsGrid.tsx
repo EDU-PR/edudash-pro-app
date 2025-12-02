@@ -1,10 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
 import { 
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
   Users, GraduationCap, Sparkles, Search, Settings, Home, Target,
-  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot
+  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot, Phone, Video, ChevronDown
 } from 'lucide-react';
 
 interface QuickAction {
@@ -25,6 +26,19 @@ interface QuickActionsGridProps {
 
 export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0 }: QuickActionsGridProps) {
   const router = useRouter();
+  const [showMessagesDropdown, setShowMessagesDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowMessagesDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getQuickActions = (): QuickAction[] => {
     // Organization-linked actions (common for all with organization)
@@ -96,6 +110,183 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
           const hasPendingHomework = isHomework && homeworkCount > 0;
           const badgeCount = isMessages ? unreadCount : isHomework ? homeworkCount : 0;
           const showBadge = hasUnread || hasPendingHomework;
+          
+          // Messages button gets special dropdown treatment
+          if (isMessages) {
+            return (
+              <div key={action.href} ref={dropdownRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowMessagesDropdown(!showMessagesDropdown)}
+                  className="qa"
+                  style={{
+                    background: 'var(--surface-1)',
+                    border: hasUnread
+                      ? '2px solid #8b5cf6'
+                      : '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: '20px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    textAlign: 'center',
+                    minHeight: '120px',
+                    boxShadow: hasUnread
+                      ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
+                      : 'none',
+                    position: 'relative',
+                    animation: hasUnread ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+                    width: '100%',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = `0 8px 24px ${action.color}22`;
+                    e.currentTarget.style.borderColor = action.color;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = hasUnread ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)' : 'none';
+                    e.currentTarget.style.borderColor = hasUnread ? '#8b5cf6' : 'var(--border)';
+                  }}
+                >
+                  {hasUnread && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      background: '#ef4444',
+                      color: 'white',
+                      borderRadius: 12,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+                      zIndex: 1,
+                    }}>
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </div>
+                  )}
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    background: `${action.color}22`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Icon size={24} style={{ color: action.color }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ 
+                      fontSize: 14, 
+                      fontWeight: 600,
+                      color: 'var(--text-primary)'
+                    }}>
+                      {action.label}
+                    </span>
+                    <ChevronDown size={14} style={{ color: 'var(--text-secondary)' }} />
+                  </div>
+                </button>
+                
+                {/* Dropdown Menu */}
+                {showMessagesDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: 8,
+                    background: 'var(--surface-1)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                    zIndex: 50,
+                    overflow: 'hidden',
+                  }}>
+                    <button
+                      onClick={() => {
+                        setShowMessagesDropdown(false);
+                        router.push('/dashboard/parent/messages');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <MessageCircle size={18} style={{ color: '#8b5cf6' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        Go to Messages
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMessagesDropdown(false);
+                        router.push('/dashboard/parent/messages?action=voice-call');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <Phone size={18} style={{ color: '#10b981' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        Voice Call
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMessagesDropdown(false);
+                        router.push('/dashboard/parent/messages?action=video-call');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <Video size={18} style={{ color: '#3b82f6' }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                        Video Call
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          }
+          
+          // Regular button for other actions
           return (
             <button
               key={action.href}

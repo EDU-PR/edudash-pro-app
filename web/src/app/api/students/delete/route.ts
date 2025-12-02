@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     // Get parent/guardian info from student_parent_relationships table
     const { data: guardianRelation, error: guardianError } = await supabase
       .from('student_parent_relationships')
-      .select('parent_id, profiles!inner(email, full_name)')
+      .select('parent_id, profiles!inner(email, first_name, last_name)')
       .eq('student_id', studentId)
       .maybeSingle();
 
@@ -61,9 +61,14 @@ export async function POST(req: NextRequest) {
     const parentEmail = Array.isArray(guardianRelation?.profiles) 
       ? guardianRelation?.profiles[0]?.email 
       : (guardianRelation?.profiles as any)?.email;
-    const parentName = Array.isArray(guardianRelation?.profiles)
-      ? guardianRelation?.profiles[0]?.full_name
-      : (guardianRelation?.profiles as any)?.full_name;
+    
+    // Construct full name from first_name and last_name
+    const profileData = Array.isArray(guardianRelation?.profiles)
+      ? guardianRelation?.profiles[0]
+      : guardianRelation?.profiles;
+    const parentName = profileData 
+      ? `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || 'Parent'
+      : 'Parent';
 
     console.log('[Delete Student] Student:', studentName, '| Parent:', parentEmail);
 

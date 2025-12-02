@@ -284,14 +284,15 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
       // Get guardian info before deletion
       const { data: guardianRelation } = await supabase
         .from('student_guardians')
-        .select('guardian_id, profiles!inner(email, full_name)')
+        .select('guardian_id, profiles!inner(email, first_name, last_name)')
         .eq('student_id', studentId)
         .eq('primary_contact', true)
         .single();
 
       const parentEmail = guardianRelation?.profiles?.email;
       const guardianId = guardianRelation?.guardian_id;
-      const parentName = guardianRelation?.profiles?.full_name || 'Parent';
+      const profile = guardianRelation?.profiles;
+      const parentName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Parent' : 'Parent';
 
       // Delete ALL registration requests for this student/parent combo
       // This allows parent to re-register if needed
@@ -398,7 +399,8 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
       // Send email notification to parent
       if (parentEmail) {
         try {
-          const parentName = guardianRelation?.profiles?.full_name || 'Parent';
+          const profile = guardianRelation?.profiles;
+          const parentName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Parent' : 'Parent';
           const schoolName = registration.organization_name || 'the school';
           
           const emailSubject = hasOtherStudents 
