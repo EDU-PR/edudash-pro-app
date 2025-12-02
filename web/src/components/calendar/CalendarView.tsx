@@ -66,40 +66,23 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
   return (
     <div className="card">
       {/* Weekday headers */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(7, 1fr)', 
-        gap: 1,
-        marginBottom: 1,
-        backgroundColor: 'var(--divider)'
-      }}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+      <div className="calendar-header">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
           <div
             key={day}
-            style={{
-              padding: '12px 8px',
-              textAlign: 'center',
-              fontWeight: 600,
-              fontSize: 14,
-              color: 'var(--muted)',
-              backgroundColor: 'var(--card)',
-            }}
+            className="calendar-weekday"
           >
-            {day}
+            <span className="hide-mobile-inline">{day}</span>
+            <span className="show-mobile-inline">{day.charAt(0)}</span>
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(7, 1fr)', 
-        gap: 1,
-        backgroundColor: 'var(--divider)'
-      }}>
+      <div className="calendar-grid">
         {days.map((date, index) => {
           if (!date) {
-            return <div key={`empty-${index}`} style={{ backgroundColor: 'var(--card)', minHeight: 120 }} />;
+            return <div key={`empty-${index}`} className="calendar-day calendar-day-empty" />;
           }
 
           const dateKey = date.toISOString().split('T')[0];
@@ -109,52 +92,25 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
           return (
             <div
               key={dateKey}
+              className="calendar-day"
               style={{
-                backgroundColor: 'var(--card)',
-                padding: 8,
-                minHeight: 120,
-                position: 'relative',
                 cursor: dayEvents.length > 0 ? 'pointer' : 'default',
               }}
             >
               {/* Date number */}
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: today ? 700 : 500,
-                  color: today ? '#fff' : 'var(--text)',
-                  backgroundColor: today ? 'var(--primary)' : 'transparent',
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 4,
-                }}
-              >
+              <div className={`calendar-date-number ${today ? 'calendar-date-today' : ''}`}>
                 {date.getDate()}
               </div>
 
               {/* Events */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div className="calendar-day-events">
                 {dayEvents.slice(0, 3).map((event) => (
                   <button
                     key={event.id}
                     onClick={() => onEventClick(event)}
+                    className="calendar-event"
                     style={{
                       backgroundColor: getEventColor(event.event_type),
-                      color: '#fff',
-                      padding: '4px 6px',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      textAlign: 'left',
-                      border: 'none',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
                     }}
                     title={event.title}
                   >
@@ -162,7 +118,7 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
                   </button>
                 ))}
                 {dayEvents.length > 3 && (
-                  <div style={{ fontSize: 11, color: 'var(--muted)', paddingLeft: 6 }}>
+                  <div className="calendar-more-events">
                     +{dayEvents.length - 3} more
                   </div>
                 )}
@@ -173,7 +129,7 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
       </div>
 
       {/* Legend */}
-      <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0', borderTop: '1px solid var(--divider)' }}>
+      <div className="calendar-legend">
         {Object.entries({
           holiday: 'Holiday',
           parent_meeting: 'Parent Meeting',
@@ -183,16 +139,14 @@ export function CalendarView({ events, currentDate, onEventClick }: CalendarView
           graduation: 'Graduation',
           fundraiser: 'Fundraiser',
         }).map(([type, label]) => (
-          <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div key={type} className="calendar-legend-item">
             <div
+              className="calendar-legend-color"
               style={{
-                width: 12,
-                height: 12,
-                borderRadius: 2,
                 backgroundColor: getEventColor(type),
               }}
             />
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{label}</span>
+            <span className="calendar-legend-label">{label}</span>
           </div>
         ))}
       </div>
