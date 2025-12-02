@@ -251,8 +251,8 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
         {/* Volume control */}
         <div style={{ marginTop: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <Volume2 size={18} />
-            <label style={{ fontSize: '0.9rem', fontWeight: 500 }}>
+            <Volume2 size={18} style={{ color: 'var(--text-secondary)' }} />
+            <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Volume: {Math.round(preferences.incomingVolume * 100)}%
             </label>
           </div>
@@ -273,7 +273,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
             checked={preferences.vibrateOnIncoming}
             onChange={e => handleUpdate({ vibrateOnIncoming: e.target.checked })}
           />
-          <span style={{ fontSize: '0.95rem' }}>Vibrate on incoming calls</span>
+          <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>Vibrate on incoming calls</span>
         </label>
 
         {/* Preview button */}
@@ -445,7 +445,7 @@ export default function RingtoneSettings({ onClose }: RingtoneSettingsProps) {
         border: '1px solid var(--info-border, #bae6fd)', 
         borderRadius: '8px',
         fontSize: '0.9rem',
-        color: '#075985'
+        color: 'var(--info-text, #075985)'
       }}>
         <strong>Note:</strong> Custom ringtones are stored in your account and will sync across your devices. 
         Supported formats: MP3, WAV, M4A, OGG. Maximum file size: 5MB.
