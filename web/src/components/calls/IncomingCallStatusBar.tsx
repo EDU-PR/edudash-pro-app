@@ -36,14 +36,16 @@ export function IncomingCallStatusBar({
       
       // Show browser notification as fallback
       if ('Notification' in window && Notification.permission === 'granted') {
-        const notification = new Notification(`${appName} - Incoming Call`, {
+        const notificationOptions: NotificationOptions & { vibrate?: number[] } = {
           body: `${callerName} is calling...`,
           icon: '/icon-192.png',
           badge: '/icon-192.png',
           tag: 'incoming-call',
           requireInteraction: true,
           vibrate: [500, 200, 500],
-        });
+        };
+        
+        const notification = new Notification(`${appName} - Incoming Call`, notificationOptions);
         
         notification.onclick = () => {
           window.focus();
