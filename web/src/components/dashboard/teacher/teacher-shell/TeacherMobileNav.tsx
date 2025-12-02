@@ -17,11 +17,19 @@ interface TeacherMobileNavProps {
 }
 
 export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps) {
-  const router = useRouter(); // Keep for sign-out
+  const router = useRouter();
   const pathname = usePathname();
   const supabase = createClient();
 
   if (!isOpen) return null;
+
+  const handleNavClick = (href: string) => {
+    console.log('🔗 Navigating to:', href);
+    onClose(); // Close drawer first
+    setTimeout(() => {
+      router.push(href);
+    }, 100); // Small delay to allow drawer to close
+  };
 
   return (
     <>
@@ -69,11 +77,7 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
               <button 
                 key={it.href} 
                 className={`navItem ${active ? 'navItemActive' : ''}`}
-                onClick={() => { 
-                  console.log('🔗 Nav clicked:', it.href);
-                  onClose();
-                  router.push(it.href);
-                }}
+                onClick={() => handleNavClick(it.href)}
                 style={{ width: '100%' }}
               >
                 <Icon className="navIcon" />
