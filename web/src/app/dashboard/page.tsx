@@ -47,6 +47,14 @@ export default function DashboardPage() {
         case 'super_admin':
           router.replace('/dashboard/admin');
           break;
+        case 'admin':
+          // Tertiary education admin (manages courses, instructors, adult students)
+          router.replace('/dashboard/admin-tertiary');
+          break;
+        case 'instructor':
+          // Tertiary education facilitator (teaches courses, grades assignments)
+          router.replace('/dashboard/instructor');
+          break;
         default:
           router.replace('/dashboard/parent'); // Default to parent dashboard
       }
