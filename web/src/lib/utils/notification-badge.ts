@@ -75,6 +75,7 @@ export class BadgeManager {
   private unreadMessages = 0;
   private unreadNotifications = 0;
   private unreadCalls = 0;
+  private upcomingEvents = 0;
 
   private constructor() {}
 
@@ -110,6 +111,14 @@ export class BadgeManager {
   }
 
   /**
+   * Update upcoming events count (within next 24 hours)
+   */
+  setUpcomingEvents(count: number): void {
+    this.upcomingEvents = Math.max(0, count);
+    this.updateBadge();
+  }
+
+  /**
    * Increment message count
    */
   incrementMessages(): void {
@@ -129,7 +138,7 @@ export class BadgeManager {
    * Get total unread count
    */
   getTotalUnread(): number {
-    return this.unreadMessages + this.unreadNotifications + this.unreadCalls;
+    return this.unreadMessages + this.unreadNotifications + this.unreadCalls + this.upcomingEvents;
   }
 
   /**
@@ -147,6 +156,7 @@ export class BadgeManager {
     this.unreadMessages = 0;
     this.unreadNotifications = 0;
     this.unreadCalls = 0;
+    this.upcomingEvents = 0;
     await clearAppBadge();
   }
 
@@ -157,6 +167,7 @@ export class BadgeManager {
     unreadMessages?: number;
     unreadNotifications?: number;
     missedCalls?: number;
+    upcomingEvents?: number;
   }): Promise<void> {
     if (counts.unreadMessages !== undefined) {
       this.unreadMessages = counts.unreadMessages;
@@ -166,6 +177,9 @@ export class BadgeManager {
     }
     if (counts.missedCalls !== undefined) {
       this.unreadCalls = counts.missedCalls;
+    }
+    if (counts.upcomingEvents !== undefined) {
+      this.upcomingEvents = counts.upcomingEvents;
     }
     await this.updateBadge();
   }

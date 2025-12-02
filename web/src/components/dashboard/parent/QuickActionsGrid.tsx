@@ -7,6 +7,7 @@ import {
   Users, GraduationCap, Sparkles, Search, Settings, Home, Target,
   Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot, Phone, Video, ChevronDown
 } from 'lucide-react';
+import { QuickCallModal } from '@/components/calls/QuickCallModal';
 
 interface QuickAction {
   icon: any;
@@ -22,11 +23,14 @@ interface QuickActionsGridProps {
   isExamEligible?: boolean;
   unreadCount?: number;
   homeworkCount?: number;
+  userId?: string;
+  preschoolId?: string;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0 }: QuickActionsGridProps) {
+export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0, userId, preschoolId }: QuickActionsGridProps) {
   const router = useRouter();
   const [showMessagesDropdown, setShowMessagesDropdown] = useState(false);
+  const [showQuickCallModal, setShowQuickCallModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -234,7 +238,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     <button
                       onClick={() => {
                         setShowMessagesDropdown(false);
-                        router.push('/dashboard/parent/messages?action=voice-call');
+                        setShowQuickCallModal(true);
                       }}
                       style={{
                         width: '100%',
@@ -259,7 +263,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     <button
                       onClick={() => {
                         setShowMessagesDropdown(false);
-                        router.push('/dashboard/parent/messages?action=video-call');
+                        setShowQuickCallModal(true);
                       }}
                       style={{
                         width: '100%',
@@ -377,6 +381,22 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
           );
         })}
       </div>
+
+      {/* Quick Call Modal */}
+      <QuickCallModal
+        isOpen={showQuickCallModal}
+        onClose={() => setShowQuickCallModal(false)}
+        onVoiceCall={(recipientId, recipientName) => {
+          setShowQuickCallModal(false);
+          router.push(`/dashboard/parent/messages?call=${recipientId}&type=voice&name=${encodeURIComponent(recipientName)}`);
+        }}
+        onVideoCall={(recipientId, recipientName) => {
+          setShowQuickCallModal(false);
+          router.push(`/dashboard/parent/messages?call=${recipientId}&type=video&name=${encodeURIComponent(recipientName)}`);
+        }}
+        currentUserId={userId}
+        preschoolId={preschoolId}
+      />
 
       <style jsx>{`
         @keyframes pulse-glow {

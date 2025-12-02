@@ -59,17 +59,17 @@ export default function SettingsPage() {
       
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, phone, avatar_url, preferences')
+        .select('first_name, last_name, phone, avatar_url, notification_preferences')
         .eq('id', userId)
         .single();
       
       if (data && !error) {
-        setFullName(data.full_name || '');
+        setFullName(`${data.first_name || ''} ${data.last_name || ''}`.trim());
         setPhoneNumber(data.phone || '');
         setAvatarUrl(data.avatar_url || null);
         
-        // Load preferences
-        const prefs = data.preferences || {};
+        // Load notification preferences
+        const prefs = data.notification_preferences || {};
         setEmailNotifications(prefs.email_notifications !== false);
         setPushNotifications(prefs.push_notifications === true);
         setWhatsappNotifications(prefs.whatsapp_notifications === true);
@@ -116,7 +116,7 @@ export default function SettingsPage() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          preferences: {
+          notification_preferences: {
             email_notifications: emailNotifications,
             push_notifications: pushNotifications,
             whatsapp_notifications: whatsappNotifications,
@@ -155,7 +155,7 @@ export default function SettingsPage() {
       await supabase
         .from('profiles')
         .update({
-          preferences: {
+          notification_preferences: {
             email_notifications: emailNotifications,
             push_notifications: pushNotifications,
             whatsapp_notifications: whatsappNotifications,
@@ -176,7 +176,7 @@ export default function SettingsPage() {
       await supabase
         .from('profiles')
         .update({
-          preferences: {
+          notification_preferences: {
             email_notifications: emailNotifications,
             push_notifications: pushNotifications,
             whatsapp_notifications: whatsappNotifications,
@@ -252,10 +252,16 @@ export default function SettingsPage() {
       setSaving(true);
       setSaveError(null);
       
+      // Split full name into first and last name
+      const nameParts = fullName.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: fullName.trim(),
+          first_name: firstName,
+          last_name: lastName,
           phone: phoneNumber.trim(),
         })
         .eq('id', userId);
@@ -381,9 +387,56 @@ export default function SettingsPage() {
   return (
     <ParentShell tenantSlug={slug} userEmail={userEmail}>
       <div className="container">
+        {/* Success notification banner */}
+        {saveSuccess && (
+          <div style={{
+            position: 'fixed',
+            top: 80,
+            right: 20,
+            background: 'var(--success)',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+            animation: 'slideIn 0.3s ease-out'
+          }}>
+            <Check className="icon16" />
+            <span>Settings saved successfully!</span>
+          </div>
+        )}
+        
         <div className="section">
-          <h1 className="h1">Settings</h1>
-          <p className="muted">Manage your account preferences</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+            <button
+              onClick={() => router.back()}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                padding: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 8,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <div>
+              <h1 className="h1" style={{ marginBottom: 0 }}>Settings</h1>
+              <p className="muted">Manage your account preferences</p>
+            </div>
+          </div>
         </div>
 
         <div className="section">

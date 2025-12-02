@@ -266,6 +266,8 @@ export default function ParentDashboard() {
             isExamEligible={isExamEligible}
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
+            userId={userId}
+            preschoolId={profile?.preschoolId}
           />
         )}
 
