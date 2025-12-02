@@ -460,7 +460,7 @@ export default function PrincipalDashboard() {
             <MessageCircle className="icon20" />
             <span>Send Announcement</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/settings')}>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/calendar')}>
             <Calendar className="icon20" />
             <span>School Calendar</span>
           </button>
