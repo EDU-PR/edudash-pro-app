@@ -53,7 +53,7 @@ export default function PrincipalCalendarPage() {
           .from('school_events')
           .select(`
             *,
-            profiles!school_events_created_by_fkey(first_name, last_name),
+            user_profiles_with_tier!school_events_created_by_fkey(first_name, last_name),
             rsvps:event_rsvps(count)
           `)
           .eq('preschool_id', preschoolId)
