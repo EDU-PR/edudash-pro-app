@@ -3,6 +3,12 @@
 ## Overview
 Users can now customize their call ringtones and ringback tones (the "KRING-KRING" sound heard while waiting for someone to answer).
 
+**✅ FIXED**: `initializeAudio is not defined` error has been resolved.
+
+**📱 Background Notifications**: Calls will ring even when the app is closed or in the background via service worker push notifications.
+
+**🔐 Persistent Authentication**: Users stay signed in automatically with `persistSession: true` and `autoRefreshToken: true`.
+
 ## Features Implemented
 
 ### 1. **Incoming Call Ringtones** (Callee Side)
@@ -176,8 +182,79 @@ This adds the `ringtone_preferences` JSONB column to the `profiles` table with d
 5. Test volume controls
 6. Test preview buttons
 7. Verify settings sync across devices
+8. Test background notifications (close app, receive call)
+
+## 📱 Background Call Notifications
+
+### How It Works
+
+1. **Service Worker Registration** (`/public/sw.js`)
+   - Runs independently of the app (even when closed)
+   - Handles push notifications via `push` event listener
+   - Shows notification with ringtone and vibration
+   - Handles notification clicks to open/focus app
+
+2. **Push Notification Flow**
+   - Caller initiates call → Creates call record in `active_calls` table
+   - Server sends push notification via Web Push API (`/api/notifications/send`)
+   - Service worker receives push event (even if app closed)
+   - Displays notification with custom ringtone
+   - User clicks → App opens to call interface
+
+3. **Persistent Authentication**
+   - Supabase client configured with `persistSession: true`
+   - Tokens stored in localStorage with key `edudash-auth-session`
+   - Automatic token refresh with `autoRefreshToken: true`
+   - Users stay signed in across browser restarts
+
+### Configuration (`/src/lib/supabase/client.ts`)
+```typescript
+createBrowserClient(url, anon, {
+  auth: {
+    storageKey: 'edudash-auth-session',
+    flowType: 'pkce',
+    persistSession: true,        // ✅ Keep user signed in
+    autoRefreshToken: true,       // ✅ Auto-refresh tokens
+    detectSessionInUrl: true,     // ✅ Handle OAuth redirects
+  },
+});
+```
+
+### Testing Background Notifications
+
+1. **Enable Push Notifications**:
+   - Go to Settings → Notifications
+   - Enable push notifications
+   - Grant browser permission when prompted
+
+2. **Test While App is Open**:
+   - Have another user call you
+   - Should see in-app overlay + hear ringtone
+
+3. **Test While App is Closed**:
+   - Close the browser tab/window completely
+   - Have another user call you
+   - Should receive OS-level notification with sound
+   - Click notification → Opens app to call interface
+
+4. **Test While App is in Background**:
+   - Keep tab open but switch to another tab
+   - Have another user call you
+   - Should receive notification in both tab and OS
+
+### Browser Compatibility
+
+| Feature | Chrome/Edge | Firefox | Safari |
+|---------|-------------|---------|--------|
+| Service Worker | ✅ | ✅ | ✅ |
+| Push Notifications | ✅ | ✅ | ✅ (iOS 16.4+) |
+| Background Sync | ✅ | ✅ | ❌ |
+| Persistent Auth | ✅ | ✅ | ✅ |
 
 ## Troubleshooting
+
+### ❌ Error: "initializeAudio is not defined"
+**Status**: ✅ FIXED (removed unused useEffect)
 
 ### Audio not playing?
 - Check browser autoplay policy
@@ -195,3 +272,26 @@ This adds the `ringtone_preferences` JSONB column to the `profiles` table with d
 - Check localStorage in DevTools
 - Verify Supabase connection
 - Check profiles table has ringtone_preferences column
+
+### Push notifications not working?
+1. **Check service worker registration**:
+   ```javascript
+   navigator.serviceWorker.getRegistration().then(reg => console.log(reg))
+   ```
+
+2. **Verify push permission**:
+   ```javascript
+   Notification.permission // Should be "granted"
+   ```
+
+3. **Check browser console** for service worker errors
+
+4. **Test in HTTPS environment** (required for service workers)
+
+5. **Verify user is signed in** (check localStorage for `edudash-auth-session`)
+
+### User keeps getting logged out?
+- Check if `persistSession: true` in `src/lib/supabase/client.ts`
+- Verify browser isn't clearing localStorage/cookies
+- Check Supabase project settings for session timeout
+- Ensure `autoRefreshToken: true` is enabled

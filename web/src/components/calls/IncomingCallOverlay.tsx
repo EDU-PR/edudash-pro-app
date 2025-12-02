@@ -76,13 +76,6 @@ export function IncomingCallOverlay({
     };
   }, [hasUserInteraction]);
 
-  // Ensure audio element is lazily created when overlay mounts
-  useEffect(() => {
-    if (isVisible) {
-      initializeAudio();
-    }
-  }, [isVisible, initializeAudio]);
-
   // Play ringtone when visible - try immediately, fall back to waiting for interaction
   useEffect(() => {
     if (!isVisible) {
