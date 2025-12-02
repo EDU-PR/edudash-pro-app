@@ -41,7 +41,7 @@ export default function GradingPage() {
           .from('organizations')
           .select('name, slug')
           .eq('id', profileData.organization_id)
-          .single();
+          .maybeSingle();
 
         if (orgData) {
           setOrganizationName(orgData.name);

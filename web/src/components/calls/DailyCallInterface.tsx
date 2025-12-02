@@ -59,8 +59,8 @@ export const DailyCallInterface = ({
   const [callState, setCallState] = useState<CallState>('idle');
   const [isVideoEnabled, setIsVideoEnabled] = useState(initialCallType === 'video');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  // Default: Video calls use loudspeaker (true), voice calls use earpiece (false)
-  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(initialCallType === 'video');
+  // Default: Always use earpiece (false) for better call quality and privacy
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
