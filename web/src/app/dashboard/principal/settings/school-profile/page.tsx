@@ -7,7 +7,6 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { Building2, Mail, Phone, MapPin, Globe, Upload, Save, ArrowLeft } from 'lucide-react';
-import { SchoolTermsSettings } from './SchoolTermsSettings';
 
 export default function SchoolProfilePage() {
   const router = useRouter();
@@ -302,14 +301,6 @@ export default function SchoolProfilePage() {
             </div>
           </div>
         </div>
-
-        {/* Terms & Conditions Settings */}
-        {preschoolId && (
-          <SchoolTermsSettings 
-            organizationId={preschoolId}
-            initialTermsUrl={formData.logo_url} // You'll need to add terms_url to formData
-          />
-        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
           <button className="btn btnMuted" onClick={() => router.back()}>

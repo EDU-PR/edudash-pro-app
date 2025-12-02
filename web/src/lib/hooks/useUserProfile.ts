@@ -139,7 +139,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         preschoolSlug,
         organizationId,
         organizationName,
-        preferredLanguage: profileData?.preferred_language || 'en-ZA',
+        preferredLanguage: 'en-ZA', // Default language
         is_trial: profileData?.is_trial,
         trial_end_date: profileData?.trial_ends_at, // Map to expected field name
         trial_plan_tier: profileData?.trial_plan_tier,
