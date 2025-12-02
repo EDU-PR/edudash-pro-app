@@ -53,7 +53,7 @@ function PendingApprovalContent() {
                   <li style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                     <span style={{ color: "#00f5ff", fontSize: 20, lineHeight: 1 }}>1.</span>
                     <span style={{ color: "#d1d5db", fontSize: 14, lineHeight: 1.6 }}>
-                      A <strong style={{ color: "#fff" }}>SuperAdmin</strong> will review your application
+                      An <strong style={{ color: "#fff" }}>Admin</strong> will review your application
                     </span>
                   </li>
                   <li style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -144,11 +144,11 @@ function PendingApprovalContent() {
                 </svg>
                 support@edudashpro.org.za
               </a>
-              <a href="tel:+27123456789" style={{ color: "#00f5ff", fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
+              <a href="tel:+27674770975" style={{ color: "#00f5ff", fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
                 <svg style={{ width: 16, height: 16 }} fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                 </svg>
-                +27 12 345 6789
+                +27 67 477 0975
               </a>
             </div>
           </div>
