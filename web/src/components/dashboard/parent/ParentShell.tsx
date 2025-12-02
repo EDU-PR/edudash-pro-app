@@ -71,14 +71,24 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
   // Close profile menu when clicking outside
   useEffect(() => {
+    if (!showProfileMenu) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    
+    // Add listener with a small delay to avoid immediate closure
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showProfileMenu]);
 
   // Get user ID
   useEffect(() => {
@@ -279,7 +289,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
                     {/* Menu Items */}
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setShowProfileMenu(false);
                         router.push('/dashboard/parent/children');
                       }}
@@ -305,7 +316,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     </button>
 
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setShowProfileMenu(false);
                         router.push('/dashboard/parent/settings');
                       }}
@@ -331,7 +343,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     </button>
 
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setShowProfileMenu(false);
                         router.push('/dashboard/parent/settings/ringtones');
                       }}
@@ -357,7 +370,8 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     </button>
 
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         setShowProfileMenu(false);
                         await supabase.auth.signOut();
                         router.push('/sign-in');

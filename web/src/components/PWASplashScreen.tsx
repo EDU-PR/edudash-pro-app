@@ -12,21 +12,36 @@ interface PWASplashScreenProps {
 export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [step, setStep] = useState(0);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Smooth progress bar animation
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(progressInterval);
+          return 100;
+        }
+        return prev + (100 / (duration / 50));
+      });
+    }, 50);
+
     // Animation sequence
     const timers = [
-      setTimeout(() => setStep(1), 200),   // Logo appears
-      setTimeout(() => setStep(2), 800),   // Rings expand
-      setTimeout(() => setStep(3), 2000),  // Sparkle effect
-      setTimeout(() => setStep(4), 3200),  // Fade out prep
+      setTimeout(() => setStep(1), 150),   // Logo appears
+      setTimeout(() => setStep(2), 600),   // Rings expand
+      setTimeout(() => setStep(3), 1800),  // Sparkle effect
+      setTimeout(() => setStep(4), 3000),  // Fade out prep
       setTimeout(() => {
         setIsVisible(false);
         onComplete?.();
       }, duration),
     ];
 
-    return () => timers.forEach(clearTimeout);
+    return () => {
+      clearInterval(progressInterval);
+      timers.forEach(clearTimeout);
+    };
   }, [duration, onComplete]);
 
   if (!isVisible) return null;
@@ -156,15 +171,35 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
 
           {/* Sparkle effect */}
           {step >= 3 && (
-            <div style={{
-              position: 'absolute',
-              top: '10px',
-              right: '20px',
-              animation: 'sparkle-pop 0.6s ease-out, rotate-slow 3s ease-in-out infinite',
-              opacity: 0.9
-            }}>
-              <Sparkles size={32} color="#fbbf24" strokeWidth={2} />
-            </div>
+            <>
+              <div style={{
+                position: 'absolute',
+                top: '10px',
+                right: '20px',
+                animation: 'sparkle-pop 0.6s ease-out, float-sparkle 2s ease-in-out infinite',
+                opacity: 0.9
+              }}>
+                <Sparkles size={32} color="#fbbf24" strokeWidth={2} />
+              </div>
+              <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '15px',
+                animation: 'sparkle-pop 0.6s ease-out 0.2s, float-sparkle 2.5s ease-in-out infinite',
+                opacity: 0.8
+              }}>
+                <Sparkles size={24} color="#ec4899" strokeWidth={2} />
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '-10px',
+                animation: 'sparkle-pop 0.6s ease-out 0.4s, float-sparkle 3s ease-in-out infinite',
+                opacity: 0.7
+              }}>
+                <Sparkles size={20} color="#7c3aed" strokeWidth={2} />
+              </div>
+            </>
           )}
         </div>
 
@@ -197,10 +232,56 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
           }}>
             AI-Powered Educational Platform
           </p>
+          
+          {/* Loading progress bar */}
+          <div style={{
+            width: '240px',
+            height: '4px',
+            background: 'rgba(124, 58, 237, 0.2)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+            marginTop: '24px',
+            opacity: step >= 1 ? 1 : 0,
+            transition: 'opacity 0.4s ease-out 0.5s'
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: 'linear-gradient(90deg, #7c3aed, #ec4899, #7c3aed)',
+              backgroundSize: '200% 100%',
+              borderRadius: '2px',
+              transition: 'width 0.1s linear',
+              animation: 'gradient-shift 2s ease infinite',
+              boxShadow: '0 0 10px rgba(124, 58, 237, 0.6)'
+            }} />
+          </div>
+
+          {/* Loading text */}
+          <p style={{
+            fontSize: '13px',
+            color: '#666',
+            marginTop: '12px',
+            fontWeight: 500,
+            opacity: step >= 1 ? 0.7 : 0,
+            transition: 'opacity 0.4s ease-out 0.6s'
+          }}>
+            {progress < 30 ? 'Initializing...' : progress < 70 ? 'Loading resources...' : progress < 95 ? 'Almost ready...' : 'Ready!'}
+          </p>
         </div>
       </div>
 
       <style jsx>{`
+        @keyframes gradient-shift {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
         @keyframes blob-float {
           0%, 100% {
             transform: translate(0px, 0px) scale(1);
@@ -252,6 +333,24 @@ export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreen
           100% {
             transform: scale(1) rotate(360deg);
             opacity: 0.9;
+          }
+        }
+
+        @keyframes float-sparkle {
+          0%, 100% {
+            transform: translateY(0px) translateX(0px) rotate(0deg);
+          }
+          50% {
+            transform: translateY(-10px) translateX(5px) rotate(180deg);
+          }
+        }
+
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 20px 60px rgba(124, 58, 237, 0.5), 0 0 80px rgba(236, 72, 153, 0.3);
+          }
+          50% {
+            box-shadow: 0 20px 80px rgba(124, 58, 237, 0.7), 0 0 100px rgba(236, 72, 153, 0.5);
           }
         }
       `}</style>

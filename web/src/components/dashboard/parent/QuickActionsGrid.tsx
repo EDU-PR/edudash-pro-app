@@ -388,11 +388,27 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
         onClose={() => setShowQuickCallModal(false)}
         onVoiceCall={(recipientId, recipientName) => {
           setShowQuickCallModal(false);
-          router.push(`/dashboard/parent/messages?call=${recipientId}&type=voice&name=${encodeURIComponent(recipientName)}`);
+          // Navigate to messages page which has the CallProvider
+          router.push('/dashboard/parent/messages');
+          // Use setTimeout to ensure navigation completes, then trigger call
+          setTimeout(() => {
+            // Dispatch custom event to trigger call from messages page
+            window.dispatchEvent(new CustomEvent('triggerCall', {
+              detail: { recipientId, recipientName, type: 'voice' }
+            }));
+          }, 500);
         }}
         onVideoCall={(recipientId, recipientName) => {
           setShowQuickCallModal(false);
-          router.push(`/dashboard/parent/messages?call=${recipientId}&type=video&name=${encodeURIComponent(recipientName)}`);
+          // Navigate to messages page which has the CallProvider
+          router.push('/dashboard/parent/messages');
+          // Use setTimeout to ensure navigation completes, then trigger call
+          setTimeout(() => {
+            // Dispatch custom event to trigger call from messages page
+            window.dispatchEvent(new CustomEvent('triggerCall', {
+              detail: { recipientId, recipientName, type: 'video' }
+            }));
+          }, 500);
         }}
         currentUserId={userId}
         preschoolId={preschoolId}

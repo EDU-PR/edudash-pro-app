@@ -22,11 +22,13 @@ import {
   Search,
   X,
   Sparkles,
+  Bell,
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { showLocalNotification } from '@/lib/services/pushNotificationService';
 
 interface PrincipalMetrics {
   totalStudents: number;
@@ -463,6 +465,22 @@ export default function PrincipalDashboard() {
           <button className="qa" onClick={() => router.push('/dashboard/principal/calendar')}>
             <Calendar className="icon20" />
             <span>School Calendar</span>
+          </button>
+          <button 
+            className="qa" 
+            onClick={async () => {
+              await showLocalNotification({
+                title: '🔔 Test Notification',
+                body: 'Push notifications are working perfectly!',
+                icon: '/icon-192.png',
+                type: 'general',
+                data: { url: '/dashboard/principal' },
+              });
+            }}
+            style={{ borderLeft: '3px solid #10b981' }}
+          >
+            <Bell className="icon20" />
+            <span>Test Notification</span>
           </button>
         </div>
       </div>

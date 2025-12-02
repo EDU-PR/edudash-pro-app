@@ -625,6 +625,23 @@ function ParentMessagesContent() {
   // Call interface hook - use Daily.co based calls
   const { startVoiceCall, startVideoCall } = useCall();
 
+  // Listen for call trigger events from QuickActionsGrid
+  useEffect(() => {
+    const handleTriggerCall = (event: CustomEvent) => {
+      const { recipientId, recipientName, type } = event.detail;
+      console.log('[Messages] Triggering call:', { recipientId, recipientName, type });
+      
+      if (type === 'voice') {
+        startVoiceCall(recipientId, recipientName);
+      } else if (type === 'video') {
+        startVideoCall(recipientId, recipientName);
+      }
+    };
+
+    window.addEventListener('triggerCall', handleTriggerCall as EventListener);
+    return () => window.removeEventListener('triggerCall', handleTriggerCall as EventListener);
+  }, [startVoiceCall, startVideoCall]);
+
   // Typing indicator hook
   const { typingText, startTyping, stopTyping } = useTypingIndicator({ supabase, threadId: selectedThreadId, userId });
 
