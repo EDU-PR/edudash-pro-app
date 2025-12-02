@@ -53,7 +53,7 @@ export default function PrincipalCalendarPage() {
           .from('school_events')
           .select(`
             *,
-            creator:created_by(first_name, last_name),
+            profiles!school_events_created_by_fkey(first_name, last_name),
             rsvps:event_rsvps(count)
           `)
           .eq('preschool_id', preschoolId)
@@ -132,7 +132,7 @@ export default function PrincipalCalendarPage() {
     <PrincipalShell tenantSlug={tenantSlug} preschoolName={preschoolName} preschoolId={preschoolId}>
       <div className="section">
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <h1 className="h1">School Calendar</h1>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -140,22 +140,23 @@ export default function PrincipalCalendarPage() {
             style={{ display: 'flex', alignItems: 'center', gap: 8 }}
           >
             <Plus size={20} />
-            Create Event
+            <span className="hide-mobile-inline">Create Event</span>
+            <span className="show-mobile-inline">Create</span>
           </button>
         </div>
 
         {/* Controls */}
         <div className="card" style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div className="calendar-controls">
             {/* View Toggle */}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
               <button
                 onClick={() => setViewMode('month')}
                 className={viewMode === 'month' ? 'btn-primary' : 'btn-secondary'}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}
               >
                 <Grid size={16} />
-                Month
+                <span className="hide-mobile-inline">Month</span>
               </button>
               <button
                 onClick={() => setViewMode('list')}
@@ -163,34 +164,34 @@ export default function PrincipalCalendarPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}
               >
                 <List size={16} />
-                List
+                <span className="hide-mobile-inline">List</span>
               </button>
             </div>
 
             {/* Month Navigation */}
             {viewMode === 'month' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div className="month-navigation">
                 <button onClick={handlePrevMonth} className="btn-secondary" style={{ padding: '8px 12px' }}>
                   <ChevronLeft size={16} />
                 </button>
-                <h2 style={{ minWidth: 200, textAlign: 'center', margin: 0 }}>{monthName}</h2>
+                <h2 className="month-title">{monthName}</h2>
                 <button onClick={handleNextMonth} className="btn-secondary" style={{ padding: '8px 12px' }}>
                   <ChevronRight size={16} />
                 </button>
-                <button onClick={handleToday} className="btn-secondary" style={{ padding: '8px 16px' }}>
+                <button onClick={handleToday} className="btn-secondary hide-mobile" style={{ padding: '8px 16px' }}>
                   Today
                 </button>
               </div>
             )}
 
             {/* Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Filter size={16} style={{ color: 'var(--muted)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 'fit-content' }}>
+              <Filter size={16} style={{ color: 'var(--muted)' }} className="hide-mobile-inline" />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 className="select"
-                style={{ minWidth: 150 }}
+                style={{ minWidth: 120 }}
               >
                 <option value="all">All Events</option>
                 <option value="holiday">Holidays</option>
