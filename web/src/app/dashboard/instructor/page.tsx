@@ -93,7 +93,7 @@ export default function InstructorDashboard() {
         .select('id')
         .eq('instructor_id', userId);
 
-      const courseIds = courses?.map(c => c.id) || [];
+      const courseIds = courses?.map((c: { id: string }) => c.id) || [];
 
       // Get stats
       const [
