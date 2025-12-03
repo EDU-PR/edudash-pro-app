@@ -145,6 +145,16 @@ export function DailyPrebuiltCall({
     params.set('showReactions', 'true');
     params.set('showPeopleUI', 'true'); // Shows participant list with raised hands
 
+    // Layout configuration (Zoom/Teams style)
+    // Active speaker mode: highlights active speaker while keeping all videos visible
+    params.set('layout', 'default'); // 'default' = grid view, 'single-participant' = spotlight
+    params.set('activeSpeakerMode', 'true'); // Highlight active speaker with border
+    params.set('showActiveSpeakerUI', 'true'); // Visual indicator for active speaker
+    
+    // Video tile sizing
+    params.set('videoFit', 'cover'); // 'cover' fills tiles, 'contain' shows full video with letterboxing
+    params.set('maxCamStreams', '25'); // Support up to 25 participants in gallery view
+
     // Teacher-only features
     if (isTeacher) {
       params.set('showRecording', 'true');
@@ -313,7 +323,7 @@ export function DailyPrebuiltCall({
       className="fixed inset-0 bg-gray-900 flex flex-col z-50"
       style={{
         background: EDUDASH_THEME.colors.background,
-        paddingTop: 'max(env(safe-area-inset-top), 60px)', // Add space for mobile app header
+        paddingTop: 'max(env(safe-area-inset-top), 80px)', // Add space for mobile app header
       }}
     >
       {/* EduDash Pro Branded Header */}
@@ -417,7 +427,7 @@ export function DailyPrebuiltCall({
         className="flex-1 relative" 
         style={{ 
           background: EDUDASH_THEME.colors.mainAreaBg,
-          marginTop: 60, // Space for fixed header
+          marginTop: 80, // Space for fixed header
         }}
       >
         <iframe
@@ -445,15 +455,6 @@ export function DailyPrebuiltCall({
           </div>
         )}
       </div>
-
-      {/* Safe area padding for mobile */}
-      <div
-        className="safe-area-pb"
-        style={{
-          paddingBottom: 'env(safe-area-inset-bottom)',
-          background: EDUDASH_THEME.colors.backgroundAccent,
-        }}
-      />
     </div>
   );
 }
