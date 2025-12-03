@@ -252,18 +252,24 @@ export function PrincipalShell({
                 const Icon = it.icon as any;
                 const active = pathname === it.href || pathname?.startsWith(it.href + '/');
                 return (
-                  <Link 
+                  <button 
                     key={it.href} 
-                    href={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
-                    onClick={() => setMobileNavOpen(false)}
+                    onClick={() => {
+                      console.log('🔗 Navigating to:', it.href);
+                      setMobileNavOpen(false);
+                      setTimeout(() => {
+                        router.push(it.href);
+                      }, 100);
+                    }}
+                    style={{ width: '100%' }}
                   >
                     <Icon className="navIcon" />
                     <span>{it.label}</span>
                     {typeof it.badge === 'number' && it.badge > 0 && (
                       <span className="navItemBadge badgeNumber">{it.badge}</span>
                     )}
-                  </Link>
+                  </button>
                 );
               })}
             </nav>
