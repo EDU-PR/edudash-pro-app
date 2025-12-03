@@ -328,7 +328,7 @@ export function AnnouncementCard({
                   }}
                 >
                   <Pin className="icon16" />
-                  {announcement.is_pinned ? 'Unpin' : 'Pin'}
+                  {announcement.pinned ? 'Unpin' : 'Pin'}
                 </button>
                 {!announcement.is_published && (
                   <button
