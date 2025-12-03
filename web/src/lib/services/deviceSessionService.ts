@@ -99,7 +99,7 @@ export async function registerDeviceSession(userId: string): Promise<{
       .eq('user_id', userId)
       .eq('is_active', true)
       .neq('device_id', deviceInfo.deviceId)
-      .order('last_seen', { ascending: false });
+      .order('last_active_at', { ascending: false });
 
     const hasOtherActiveDevice = existingSessions && existingSessions.length > 0;
     const otherDevice = existingSessions?.[0];
@@ -122,7 +122,7 @@ export async function registerDeviceSession(userId: string): Promise<{
         user_agent: deviceInfo.userAgent,
         platform: deviceInfo.platform,
         browser: deviceInfo.browser,
-        last_seen: deviceInfo.lastSeen,
+        last_active_at: deviceInfo.lastSeen,
         is_active: true,
         started_at: new Date().toISOString(),
       }, {
@@ -140,7 +140,7 @@ export async function registerDeviceSession(userId: string): Promise<{
       otherDeviceInfo: otherDevice ? {
         platform: otherDevice.platform,
         browser: otherDevice.browser,
-        lastSeen: otherDevice.last_seen,
+        lastSeen: otherDevice.last_active_at,
       } : undefined,
     };
   } catch (error) {
@@ -182,7 +182,7 @@ export async function updateDeviceHeartbeat(userId: string): Promise<void> {
 
     await supabase
       .from('user_sessions')
-      .update({ last_seen: new Date().toISOString() })
+      .update({ last_active_at: new Date().toISOString() })
       .eq('user_id', userId)
       .eq('device_id', deviceInfo.deviceId);
   } catch (error) {
