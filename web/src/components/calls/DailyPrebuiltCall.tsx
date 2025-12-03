@@ -140,6 +140,11 @@ export function DailyPrebuiltCall({
       params.set('showScreenShare', 'true');
     }
 
+    // Enable raise hand and reactions for interactive lessons
+    params.set('showRaiseHandButton', 'true');
+    params.set('showReactions', 'true');
+    params.set('showPeopleUI', 'true'); // Shows participant list with raised hands
+
     // Teacher-only features
     if (isTeacher) {
       params.set('showRecording', 'true');
@@ -308,6 +313,7 @@ export function DailyPrebuiltCall({
       className="fixed inset-0 bg-gray-900 flex flex-col z-50"
       style={{
         background: EDUDASH_THEME.colors.background,
+        paddingTop: 'max(env(safe-area-inset-top), 60px)', // Add space for mobile app header
       }}
     >
       {/* EduDash Pro Branded Header */}
@@ -316,6 +322,11 @@ export function DailyPrebuiltCall({
         style={{
           background: EDUDASH_THEME.colors.backgroundAccent,
           borderBottom: `1px solid ${EDUDASH_THEME.colors.border}`,
+          position: 'fixed',
+          top: 'max(env(safe-area-inset-top), 0)',
+          left: 0,
+          right: 0,
+          zIndex: 10,
         }}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -402,7 +413,13 @@ export function DailyPrebuiltCall({
       </header>
 
       {/* Daily Prebuilt iframe */}
-      <div className="flex-1 relative" style={{ background: EDUDASH_THEME.colors.mainAreaBg }}>
+      <div 
+        className="flex-1 relative" 
+        style={{ 
+          background: EDUDASH_THEME.colors.mainAreaBg,
+          marginTop: 60, // Space for fixed header
+        }}
+      >
         <iframe
           ref={iframeRef}
           title={`${callType === 'voice' ? 'Voice Call' : 'Video Lesson'}: ${title}`}
