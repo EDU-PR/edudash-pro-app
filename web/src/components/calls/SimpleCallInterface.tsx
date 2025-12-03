@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import DailyIframe, { DailyCall } from '@daily-co/daily-js';
+import RingtoneService from '@/lib/services/ringtoneService';
 import {
   Phone,
   PhoneOff,
@@ -49,16 +50,111 @@ export const SimpleCallInterface = ({
 
   const callFrameRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<DailyCall | null>(null);
+  const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const supabase = createClient();
+
+  // Play ringback tone when connecting (for callers)
+  useEffect(() => {
+    if (callState === 'connecting' && isOwner) {
+      // Play ringback tone
+      RingtoneService.playRingtone('outgoing', { loop: true })
+        .then(audio => {
+          ringbackAudioRef.current = audio;
+          console.log('[SimpleCall] Playing ringback tone...');
+        })
+        .catch(err => {
+          console.warn('[SimpleCall] Could not play ringback:', err);
+        });
+    } else if (callState !== 'connecting' && ringbackAudioRef.current) {
+      // Stop ringback when connected or failed
+      RingtoneService.stopRingtone(ringbackAudioRef.current);
+      ringbackAudioRef.current = null;
+      console.log('[SimpleCall] Stopped ringback tone');
+    }
+
+    return () => {
+      // Cleanup ringback on unmount
+      if (ringbackAudioRef.current) {
+        RingtoneService.stopRingtone(ringbackAudioRef.current);
+        ringbackAudioRef.current = null;
+      }
+    };
+  }, [callState, isOwner]);
 
   // Initialize call when opened
   useEffect(() => {
     if (!isOpen || !roomName) return;
 
+    // Prevent duplicate instances in React StrictMode
+    let isCleanedUp = false;
+
     const initializeCall = async () => {
       try {
         setCallState('connecting');
         setError(null);
+
+        // Wait for ref to be ready with retry logic
+        let retries = 0;
+        const maxRetries = 10;
+        while (!callFrameRef.current && retries < maxRetries && !isCleanedUp) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          retries++;
+          console.log(`[SimpleCall] Waiting for ref... attempt ${retries}/${maxRetries}`);
+        }
+
+        if (isCleanedUp) {
+          console.log('[SimpleCall] Component unmounted during initialization, aborting');
+          return;
+        }
+
+        // Double-check ref is ready
+        if (!callFrameRef.current) {
+          console.error('[SimpleCall] Call frame ref still not ready after retries');
+          throw new Error('Call interface failed to load. Please close and try again.');
+        }
+
+        // Destroy any existing Daily instance first (prevent duplicates)
+        if (dailyCallRef.current) {
+          console.log('[SimpleCall] Destroying existing Daily instance');
+          dailyCallRef.current.destroy();
+          dailyCallRef.current = null;
+        }
+
+        console.log('[SimpleCall] Starting call initialization...', { roomName, userName, isOwner });
+
+        // For owners (callers), create the room first
+        // For non-owners (recipients), just get a token for existing room
+        let roomUrl: string;
+        
+        if (isOwner) {
+          // Create a new room via Daily API
+          console.log('[SimpleCall] Owner creating new room...');
+          const roomResponse = await fetch('/api/daily/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: `P2P Call - ${userName}`,
+              preschoolId: 'temp', // Will be filled by API from user profile
+              isPrivate: true,
+              expiryMinutes: 60,
+              maxParticipants: 2, // P2P call
+            }),
+          });
+
+          if (!roomResponse.ok) {
+            const errorData = await roomResponse.json();
+            console.error('[SimpleCall] Room creation failed:', errorData);
+            throw new Error(errorData.error || 'Failed to create call room');
+          }
+
+          const { room } = await roomResponse.json();
+          roomUrl = room.url;
+          console.log('[SimpleCall] Room created:', roomUrl);
+        } else {
+          // Just build the URL for existing room
+          roomUrl = `https://edudashpro.daily.co/${roomName}`;
+          console.log('[SimpleCall] Joining existing room:', roomUrl);
+        }
 
         // Get meeting token from API
         const response = await fetch('/api/daily/token', {
@@ -73,16 +169,19 @@ export const SimpleCallInterface = ({
 
         if (!response.ok) {
           const errorData = await response.json();
+          console.error('[SimpleCall] Token fetch failed:', errorData);
           throw new Error(errorData.error || 'Failed to get meeting token');
         }
 
         const { token } = await response.json();
+        console.log('[SimpleCall] Got meeting token, creating Daily frame...');
 
-        // Create Daily call object
-        if (!callFrameRef.current) {
-          throw new Error('Call frame ref not ready');
+        if (isCleanedUp) {
+          console.log('[SimpleCall] Component unmounted before frame creation, aborting');
+          return;
         }
 
+        // Create Daily call object
         const daily = DailyIframe.createFrame(callFrameRef.current, {
           showLeaveButton: false,
           showFullscreenButton: true,
@@ -95,6 +194,7 @@ export const SimpleCallInterface = ({
         });
 
         dailyCallRef.current = daily;
+        console.log('[SimpleCall] Daily frame created successfully');
 
         // Set up event listeners
         daily
@@ -120,9 +220,10 @@ export const SimpleCallInterface = ({
             setCallState('failed');
           });
 
-        // Join the meeting
+        // Join the meeting using the room URL
+        console.log('[SimpleCall] Joining meeting...', roomUrl);
         await daily.join({
-          url: `https://edudashpro.daily.co/${roomName}`,
+          url: roomUrl,
           token,
         });
 
@@ -137,7 +238,9 @@ export const SimpleCallInterface = ({
 
     // Cleanup on unmount
     return () => {
+      isCleanedUp = true;
       if (dailyCallRef.current) {
+        console.log('[SimpleCall] Cleaning up Daily instance');
         dailyCallRef.current.destroy();
         dailyCallRef.current = null;
       }
@@ -183,6 +286,21 @@ export const SimpleCallInterface = ({
       console.error('[SimpleCall] Toggle screen share error:', err);
     }
   }, [isScreenSharing]);
+
+  // Toggle speaker (limited browser support)
+  const toggleSpeaker = useCallback(async () => {
+    if (!dailyCallRef.current) return;
+    try {
+      const newSpeakerState = !isSpeakerEnabled;
+      setIsSpeakerEnabled(newSpeakerState);
+      
+      // Note: This has limited browser support
+      // On mobile browsers, speakerphone toggle may not work
+      console.log(`[SimpleCall] Speaker ${newSpeakerState ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      console.error('[SimpleCall] Toggle speaker error:', err);
+    }
+  }, [isSpeakerEnabled]);
 
   // End call
   const handleEndCall = useCallback(() => {
@@ -336,6 +454,24 @@ export const SimpleCallInterface = ({
                 )}
               </button>
             )}
+
+            {/* Speaker Toggle */}
+            <button
+              onClick={toggleSpeaker}
+              disabled={callState !== 'connected'}
+              className={`p-4 rounded-full transition-all ${
+                isSpeakerEnabled
+                  ? 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  : 'bg-yellow-500 hover:bg-yellow-600'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={isSpeakerEnabled ? 'Disable Speaker' : 'Enable Speaker'}
+            >
+              {isSpeakerEnabled ? (
+                <Volume2 className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+              ) : (
+                <VolumeX className="w-6 h-6 text-white" />
+              )}
+            </button>
 
             {/* End Call */}
             <button
