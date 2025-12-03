@@ -22,7 +22,7 @@ interface Announcement {
   target_audience: 'all' | 'teachers' | 'parents' | 'students';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   is_published: boolean;
-  is_pinned: boolean;
+  pinned: boolean;
   published_at: string | null;
   scheduled_for: string | null;
   expires_at: string | null;
@@ -178,11 +178,11 @@ export function AnnouncementCard({
         position: 'relative',
         cursor: 'pointer',
         transition: 'all 0.2s',
-        border: announcement.is_pinned ? '2px solid var(--primary)' : undefined,
+        border: announcement.pinned ? '2px solid var(--primary)' : undefined,
       }}
       onClick={onView}
     >
-      {announcement.is_pinned && (
+      {announcement.pinned && (
         <div style={{
           position: 'absolute',
           top: -8,

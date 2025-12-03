@@ -9,7 +9,7 @@ interface Announcement {
   target_audience: 'all' | 'teachers' | 'parents' | 'students';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   is_published: boolean;
-  is_pinned: boolean;
+  pinned: boolean;
   published_at: string | null;
   scheduled_for: string | null;
   expires_at: string | null;

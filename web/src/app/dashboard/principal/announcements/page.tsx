@@ -35,7 +35,7 @@ interface Announcement {
   target_audience: 'all' | 'teachers' | 'parents' | 'students';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   is_published: boolean;
-  is_pinned: boolean;
+  pinned: boolean;
   published_at: string | null;
   scheduled_for: string | null;
   expires_at: string | null;
@@ -100,7 +100,7 @@ export default function PrincipalAnnouncementsPage() {
       .from('announcements')
       .select('*')
       .eq('preschool_id', preschoolId)
-      .order('is_pinned', { ascending: false })
+      .order('pinned', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (!error && data) {
@@ -137,7 +137,7 @@ export default function PrincipalAnnouncementsPage() {
   const handleTogglePin = async (announcement: Announcement) => {
     const { error } = await supabase
       .from('announcements')
-      .update({ is_pinned: !announcement.is_pinned })
+      .update({ pinned: !announcement.pinned })
       .eq('id', announcement.id);
 
     if (!error) {
