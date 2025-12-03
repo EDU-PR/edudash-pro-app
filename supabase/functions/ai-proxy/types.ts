@@ -160,6 +160,7 @@ export interface StreamingResponse {
 // Tool context for execution
 export interface ToolContext {
   supabaseAdmin: any
+  supabase?: any  // User's authenticated Supabase client (for RPC calls)
   userId: string
   organizationId: string | null
   role: string

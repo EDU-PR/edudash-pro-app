@@ -1275,6 +1275,9 @@ The diagrams are rendered using Mermaid syntax and will appear directly in the c
               const textbook = result.data;
               textbookContext = `\nTextbook: ${textbook.title} (Grade ${textbook.grade} ${textbook.subject})`;
             }
+          } else if (textbook_id) {
+            // Fallback: Skip textbook context if no supabase client available
+            logger.warn('[generate_textbook_diagram] No Supabase client in context, skipping textbook metadata');
           }
 
           // Build context string
