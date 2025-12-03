@@ -343,10 +343,29 @@ export const VideoCallInterface = ({
 
         if (isCleanedUp) return;
 
-        // Create Daily call frame (with video iframe)
+        // Create Daily call frame with Prebuilt UI
         const daily = DailyIframe.createFrame(callFrameRef.current, {
           showLeaveButton: false,
           showFullscreenButton: true,
+          showLocalVideo: true,
+          showParticipantsBar: true,
+          
+          // UI customization
+          theme: {
+            colors: {
+              accent: '#6366f1',
+              accentText: '#ffffff',
+              background: '#1a1a2e',
+              backgroundAccent: '#16213e',
+              baseText: '#ffffff',
+              border: '#0f3460',
+              mainAreaBg: '#0f0e17',
+              mainAreaBgAccent: '#16213e',
+              mainAreaText: '#ffffff',
+              supportiveText: '#a7a9be',
+            },
+          },
+          
           iframeStyle: {
             width: '100%',
             height: '100%',

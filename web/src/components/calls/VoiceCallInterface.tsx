@@ -364,8 +364,6 @@ export const VoiceCallInterface = ({
         await daily.join({
           url: roomUrl,
           token,
-          videoSource: false,
-          audioSource: true,
         });
 
       } catch (err) {

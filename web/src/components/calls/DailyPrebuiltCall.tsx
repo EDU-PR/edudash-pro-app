@@ -110,6 +110,14 @@ export function DailyPrebuiltCall({
     // Apply EduDash Pro theme colors
     params.set('color', EDUDASH_THEME.colors.accent.replace('#', ''));
 
+    // Enable audio enhancements (noise cancellation, echo cancellation, auto-gain)
+    params.set('dailyConfig', JSON.stringify({
+      enableNoiseReduction: true,
+      enableEchoCancellation: true,
+      enableAutogainControl: true,
+      enableTypingSuppression: true,
+    }));
+
     // Configure based on call type
     if (callType === 'voice') {
       // Voice call configuration (industry standard for audio-only calls)
