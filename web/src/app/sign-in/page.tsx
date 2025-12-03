@@ -27,6 +27,10 @@ function SignInFormWithParams() {
     if (searchParams.get('error') === 'verification_failed') {
       setError('Email verification failed. Please try again or contact support.');
     }
+    // Check if logged out from another device
+    if (searchParams.get('reason') === 'logged_out_other_device') {
+      setError('You were logged out because you signed in on another device. EduDash Pro can only be used on one device at a time.');
+    }
   }, [searchParams]);
 
   async function onSubmit(e: React.FormEvent) {

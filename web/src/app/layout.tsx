@@ -11,6 +11,7 @@ import { CallProviderWrapper } from "@/components/calls/CallProviderWrapper";
 import { NativeAppManager } from "@/components/NativeAppManager";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { PushNotificationSubscribe } from "@/components/PushNotificationSubscribe";
+import { DeviceSessionGuard } from "@/components/DeviceSessionGuard";
 import 'katex/dist/katex.min.css';
 
 const geistSans = Geist({
@@ -81,6 +82,7 @@ export default function RootLayout({
         <PWAUpdateChecker />
         <DeploymentNotificationProvider />
         <PushNotificationSubscribe />
+        <DeviceSessionGuard />
         <NativeAppManager enableSounds={true} />
         <OfflineIndicator />
         <CallProviderWrapper>
