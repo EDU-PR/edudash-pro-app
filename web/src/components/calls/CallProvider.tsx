@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { DailyCallInterface } from './DailyCallInterface';
+import { SimpleCallInterface } from './SimpleCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
 import { IncomingCallStatusBar } from './IncomingCallStatusBar';
 
@@ -518,26 +518,23 @@ export function CallProvider({ children }: CallProviderProps) {
 
       {/* Call interface for outgoing calls */}
       {outgoingCall && (
-        <DailyCallInterface
+        <SimpleCallInterface
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={handleCallClose}
-          callType={outgoingCall.callType}
-          remoteUserId={outgoingCall.userId}
-          remoteUserName={outgoingCall.userName}
+          roomName={`call-${Date.now()}`}
+          userName={outgoingCall.userName}
+          isOwner={true}
         />
       )}
 
       {/* Call interface for answering calls */}
-      {answeringCall && (
-        <DailyCallInterface
+      {answeringCall && answeringCall.meeting_url && (
+        <SimpleCallInterface
           isOpen={isCallInterfaceOpen}
           onClose={handleCallClose}
-          callType={answeringCall.call_type}
-          remoteUserId={answeringCall.caller_id}
-          remoteUserName={answeringCall.caller_name}
-          isIncoming={true}
-          incomingCallId={answeringCall.call_id}
-          meetingUrl={answeringCall.meeting_url}
+          roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
+          userName={answeringCall.caller_name}
+          isOwner={false}
         />
       )}
 
