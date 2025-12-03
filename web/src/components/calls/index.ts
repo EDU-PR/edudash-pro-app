@@ -1,4 +1,8 @@
-// NEW: Simple, clean call interface (RECOMMENDED)
+// NEW: Modular call interfaces (RECOMMENDED)
+export { VoiceCallInterface } from './VoiceCallInterface';
+export { VideoCallInterface } from './VideoCallInterface';
+
+// Simple unified call interface (backward compatibility)
 export { SimpleCallInterface, useSimpleCallInterface } from './SimpleCallInterface';
 
 // Call system components

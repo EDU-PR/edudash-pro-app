@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { SimpleCallInterface } from './SimpleCallInterface';
+import { VoiceCallInterface } from './VoiceCallInterface';
+import { VideoCallInterface } from './VideoCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
 import { IncomingCallStatusBar } from './IncomingCallStatusBar';
 
@@ -516,22 +517,44 @@ export function CallProvider({ children }: CallProviderProps) {
         isConnecting={isConnecting}
       />
 
-      {/* Call interface for outgoing calls */}
-      {outgoingCall && (
-        <SimpleCallInterface
+      {/* Voice call interface for outgoing calls */}
+      {outgoingCall && outgoingCall.callType === 'voice' && (
+        <VoiceCallInterface
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={handleCallClose}
           roomName={`call-${Date.now()}`}
           userName={outgoingCall.userName}
           isOwner={true}
           calleeId={outgoingCall.userId}
-          callType={outgoingCall.callType}
         />
       )}
 
-      {/* Call interface for answering calls */}
-      {answeringCall && answeringCall.meeting_url && (
-        <SimpleCallInterface
+      {/* Video call interface for outgoing calls */}
+      {outgoingCall && outgoingCall.callType === 'video' && (
+        <VideoCallInterface
+          isOpen={isCallInterfaceOpen && !answeringCall}
+          onClose={handleCallClose}
+          roomName={`call-${Date.now()}`}
+          userName={outgoingCall.userName}
+          isOwner={true}
+          calleeId={outgoingCall.userId}
+        />
+      )}
+
+      {/* Voice call interface for answering calls */}
+      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'voice' && (
+        <VoiceCallInterface
+          isOpen={isCallInterfaceOpen}
+          onClose={handleCallClose}
+          roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
+          userName={answeringCall.caller_name}
+          isOwner={false}
+        />
+      )}
+
+      {/* Video call interface for answering calls */}
+      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
+        <VideoCallInterface
           isOpen={isCallInterfaceOpen}
           onClose={handleCallClose}
           roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
