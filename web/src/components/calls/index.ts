@@ -1,5 +1,7 @@
-// NEW: Modular call interfaces (RECOMMENDED)
+// Call Interfaces (RECOMMENDED)
+// Daily.co for voice calls (audio-only mode, reliable)
 export { VoiceCallInterface } from './VoiceCallInterface';
+// Daily.co for video calls and group calls (full featured)
 export { VideoCallInterface } from './VideoCallInterface';
 
 // Simple unified call interface (backward compatibility)

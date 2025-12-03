@@ -1,11 +1,81 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode, Component, type ErrorInfo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { VoiceCallInterface } from './VoiceCallInterface';
 import { VideoCallInterface } from './VideoCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
-import { IncomingCallStatusBar } from './IncomingCallStatusBar';
+
+// Simple error boundary for call components
+interface CallErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error) => void;
+}
+
+interface CallErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class CallErrorBoundary extends Component<CallErrorBoundaryProps, CallErrorBoundaryState> {
+  constructor(props: CallErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): CallErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[CallErrorBoundary] Error caught:', error, errorInfo);
+    this.props.onError?.(error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          background: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          padding: 20,
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📞</div>
+          <div style={{ fontSize: 18, marginBottom: 8 }}>Call Error</div>
+          <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 20, textAlign: 'center' }}>
+            Something went wrong with the call.
+          </div>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            style={{
+              padding: '12px 24px',
+              background: '#22c55e',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface ActiveCall {
   id: string;
@@ -83,6 +153,56 @@ export function CallProvider({ children }: CallProviderProps) {
     });
 
     return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  // Listen for service worker messages (push notification clicks)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const handleServiceWorkerMessage = async (event: MessageEvent) => {
+      console.log('[CallProvider] Service worker message received:', event.data);
+      
+      if (event.data?.type === 'ANSWER_CALL') {
+        const { callId, callType, callerName, roomUrl } = event.data;
+        console.log('[CallProvider] Answering call from push notification:', callId);
+        
+        // Fetch the full call record from DB
+        const { data: call } = await supabase
+          .from('active_calls')
+          .select('*')
+          .eq('call_id', callId)
+          .single();
+        
+        if (call && call.status === 'ringing') {
+          // Auto-answer the call
+          setAnsweringCall({
+            ...call,
+            meeting_url: roomUrl || call.meeting_url,
+            call_type: callType || call.call_type,
+            caller_name: callerName || call.caller_name,
+          });
+          setIsCallInterfaceOpen(true);
+          setIncomingCall(null);
+        }
+      } else if (event.data?.type === 'REJECT_CALL') {
+        const { callId } = event.data;
+        console.log('[CallProvider] Rejecting call from push notification:', callId);
+        
+        // Update call status to rejected
+        await supabase
+          .from('active_calls')
+          .update({ status: 'rejected' })
+          .eq('call_id', callId);
+        
+        setIncomingCall(null);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+    };
   }, [supabase]);
 
   // Listen for incoming calls
@@ -268,13 +388,18 @@ export function CallProvider({ children }: CallProviderProps) {
     };
   }, [currentUserId, supabase]);
 
-  // Start voice call
+  // Start voice call (Daily.co audio-only)
   const startVoiceCall = useCallback((userId: string, userName?: string) => {
+    if (!currentUserId) {
+      console.error('[CallProvider] Cannot start call - no current user');
+      return;
+    }
+    // VoiceCallInterface will create the Daily.co room and active_calls record
     setOutgoingCall({ userId, userName, callType: 'voice' });
     setIsCallInterfaceOpen(true);
-  }, []);
+  }, [currentUserId]);
 
-  // Start video call  
+  // Start video call (Daily.co-based)
   const startVideoCall = useCallback((userId: string, userName?: string) => {
     setOutgoingCall({ userId, userName, callType: 'video' });
     setIsCallInterfaceOpen(true);
@@ -395,9 +520,6 @@ export function CallProvider({ children }: CallProviderProps) {
   const isCallActive = isCallInterfaceOpen || !!incomingCall;
   const isInActiveCall = !!(outgoingCall || answeringCall);
 
-  // Floating indicator for incoming call when user navigates away
-  const showFloatingIndicator = !!incomingCall && !answeringCall;
-
   return (
     <CallContext.Provider value={{ startVoiceCall, startVideoCall, incomingCall, isCallActive, isInActiveCall, returnToCall }}>
       {children}
@@ -443,71 +565,7 @@ export function CallProvider({ children }: CallProviderProps) {
         </div>
       )}
 
-      {/* Floating call indicator - shows when there's incoming call and user is elsewhere */}
-      {showFloatingIndicator && (
-        <div
-          onClick={answerIncomingCall}
-          style={{
-            position: 'fixed',
-            bottom: 100,
-            right: 20,
-            zIndex: 9998,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 20px',
-            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-            borderRadius: 50,
-            boxShadow: '0 8px 32px rgba(34, 197, 94, 0.4)',
-            cursor: 'pointer',
-            animation: 'pulse-call 1.5s ease-in-out infinite',
-          }}
-        >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-            </svg>
-          </div>
-          <div style={{ color: 'white' }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Incoming Call</div>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>{incomingCall?.caller_name || 'Unknown'}</div>
-          </div>
-          <div
-            style={{
-              marginLeft: 8,
-              padding: '6px 12px',
-              background: 'white',
-              color: '#16a34a',
-              borderRadius: 20,
-              fontWeight: 600,
-              fontSize: 12,
-            }}
-          >
-            Answer
-          </div>
-        </div>
-      )}
-
-      {/* Status bar notification for incoming calls */}
-      <IncomingCallStatusBar
-        isVisible={!!incomingCall && !answeringCall}
-        callerName={incomingCall?.caller_name || 'Unknown Caller'}
-        appName="EduDash Pro"
-        onAnswer={answerIncomingCall}
-        onReject={rejectIncomingCall}
-      />
-
-      {/* Incoming call overlay */}
+      {/* Incoming call overlay - full screen for mobile-first UX */}
       <IncomingCallOverlay
         isVisible={!!incomingCall && !answeringCall}
         callerName={incomingCall?.caller_name}
@@ -517,51 +575,59 @@ export function CallProvider({ children }: CallProviderProps) {
         isConnecting={isConnecting}
       />
 
-      {/* Voice call interface for outgoing calls */}
-      {outgoingCall && outgoingCall.callType === 'voice' && (
-        <VoiceCallInterface
-          isOpen={isCallInterfaceOpen && !answeringCall}
-          onClose={handleCallClose}
-          roomName={`call-${Date.now()}`}
-          userName={outgoingCall.userName}
-          isOwner={true}
-          calleeId={outgoingCall.userId}
-        />
-      )}
+      {/* Call interfaces wrapped in error boundary */}
+      <CallErrorBoundary onError={(err) => {
+        console.error('[CallProvider] Call interface error:', err);
+        handleCallClose();
+      }}>
+        {/* Voice call interface for outgoing calls (Daily.co audio-only) */}
+        {outgoingCall && outgoingCall.callType === 'voice' && (
+          <VoiceCallInterface
+            isOpen={isCallInterfaceOpen && !answeringCall}
+            onClose={handleCallClose}
+            roomName={`voice-${Date.now()}`}
+            userName={outgoingCall.userName}
+            isOwner={true}
+            calleeId={outgoingCall.userId}
+          />
+        )}
 
-      {/* Video call interface for outgoing calls */}
-      {outgoingCall && outgoingCall.callType === 'video' && (
-        <VideoCallInterface
-          isOpen={isCallInterfaceOpen && !answeringCall}
-          onClose={handleCallClose}
-          roomName={`call-${Date.now()}`}
-          userName={outgoingCall.userName}
-          isOwner={true}
-          calleeId={outgoingCall.userId}
-        />
-      )}
+        {/* Video call interface for outgoing calls */}
+        {outgoingCall && outgoingCall.callType === 'video' && (
+          <VideoCallInterface
+            isOpen={isCallInterfaceOpen && !answeringCall}
+            onClose={handleCallClose}
+            roomName={`call-${Date.now()}`}
+            userName={outgoingCall.userName}
+            isOwner={true}
+            calleeId={outgoingCall.userId}
+          />
+        )}
 
-      {/* Voice call interface for answering calls */}
-      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'voice' && (
-        <VoiceCallInterface
-          isOpen={isCallInterfaceOpen}
-          onClose={handleCallClose}
-          roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
-          userName={answeringCall.caller_name}
-          isOwner={false}
-        />
-      )}
+        {/* Voice call interface for answering calls (Daily.co audio-only) */}
+        {answeringCall && answeringCall.call_type === 'voice' && answeringCall.meeting_url && (
+          <VoiceCallInterface
+            isOpen={isCallInterfaceOpen}
+            onClose={handleCallClose}
+            roomName={answeringCall.meeting_url.split('/').pop() || `voice-${answeringCall.call_id}`}
+            userName={answeringCall.caller_name}
+            isOwner={false}
+            callId={answeringCall.call_id}
+          />
+        )}
 
-      {/* Video call interface for answering calls */}
-      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
-        <VideoCallInterface
-          isOpen={isCallInterfaceOpen}
-          onClose={handleCallClose}
-          roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
-          userName={answeringCall.caller_name}
-          isOwner={false}
-        />
-      )}
+        {/* Video call interface for answering calls */}
+        {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
+          <VideoCallInterface
+            isOpen={isCallInterfaceOpen}
+            onClose={handleCallClose}
+            roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
+            userName={answeringCall.caller_name}
+            isOwner={false}
+            callId={answeringCall.call_id}
+          />
+        )}
+      </CallErrorBoundary>
 
       {/* Animation styles */}
       <style jsx global>{`
