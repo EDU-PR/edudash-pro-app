@@ -30,6 +30,8 @@ interface SimpleCallInterfaceProps {
   roomName?: string;
   userName?: string;
   isOwner?: boolean;
+  calleeId?: string; // User ID of person being called
+  callType?: 'voice' | 'video'; // Type of call
 }
 
 export const SimpleCallInterface = ({
@@ -38,6 +40,8 @@ export const SimpleCallInterface = ({
   roomName,
   userName,
   isOwner = false,
+  calleeId,
+  callType = 'voice',
 }: SimpleCallInterfaceProps) => {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -51,7 +55,18 @@ export const SimpleCallInterface = ({
   const callFrameRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<DailyCall | null>(null);
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const callIdRef = useRef<string | null>(null);
   const supabase = createClient();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Get current user ID
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
 
   // Play ringback tone when connecting (for callers)
   useEffect(() => {
@@ -179,6 +194,74 @@ export const SimpleCallInterface = ({
         if (isCleanedUp) {
           console.log('[SimpleCall] Component unmounted before frame creation, aborting');
           return;
+        }
+
+        // If we're the owner (caller), create call record in database
+        if (isOwner && calleeId && currentUserId && !callIdRef.current) {
+          const callId = crypto.randomUUID();
+          callIdRef.current = callId;
+
+          // Get caller's name
+          const { data: callerProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', currentUserId)
+            .single();
+          
+          const callerName = callerProfile 
+            ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+            : 'Someone';
+
+          // Create call record
+          console.log('[SimpleCall] Creating call record:', { callId, calleeId, callType });
+          await supabase.from('active_calls').insert({
+            call_id: callId,
+            caller_id: currentUserId,
+            callee_id: calleeId,
+            call_type: callType,
+            status: 'ringing',
+            caller_name: callerName,
+            meeting_url: roomUrl,
+          });
+
+          // Send offer signal
+          await supabase.from('call_signals').insert({
+            call_id: callId,
+            from_user_id: currentUserId,
+            to_user_id: calleeId,
+            signal_type: 'offer',
+            payload: {
+              meeting_url: roomUrl,
+              call_type: callType,
+              caller_name: callerName,
+            },
+          });
+
+          // Send push notification
+          try {
+            await fetch('/api/notifications/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: calleeId,
+                title: `Incoming ${callType} call`,
+                body: `${callerName} is calling...`,
+                tag: `call-${callId}`,
+                type: 'call',
+                requireInteraction: true,
+                data: {
+                  url: '/dashboard',
+                  callId,
+                  callType,
+                  callerId: currentUserId,
+                  callerName,
+                  roomUrl,
+                },
+              }),
+            });
+          } catch (notifErr) {
+            console.warn('[SimpleCall] Failed to send push notification:', notifErr);
+          }
         }
 
         // Create Daily call object

@@ -524,6 +524,8 @@ export function CallProvider({ children }: CallProviderProps) {
           roomName={`call-${Date.now()}`}
           userName={outgoingCall.userName}
           isOwner={true}
+          calleeId={outgoingCall.userId}
+          callType={outgoingCall.callType}
         />
       )}
 
