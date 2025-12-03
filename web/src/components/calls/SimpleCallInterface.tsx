@@ -51,22 +51,57 @@ export const SimpleCallInterface = ({
   const [isMinimized, setIsMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [participantCount, setParticipantCount] = useState(0);
+  const [callDuration, setCallDuration] = useState(0);
+  const [isWaitingForOther, setIsWaitingForOther] = useState(false);
 
   const callFrameRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<DailyCall | null>(null);
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const callIdRef = useRef<string | null>(null);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Get current user ID
+  // Get current user ID IMMEDIATELY on mount
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
+      if (user) {
+        setCurrentUserId(user.id);
+        console.log('[SimpleCall] Got current user ID:', user.id);
+      }
     };
     getUser();
   }, [supabase]);
+
+  // Call timer - counts up when connected
+  useEffect(() => {
+    if (callState === 'connected' && participantCount > 1) {
+      // Start timer when actually connected with someone
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      // Clear timer
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+      }
+    };
+  }, [callState, participantCount]);
+
+  // Format duration as mm:ss
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Play ringback tone when connecting (for callers)
   useEffect(() => {
@@ -107,25 +142,29 @@ export const SimpleCallInterface = ({
       try {
         setCallState('connecting');
         setError(null);
+        setCallDuration(0);
+        setIsWaitingForOther(true);
 
-        // Wait for ref to be ready with retry logic
-        let retries = 0;
-        const maxRetries = 10;
-        while (!callFrameRef.current && retries < maxRetries && !isCleanedUp) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          retries++;
-          console.log(`[SimpleCall] Waiting for ref... attempt ${retries}/${maxRetries}`);
+        // Get user ID directly (don't rely on state which may not be ready)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('Not authenticated. Please sign in.');
         }
+        const userId = user.id;
+        console.log('[SimpleCall] Authenticated user:', userId);
 
         if (isCleanedUp) {
           console.log('[SimpleCall] Component unmounted during initialization, aborting');
           return;
         }
 
-        // Double-check ref is ready
+        // The ref div is always rendered now (just hidden with CSS)
+        // Give a small delay for React to paint the DOM
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         if (!callFrameRef.current) {
-          console.error('[SimpleCall] Call frame ref still not ready after retries');
-          throw new Error('Call interface failed to load. Please close and try again.');
+          console.error('[SimpleCall] Call frame ref not available');
+          throw new Error('Call interface failed to initialize. Please try again.');
         }
 
         // Destroy any existing Daily instance first (prevent duplicates)
@@ -137,22 +176,22 @@ export const SimpleCallInterface = ({
 
         console.log('[SimpleCall] Starting call initialization...', { roomName, userName, isOwner });
 
-        // For owners (callers), create the room first
+        // For owners (callers), create the room first via Daily.co API
         // For non-owners (recipients), just get a token for existing room
         let roomUrl: string;
         
         if (isOwner) {
-          // Create a new room via Daily API
-          console.log('[SimpleCall] Owner creating new room...');
+          // Create a P2P room via Daily API (no database record needed)
+          console.log('[SimpleCall] Owner creating new P2P room...');
           const roomResponse = await fetch('/api/daily/rooms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: `P2P Call - ${userName}`,
-              preschoolId: 'temp', // Will be filled by API from user profile
               isPrivate: true,
               expiryMinutes: 60,
-              maxParticipants: 2, // P2P call
+              maxParticipants: 2,
+              isP2P: true, // Flag to skip video_calls table insertion
             }),
           });
 
@@ -164,19 +203,97 @@ export const SimpleCallInterface = ({
 
           const { room } = await roomResponse.json();
           roomUrl = room.url;
-          console.log('[SimpleCall] Room created:', roomUrl);
+          console.log('[SimpleCall] P2P room created:', roomUrl);
+
+          // Create call record in database for signaling
+          if (calleeId && !callIdRef.current) {
+            const callId = crypto.randomUUID();
+            callIdRef.current = callId;
+
+            // Get caller's name
+            const { data: callerProfile } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', userId)
+              .single();
+            
+            const callerName = callerProfile 
+              ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+              : 'Someone';
+
+            // Create call record
+            console.log('[SimpleCall] Creating call record:', { callId, calleeId, callType, userId });
+            const { error: insertError } = await supabase.from('active_calls').insert({
+              call_id: callId,
+              caller_id: userId,
+              callee_id: calleeId,
+              call_type: callType,
+              status: 'ringing',
+              caller_name: callerName,
+              meeting_url: roomUrl,
+            });
+
+            if (insertError) {
+              console.error('[SimpleCall] Failed to create call record:', insertError);
+            } else {
+              console.log('[SimpleCall] Call record created successfully');
+            }
+
+            // Send offer signal
+            await supabase.from('call_signals').insert({
+              call_id: callId,
+              from_user_id: userId,
+              to_user_id: calleeId,
+              signal_type: 'offer',
+              payload: {
+                meeting_url: roomUrl,
+                call_type: callType,
+                caller_name: callerName,
+              },
+            });
+
+            // Send push notification
+            try {
+              await fetch('/api/notifications/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: calleeId,
+                  title: `Incoming ${callType} call`,
+                  body: `${callerName} is calling...`,
+                  tag: `call-${callId}`,
+                  type: 'call',
+                  requireInteraction: true,
+                  data: {
+                    url: '/dashboard',
+                    callId,
+                    callType,
+                    callerId: userId,
+                    callerName,
+                    roomUrl,
+                  },
+                }),
+              });
+              console.log('[SimpleCall] Push notification sent');
+            } catch (notifErr) {
+              console.warn('[SimpleCall] Failed to send push notification:', notifErr);
+            }
+          }
         } else {
           // Just build the URL for existing room
           roomUrl = `https://edudashpro.daily.co/${roomName}`;
           console.log('[SimpleCall] Joining existing room:', roomUrl);
         }
 
+        // Extract room name from URL for token request
+        const actualRoomName = roomUrl.split('/').pop() || roomName;
+
         // Get meeting token from API
         const response = await fetch('/api/daily/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            roomName,
+            roomName: actualRoomName,
             userName,
             isOwner,
           }),
@@ -194,74 +311,6 @@ export const SimpleCallInterface = ({
         if (isCleanedUp) {
           console.log('[SimpleCall] Component unmounted before frame creation, aborting');
           return;
-        }
-
-        // If we're the owner (caller), create call record in database
-        if (isOwner && calleeId && currentUserId && !callIdRef.current) {
-          const callId = crypto.randomUUID();
-          callIdRef.current = callId;
-
-          // Get caller's name
-          const { data: callerProfile } = await supabase
-            .from('profiles')
-            .select('first_name, last_name')
-            .eq('id', currentUserId)
-            .single();
-          
-          const callerName = callerProfile 
-            ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
-            : 'Someone';
-
-          // Create call record
-          console.log('[SimpleCall] Creating call record:', { callId, calleeId, callType });
-          await supabase.from('active_calls').insert({
-            call_id: callId,
-            caller_id: currentUserId,
-            callee_id: calleeId,
-            call_type: callType,
-            status: 'ringing',
-            caller_name: callerName,
-            meeting_url: roomUrl,
-          });
-
-          // Send offer signal
-          await supabase.from('call_signals').insert({
-            call_id: callId,
-            from_user_id: currentUserId,
-            to_user_id: calleeId,
-            signal_type: 'offer',
-            payload: {
-              meeting_url: roomUrl,
-              call_type: callType,
-              caller_name: callerName,
-            },
-          });
-
-          // Send push notification
-          try {
-            await fetch('/api/notifications/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userId: calleeId,
-                title: `Incoming ${callType} call`,
-                body: `${callerName} is calling...`,
-                tag: `call-${callId}`,
-                type: 'call',
-                requireInteraction: true,
-                data: {
-                  url: '/dashboard',
-                  callId,
-                  callType,
-                  callerId: currentUserId,
-                  callerName,
-                  roomUrl,
-                },
-              }),
-            });
-          } catch (notifErr) {
-            console.warn('[SimpleCall] Failed to send push notification:', notifErr);
-          }
         }
 
         // Create Daily call object
@@ -411,18 +460,20 @@ export const SimpleCallInterface = ({
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
-                callState === 'connected' ? 'bg-green-500 animate-pulse' : 
+                callState === 'connected' && participantCount > 1 ? 'bg-green-500 animate-pulse' : 
+                callState === 'connected' && participantCount <= 1 ? 'bg-blue-500 animate-pulse' :
                 callState === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
                 'bg-red-500'
               }`} />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {callState === 'connected' ? 'Connected' :
+                {callState === 'connected' && participantCount > 1 ? `Connected • ${formatDuration(callDuration)}` :
+                 callState === 'connected' && participantCount <= 1 ? 'Waiting for other person...' :
                  callState === 'connecting' ? 'Connecting...' :
                  callState === 'failed' ? 'Call Failed' :
                  'Call Ended'}
               </span>
             </div>
-            {participantCount > 0 && (
+            {participantCount > 1 && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {participantCount} participant{participantCount !== 1 ? 's' : ''}
               </span>
@@ -453,7 +504,13 @@ export const SimpleCallInterface = ({
 
         {/* Call Frame or Error */}
         <div className="relative w-full h-[calc(100%-140px)] bg-gray-900">
-          {error ? (
+          {/* Always render the ref div - hide with CSS when not needed */}
+          <div 
+            ref={callFrameRef} 
+            className={`w-full h-full ${error || callState === 'connecting' ? 'hidden' : ''}`} 
+          />
+          
+          {error && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center space-y-4 p-6 max-w-md">
                 <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
@@ -467,15 +524,20 @@ export const SimpleCallInterface = ({
                 </button>
               </div>
             </div>
-          ) : callState === 'connecting' ? (
+          )}
+          
+          {callState === 'connecting' && !error && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center space-y-4">
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
-                <p className="text-white text-lg">Connecting to call...</p>
+                <p className="text-white text-lg">
+                  {isOwner ? 'Calling...' : 'Connecting to call...'}
+                </p>
+                {isOwner && userName && (
+                  <p className="text-gray-400 text-sm">Calling {userName}</p>
+                )}
               </div>
             </div>
-          ) : (
-            <div ref={callFrameRef} className="w-full h-full" />
           )}
         </div>
 

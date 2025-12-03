@@ -7,13 +7,14 @@ const DAILY_API_URL = 'https://api.daily.co/v1';
 interface CreateRoomRequest {
   name: string;
   classId?: string;
-  preschoolId: string;
+  preschoolId?: string; // Optional for P2P calls
   isPrivate?: boolean;
   expiryMinutes?: number;
   maxParticipants?: number;
   enableRecording?: boolean;
   enableScreenShare?: boolean;
   enableChat?: boolean;
+  isP2P?: boolean; // Flag for peer-to-peer calls
 }
 
 // Tier-based time limits (in minutes) - enforced server-side
@@ -86,18 +87,22 @@ export async function POST(request: NextRequest) {
       enableRecording = false,
       enableScreenShare = true,
       enableChat = true,
+      isP2P = false,
     } = body;
 
     // Get the school's subscription tier to enforce time limits
+    // For P2P calls without preschoolId, use default tier
     let subscriptionTier = 'starter';
-    const { data: school } = await supabase
-      .from('preschools')
-      .select('subscription_tier')
-      .eq('id', preschoolId)
-      .single();
-    
-    if (school?.subscription_tier) {
-      subscriptionTier = String(school.subscription_tier).toLowerCase();
+    if (preschoolId) {
+      const { data: school } = await supabase
+        .from('preschools')
+        .select('subscription_tier')
+        .eq('id', preschoolId)
+        .single();
+      
+      if (school?.subscription_tier) {
+        subscriptionTier = String(school.subscription_tier).toLowerCase();
+      }
     }
 
     // Enforce tier-based time limits (server-side validation)
@@ -107,7 +112,9 @@ export async function POST(request: NextRequest) {
     console.log(`[Daily Rooms] Tier: ${subscriptionTier}, Requested: ${requestedMinutes}min, Allowed: ${maxAllowed}min, Using: ${expiryMinutes}min`);
 
     // Generate unique room name
-    const roomName = `edudash-${preschoolId.slice(0, 8)}-${Date.now()}`;
+    const roomName = isP2P 
+      ? `edudash-p2p-${Date.now()}`
+      : `edudash-${preschoolId?.slice(0, 8) || 'unknown'}-${Date.now()}`;
 
     // Create room via Daily.co API
     const dailyResponse = await fetch(`${DAILY_API_URL}/rooms`, {
@@ -168,28 +175,33 @@ export async function POST(request: NextRequest) {
 
     const room = await dailyResponse.json();
 
-    // Store room in database - set status to 'live' since teacher is starting immediately
-    const { data: lessonRoom, error: dbError } = await supabase
-      .from('video_calls')
-      .insert({
-        title: name,
-        class_id: classId || null,
-        preschool_id: preschoolId,
-        teacher_id: user.id,
-        meeting_id: room.name,
-        meeting_url: room.url,
-        status: 'live', // Teacher is starting now, so it's live
-        scheduled_start: new Date().toISOString(),
-        scheduled_end: new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString(),
-        max_participants: maxParticipants,
-        recording_enabled: enableRecording,
-      })
-      .select()
-      .single();
+    // Store room in database ONLY for class lessons (not P2P calls)
+    let lessonRoom = null;
+    if (!isP2P && preschoolId) {
+      const { data, error: dbError } = await supabase
+        .from('video_calls')
+        .insert({
+          title: name,
+          class_id: classId || null,
+          preschool_id: preschoolId,
+          teacher_id: user.id,
+          meeting_id: room.name,
+          meeting_url: room.url,
+          status: 'live', // Teacher is starting now, so it's live
+          scheduled_start: new Date().toISOString(),
+          scheduled_end: new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString(),
+          max_participants: maxParticipants,
+          recording_enabled: enableRecording,
+        })
+        .select()
+        .single();
 
-    if (dbError) {
-      console.error('Failed to store room in database:', dbError);
-      // Still return the room URL even if DB fails
+      if (dbError) {
+        console.error('Failed to store room in database:', dbError);
+        // Still return the room URL even if DB fails
+      } else {
+        lessonRoom = data;
+      }
     }
 
     // Send push notifications to participants
