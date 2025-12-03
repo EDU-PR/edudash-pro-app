@@ -1264,22 +1264,15 @@ The diagrams are rendered using Mermaid syntax and will appear directly in the c
         try {
           const { textbook_id, grade, subject, topic, diagram_type, detail_level = 'detailed' } = args;
           
-          // Optionally fetch textbook metadata
+          // Optionally fetch textbook metadata using secure RPC
           let textbookContext = '';
-          if (textbook_id) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabase = createClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.SUPABASE_SERVICE_ROLE_KEY!
-            );
+          if (textbook_id && context?.supabase) {
+            // Use secure RPC function instead of SERVICE_ROLE_KEY
+            const { data: result } = await context.supabase
+              .rpc('get_textbook_metadata', { p_textbook_id: textbook_id });
             
-            const { data: textbook } = await supabase
-              .from('textbooks')
-              .select('*')
-              .eq('id', textbook_id)
-              .single();
-            
-            if (textbook) {
+            if (result?.success && result.data) {
+              const textbook = result.data;
               textbookContext = `\nTextbook: ${textbook.title} (Grade ${textbook.grade} ${textbook.subject})`;
             }
           }
@@ -1344,19 +1337,12 @@ Do not include \`\`\`mermaid code fences or explanations.`;
             .replace(/\n```$/, '')
             .trim();
 
-          // Log to AI events for telemetry
-          if (context?.userId) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabase = createClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.SUPABASE_SERVICE_ROLE_KEY!
-            );
-            
-            await supabase.from('ai_events').insert({
-              user_id: context.userId,
-              event_type: 'tool_use',
-              tool_name: 'generate_textbook_diagram',
-              metadata: {
+          // Log to AI events for telemetry using secure RPC
+          if (context?.supabase) {
+            // Use secure RPC function instead of SERVICE_ROLE_KEY
+            await context.supabase.rpc('log_ai_tool_event', {
+              p_tool_name: 'generate_textbook_diagram',
+              p_metadata: {
                 textbook_id,
                 grade,
                 subject,

@@ -1,9 +1,15 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
 
-const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY') || 'BLXiYIECWZGIlbDkQKKPhl3t86tGQRQDAHnNq5JHMg9btdbjiVgt3rLDeGhz5LveRarHS-9vY84aFkQrfApmNpE';
-const VAPID_PRIVATE_KEY = 'qdFtH6ruCn2b__D7mT_vIAJKhK8i9mhYXVeISRKzGpM';
-const VAPID_SUBJECT = 'mailto:noreply@edudashpro.org.za';
+// CRITICAL FIX: Load keys from environment secrets (never hardcode!)
+const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY');
+const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY');
+const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || 'mailto:noreply@edudashpro.org.za';
+
+// Validate required secrets are present
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  throw new Error('CRITICAL: VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set in Supabase secrets');
+}
 
 interface PushPayload {
   title: string;
