@@ -1,3 +1,7 @@
+// NEW: Simple, clean call interface (RECOMMENDED)
+export { SimpleCallInterface, useSimpleCallInterface } from './SimpleCallInterface';
+
+// Legacy implementations (kept for backwards compatibility)
 export { CallInterface, useCallInterface } from './CallInterface';
 export { IncomingCallOverlay } from './IncomingCallOverlay';
 export { CallProvider, useCall } from './CallProvider';
