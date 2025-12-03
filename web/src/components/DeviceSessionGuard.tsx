@@ -168,7 +168,7 @@ export function DeviceSessionGuard() {
             marginBottom: 12,
           }}
         >
-          Logged in from another device
+          Using EduDash Pro on this device?
         </h2>
 
         {/* Description */}
@@ -185,8 +185,8 @@ export function DeviceSessionGuard() {
         >
           <AlertCircle style={{ width: 20, height: 20, color: '#D97706', flexShrink: 0 }} />
           <p style={{ fontSize: 14, color: '#92400E', margin: 0 }}>
-            Your previous session on <strong>{otherDeviceInfo.platform}</strong> using{' '}
-            <strong>{otherDeviceInfo.browser}</strong> has been logged out.
+            You were previously logged in on <strong>{otherDeviceInfo.platform}</strong> using{' '}
+            <strong>{otherDeviceInfo.browser}</strong>. That device has been logged out.
           </p>
         </div>
 
@@ -209,7 +209,7 @@ export function DeviceSessionGuard() {
             marginBottom: 24,
           }}
         >
-          EduDash Pro can only be used on one device at a time.
+          You can only use EduDash Pro on one device at a time for security.
         </p>
 
         {/* Continue Button */}
