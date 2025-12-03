@@ -1,7 +1,7 @@
 /* EduDash Pro Service Worker - PWA Support */
 
 // NOTE: SW_VERSION is bumped automatically by scripts/bump-sw-version.mjs on each build
-const SW_VERSION = 'v20251203185854';
+const SW_VERSION = 'v20251203200406';
 const OFFLINE_URL = '/offline.html';
 const STATIC_CACHE = `edudash-static-${SW_VERSION}`;
 const RUNTIME_CACHE = `edudash-runtime-${SW_VERSION}`;
@@ -247,31 +247,91 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
     const clickedNotification = event.notification;
     const action = event.action; // 'join', 'dismiss', 'view', 'close', or empty for main body click
-    const urlToOpen = clickedNotification.data.url || '/dashboard';
-
-    console.log(`[SW] Notification clicked. Action: ${action}, URL: ${urlToOpen}`);
+    const notificationData = clickedNotification.data || {};
+    const isCall = notificationData.type === 'call' || notificationData.callType;
     
-    // Close the notification as soon as it's clicked
+    console.log(`[SW] Notification clicked. Action: ${action}, Data:`, JSON.stringify(notificationData));
+    
+    // Close the notification
     clickedNotification.close();
+    
+    // Handle dismiss/reject actions - don't open app
+    if (action === 'dismiss' || action === 'close') {
+        console.log('[SW] User dismissed notification');
+        // Optionally send a message to reject the call
+        if (isCall && notificationData.callId) {
+            // Post message to all clients to reject the call
+            self.clients.matchAll({ type: 'window' }).then((clientList) => {
+                clientList.forEach((client) => {
+                    client.postMessage({
+                        type: 'REJECT_CALL',
+                        callId: notificationData.callId,
+                    });
+                });
+            });
+        }
+        return;
+    }
+
+    // Build URL based on notification type
+    let urlToOpen = notificationData.url || '/dashboard';
+    
+    if (isCall) {
+        // For calls, include callId in URL params so the app can answer
+        const callParams = new URLSearchParams({
+            action: action === 'join' ? 'answer' : 'view',
+            callId: notificationData.callId || '',
+            callType: notificationData.callType || 'voice',
+            callerName: notificationData.callerName || '',
+            roomUrl: notificationData.roomUrl || '',
+        }).toString();
+        urlToOpen = `/dashboard?${callParams}`;
+    }
+
+    console.log(`[SW] Opening URL: ${urlToOpen}`);
 
     // Prevent the service worker from terminating until we open/focus a window
     event.waitUntil(
         // Match all existing window clients (tabs/windows of your PWA)
-        clients.matchAll({ type: 'window' }).then((clientList) => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            console.log(`[SW] Found ${clientList.length} open clients`);
+            
+            // For calls, try to find any EduDash tab and focus it, then post message
+            if (isCall && clientList.length > 0) {
+                // Find a client that's on edudashpro
+                for (const client of clientList) {
+                    if (client.url.includes('edudashpro') || client.url.includes('localhost')) {
+                        console.log('[SW] Found existing EduDash client, focusing and posting message');
+                        // Post message to answer the call
+                        client.postMessage({
+                            type: 'ANSWER_CALL',
+                            callId: notificationData.callId,
+                            callType: notificationData.callType,
+                            callerName: notificationData.callerName,
+                            roomUrl: notificationData.roomUrl,
+                        });
+                        return client.focus();
+                    }
+                }
+            }
+            
             // Check if any client is already open at the target URL
             for (const client of clientList) {
-                // Focus an existing tab if possible
-                if (client.url.includes(urlToOpen) && 'focus' in client) {
+                if ('focus' in client) {
+                    // Post message about the notification click
+                    client.postMessage({
+                        type: 'NOTIFICATION_CLICK',
+                        url: urlToOpen,
+                        notificationType: notificationData.type,
+                        data: notificationData,
+                    });
                     return client.focus();
                 }
             }
-            // If no suitable tab is open, or it's a new action requiring a new context, open a new window/tab
-            if (clients.openWindow) {
-                if (action === 'join') {
-                    // Append a query param to the URL so the app knows how to handle the deep link
-                    return clients.openWindow(`${urlToOpen}?action=join`);
-                }
-                return clients.openWindow(urlToOpen);
+            
+            // If no suitable tab is open, open a new window/tab
+            if (self.clients.openWindow) {
+                return self.clients.openWindow(urlToOpen);
             }
         })
     );

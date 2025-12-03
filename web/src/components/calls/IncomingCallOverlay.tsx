@@ -2,7 +2,9 @@
 
 import { Phone, PhoneOff, Video, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import RingtoneService from '@/lib/services/ringtoneService';
+
+// Fallback ringtone URL (simple web audio beep) if RingtoneService fails
+const FALLBACK_RINGTONE = '/sounds/ringtone.mp3';
 
 interface IncomingCallOverlayProps {
   callerName?: string;
@@ -21,40 +23,52 @@ export function IncomingCallOverlay({
   isVisible,
   isConnecting = false,
 }: IncomingCallOverlayProps) {
-  const [ringCount, setRingCount] = useState(0);
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [hasUserInteraction, setHasUserInteraction] = useState(false);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const hasUserInteractionRef = useRef(false);
 
-  // Try to play ringtone using RingtoneService (user's custom preferences)
+  // Try to play ringtone - with fallback for errors
   const playRingtone = useCallback(async () => {
     try {
-      // Use RingtoneService to play user's selected incoming ringtone
+      // Dynamically import RingtoneService to avoid SSR issues
+      const { default: RingtoneService } = await import('@/lib/services/ringtoneService');
       const audio = await RingtoneService.playRingtone('incoming', { loop: true });
-      ringtoneRef.current = audio;
-      setAudioInitialized(true);
-      console.log('[IncomingCall] Custom ringtone playing');
+      if (audio) {
+        ringtoneRef.current = audio;
+        setAudioInitialized(true);
+        console.log('[IncomingCall] Custom ringtone playing');
+      }
     } catch (err) {
-      console.warn('[IncomingCall] Ringtone autoplay blocked, will play on interaction:', err);
-      // Will try again when user interacts with the page
+      console.warn('[IncomingCall] RingtoneService failed, trying fallback:', err);
+      // Fallback: Play simple audio file
+      try {
+        const audio = new Audio(FALLBACK_RINGTONE);
+        audio.loop = true;
+        await audio.play();
+        ringtoneRef.current = audio;
+        setAudioInitialized(true);
+      } catch (fallbackErr) {
+        console.warn('[IncomingCall] Fallback ringtone also failed:', fallbackErr);
+      }
     }
   }, []);
 
-  // Stop ringtone using RingtoneService
+  // Stop ringtone safely
   const stopRingtone = useCallback(() => {
-    if (ringtoneRef.current) {
-      RingtoneService.stopRingtone(ringtoneRef.current);
-      ringtoneRef.current = null;
-    }
-    // Stop any ongoing vibration - only if user has interacted (browser security requirement)
-    // See: https://www.chromestatus.com/feature/5644273861001216
-    if ('vibrate' in navigator && hasUserInteractionRef.current) {
-      try {
-        navigator.vibrate(0);
-      } catch (err) {
-        // Ignore vibration errors
+    try {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+        ringtoneRef.current = null;
       }
+      // Stop any ongoing vibration - only if user has interacted
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator && hasUserInteractionRef.current) {
+        navigator.vibrate(0);
+      }
+    } catch (err) {
+      // Ignore all errors during cleanup
+      console.warn('[IncomingCall] Error stopping ringtone:', err);
     }
   }, []);
 
@@ -79,7 +93,6 @@ export function IncomingCallOverlay({
   // Play ringtone when visible - try immediately, fall back to waiting for interaction
   useEffect(() => {
     if (!isVisible) {
-      setRingCount(0);
       stopRingtone();
       return;
     }
@@ -121,13 +134,13 @@ export function IncomingCallOverlay({
 
   // Handle answer with haptic feedback
   const handleAnswer = useCallback(() => {
-    // Provide haptic feedback on user gesture (this is allowed)
-    if ('vibrate' in navigator) {
-      try {
+    try {
+      // Provide haptic feedback on user gesture (this is allowed)
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate(100);
-      } catch (err) {
-        // Ignore vibration errors
       }
+    } catch (err) {
+      // Ignore vibration errors
     }
     stopRingtone();
     onAnswer();
@@ -135,28 +148,17 @@ export function IncomingCallOverlay({
 
   // Handle reject with haptic feedback
   const handleReject = useCallback(() => {
-    // Provide haptic feedback on user gesture (this is allowed)
-    if ('vibrate' in navigator) {
-      try {
+    try {
+      // Provide haptic feedback on user gesture (this is allowed)
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate(50);
-      } catch (err) {
-        // Ignore vibration errors
       }
+    } catch (err) {
+      // Ignore vibration errors
     }
     stopRingtone();
     onReject();
   }, [onReject, stopRingtone]);
-
-  // Visual pulse effect counter
-  useEffect(() => {
-    if (!isVisible) return;
-    
-    const interval = setInterval(() => {
-      setRingCount((prev) => prev + 1);
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [isVisible]);
 
   if (!isVisible) return null;
 

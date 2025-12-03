@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import DailyIframe, { DailyCall } from '@daily-co/daily-js';
-import RingtoneService from '@/lib/services/ringtoneService';
 import {
   PhoneOff,
   Video,
@@ -32,6 +31,7 @@ interface VideoCallInterfaceProps {
   userName?: string;
   isOwner?: boolean;
   calleeId?: string;
+  callId?: string; // Call ID for tracking (callee gets this from answering call)
   onCallStateChange?: (state: CallState) => void;
 }
 
@@ -42,6 +42,7 @@ export const VideoCallInterface = ({
   userName,
   isOwner = false,
   calleeId,
+  callId,
   onCallStateChange,
 }: VideoCallInterfaceProps) => {
   const [callState, setCallState] = useState<CallState>('idle');
@@ -57,9 +58,17 @@ export const VideoCallInterface = ({
   const callFrameRef = useRef<HTMLDivElement>(null);
   const dailyCallRef = useRef<DailyCall | null>(null);
   const ringbackAudioRef = useRef<HTMLAudioElement | null>(null);
-  const callIdRef = useRef<string | null>(null);
+  const callIdRef = useRef<string | null>(callId || null); // Initialize with prop if provided
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
+
+  // Update callIdRef when prop changes (for callee answering)
+  useEffect(() => {
+    if (callId && !callIdRef.current) {
+      callIdRef.current = callId;
+      console.log('[VideoCall] Call ID set from prop:', callId);
+    }
+  }, [callId]);
 
   // Update parent on state changes
   useEffect(() => {
@@ -92,26 +101,89 @@ export const VideoCallInterface = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Ringback tone for caller
+  // Listen for call status changes (e.g., other party hung up)
   useEffect(() => {
-    if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
-      RingtoneService.playRingtone('outgoing', { loop: true })
-        .then(audio => {
-          ringbackAudioRef.current = audio;
-        })
-        .catch(err => {
+    if (!callIdRef.current || callState === 'ended') return;
+
+    const callId = callIdRef.current;
+    console.log('[VideoCall] Setting up call status listener for:', callId);
+
+    const channel = supabase
+      .channel(`video-call-status-${callId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'active_calls',
+          filter: `call_id=eq.${callId}`,
+        },
+        (payload: { new: { status: string } }) => {
+          const newStatus = payload.new?.status;
+          console.log('[VideoCall] Call status changed to:', newStatus);
+          if (newStatus === 'ended' || newStatus === 'rejected' || newStatus === 'missed') {
+            console.log('[VideoCall] Other party ended the call');
+            // Clean up and close
+            if (dailyCallRef.current) {
+              try {
+                dailyCallRef.current.leave();
+                dailyCallRef.current.destroy();
+              } catch (err) {
+                // Ignore cleanup errors
+              }
+              dailyCallRef.current = null;
+            }
+            setCallState('ended');
+            onClose();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [callState, onClose, supabase]);
+
+  // Ringback tone for caller (dynamic import for better error handling)
+  useEffect(() => {
+    let isMounted = true;
+
+    const playRingback = async () => {
+      if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+        try {
+          const { default: RingtoneService } = await import('@/lib/services/ringtoneService');
+          const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
+          if (isMounted && audio) {
+            ringbackAudioRef.current = audio;
+          }
+        } catch (err) {
           console.warn('[VideoCall] Could not play ringback:', err);
-        });
-    } else if (ringbackAudioRef.current) {
-      RingtoneService.stopRingtone(ringbackAudioRef.current);
-      ringbackAudioRef.current = null;
+        }
+      }
+    };
+
+    const stopRingback = () => {
+      if (ringbackAudioRef.current) {
+        try {
+          ringbackAudioRef.current.pause();
+          ringbackAudioRef.current.currentTime = 0;
+        } catch (err) {
+          // Ignore errors
+        }
+        ringbackAudioRef.current = null;
+      }
+    };
+
+    if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+      playRingback();
+    } else {
+      stopRingback();
     }
 
     return () => {
-      if (ringbackAudioRef.current) {
-        RingtoneService.stopRingtone(ringbackAudioRef.current);
-        ringbackAudioRef.current = null;
-      }
+      isMounted = false;
+      stopRingback();
     };
   }, [callState, isOwner]);
 
@@ -209,23 +281,38 @@ export const VideoCallInterface = ({
               },
             });
 
-            // Send push notification
+            // Send push notification for background/closed app
             try {
-              await fetch('/api/notifications/send', {
+              const pushResponse = await fetch('/api/notifications/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   userId: calleeId,
-                  title: 'Incoming video call',
+                  title: '📹 Incoming Video Call',
                   body: `${callerName} is calling...`,
                   tag: `call-${callId}`,
                   type: 'call',
                   requireInteraction: true,
-                  data: { callId, callType: 'video', callerId: userId, callerName, roomUrl },
+                  url: '/dashboard',
+                  data: { 
+                    callId, 
+                    callType: 'video', 
+                    callerId: userId, 
+                    callerName, 
+                    roomUrl,
+                    type: 'call',
+                  },
                 }),
               });
+              
+              if (pushResponse.ok) {
+                const result = await pushResponse.json();
+                console.log('[VideoCall] Push notification sent:', result);
+              } else {
+                console.warn('[VideoCall] Push notification failed:', await pushResponse.text());
+              }
             } catch (e) {
-              console.warn('[VideoCall] Push notification failed:', e);
+              console.warn('[VideoCall] Push notification error:', e);
             }
 
             setCallState('ringing');
@@ -357,16 +444,33 @@ export const VideoCallInterface = ({
     setIsSpeakerEnabled(!isSpeakerEnabled);
   }, [isSpeakerEnabled]);
 
-  // End call
-  const handleEndCall = useCallback(() => {
+  // End call and update database
+  const handleEndCall = useCallback(async () => {
+    // Update database status to 'ended'
+    if (callIdRef.current) {
+      try {
+        await supabase
+          .from('active_calls')
+          .update({ status: 'ended', ended_at: new Date().toISOString() })
+          .eq('call_id', callIdRef.current);
+        console.log('[VideoCall] Updated call status to ended in database');
+      } catch (err) {
+        console.error('[VideoCall] Failed to update call status:', err);
+      }
+    }
+
     if (dailyCallRef.current) {
-      dailyCallRef.current.leave();
-      dailyCallRef.current.destroy();
+      try {
+        await dailyCallRef.current.leave();
+        dailyCallRef.current.destroy();
+      } catch (err) {
+        console.warn('[VideoCall] Error leaving call:', err);
+      }
       dailyCallRef.current = null;
     }
     setCallState('ended');
     onClose();
-  }, [onClose]);
+  }, [onClose, supabase]);
 
   if (!isOpen) return null;
 
