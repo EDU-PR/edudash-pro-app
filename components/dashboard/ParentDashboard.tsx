@@ -4,12 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
-import AdBanner from '@/components/ui/AdBanner';
+import { AdBanner } from '@/components/ads/AdBanner';
 import { NativeAdCard } from '@/components/ads/NativeAdCard';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import ErrorBanner from '@/components/ui/ErrorBanner';
 import WhatsAppOptInModal from '@/components/whatsapp/WhatsAppOptInModal';
-import OfflineBanner from '@/components/sync/OfflineBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getCurrentLanguage } from '@/lib/i18n';
@@ -24,6 +23,7 @@ import { PendingRegistrationRequests } from './PendingRegistrationRequests';
 import { HomeworkModal } from './HomeworkModal';
 import { useWhatsAppConnection as useRealWhatsAppConnection } from '@/hooks/useWhatsAppConnection';
 import { useParentDashboardData } from '@/hooks/useParentDashboardData';
+import type { ChildCardData } from '@/hooks/useParentDashboardData';
 
 // Extracted components
 import { ChildSwitcher } from './parent/ChildSwitcher';
@@ -34,6 +34,15 @@ import { ParentInsightsCard } from '@/components/parent/ParentInsightsCard';
 import { InteractiveLessonsWidget } from '@/components/parent/InteractiveLessonsWidget';
 import { PendingLinkRequests } from './PendingLinkRequests';
 import { PendingParentLinkRequests } from './PendingParentLinkRequests';
+
+// Phase 1: Modular components
+import { CollapsibleSection } from './parent/CollapsibleSection';
+import { MetricCard } from './parent/MetricCard';
+import { DashboardSection } from './parent/DashboardSection';
+import { SearchBar } from './parent/SearchBar';
+
+// Shared style system
+import { createDashboardStyles, SPACING, RADIUS, FONT_SIZE } from '@/lib/styles/dashboardTheme';
 
 // AI Quota display component
 import { AIQuotaOverview } from '@/components/ui/AIQuotaDisplay';
@@ -86,6 +95,9 @@ export default function ParentDashboard() {
   const [interactiveLessons, setInteractiveLessons] = useState<InteractiveLesson[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(false);
   
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  
   // Custom hook for dashboard data
   const {
     children,
@@ -114,7 +126,7 @@ export default function ParentDashboard() {
   
   // Update urgent metrics with unread messages
   useEffect(() => {
-    setUrgentMetrics(prev => ({ ...prev, unreadMessages: unreadMessageCount }));
+    setUrgentMetrics((prev: typeof urgentMetrics) => ({ ...prev, unreadMessages: unreadMessageCount }));
   }, [unreadMessageCount, setUrgentMetrics]);
   
   // Load proactive insights when active child changes
@@ -264,7 +276,7 @@ case 'homework':
   const cycleToNextChild = () => {
     if (children.length <= 1) return;
     
-    const currentIndex = children.findIndex(child => child.id === activeChildId);
+    const currentIndex: number = children.findIndex((child: typeof children[0]) => child.id === activeChildId);
     const nextIndex = (currentIndex + 1) % children.length;
     const nextChild = children[nextIndex];
     
@@ -279,557 +291,51 @@ case 'homework':
       });
     }
   };
-
+  
+  // Use shared dashboard styles (most styles moved to dashboardTheme)
+  const dashStyles = createDashboardStyles(theme);
+  
+  // All inline styles
   const styles = React.useMemo(() => StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: theme.background,
-    },
-    loadingText: {
-      color: theme.text,
-      marginTop: 12,
-    },
-    section: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: theme.text,
-      marginBottom: 12,
-    },
-    statsRow: {
-      flexDirection: 'row',
-      gap: 12,
-    },
-    statCard: {
-      flex: 1,
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-    },
-    statGradient: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    statValue: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.text,
-      marginTop: 8,
-    },
-    statTitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      marginTop: 4,
-    },
-    statSubtitle: {
-      fontSize: 12,
-      color: theme.textTertiary,
-      marginTop: 2,
-    },
-    quickActionsGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'space-between',
-      gap: 12,
-    },
-    quickActionCard: {
-      width: cardWidth,
-      borderRadius: 12,
-      overflow: 'hidden',
-      shadowColor: theme.shadow || '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.35,
-      shadowRadius: 10,
-      elevation: 10,
-    },
-    disabledCard: {
-      opacity: 0.6,
-      shadowOpacity: 0.05,
-      elevation: 2,
-    },
-    quickActionGradient: {
-      padding: 16,
-      alignItems: 'center',
-      minHeight: 120,
-      justifyContent: 'center',
-      borderRadius: 12,
-    },
-    quickActionTitle: {
-      color: '#FFFFFF',
-      fontWeight: 'bold',
-      fontSize: 14,
-      marginTop: 8,
-      textAlign: 'center',
-    },
-    quickActionDescription: {
-      color: 'rgba(255, 255, 255, 0.8)',
-      fontSize: 12,
-      marginTop: 4,
-      textAlign: 'center',
-    },
-    activityCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-    },
-    activityText: {
-      color: theme.textSecondary,
-      fontSize: 14,
-    },
-    upgradeButton: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 8,
-      marginTop: 12,
-      alignSelf: 'flex-start',
-    },
-    upgradeButtonText: {
-      color: theme.background,
-      fontWeight: 'bold',
-      fontSize: 12,
-    },
-    emptyCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      alignItems: 'center',
-    },
-    emptyTitle: {
-      color: theme.text,
-      fontSize: 16,
-      fontWeight: '700',
-      marginBottom: 6,
-    },
-    emptySubtitle: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      textAlign: 'center',
-    },
-    profileMenuOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.15)',
-      justifyContent: 'flex-start',
-      alignItems: 'flex-end',
-      paddingTop: 80,
-      paddingRight: 16,
-    },
-    profileMenuContainer: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      paddingVertical: 8,
-      minWidth: 200,
-      shadowColor: theme.shadow || '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-      elevation: 8,
-    },
-    profileMenuHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    profileMenuTitle: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: theme.text,
-    },
-    profileRoleChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: theme.warning + '20',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 12,
-    },
-    profileFreeText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: theme.warning,
-    },
-    profileMenuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      gap: 12,
-    },
-    profileMenuItemText: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      flex: 1,
-    },
-    profileMenuDivider: {
-      height: 1,
-      backgroundColor: theme.border,
-      marginVertical: 4,
-    },
-    // Empty State Styles
-    emptyState: {
-      alignItems: 'center',
-      padding: 32,
-      backgroundColor: theme.surface,
-      borderRadius: 16,
-      marginTop: 16,
-    },
-    emptyStateTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.text,
-      marginTop: 16,
-      textAlign: 'center',
-    },
-    emptyStateSubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      marginTop: 8,
-      lineHeight: 20,
-    },
-    emptyStateButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderRadius: 12,
-    },
-    emptyStateButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    // Claim overlay styles
-    claimOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backdropFilter: 'blur(4px)',
-    },
-    claimButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 24,
-      paddingVertical: 16,
-      borderRadius: 12,
-      gap: 8,
-    },
-    claimButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '700',
-    },
-    infoBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      borderRadius: 8,
-      borderWidth: 1,
-      marginBottom: 12,
-    },
-    infoText: {
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    // Principal Dashboard Style Section Headers
-    sectionHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    viewAllButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    viewAllText: {
-      fontSize: 14,
-      color: theme.primary,
-      marginRight: 4,
-    },
-    // Principal Dashboard Style Tool Cards
-    toolsGrid: {
-      gap: 12,
-    },
-    toolCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    toolIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-    },
-    toolContent: {
-      flex: 1,
-    },
-    toolTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 2,
-    },
-    toolSubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-    },
-    // Urgent Cards Styling
-    urgentCardsGrid: {
-      gap: 12,
-    },
-    urgentCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-      borderLeftWidth: 4,
-    },
-    urgentCardPayment: {
-      borderLeftColor: theme.warning,
-    },
-    urgentCardMessage: {
-      borderLeftColor: theme.primary,
-    },
-    urgentCardHomework: {
-      borderLeftColor: theme.accent,
-    },
-    urgentCardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    urgentIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-    },
-    urgentCardContent: {
-      flex: 1,
-    },
-    urgentCardTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 2,
-    },
-    urgentCardAmount: {
-      fontSize: 18,
-      fontWeight: '700',
-      marginBottom: 2,
-    },
-    urgentCardSubtitle: {
-      fontSize: 12,
-      color: theme.textSecondary,
-    },
-    // Daily Summary Styling
-    dailySummaryCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    dailySummaryGrid: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-    },
-    dailySummaryItem: {
-      alignItems: 'center',
-      flex: 1,
-    },
-    dailySummaryIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 8,
-    },
-    dailySummaryLabel: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      marginBottom: 4,
-    },
-    dailySummaryValue: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.text,
-      textAlign: 'center',
-    },
-    // Professional Metric Cards - Principal Dashboard Style
-    metricsGrid: {
-      gap: 12,
-    },
-    metricsRow: {
-      flexDirection: 'row',
-      gap: 12,
-      marginBottom: 12,
-    },
-    metricCard: {
-      flex: 1,
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      borderWidth: 2,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    metricIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-    },
-    metricValue: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.text,
-      marginBottom: 4,
-    },
-    metricLabel: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 4,
-    },
-    metricStatus: {
-      fontSize: 12,
-      fontWeight: '500',
-      textTransform: 'lowercase',
-    },
-    // POP Actions Grid
-    popActionsGrid: {
-      gap: 12,
-    },
-    popActionCard: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderWidth: 2,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-      marginBottom: 12,
-    },
-    popActionIcon: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 16,
-    },
-    popActionContent: {
-      flex: 1,
-    },
-    popActionTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: theme.text,
-      marginBottom: 4,
-    },
-    popActionSubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      lineHeight: 18,
-    },
-    popActionBadge: {
-      marginTop: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
-      alignSelf: 'flex-start',
-    },
-    popActionBadgeText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: 'white',
-    },
-    // Timeline Styles
-    timelineContainer: {
-      paddingLeft: 16,
-    },
-    timelineItem: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      marginBottom: 16,
-    },
-    timelineDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      marginRight: 12,
-      marginTop: 6,
-    },
-    timelineContent: {
-      flex: 1,
-    },
-    timelineEvent: {
-      fontSize: 14,
-      color: theme.text,
-      marginBottom: 2,
-    },
-    timelineTime: {
-      fontSize: 12,
-      color: theme.textSecondary,
-    },
-  }), [theme]);
+    container: dashStyles.container,
+    loadingContainer: dashStyles.loadingContainer,
+    loadingText: dashStyles.loadingText,
+    section: dashStyles.section,
+    sectionTitle: dashStyles.sectionTitle,
+    sectionHeader: dashStyles.sectionHeader,
+    emptyState: { padding: 24, alignItems: 'center' },
+    emptyStateTitle: { fontSize: FONT_SIZE.lg, fontWeight: '600', color: theme.text, marginTop: 16 },
+    emptyStateSubtitle: { fontSize: FONT_SIZE.sm, color: theme.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+    emptyStateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 24, borderRadius: RADIUS.lg, marginTop: 16, minWidth: 200 },
+    emptyStateButtonText: { fontSize: FONT_SIZE.md, fontWeight: '600' },
+    emptyCard: { padding: 20, alignItems: 'center' },
+    emptyTitle: { fontSize: FONT_SIZE.md, fontWeight: '600', color: theme.text },
+    emptySubtitle: { fontSize: FONT_SIZE.sm, color: theme.textSecondary, marginTop: 4 },
+    metricsGrid: { gap: 12 },
+    metricsRow: { flexDirection: 'row', gap: 12 },
+    popActionsGrid: { gap: 12 },
+    popActionCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: RADIUS.lg, borderWidth: 1 },
+    popActionIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    popActionContent: { flex: 1 },
+    popActionTitle: { fontSize: FONT_SIZE.md, fontWeight: '600', color: theme.text },
+    popActionSubtitle: { fontSize: FONT_SIZE.sm, color: theme.textSecondary, marginTop: 2 },
+    popActionBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.sm, marginTop: 8 },
+    popActionBadgeText: { fontSize: FONT_SIZE.xs, fontWeight: '600', color: '#fff' },
+    toolsGrid: { gap: 12 },
+    toolCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: RADIUS.lg },
+    toolIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    toolContent: { flex: 1 },
+    toolTitle: { fontSize: FONT_SIZE.md, fontWeight: '600', color: theme.text },
+    toolSubtitle: { fontSize: FONT_SIZE.sm, color: theme.textSecondary, marginTop: 2 },
+    timelineContainer: { gap: 16 },
+    timelineItem: { flexDirection: 'row', alignItems: 'flex-start' },
+    timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 4, marginRight: 12 },
+    timelineContent: { flex: 1 },
+    timelineEvent: { fontSize: FONT_SIZE.md, color: theme.text, fontWeight: '500' },
+    timelineTime: { fontSize: FONT_SIZE.sm, color: theme.textSecondary, marginTop: 4 },
+    upgradeButton: { backgroundColor: theme.primary, paddingVertical: 8, paddingHorizontal: 16, borderRadius: RADIUS.md },
+    upgradeButtonText: { fontSize: FONT_SIZE.sm, fontWeight: '600', color: '#fff' },
+  }), [theme, dashStyles]);
 
   if (loading) {
     return (
@@ -845,13 +351,9 @@ case 'homework':
 
   return (
     <View style={styles.container}>
-      {/* Offline Banner */}
-      <OfflineBanner />
-
       {/* Fixed Header - Hidden for cleaner UI */}
       
       <ScrollView
-        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -873,7 +375,7 @@ case 'homework':
         <WelcomeSection
           userName={`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || t('roles.parent')}
           subtitle={(() => {
-            const active = (childrenCards || []).find(c => c.id === activeChildId) || (childrenCards.length === 1 ? childrenCards[0] : null);
+            const active = (childrenCards || []).find((c: ChildCardData) => c.id === activeChildId) || (childrenCards.length === 1 ? childrenCards[0] : null);
             if (active) {
               return `Managing ${active.firstName} ${active.lastName}`;
             }
@@ -889,41 +391,37 @@ case 'homework':
           tierBadgeSize="sm"
         />
 
-        {/* Enhanced Children Section (moved under welcome) */}
+        {/* Enhanced Children Section (moved under welcome) - Using Phase 1 DashboardSection */}
         {children.length > 0 ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t('parent.myChildren')} ({children.length})</Text>
-              <TouchableOpacity
-                style={styles.viewAllButton}
-                onPress={() => router.push('/screens/parent-children')}
-              >
-                <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
+            <DashboardSection
+            title={`${t('parent.myChildren')} (${children.length})`}
+            icon="people"
+            iconColor={theme.primary}
+            showViewAll
+            onViewAll={() => router.push('/screens/parent-children')}
+            >
             {children.length > 1 && (
               <View style={{ marginBottom: 12 }}>
-                <ChildSwitcher 
-                  children={childrenCards}
-                  activeChildId={activeChildId}
-                  onChildChange={setActiveChildId}
-                />
+              <ChildSwitcher 
+                children={childrenCards}
+                activeChildId={activeChildId}
+                onChildChange={(childId: string) => setActiveChildId(childId)}
+              />
               </View>
             )}
             {(children.length > 1 && activeChildId ? 
-              childrenCards.filter(child => child.id === activeChildId) : 
+              childrenCards.filter((child: ChildCardData) => child.id === activeChildId) : 
               childrenCards
-            ).map((child) => (
+            ).map((child: ChildCardData) => (
               <ChildCard
-                key={child.id}
-                child={child}
-                onAttendancePress={() => console.log('View attendance for', child.id)}
-                onHomeworkPress={() => console.log('View homework for', child.id)}
-                onMessagePress={() => handleQuickMessage(child)}
+              key={child.id}
+              child={child}
+              onAttendancePress={() => console.log('View attendance for', child.id)}
+              onHomeworkPress={() => console.log('View homework for', child.id)}
+              onMessagePress={() => handleQuickMessage(child)}
               />
             ))}
-          </View>
+            </DashboardSection>
         ) : (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -978,40 +476,52 @@ case 'homework':
           </View>
         )}
 
-        {/* AI-Powered Proactive Insights */}
+        {/* AI-Powered Proactive Insights - Using Phase 1 CollapsibleSection */}
         {activeChildId && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="bulb" size={24} color="#00f5ff" style={{ marginRight: 8 }} />
-              <Text style={styles.sectionTitle}>Insights for Your Child</Text>
-            </View>
-            {loadingInsights ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>Loading insights...</Text>
-              </View>
-            ) : insights.length > 0 ? (
-              insights.slice(0, 3).map((insight, index) => (
-                <ParentInsightsCard
-                  key={index}
-                  insight={insight}
-                  onActionPress={(actionTitle) => {
-                    track('edudash.parent.insight_action_pressed', {
-                      action: actionTitle,
-                      insight_type: insight.type,
-                      child_id: activeChildId,
-                      user_id: user?.id,
-                    });
-                    // Navigate or perform action based on actionTitle
-                    console.log('Action pressed:', actionTitle);
-                  }}
-                />
-              ))
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No insights available yet</Text>
-                <Text style={styles.emptySubtitle}>Check back later for personalized guidance</Text>
-              </View>
-            )}
+            <CollapsibleSection
+              title="Insights for Your Child"
+              icon="bulb"
+              iconColor="#00f5ff"
+              badgeCount={insights.length}
+              defaultExpanded={true}
+              subtitle={loadingInsights ? 'Loading...' : insights.length > 0 ? `${insights.length} insights available` : undefined}
+              onToggle={(expanded) => {
+                track('edudash.parent.insights_section_toggled', {
+                  expanded,
+                  child_id: activeChildId,
+                  user_id: user?.id,
+                });
+              }}
+            >
+              {loadingInsights ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>Loading insights...</Text>
+                </View>
+              ) : insights.length > 0 ? (
+                insights.slice(0, 3).map((insight, index) => (
+                  <ParentInsightsCard
+                    key={index}
+                    insight={insight}
+                    onActionPress={(actionTitle: string) => {
+                      track('edudash.parent.insight_action_pressed', {
+                        action: actionTitle,
+                        insight_type: insight.type,
+                        child_id: activeChildId,
+                        user_id: user?.id,
+                      });
+                      // Navigate or perform action based on actionTitle
+                      console.log('Action pressed:', actionTitle);
+                    }}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No insights available yet</Text>
+                  <Text style={styles.emptySubtitle}>Check back later for personalized guidance</Text>
+                </View>
+              )}
+            </CollapsibleSection>
           </View>
         )}
 
@@ -1025,7 +535,7 @@ case 'homework':
             ) : (
               <InteractiveLessonsWidget
                 lessons={interactiveLessons}
-                onLessonPress={(lesson) => {
+                onLessonPress={(lesson: InteractiveLesson) => {
                   track('edudash.parent.lesson_started', {
                     lesson_id: lesson.id,
                     lesson_title: lesson.title,
@@ -1041,107 +551,103 @@ case 'homework':
           </View>
         )}
 
-        {/* Professional Metric Cards - Principal Dashboard Style */}
-        <View style={styles.section}>
+        {/* Professional Metric Cards - Using Phase 1 MetricCard Component */}
+        <DashboardSection
+          title="Activity Overview"
+          icon="stats-chart"
+          iconColor={theme.primary}
+          subtitle="Key metrics at a glance"
+        >
           <View style={styles.metricsGrid}>
             {/* Row 1: Core metrics */}
             <View style={styles.metricsRow}>
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.primary + '30' }]}
+              <MetricCard
+                value={unreadMessageCount}
+                label="New Messages"
+                icon="mail"
+                iconColor="#FFFFFF"
+                iconBackgroundColor={theme.primary}
+                status={unreadMessageCount > 0 ? 'warning' : 'info'}
+                statusText={unreadMessageCount > 0 ? 'needs attention' : 'all read'}
                 onPress={() => router.push('/messages')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: theme.primary }]}>
-                  <Ionicons name="mail" size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>{unreadMessageCount}</Text>
-                <Text style={styles.metricLabel}>New Messages</Text>
-                <Text style={[styles.metricStatus, { color: unreadMessageCount > 0 ? theme.warning : theme.textSecondary }]}>
-                  {unreadMessageCount > 0 ? 'needs attention' : 'all read'}
-                </Text>
-              </TouchableOpacity>
+              />
 
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.success + '30' }]}
+              <MetricCard
+                value={popStats?.proof_of_payment?.approved || 0}
+                label="Approved Payments"
+                icon="checkmark-circle"
+                iconColor="#FFFFFF"
+                iconBackgroundColor={theme.success}
+                status="success"
+                statusText="verified"
                 onPress={() => router.push('/pop-history')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: theme.success }]}>
-                  <Ionicons name="checkmark-circle" size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>{popStats?.proof_of_payment?.approved || 0}</Text>
-                <Text style={styles.metricLabel}>Approved Payments</Text>
-                <Text style={[styles.metricStatus, { color: theme.success }]}>verified</Text>
-              </TouchableOpacity>
+              />
             </View>
 
             {/* Row 2: POP metrics */}
             <View style={styles.metricsRow}>
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.warning + '30' }]}
+              <MetricCard
+                value={popStats?.proof_of_payment?.pending || 0}
+                label="Pending Payments"
+                icon="time"
+                iconColor="#FFFFFF"
+                iconBackgroundColor={theme.warning}
+                status="warning"
+                statusText="review needed"
                 onPress={() => router.push('/pop-history?type=proof_of_payment&status=pending')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: theme.warning }]}>
-                  <Ionicons name="time" size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>{popStats?.proof_of_payment?.pending || 0}</Text>
-                <Text style={styles.metricLabel}>Pending Payments</Text>
-                <Text style={[styles.metricStatus, { color: theme.warning }]}>review needed</Text>
-              </TouchableOpacity>
+              />
 
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.accent + '30' }]}
+              <MetricCard
+                value={(popStats?.picture_of_progress?.pending || 0) + (popStats?.picture_of_progress?.approved || 0)}
+                label="Progress Photos"
+                icon="images"
+                iconColor="#FFFFFF"
+                iconBackgroundColor={theme.accent}
+                status="info"
+                statusText="shared"
                 onPress={() => router.push('/pop-history?type=picture_of_progress')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: theme.accent }]}>
-                  <Ionicons name="images" size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>{(popStats?.picture_of_progress?.pending || 0) + (popStats?.picture_of_progress?.approved || 0)}</Text>
-                <Text style={styles.metricLabel}>Progress Photos</Text>
-                <Text style={[styles.metricStatus, { color: theme.accent }]}>shared</Text>
-              </TouchableOpacity>
+              />
             </View>
 
             {/* Row 3: Activity metrics */}
             <View style={styles.metricsRow}>
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.error + '30' }]}
+              <MetricCard
+                value={urgentMetrics.pendingHomework}
+                label="Pending Homework"
+                icon="book"
+                iconColor="#FFFFFF"
+                iconBackgroundColor={theme.error}
+                status={urgentMetrics.pendingHomework > 0 ? 'error' : 'success'}
+                statusText={urgentMetrics.pendingHomework > 0 ? 'overdue' : 'up to date'}
                 onPress={() => router.push('/homework')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: theme.error }]}>
-                  <Ionicons name="book" size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>{urgentMetrics.pendingHomework}</Text>
-                <Text style={styles.metricLabel}>Pending Homework</Text>
-                <Text style={[styles.metricStatus, { color: urgentMetrics.pendingHomework > 0 ? theme.error : theme.textSecondary }]}>
-                  {urgentMetrics.pendingHomework > 0 ? 'overdue' : 'up to date'}
-                </Text>
-              </TouchableOpacity>
+              />
 
-              <TouchableOpacity 
-                style={[styles.metricCard, { borderColor: theme.primary + '30' }]}
+              <MetricCard
+                value="Today"
+                label="Attendance"
+                icon={getAttendanceIcon(urgentMetrics.todayAttendance)}
+                iconColor="#FFFFFF"
+                iconBackgroundColor={getAttendanceColor(urgentMetrics.todayAttendance, theme)}
+                subtitle={urgentMetrics.todayAttendance === 'unknown' ? 'not recorded' : urgentMetrics.todayAttendance}
                 onPress={() => router.push('/attendance')}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: getAttendanceColor(urgentMetrics.todayAttendance, theme) }]}>
-                  <Ionicons name={getAttendanceIcon(urgentMetrics.todayAttendance)} size={20} color="white" />
-                </View>
-                <Text style={styles.metricValue}>Today</Text>
-                <Text style={styles.metricLabel}>Attendance</Text>
-                <Text style={[styles.metricStatus, { color: getAttendanceColor(urgentMetrics.todayAttendance, theme) }]}>
-                  {urgentMetrics.todayAttendance === 'unknown' ? 'not recorded' : urgentMetrics.todayAttendance}
-                </Text>
-              </TouchableOpacity>
+              />
             </View>
           </View>
-        </View>
+        </DashboardSection>
 
-        {/* POP Upload Actions - Prominent section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📸 Upload & Share</Text>
+        {/* POP Upload Actions - Using Phase 1 DashboardSection */}
+        <DashboardSection
+          title="Upload & Share"
+          icon="camera"
+          iconColor={theme.accent}
+          subtitle="Manage payments and progress photos"
+        >
           <View style={styles.popActionsGrid}>
             <TouchableOpacity 
               style={[styles.popActionCard, { backgroundColor: theme.warning + '10', borderColor: theme.warning }]}
               onPress={() => {
                 if (activeChildId) {
-                  const child = childrenCards.find(c => c.id === activeChildId);
+                  const child = childrenCards.find((c: ChildCardData) => c.id === activeChildId);
                   router.push(`/screens/parent-proof-of-payment?studentId=${activeChildId}&studentName=${encodeURIComponent(`${child?.firstName || ''} ${child?.lastName || ''}`.trim())}`);
                 } else {
                   router.push('/screens/parent-proof-of-payment');
@@ -1167,7 +673,7 @@ case 'homework':
               style={[styles.popActionCard, { backgroundColor: theme.accent + '10', borderColor: theme.accent }]}
               onPress={() => {
                 if (activeChildId) {
-                  const child = childrenCards.find(c => c.id === activeChildId);
+                  const child = childrenCards.find((c: ChildCardData) => c.id === activeChildId);
                   router.push(`/picture-of-progress?studentId=${activeChildId}&studentName=${encodeURIComponent(`${child?.firstName || ''} ${child?.lastName || ''}`.trim())}`);
                 } else {
                   router.push('/picture-of-progress');
@@ -1208,7 +714,7 @@ case 'homework':
               <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
-        </View>
+        </DashboardSection>
 
         {/* Native Ad - Inline in content stream */}
         {showBanner && (
@@ -1254,19 +760,14 @@ case 'homework':
         )}
 
         
-        {/* Communication Hub - Principal Dashboard Style */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('parent.communicationHub')}</Text>
-            <TouchableOpacity
-              style={styles.viewAllButton}
-              onPress={() => router.push('/screens/parent-messages')}
-            >
-              <Text style={styles.viewAllText}>{t('common.viewAll')}</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.primary} />
-            </TouchableOpacity>
-          </View>
-          
+        {/* Communication Hub - Using Phase 1 DashboardSection */}
+        <DashboardSection
+          title={t('parent.communicationHub')}
+          icon="chatbubbles"
+          iconColor={theme.primary}
+          showViewAll
+          onViewAll={() => router.push('/screens/parent-messages')}
+        >
           <View style={styles.toolsGrid}>
             <TouchableOpacity 
               style={[styles.toolCard, { backgroundColor: theme.primary + '10' }]}
@@ -1320,7 +821,7 @@ case 'homework':
               />
             )}
           </View>
-        </View>
+        </DashboardSection>
         
         {/* Banner Ad - Messages/Communication context */}
         {showBanner && (
@@ -1336,9 +837,12 @@ case 'homework':
         {/* Child Registration Requests - Shows pending/approved/rejected requests */}
         <PendingRegistrationRequests />
         
-        {/* Recent Activity Timeline */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('dashboard.recentActivity')}</Text>
+        {/* Recent Activity Timeline - Using Phase 1 DashboardSection */}
+        <DashboardSection
+          title={t('dashboard.recentActivity')}
+          icon="time"
+          iconColor={theme.primary}
+        >
           <View style={styles.timelineContainer}>
             {(() => {
               const recentActivities = [];
@@ -1412,7 +916,7 @@ case 'homework':
               </View>
             )}
           </View>
-        </View>
+        </DashboardSection>
 
         {/* Ad Banner for Free Tier - Main Dashboard bottom placement */}
         {showBanner && (
@@ -1452,6 +956,3 @@ case 'homework':
     </View>
   );
 }
-
-const { width } = require('react-native').Dimensions.get('window');
-const cardWidth = (width - 48) / 2; // Account for padding and gap
