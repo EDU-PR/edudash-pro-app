@@ -5,8 +5,7 @@
     "owner": "dashpro",
     "version": "1.0.2",
     "runtimeVersion": "1.0.2",
-    "orientation": "default",
-    "orientationLock": "portrait",
+    "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "edudashpro",
@@ -102,6 +101,13 @@
           "sounds": [
             "./assets/sounds/notification.wav"
           ]
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "EduDash Pro needs camera access for video calls with teachers and parents",
+          "microphonePermission": "EduDash Pro needs microphone access for voice and video calls"
         }
       ],
       "./plugins/withAndroidManifestFix.js"

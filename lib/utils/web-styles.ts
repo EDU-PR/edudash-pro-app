@@ -174,6 +174,28 @@ export const injectWebStyles = (): (() => void) => {
     [data-focusable="true"][style*="flex: 1"] {
       min-height: 100vh;
     }
+    
+    /* Mobile responsive styles - hide sidebar on small screens */
+    @media (max-width: 767px) {
+      /* Force single column layout on mobile */
+      .desktop-sidebar,
+      [data-desktop-sidebar="true"] {
+        display: none !important;
+        width: 0 !important;
+      }
+      
+      /* Ensure main content fills width on mobile */
+      .desktop-main-content,
+      [data-desktop-main="true"] {
+        width: 100% !important;
+        flex: 1 !important;
+      }
+      
+      /* Reset flex direction for mobile */
+      .desktop-layout-container {
+        flex-direction: column !important;
+      }
+    }
   `;
   document.head.appendChild(globalStyle);
 

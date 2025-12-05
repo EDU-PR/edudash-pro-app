@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -76,6 +76,10 @@ export function DesktopLayout({ children, role }: DesktopLayoutProps) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Use window dimensions for responsive behavior on web
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobileWidth = windowWidth < 768; // Mobile breakpoint
 
   // Determine user role from profile if not provided
   const userRole = role || (profile?.role as string) || 'parent';
@@ -96,9 +100,9 @@ export function DesktopLayout({ children, role }: DesktopLayoutProps) {
   const org: any = (permissions as any)?.enhancedProfile?.organization_membership || {};
   const tenantSlug: string = org?.organization_slug || org?.tenant_slug || org?.slug || org?.organization_name || 'EduDash Pro';
 
-  // Only render desktop layout on web
-  // On mobile, wrap in flex container to ensure bottom nav is visible
-  if (Platform.OS !== 'web') {
+  // On native platforms OR mobile-width web, render mobile layout (no sidebar)
+  // This ensures Chrome DevTools mobile view shows mobile layout
+  if (Platform.OS !== 'web' || isMobileWidth) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {children}

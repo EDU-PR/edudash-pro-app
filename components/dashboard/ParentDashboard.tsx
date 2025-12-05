@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
-import { AdBanner } from '@/components/ads/AdBanner';
+import { AdBanner } from '@/components/ui/AdBanner';
 import { NativeAdCard } from '@/components/ads/NativeAdCard';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import ErrorBanner from '@/components/ui/ErrorBanner';
@@ -13,33 +13,33 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getCurrentLanguage } from '@/lib/i18n';
 import { track } from '@/lib/analytics';
-import { EnhancedStatsRow } from './EnhancedStats';
-import { EnhancedQuickActions } from './EnhancedQuickActions';
-import SkeletonLoader from '../ui/SkeletonLoader';
+import { EnhancedStatsRow } from '@/components/dashboard/EnhancedStats';
+import { EnhancedQuickActions } from '@/components/dashboard/EnhancedQuickActions';
+import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUnreadMessageCount } from '@/hooks/useParentMessaging';
 import { usePOPStats } from '@/hooks/usePOPUploads';
-import { PendingRegistrationRequests } from './PendingRegistrationRequests';
-import { HomeworkModal } from './HomeworkModal';
+import { PendingRegistrationRequests } from '@/components/dashboard/PendingRegistrationRequests';
+import { HomeworkModal } from '@/components/dashboard/HomeworkModal';
 import { useWhatsAppConnection as useRealWhatsAppConnection } from '@/hooks/useWhatsAppConnection';
 import { useParentDashboardData } from '@/hooks/useParentDashboardData';
 import type { ChildCardData } from '@/hooks/useParentDashboardData';
 
 // Extracted components
-import { ChildSwitcher } from './parent/ChildSwitcher';
-import { ChildCard } from './parent/ChildCard';
-import { LanguageModal } from './parent/LanguageModal';
-import { WelcomeSection } from './parent/WelcomeSection';
+import { ChildSwitcher } from '@/components/dashboard/parent/ChildSwitcher';
+import { ChildCard } from '@/components/dashboard/parent/ChildCard';
+import { LanguageModal } from '@/components/dashboard/parent/LanguageModal';
+import { WelcomeSection } from '@/components/dashboard/parent/WelcomeSection';
 import { ParentInsightsCard } from '@/components/parent/ParentInsightsCard';
 import { InteractiveLessonsWidget } from '@/components/parent/InteractiveLessonsWidget';
-import { PendingLinkRequests } from './PendingLinkRequests';
-import { PendingParentLinkRequests } from './PendingParentLinkRequests';
+import { PendingLinkRequests } from '@/components/dashboard/PendingLinkRequests';
+import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 
 // Phase 1: Modular components
-import { CollapsibleSection } from './parent/CollapsibleSection';
-import { MetricCard } from './parent/MetricCard';
-import { DashboardSection } from './parent/DashboardSection';
-import { SearchBar } from './parent/SearchBar';
+import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
+import { MetricCard } from '@/components/dashboard/parent/MetricCard';
+import { DashboardSection } from '@/components/dashboard/parent/DashboardSection';
+import { SearchBar } from '@/components/dashboard/parent/SearchBar';
 
 // Shared style system
 import { createDashboardStyles, SPACING, RADIUS, FONT_SIZE } from '@/lib/styles/dashboardTheme';
@@ -354,6 +354,7 @@ case 'homework':
       {/* Fixed Header - Hidden for cleaner UI */}
       
       <ScrollView
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 0 : 80 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
