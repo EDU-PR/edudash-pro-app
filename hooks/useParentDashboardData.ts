@@ -321,16 +321,20 @@ export function useParentDashboardData() {
 
   useEffect(() => {
     loadDashboardData();
-  }, [loadDashboardData]);
+    // Only run on mount and when user/profile changes, not when loadDashboardData changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.id]);
 
   useEffect(() => {
     if (activeChildId) {
       AsyncStorage.setItem('@edudash_active_child_id', activeChildId).catch(() => {});
-      if (activeChildId && childrenCards.find(c => c.id === activeChildId)) {
+      if (childrenCards.find(c => c.id === activeChildId)) {
         loadUrgentMetrics(activeChildId);
       }
     }
-  }, [activeChildId, childrenCards, loadUrgentMetrics]);
+    // Only run when activeChildId changes, not when childrenCards or loadUrgentMetrics changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChildId]);
 
   return {
     children,

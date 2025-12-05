@@ -460,7 +460,7 @@ export const EnhancedPrincipalDashboard: React.FC = () => {
 
       <ScrollView
         style={styles.scrollContainer}
-        contentContainerStyle={Platform.OS === 'web' ? { paddingBottom: 40 } : undefined}
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 40 : 80 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={refresh} />

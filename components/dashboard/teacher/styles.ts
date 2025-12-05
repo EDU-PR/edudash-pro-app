@@ -559,3 +559,89 @@ export const getStyles = (theme: any, isDark: boolean) =>
       lineHeight: 20,
     },
   });
+
+/**
+ * Mobile-specific styles for Teacher Dashboard
+ * Used when screen width < 768px
+ */
+export const getMobileStyles = (theme: any, isDark: boolean) =>
+  StyleSheet.create({
+    header: {
+      backgroundColor: 'transparent',
+      padding: 12,
+      paddingTop: 8,
+    },
+    headerCard: {
+      backgroundColor: theme.cardBackground,
+      borderRadius: 12,
+      padding: 12,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    headerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    headerTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 2,
+    },
+    subRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+    },
+    roleBadge: {
+      backgroundColor: theme.primary + '10',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 999,
+    },
+    roleBadgeText: {
+      color: theme.primary,
+      fontSize: 9,
+      fontWeight: '600',
+      textTransform: 'capitalize',
+    },
+    greeting: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    themeToggleButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.primary + '12',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerMenuButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.textSecondary + '10',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hamburgerButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: theme.textSecondary + '10',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+  });

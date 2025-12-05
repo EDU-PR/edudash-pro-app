@@ -21,6 +21,9 @@ import { reportError } from '@/lib/monitoring';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { assertSupabase } from '@/lib/supabase';
 
+// Routing lock key to prevent duplicate navigation
+const routingLock = '__EDUDASH_ROUTING_LOCK__';
+
 const ROLES = [
   {
     value: 'parent' as Role,

@@ -272,17 +272,13 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     return { path: '/(auth)/sign-in' };
   }
   
-  // Check if user has active access
+  // Check if user has active access - but be permissive for users with valid roles
+  // This prevents users from getting stuck due to capability system issues
   if (!profile.hasCapability('access_mobile_app')) {
-    console.log('[ROUTE DEBUG] User lacks access_mobile_app capability');
-    
-    // For teachers, be more permissive - allow them to access their dashboard
-    // even if they don't have the general mobile app capability
-    if (role !== 'teacher') {
-      return { path: '/screens/account' }; // Route to account settings to resolve access issues
-    } else {
-      console.log('[ROUTE DEBUG] Teacher without mobile app capability - allowing dashboard access');
-    }
+    console.log('[ROUTE DEBUG] User lacks access_mobile_app capability, but has role:', role);
+    // For users with valid roles, allow dashboard access anyway
+    // The capability system can be overly restrictive, especially for new users
+    console.log('[ROUTE DEBUG] Allowing dashboard access despite capability check');
   }
 
   // Route based on role and tenant kind
@@ -331,18 +327,21 @@ export function validateUserAccess(profile: EnhancedUserProfile | null): {
     };
   }
 
+  // If user has a valid role, grant access regardless of capability check
+  // This prevents users from getting stuck on profiles-gate
+  const role = normalizeRole(profile.role) as Role;
+  if (role && ['parent', 'teacher', 'principal_admin', 'super_admin'].includes(role)) {
+    console.log('[validateUserAccess] User has valid role:', role, '- granting access');
+    return { hasAccess: true };
+  }
+
+  // Fallback: check capability if role is missing/invalid
   if (!profile.hasCapability('access_mobile_app')) {
     return {
       hasAccess: false,
       reason: 'Mobile app access not enabled',
       suggestedAction: 'Contact your administrator',
     };
-  }
-
-  // Check seat-based access for non-admin roles
-  const role = normalizeRole(profile.role) as Role;
-  if (role === 'teacher') {
-    // Allow access for all current statuses per type definition
   }
 
   return { hasAccess: true };

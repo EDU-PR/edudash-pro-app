@@ -194,9 +194,10 @@ export const TeacherDashboard: React.FC = () => {
   }
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView
         style={styles.container}
+        contentContainerStyle={{ paddingBottom: Platform.OS === 'web' ? 0 : 80 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={refresh} />
@@ -344,7 +345,7 @@ export const TeacherDashboard: React.FC = () => {
         showWhatsAppModal={showWhatsAppModal}
         setShowWhatsAppModal={setShowWhatsAppModal}
       />
-    </>
+    </View>
   );
 };
 

@@ -70,6 +70,33 @@ export interface FeatureFlags {
   sa_languages_support: boolean; // English, Afrikaans, isiZulu, Sesotho
   caps_curriculum_alignment: boolean;
   sa_payment_methods: boolean;
+  
+  // ============================================
+  // PWA PARITY FEATURES (Native App)
+  // ============================================
+  
+  // Video/Voice Calls (Daily.co)
+  video_calls_enabled: boolean;
+  voice_calls_enabled: boolean;
+  group_calls_enabled: boolean;
+  live_lessons_enabled: boolean;
+  
+  // E-Books Library
+  ebooks_enabled: boolean;
+  ebook_offline_download: boolean;
+  ebook_bookmarks: boolean;
+  
+  // Registration Flows
+  principal_signup_enabled: boolean;
+  teacher_signup_enabled: boolean;
+  parent_claim_child_enabled: boolean;
+  
+  // Exam Prep
+  exam_prep_enabled: boolean;
+  exam_prep_ai_questions: boolean;
+  
+  // Campaigns (Principal)
+  campaigns_enabled: boolean;
 }
 
 // Default feature flags - primarily controlled via PostHog but with env fallbacks
@@ -146,6 +173,34 @@ const DEFAULT_FLAGS: FeatureFlags = {
   sa_languages_support: SA_TENANT_DEFAULT, // English, Afrikaans, isiZulu, Sesotho
   caps_curriculum_alignment: SA_TENANT_DEFAULT, // CAPS = Curriculum and Assessment Policy Statement
   sa_payment_methods: SA_TENANT_DEFAULT, // EFT, Ozow, SnapScan
+  
+  // ============================================
+  // PWA PARITY FEATURES (Native App) - Default: DISABLED
+  // Enable via environment variables when ready
+  // ============================================
+  
+  // Video/Voice Calls (Daily.co) - Requires prebuild for native modules
+  video_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
+  voice_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VOICE_CALLS === 'true',
+  group_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_GROUP_CALLS === 'true',
+  live_lessons_enabled: process.env.EXPO_PUBLIC_ENABLE_LIVE_LESSONS === 'true',
+  
+  // E-Books Library - PDF viewing with offline support
+  ebooks_enabled: process.env.EXPO_PUBLIC_ENABLE_EBOOKS === 'true',
+  ebook_offline_download: process.env.EXPO_PUBLIC_ENABLE_EBOOK_OFFLINE === 'true',
+  ebook_bookmarks: process.env.EXPO_PUBLIC_ENABLE_EBOOK_BOOKMARKS === 'true',
+  
+  // Registration Flows - Allow new users to sign up directly
+  principal_signup_enabled: process.env.EXPO_PUBLIC_ENABLE_PRINCIPAL_SIGNUP === 'true',
+  teacher_signup_enabled: process.env.EXPO_PUBLIC_ENABLE_TEACHER_SIGNUP === 'true',
+  parent_claim_child_enabled: process.env.EXPO_PUBLIC_ENABLE_CLAIM_CHILD === 'true',
+  
+  // Exam Prep - CAPS-aligned AI question generation
+  exam_prep_enabled: process.env.EXPO_PUBLIC_ENABLE_EXAM_PREP === 'true',
+  exam_prep_ai_questions: process.env.EXPO_PUBLIC_ENABLE_EXAM_AI === 'true',
+  
+  // Campaigns - Principal marketing campaigns
+  campaigns_enabled: process.env.EXPO_PUBLIC_ENABLE_CAMPAIGNS === 'true',
 };
 
 let cachedFlags: FeatureFlags | null = null;
@@ -220,6 +275,21 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,
+      
+      // PWA Parity Features - PostHog overrides for A/B testing
+      video_calls_enabled: flags.video_calls ?? DEFAULT_FLAGS.video_calls_enabled,
+      voice_calls_enabled: flags.voice_calls ?? DEFAULT_FLAGS.voice_calls_enabled,
+      group_calls_enabled: flags.group_calls ?? DEFAULT_FLAGS.group_calls_enabled,
+      live_lessons_enabled: flags.live_lessons ?? DEFAULT_FLAGS.live_lessons_enabled,
+      ebooks_enabled: flags.ebooks ?? DEFAULT_FLAGS.ebooks_enabled,
+      ebook_offline_download: flags.ebook_offline ?? DEFAULT_FLAGS.ebook_offline_download,
+      ebook_bookmarks: flags.ebook_bookmarks ?? DEFAULT_FLAGS.ebook_bookmarks,
+      principal_signup_enabled: flags.principal_signup ?? DEFAULT_FLAGS.principal_signup_enabled,
+      teacher_signup_enabled: flags.teacher_signup ?? DEFAULT_FLAGS.teacher_signup_enabled,
+      parent_claim_child_enabled: flags.claim_child ?? DEFAULT_FLAGS.parent_claim_child_enabled,
+      exam_prep_enabled: flags.exam_prep ?? DEFAULT_FLAGS.exam_prep_enabled,
+      exam_prep_ai_questions: flags.exam_ai ?? DEFAULT_FLAGS.exam_prep_ai_questions,
+      campaigns_enabled: flags.campaigns ?? DEFAULT_FLAGS.campaigns_enabled,
     };
     
     lastFetchTime = now;
