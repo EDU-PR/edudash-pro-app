@@ -110,10 +110,10 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/financial-dashboard');
         break;
       case 'reports':
-        router.push('/screens/reports');
+        router.push('/screens/teacher-reports');
         break;
       case 'announcements':
-        router.push('/screens/announcements');
+        router.push('/screens/principal-announcement');
         break;
       case 'calendar':
         router.push('/screens/calendar');

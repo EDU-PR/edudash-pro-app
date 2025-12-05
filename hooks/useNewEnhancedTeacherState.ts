@@ -50,19 +50,19 @@ export const useNewEnhancedTeacherState = () => {
     
     switch (action) {
       case 'create_lesson':
-        router.push('/screens/lesson-planner');
+        router.push('/screens/ai-lesson-generator');
         break;
       case 'grade_assignments':
-        router.push('/screens/assignments');
+        router.push('/screens/assign-homework');
         break;
       case 'view_classes':
-        router.push('/screens/classes');
+        router.push('/screens/class-details');
         break;
       case 'parent_communication':
-        router.push('/screens/messages');
+        router.push('/screens/teacher-messages');
         break;
       case 'student_reports':
-        router.push('/screens/reports');
+        router.push('/screens/teacher-reports');
         break;
       case 'ai_assistant':
         router.push('/screens/dash-assistant');

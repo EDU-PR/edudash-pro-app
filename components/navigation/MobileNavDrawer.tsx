@@ -43,7 +43,7 @@ const getDefaultNavItems = (role: string): NavItem[] => {
       return [
         { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/teacher-dashboard' },
         { id: 'students', label: 'Students', icon: 'people', route: '/screens/student-management' },
-        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/classes' },
+        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-details' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-messages' },
         { id: 'calendar', label: 'Calendar', icon: 'calendar', route: '/screens/calendar' },
         { id: 'reports', label: 'Reports', icon: 'document-text', route: '/screens/teacher-reports' },

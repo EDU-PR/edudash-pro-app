@@ -414,13 +414,13 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/grades');
         break;
       case 'messages':
-        router.push('/screens/messages');
+        router.push('/screens/parent-messages');
         break;
       case 'events':
-        router.push('/screens/events');
+        router.push('/screens/calendar');
         break;
       case 'ai_homework_help':
-        router.push('/screens/ai-homework-help');
+        router.push('/screens/ai-homework-helper');
         break;
       default:
         Alert.alert(t('common.coming_soon', { defaultValue: 'Coming Soon' }), t('dashboard.feature_coming_soon', { defaultValue: 'This feature is coming soon!' }));

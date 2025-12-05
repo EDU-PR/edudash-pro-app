@@ -128,7 +128,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         router.push('/screens/financial-dashboard');
         break;
       case 'reports':
-        router.push('/screens/reports');
+        router.push('/screens/teacher-reports');
         break;
       case 'calendar':
         router.push('/screens/calendar');
