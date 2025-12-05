@@ -97,6 +97,9 @@ export interface FeatureFlags {
   
   // Campaigns (Principal)
   campaigns_enabled: boolean;
+  
+  // Registrations (Principal - Child Registration Management)
+  registrations_enabled: boolean;
 }
 
 // Default feature flags - primarily controlled via PostHog but with env fallbacks
@@ -199,8 +202,11 @@ const DEFAULT_FLAGS: FeatureFlags = {
   exam_prep_enabled: process.env.EXPO_PUBLIC_ENABLE_EXAM_PREP === 'true',
   exam_prep_ai_questions: process.env.EXPO_PUBLIC_ENABLE_EXAM_AI === 'true',
   
-  // Campaigns - Principal marketing campaigns
-  campaigns_enabled: process.env.EXPO_PUBLIC_ENABLE_CAMPAIGNS === 'true',
+  // Campaigns - Principal marketing campaigns (default: true for principals)
+  campaigns_enabled: process.env.EXPO_PUBLIC_ENABLE_CAMPAIGNS !== 'false',
+  
+  // Registrations - Principal child registration management (default: true for principals)
+  registrations_enabled: process.env.EXPO_PUBLIC_ENABLE_REGISTRATIONS !== 'false',
 };
 
 let cachedFlags: FeatureFlags | null = null;

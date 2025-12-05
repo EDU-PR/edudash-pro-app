@@ -1,10 +1,36 @@
 # Ignore large local artifacts and non-build files to reduce EAS upload size
+
+# VCS - MUST be at top
+.git
+.git/
+.github
+.github/
+
 # Build outputs and APKs
-android/
-ios/
 build-*.apk
 artifacts/
 dist/
+builds/
+
+# Web folder (Next.js PWA - not needed for native build)
+web/
+web
+
+# Large non-essential folders
+CAPS/
+CAPS
+docs/
+docs
+temp/
+temp
+archive/
+archive
+tests/
+tests
+
+# Supabase (functions deployed separately, not needed for native build)
+supabase/
+supabase
 
 # Local caches and Expo files
 .expo/
@@ -41,7 +67,3 @@ reports/
 
 # Keep assets (png/jpg) and config JSON files included for the app to bundle correctly
 # Do NOT add global patterns like *.png or *.json here.
-
-# VCS
-.git/
-.github/

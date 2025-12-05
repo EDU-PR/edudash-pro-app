@@ -165,10 +165,9 @@ export function BottomTabBar() {
     return pathname === route || pathname?.startsWith(route);
   };
 
-  // Don't show on web (DesktopLayout handles navigation)
-  if (Platform.OS === 'web') {
-    return null;
-  }
+  // Hide entirely - navigation is now handled by MobileNavDrawer via hamburger menu
+  // This applies to both web and native platforms
+  return null;
 
   // Don't show on auth/onboarding/landing screens only
   const shouldHide = 

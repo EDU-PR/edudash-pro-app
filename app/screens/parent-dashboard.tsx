@@ -9,7 +9,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ParentDashboardWrapper from '@/components/dashboard/ParentDashboardWrapper';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { track } from '@/lib/analytics';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 
@@ -161,7 +160,6 @@ export default function ParentDashboardScreen() {
           translucent={false}
         />
         <Stack.Screen options={{ headerShown: false }} />
-        <RoleBasedHeader showBackButton={false} />
         <ParentDashboardWrapper />
       </View>
     </DesktopLayout>

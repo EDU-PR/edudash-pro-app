@@ -29,7 +29,7 @@ import { router } from 'expo-router';
 import { navigateBack } from '@/lib/navigation';
 import { useTranslation } from 'react-i18next';
 import { derivePreschoolId } from '@/lib/roleUtils';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { SimpleHeader } from '@/components/ui/SimpleHeader';
 
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { ChartDataService } from '@/lib/services/finance/ChartDataService';
@@ -318,7 +318,7 @@ export default function FinanceDashboard() {
 
   return (
     <View style={styles.container}>
-      <RoleBasedHeader title={t('finance_dashboard.title', { defaultValue: 'Finance Dashboard' })} showBackButton={true} />
+      <SimpleHeader title={t('finance_dashboard.title', { defaultValue: 'Finance Dashboard' })} />
 
       <ScrollView
         style={styles.content}

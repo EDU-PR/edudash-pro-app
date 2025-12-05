@@ -24,7 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
-import { useTheme } from '@/lib/hooks/useTheme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function TeacherSignUpScreen() {
   const { theme } = useTheme();

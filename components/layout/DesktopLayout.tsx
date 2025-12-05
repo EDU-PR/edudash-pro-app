@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -31,10 +32,12 @@ const NAV_ITEMS: NavItem[] = [
   // Principal/Teacher items
   { id: 'students', label: 'Students', icon: 'people-outline', route: '/screens/student-management', roles: ['principal', 'teacher'] },
   { id: 'teachers', label: 'Teachers', icon: 'school-outline', route: '/screens/teacher-management', roles: ['principal'] },
+  { id: 'registrations', label: 'Registrations', icon: 'person-add-outline', route: '/screens/principal-registrations', roles: ['principal'] },
   { id: 'classes', label: 'Classes', icon: 'book-outline', route: '/screens/class-details', roles: ['principal', 'teacher'] },
   { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle-outline', route: '/screens/attendance', roles: ['principal', 'teacher'] },
   { id: 'messages', label: 'Messages', icon: 'mail-outline', route: '/screens/teacher-messages', roles: ['principal', 'teacher'] },
   { id: 'financials', label: 'Financials', icon: 'cash-outline', route: '/screens/financial-dashboard', roles: ['principal'] },
+  { id: 'campaigns', label: 'Campaigns', icon: 'megaphone-outline', route: '/screens/campaigns', roles: ['principal'] },
   { id: 'reports', label: 'Reports', icon: 'document-text-outline', route: '/screens/teacher-reports', roles: ['principal', 'teacher'] },
   
   // Parent items
@@ -76,6 +79,7 @@ export function DesktopLayout({ children, role }: DesktopLayoutProps) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   
   // Use window dimensions for responsive behavior on web
   const { width: windowWidth } = useWindowDimensions();
@@ -100,12 +104,97 @@ export function DesktopLayout({ children, role }: DesktopLayoutProps) {
   const org: any = (permissions as any)?.enhancedProfile?.organization_membership || {};
   const tenantSlug: string = org?.organization_slug || org?.tenant_slug || org?.slug || org?.organization_name || 'EduDash Pro';
 
-  // On native platforms OR mobile-width web, render mobile layout (no sidebar)
+  // Mobile layout styles (computed here for mobile header)
+  const mobileStyles = React.useMemo(() => ({
+    mobileHeader: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+      paddingHorizontal: 16,
+      paddingTop: insets.top + 12,
+      paddingBottom: 12,
+      backgroundColor: theme.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    headerLeft: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 12,
+    },
+    hamburgerButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.surfaceVariant,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '700' as const,
+      color: theme.text,
+    },
+    headerRight: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 8,
+    },
+    iconButton: {
+      padding: 8,
+      borderRadius: 8,
+    },
+  }), [theme, insets]);
+
+  // On native platforms OR mobile-width web, render mobile layout with header
   // This ensures Chrome DevTools mobile view shows mobile layout
   if (Platform.OS !== 'web' || isMobileWidth) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        {children}
+      <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' as any }}>
+        {/* Mobile Header with Hamburger */}
+        <View style={mobileStyles.mobileHeader}>
+          <View style={mobileStyles.headerLeft}>
+            <TouchableOpacity
+              style={mobileStyles.hamburgerButton}
+              onPress={() => {
+                console.log('[DesktopLayout] Hamburger pressed, opening drawer');
+                setMobileDrawerOpen(true);
+              }}
+            >
+              <Ionicons name="menu" size={24} color={theme.text} />
+            </TouchableOpacity>
+            <Text style={mobileStyles.headerTitle}>{tenantSlug}</Text>
+          </View>
+          <View style={mobileStyles.headerRight}>
+            <TouchableOpacity
+              style={mobileStyles.iconButton}
+              onPress={() => router.push('/screens/notifications' as any)}
+            >
+              <Ionicons name="notifications-outline" size={22} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={mobileStyles.iconButton}
+              onPress={() => router.push('/screens/account' as any)}
+            >
+              <Avatar
+                name={`${user?.user_metadata?.first_name || ''} ${user?.user_metadata?.last_name || ''}`.trim() || user?.email || 'User'}
+                imageUri={(profile as any)?.avatar_url || null}
+                size={32}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Main Content */}
+        <View style={{ flex: 1 }}>
+          {children}
+        </View>
+
+        {/* Mobile Navigation Drawer */}
+        <MobileNavDrawer
+          isOpen={mobileDrawerOpen}
+          onClose={() => {
+            console.log('[DesktopLayout] Closing drawer');
+            setMobileDrawerOpen(false);
+          }}
+        />
       </View>
     );
   }

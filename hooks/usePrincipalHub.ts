@@ -31,6 +31,8 @@ export interface SchoolStats {
   staff: { total: number; trend: string };
   classes: { total: number; trend: string };
   pendingApplications: { total: number; trend: string };
+  pendingRegistrations: { total: number; trend: string };
+  pendingPayments: { total: number; trend: string };
   monthlyRevenue: { total: number; trend: string };
   attendanceRate: { percentage: number; trend: string };
   timestamp: string;
@@ -277,7 +279,10 @@ export const usePrincipalHub = () => {
         attendanceResult,
         capacityResult,
         preschoolResult,
-        pendingReportsResult
+        pendingReportsResult,
+        pendingRegistrationsResult,
+        pendingPaymentsResult,
+        registrationFeesResult
       ] = await Promise.allSettled([
         // Get students count
         assertSupabase()
@@ -362,7 +367,27 @@ export const usePrincipalHub = () => {
           .from('progress_reports')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .or('approval_status.eq.pending_review,status.eq.pending_review')
+          .or('approval_status.eq.pending_review,status.eq.pending_review'),
+          
+        // Get pending registrations count (try registration_requests first, then child_registrations)
+        assertSupabase()
+          .from('registration_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', preschoolId)
+          .eq('status', 'pending'),
+          
+        // Get pending payments count (from parent_payments table)
+        assertSupabase()
+          .from('parent_payments')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .eq('status', 'pending'),
+          
+        // Get registration fees from registration_requests (like PWA)
+        assertSupabase()
+          .from('registration_requests')
+          .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
+          .eq('organization_id', preschoolId)
       ]);
       
       // Extract data with error handling
@@ -377,6 +402,30 @@ export const usePrincipalHub = () => {
       const preschoolCapacity = capacityResult.status === 'fulfilled' ? (capacityResult.value.data || {}) : {} as any;
       const preschoolInfo = preschoolResult.status === 'fulfilled' ? (preschoolResult.value.data || {}) : {} as any;
       const pendingReportsCount = pendingReportsResult.status === 'fulfilled' ? (pendingReportsResult.value.count || 0) : 0;
+      const pendingRegistrationsCount = pendingRegistrationsResult.status === 'fulfilled' ? (pendingRegistrationsResult.value.count || 0) : 0;
+      const pendingPaymentsCount = pendingPaymentsResult.status === 'fulfilled' ? (pendingPaymentsResult.value.count || 0) : 0;
+      
+      // Calculate registration fees collected (like PWA does)
+      const registrationFeesData = registrationFeesResult.status === 'fulfilled' ? (registrationFeesResult.value.data || []) : [];
+      let registrationFeesCollected = 0;
+      let pendingRegistrationPayments = 0;
+      
+      if (registrationFeesData.length > 0) {
+        // Only count verified payments from approved registrations
+        const paidAndVerified = registrationFeesData.filter((r: any) => 
+          r.payment_verified && r.status === 'approved'
+        );
+        
+        // Pending = approved but not verified, or have amount but not paid
+        const pending = registrationFeesData.filter((r: any) => 
+          !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
+        );
+        
+        registrationFeesCollected = paidAndVerified.reduce((sum: number, r: any) => 
+          sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
+        );
+        pendingRegistrationPayments = pending.length;
+      }
       
       logger.info('📊 REAL DATA FETCHED:', {
         studentsCount,
@@ -384,6 +433,10 @@ export const usePrincipalHub = () => {
         classesCount,
         applicationsCount,
         pendingReportsCount,
+        pendingRegistrationsCount,
+        pendingPaymentsCount,
+        registrationFeesCollected,
+        pendingRegistrationPayments,
         attendanceRecords: attendanceData.length,
         preschoolName: preschoolInfo.name
       });
@@ -618,6 +671,18 @@ export const usePrincipalHub = () => {
           total: applicationsCount, 
           trend: applicationsCount > 5 ? t('trends.high') : applicationsCount > 2 ? t('trends.up') : t('trends.stable') 
         },
+        pendingRegistrations: {
+          total: pendingRegistrationsCount,
+          trend: pendingRegistrationsCount > 5 ? t('trends.high') : pendingRegistrationsCount > 2 ? t('trends.up') : t('trends.stable')
+        },
+        pendingPayments: {
+          total: pendingPaymentsCount || pendingRegistrationPayments,
+          trend: (pendingPaymentsCount || pendingRegistrationPayments) > 5 ? t('trends.high') : (pendingPaymentsCount || pendingRegistrationPayments) > 2 ? t('trends.up') : t('trends.stable')
+        },
+        registrationFees: {
+          total: registrationFeesCollected,
+          trend: registrationFeesCollected > 0 ? t('trends.up') : t('trends.stable')
+        },
         monthlyRevenue: { 
           total: monthlyRevenueTotal, 
           trend: monthlyRevenueTotal > finalPreviousRevenue ? t('trends.up') : monthlyRevenueTotal < finalPreviousRevenue ? t('trends.down') : t('trends.stable') 
@@ -824,6 +889,7 @@ useEffect(() => {
   const getMetrics = useCallback(() => {
     if (!data.stats) return [];
 
+    // Reordered to show registrations and payments more prominently (within first 6)
     return [
       {
         id: 'students',
@@ -834,12 +900,12 @@ useEffect(() => {
         trend: data.stats.students.trend
       },
       {
-        id: 'staff',
-        title: t('metrics.teaching_staff'),
-        value: data.stats.staff.total,
-        icon: 'school-outline', 
-        color: '#059669',
-        trend: data.stats.staff.trend
+        id: 'registrations',
+        title: t('metrics.pending_registrations', { defaultValue: 'Pending Registrations' }),
+        value: data.stats.pendingRegistrations.total,
+        icon: 'person-add-outline',
+        color: '#10B981',
+        trend: data.stats.pendingRegistrations.trend
       },
       {
         id: 'classes',
@@ -850,6 +916,30 @@ useEffect(() => {
         trend: data.stats.classes.trend
       },
       {
+        id: 'payments',
+        title: t('metrics.pending_payments', { defaultValue: 'Pending Payments' }),
+        value: data.stats.pendingPayments.total,
+        icon: 'wallet-outline',
+        color: '#F59E0B',
+        trend: data.stats.pendingPayments.trend
+      },
+      {
+        id: 'staff',
+        title: t('metrics.teaching_staff'),
+        value: data.stats.staff.total,
+        icon: 'school-outline', 
+        color: '#059669',
+        trend: data.stats.staff.trend
+      },
+      {
+        id: 'registration_fees',
+        title: t('metrics.registration_fees', { defaultValue: 'Registration Fees' }),
+        value: formatCurrency(data.stats.registrationFees?.total || 0),
+        icon: 'cash-outline',
+        color: '#10B981',
+        trend: data.stats.registrationFees?.trend || 'stable'
+      },
+      {
         id: 'attendance',
         title: t('metrics.attendance_rate'),
         value: `${data.stats.attendanceRate.percentage}%`,
@@ -858,19 +948,11 @@ useEffect(() => {
         trend: data.stats.attendanceRate.trend
       },
       {
-        id: 'revenue',
-        title: t('metrics.monthly_revenue'),
-        value: formatCurrency(data.stats.monthlyRevenue.total),
-        icon: 'card-outline',
-        color: '#059669',
-        trend: data.stats.monthlyRevenue.trend
-      },
-      {
         id: 'applications',
         title: t('metrics.pending_applications', { defaultValue: 'Pending Applications' }),
         value: data.stats.pendingApplications.total,
         icon: 'document-text-outline',
-        color: '#F59E0B',
+        color: '#EC4899',
         trend: data.stats.pendingApplications.trend
       }
     ];

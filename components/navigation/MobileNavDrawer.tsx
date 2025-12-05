@@ -61,9 +61,14 @@ const getDefaultNavItems = (role: string): NavItem[] => {
     case 'principal_admin':
       return [
         { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/principal-dashboard' },
-        { id: 'teachers', label: 'Teachers', icon: 'briefcase', route: '/screens/teacher-management' },
         { id: 'students', label: 'Students', icon: 'people', route: '/screens/student-management' },
+        { id: 'teachers', label: 'Teachers', icon: 'briefcase', route: '/screens/teacher-management' },
+        { id: 'registrations', label: 'Registrations', icon: 'person-add', route: '/screens/principal-registrations' },
+        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-details' },
+        { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle', route: '/screens/attendance' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-messages' },
+        { id: 'financials', label: 'Financials', icon: 'cash', route: '/screens/financial-dashboard' },
+        { id: 'campaigns', label: 'Campaigns', icon: 'megaphone', route: '/screens/campaigns' },
         { id: 'reports', label: 'Reports', icon: 'analytics', route: '/screens/teacher-reports' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
       ];
@@ -226,7 +231,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
             <Ionicons name="log-out-outline" size={20} color={theme.error} />
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
-          <Text style={styles.brandText}>Powered by Young Eagles</Text>
+          <Text style={styles.brandText}>Powered by EduDash Pro</Text>
         </View>
       </Animated.View>
     </View>
@@ -352,12 +357,18 @@ const getStyles = (theme: any, isDark: boolean, insets: any) =>
     signOutButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.error + '15',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.error + '30',
     },
     signOutText: {
-      marginLeft: 12,
-      fontSize: 14,
-      fontWeight: '500',
+      marginLeft: 10,
+      fontSize: 15,
+      fontWeight: '600',
       color: theme.error,
     },
     brandText: {

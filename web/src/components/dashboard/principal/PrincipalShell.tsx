@@ -185,7 +185,7 @@ export function PrincipalShell({
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
               </button>
-              <div className="brandPill w-full text-center">Powered by Young Eagles</div>
+              <div className="brandPill w-full text-center">Powered by EduDash Pro</div>
             </div>
           </div>
         </aside>
@@ -287,7 +287,7 @@ export function PrincipalShell({
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
               </button>
-              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by Young Eagles</div>
+              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by EduDash Pro</div>
             </div>
           </div>
         </>

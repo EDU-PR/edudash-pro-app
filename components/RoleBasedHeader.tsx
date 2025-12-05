@@ -9,7 +9,6 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { LanguageSelector } from '@/components/ui/LanguageSelector';
 import { LanguagePickerButton } from '@/components/ui/LanguagePickerButton';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
 import { router } from 'expo-router';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -68,8 +67,6 @@ export function RoleBasedHeader({
   const permissions = usePermissions();
   const { theme, mode, toggleTheme } = useTheme();
   const { tier } = useSubscription();
-  // Dashboard layout preferences (used for grid/apps toggle)
-  const { preferences: dashboardPreferences, setLayout: setDashboardLayout } = useDashboardPreferences();
   
   // Get role label for current role (hook must be called at top-level)
   const currentRole = permissions?.enhancedProfile?.role || 'teacher';
@@ -359,15 +356,6 @@ export function RoleBasedHeader({
 
         {/* Right Section - Theme Toggle & Settings */}
         <View style={styles.rightSection}>
-          {/* Dashboard layout toggle (replaces theme toggle) */}
-          <TouchableOpacity
-            style={[styles.themeButton, { marginRight: 8 }]}
-            onPress={() => setDashboardLayout(dashboardPreferences.layout === 'enhanced' ? 'classic' : 'enhanced')}
-            accessibilityLabel="Toggle dashboard layout"
-          >
-            <Ionicons name={(dashboardPreferences.layout === 'enhanced' ? 'grid' : 'apps') as any} size={18} color={headerTextColor} />
-          </TouchableOpacity>
-
           {/* Language Picker Button */}
           <LanguagePickerButton variant="compact" />
           

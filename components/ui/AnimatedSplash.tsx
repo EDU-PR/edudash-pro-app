@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
@@ -37,6 +37,10 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
   
   const sparkleOpacity = useRef(new Animated.Value(0)).current;
   const sparkleRotate = useRef(new Animated.Value(0)).current;
+  
+  // Text animation values
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const textTranslateY = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     // Hide native splash immediately when component mounts
@@ -116,7 +120,22 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
         }),
       ]),
       
-      // 4. Small delay before finishing
+      // 4. Text fade in with slide up
+      Animated.parallel([
+        Animated.timing(textOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.spring(textTranslateY, {
+          toValue: 0,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+      
+      // 5. Small delay before finishing
       Animated.delay(400),
     ]).start(() => {
       // Animation complete, notify parent
@@ -232,6 +251,20 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
         >
           <Ionicons name="sparkles" size={40} color="#fbbf24" />
         </Animated.View>
+        
+        {/* Animated EduDash Pro text */}
+        <Animated.View
+          style={[
+            styles.textContainer,
+            {
+              opacity: textOpacity,
+              transform: [{ translateY: textTranslateY }],
+            },
+          ]}
+        >
+          <Text style={styles.brandText}>EduDash Pro</Text>
+          <Text style={styles.tagline}>Empowering Education</Text>
+        </Animated.View>
       </LinearGradient>
     </View>
   );
@@ -274,5 +307,26 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: height / 2 - 140,
     right: width / 2 - 100,
+  },
+  textContainer: {
+    position: 'absolute',
+    bottom: height / 2 - 180,
+    alignItems: 'center',
+  },
+  brandText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(124, 58, 237, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  tagline: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 8,
+    letterSpacing: 2,
   },
 });

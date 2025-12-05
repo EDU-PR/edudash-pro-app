@@ -55,6 +55,7 @@ interface MetricCardProps {
   trend?: string;
   onPress?: () => void;
   size?: 'small' | 'medium' | 'large';
+  valueColor?: string; // Optional: color for the value text
 }
 
 interface QuickActionProps {
@@ -170,7 +171,8 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
     color, 
     trend, 
     onPress,
-    size = 'medium'
+    size = 'medium',
+    valueColor
   }) => (
     <TouchableOpacity
       style={[
@@ -200,7 +202,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             </View>
           )}
         </View>
-        <Text style={styles.metricValue}>{value}</Text>
+        <Text style={[styles.metricValue, valueColor && { color: valueColor }]}>{value}</Text>
         <Text style={styles.metricTitle}>{title}</Text>
       </View>
     </TouchableOpacity>
@@ -284,6 +286,80 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
   const metrics = getMetrics();
   const teachersWithStatus = getTeachersWithStatus();
   
+  // School Overview metrics matching PWA design - now includes registrations
+  const schoolOverviewMetrics = [
+    {
+      id: 'students',
+      title: t('dashboard.total_students', { defaultValue: 'Total Students' }),
+      value: data.stats?.students?.total ?? data.studentsCount ?? 0,
+      icon: 'people',
+      color: '#6366F1',
+      trend: 'stable'
+    },
+    {
+      id: 'enrollments',
+      title: t('dashboard.active_enrollments', { defaultValue: 'Active Enrollments' }),
+      value: data.stats?.pendingRegistrations?.total ?? 0,
+      icon: 'person-add',
+      color: '#10B981',
+      trend: data.stats?.pendingRegistrations?.total > 5 ? 'attention' : 'stable'
+    },
+    {
+      id: 'classes',
+      title: t('dashboard.active_classes', { defaultValue: 'Active Classes' }),
+      value: data.stats?.classes?.total ?? data.classesCount ?? 0,
+      icon: 'book',
+      color: '#8B5CF6',
+      trend: 'stable'
+    },
+    {
+      id: 'pending_payments',
+      title: t('dashboard.pending_payments', { defaultValue: 'Pending Payments' }),
+      value: data.stats?.pendingPayments?.total ?? 0,
+      icon: 'time',
+      color: '#F59E0B',
+      trend: data.stats?.pendingPayments?.total > 3 ? 'attention' : 'stable'
+    }
+  ];
+
+  // Financial Summary metrics matching PWA design  
+  const financialMetrics = [
+    {
+      id: 'fees_collected',
+      title: t('dashboard.registration_fees', { defaultValue: 'Registration Fees Collected' }),
+      value: `R${(data.stats?.registrationFees?.total ?? 0).toLocaleString()}`,
+      icon: 'cash',
+      color: '#10B981',
+      valueColor: '#10B981', // Green for fees
+      trend: (data.stats?.registrationFees?.total ?? 0) > 0 ? 'up' : 'stable'
+    },
+    {
+      id: 'pending_payments',
+      title: t('dashboard.pending_payments', { defaultValue: 'Pending Payments' }),
+      value: data.stats?.pendingPayments?.total ?? 0,
+      icon: 'time',
+      color: '#F59E0B',
+      valueColor: '#F59E0B', // Yellow/orange for pending
+      trend: (data.stats?.pendingPayments?.total ?? 0) > 3 ? 'attention' : 'stable'
+    },
+    {
+      id: 'enrollments',
+      title: t('dashboard.active_enrollments', { defaultValue: 'Active Enrollments' }),
+      value: data.stats?.students?.total ?? data.studentsCount ?? 0,
+      icon: 'person-add',
+      color: '#6366F1',
+      trend: 'stable'
+    },
+    {
+      id: 'events',
+      title: t('dashboard.upcoming_events', { defaultValue: 'Upcoming Events' }),
+      value: 0,
+      icon: 'calendar',
+      color: '#EC4899',
+      trend: 'stable'
+    }
+  ];
+  
   // Add pending reports metric BEFORE other metrics (high priority)
   const reportsMetric = {
     id: 'pending_reports',
@@ -308,8 +384,15 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
       subtitle: t('quick_actions.ai_assistant', { defaultValue: 'Your AI teaching assistant' })
     },
     {
-      title: t('quick_actions.enroll_student'),
+      title: t('quick_actions.registrations', { defaultValue: 'Registrations' }),
       icon: 'person-add',
+      color: '#F59E0B',
+      onPress: () => router.push('/screens/principal-registrations'),
+      subtitle: t('quick_actions.review_registrations', { defaultValue: 'Review registration requests' })
+    },
+    {
+      title: t('quick_actions.enroll_student'),
+      icon: 'school',
       color: theme.primary,
       onPress: () => router.push('/screens/student-enrollment'),
     },
@@ -320,12 +403,11 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
       onPress: () => router.push('/screens/teacher-management'),
     },
     {
-      title: t('quick_actions.send_announcement'),
+      title: t('quick_actions.campaigns', { defaultValue: 'Campaigns' }),
       icon: 'megaphone',
-      color: theme.accent,
-      onPress: () => {
-        Alert.alert(t('quick_actions.send_announcement'), t('quick_actions.announcement_description'));
-      },
+      color: '#EC4899',
+      onPress: () => router.push('/screens/campaigns'),
+      subtitle: t('quick_actions.marketing_campaigns', { defaultValue: 'Manage marketing campaigns' })
     },
     {
       title: 'Review Progress Reports',
@@ -337,7 +419,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
     },
     {
       title: 'Student Management',
-      icon: 'school',
+      icon: 'people-outline',
       color: '#3B82F6',
       onPress: () => router.push('/screens/student-management'),
       subtitle: 'View and manage students'
@@ -352,60 +434,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
 
   return (
     <View style={styles.container}>
-      {/* Fixed App Header - Hidden on web (DesktopLayout provides navigation) */}
-      {Platform.OS !== 'web' && (
-      <View style={styles.appHeader}>
-        <View style={styles.appHeaderContent}>
-          {/* Left side - Avatar + Tenant/School name */}
-          <View style={styles.headerLeft}>
-            <TouchableOpacity 
-              style={{ borderRadius: 18, overflow: 'hidden', marginRight: 10 }}
-              onPress={() => router.push('/screens/account')}
-              activeOpacity={0.7}
-              accessibilityLabel={t('common.account')}
-            >
-              <Avatar 
-                name={`${user?.user_metadata?.first_name || ''} ${user?.user_metadata?.last_name || ''}`.trim() || (user?.email || 'User')}
-                imageUri={(profile as any)?.avatar_url || (user?.user_metadata as any)?.avatar_url || null}
-                size={36}
-              />
-            </TouchableOpacity>
-            <Text style={styles.tenantName} numberOfLines={1} ellipsizeMode="tail">
-              {tenantSlug || data.schoolName || t('dashboard.your_school')}
-            </Text>
-          </View>
-          
-          {/* Right side - Dashboard Toggle + Settings */}
-          <View style={styles.headerRight}>
-            {/* Dashboard Layout Toggle */}
-            <TouchableOpacity
-              style={styles.dashboardToggle}
-              onPress={() => {
-                const newLayout = preferences.layout === 'enhanced' ? 'classic' : 'enhanced';
-                setLayout(newLayout);
-                try { Feedback.vibrate(15); } catch { /* Intentional: non-fatal */ }
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={preferences.layout === 'classic' ? 'grid' : 'apps'} 
-                size={16} 
-                color={theme.primary} 
-              />
-            </TouchableOpacity>
-            
-            {/* Settings Icon */}
-            <TouchableOpacity 
-              style={styles.settingsButton}
-              onPress={() => router.push('/screens/settings')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="settings-outline" size={20} color={theme.text} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-      )}
+      {/* Header is now provided by DesktopLayout with hamburger menu */}
 
       {/* Scrollable content */}
       <ScrollView
@@ -486,8 +515,8 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         <SectionHeader title={t('dashboard.school_overview')} sectionId="school-metrics" icon="📊" />
         {!collapsedSections.has('school-metrics') && (
         <View style={styles.metricsGrid}>
-          {/* Show first 4 metrics (reports card + 3 key metrics) */}
-          {allMetrics.slice(0, 4).map((metric, index) => (
+          {/* School Overview - 4 metrics like PWA (with registrations/payments) */}
+          {schoolOverviewMetrics.map((metric, index) => (
             <MetricCard
               key={index}
               title={metric.title}
@@ -500,17 +529,53 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
                   case 'students':
                     router.push('/screens/student-management');
                     break;
-                  case 'staff':
-                    router.push('/screens/teacher-management');
+                  case 'enrollments':
+                    router.push('/screens/principal-registrations');
                     break;
-                  case 'revenue':
+                  case 'classes':
+                    router.push('/screens/class-details');
+                    break;
+                  case 'pending_payments':
                     router.push('/screens/financial-dashboard');
                     break;
-                  case 'pending_reports':
-                    router.push('/screens/principal-report-review');
+                  default:
+                    break;
+                }
+              }}
+            />
+          ))}
+        </View>
+        )}
+      </View>
+
+      {/* Financial Summary - Collapsible - Like PWA */}
+      <View style={styles.section}>
+        <SectionHeader title={t('dashboard.financial_summary', { defaultValue: 'Financial Summary' })} sectionId="financial-summary" icon="💰" />
+        {!collapsedSections.has('financial-summary') && (
+        <View style={styles.metricsGrid}>
+          {/* Financial metrics like PWA with colored values */}
+          {financialMetrics.map((metric, index) => (
+            <MetricCard
+              key={index}
+              title={metric.title}
+              value={metric.value}
+              icon={metric.icon}
+              color={metric.color}
+              valueColor={metric.valueColor}
+              trend={metric.trend}
+              onPress={() => {
+                switch (metric.id) {
+                  case 'fees_collected':
+                  case 'pending_payments':
+                    router.push('/screens/financial-dashboard');
+                    break;
+                  case 'enrollments':
+                    router.push('/screens/principal-registrations');
+                    break;
+                  case 'events':
+                    router.push('/screens/calendar');
                     break;
                   default:
-                    // Handle other metrics
                     break;
                 }
               }}
@@ -578,12 +643,36 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         )}
       </View>
 
-      {/* Recent Activity - Collapsible */}
+      {/* Recent Activity - Collapsible - With Alerts like PWA */}
       <View style={styles.section}>
         <SectionHeader title={t('activity.recent_activity')} sectionId="recent-activity" icon="🔔" />
         {!collapsedSections.has('recent-activity') && (
         <View style={styles.recentActivityCard}>
           <Text style={styles.cardTitle}>{t('activity.recent_activity')}</Text>
+          
+          {/* Pending Payments Alert - Like PWA */}
+          {(data.stats?.pendingPayments?.total ?? 0) > 0 && (
+            <TouchableOpacity 
+              style={[styles.alertCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}
+              onPress={() => router.push('/screens/financial-dashboard')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.alertIconContainer}>
+                <Ionicons name="warning" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.alertContent}>
+                <Text style={[styles.alertTitle, { color: '#92400E' }]}>
+                  {t('dashboard.pending_payments', { defaultValue: 'Pending Payments' })}
+                </Text>
+                <Text style={[styles.alertSubtitle, { color: '#B45309' }]}>
+                  {data.stats?.pendingPayments?.total} {t('dashboard.payments_awaiting', { defaultValue: 'payments awaiting review' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#F59E0B" />
+            </TouchableOpacity>
+          )}
+          
+          {/* Recent Activities List */}
           {data.recentActivities && data.recentActivities.length > 0 ? (
             <View style={styles.activityList}>
               {data.recentActivities.slice(0, 4).map((activity: any, index: number) => (
@@ -615,30 +704,28 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         )}
       </View>
 
-      {/* Financial Summary - Collapsible */}
-      {data.financialSummary && (
-        <View style={styles.section}>
-          <SectionHeader title={t('dashboard.financial_overview')} sectionId="financials" icon="💰" />
-          {!collapsedSections.has('financials') && (
-          <View style={styles.financialGrid}>
-            <View style={styles.financialCard}>
-              <Text style={styles.financialLabel}>{t('dashboard.monthly_revenue')}</Text>
-              <Text style={[styles.financialValue, { color: theme.success }]}>
-                {formatCurrency(data.financialSummary.monthlyRevenue)}
-              </Text>
-            </View>
-            <View style={styles.financialCard}>
-              <Text style={styles.financialLabel}>{t('dashboard.net_profit')}</Text>
-              <Text style={[styles.financialValue, { 
-                color: data.financialSummary.netProfit > 0 ? theme.success : theme.error 
-              }]}>
-                {formatCurrency(data.financialSummary.netProfit)}
-              </Text>
-            </View>
+      {/* Financial Overview - Collapsible - Matching PWA style */}
+      <View style={styles.section}>
+        <SectionHeader title={t('dashboard.financial_overview')} sectionId="financials" icon="💰" />
+        {!collapsedSections.has('financials') && (
+        <View style={styles.financialGrid}>
+          <View style={styles.financialCard}>
+            <Text style={styles.financialLabel}>{t('dashboard.monthly_revenue')}</Text>
+            <Text style={[styles.financialValue, { color: '#10B981' }]}>
+              R{(data.stats?.registrationFees?.total ?? data.financialSummary?.monthlyRevenue ?? 0).toLocaleString()}
+            </Text>
           </View>
-          )}
+          <View style={styles.financialCard}>
+            <Text style={styles.financialLabel}>{t('dashboard.net_profit')}</Text>
+            <Text style={[styles.financialValue, { 
+              color: ((data.stats?.registrationFees?.total ?? data.financialSummary?.netProfit ?? 0) - (data.financialSummary?.estimatedExpenses ?? 0)) >= 0 ? '#10B981' : '#EF4444' 
+            }]}>
+              R{((data.stats?.registrationFees?.total ?? data.financialSummary?.monthlyRevenue ?? 0) - (data.financialSummary?.estimatedExpenses ?? 0)).toLocaleString()}
+            </Text>
+          </View>
         </View>
-      )}
+        )}
+      </View>
       </ScrollView>
 
       {/* Dash AI Floating Button removed - global FAB is used from _layout.tsx */}
@@ -722,7 +809,7 @@ const createStyles = (theme: any, insetTop = 0, insetBottom = 0) => {
       marginTop: (isSmallScreen ? 165 : 170) + insetTop,
     },
     scrollContainerWeb: {
-      marginTop: 40, // No header on web, DesktopLayout handles it
+      marginTop: 0, // DesktopLayout header handles it - no extra margin needed
     },
     scrollContent: {
       paddingBottom: insetBottom + (isSmallScreen ? 56 : 72),
@@ -878,7 +965,7 @@ const createStyles = (theme: any, insetTop = 0, insetBottom = 0) => {
       elevation: 3,
     },
     welcomeContent: {
-      padding: isSmallScreen ? 16 : 20,
+      padding: isSmallScreen ? 12 : 16,
     },
     welcomeTitle: {
       fontSize: isSmallScreen ? 18 : 20,
@@ -948,10 +1035,10 @@ const createStyles = (theme: any, insetTop = 0, insetBottom = 0) => {
       paddingVertical: isSmallScreen ? 10 : 12,
     },
     firstSection: {
-      paddingTop: isSmallScreen ? 6 : 8,
+      paddingTop: isSmallScreen ? 2 : 4,
     },
     firstSectionWeb: {
-      paddingTop: 12, // Balanced spacing for web with DesktopLayout (was 16, then 4)
+      paddingTop: 4, // Reduced spacing for web with DesktopLayout
     },
     sectionTitle: {
       fontSize: isSmallScreen ? 18 : isTablet ? 22 : 20,
@@ -1355,6 +1442,35 @@ const createStyles = (theme: any, insetTop = 0, insetBottom = 0) => {
     chartSubtext: {
       fontSize: 12,
       color: theme.textSecondary,
+    },
+    // Alert card styles for pending payments etc
+    alertCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      marginBottom: 12,
+    },
+    alertIconContainer: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    alertContent: {
+      flex: 1,
+    },
+    alertTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    alertSubtitle: {
+      fontSize: 12,
     },
     activityList: {
       gap: isSmallScreen ? 8 : 12,

@@ -14,6 +14,7 @@ import {
   FlatList,
   Platform,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -25,10 +26,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Clipboard from 'expo-clipboard';
 import { router, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
-import { useTheme } from '@/lib/hooks/useTheme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -101,30 +103,6 @@ export default function CampaignsScreen() {
   const [formMaxRedemptions, setFormMaxRedemptions] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [formFeatured, setFormFeatured] = useState(false);
-
-  // Feature flag check
-  if (!flags.campaigns_enabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'Campaigns' }} />
-        <View style={styles.disabledContainer}>
-          <Ionicons name="megaphone-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            Campaigns feature is not available
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Please upgrade your subscription to access marketing campaigns.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
 
   // Load user's organization
   useEffect(() => {
@@ -289,6 +267,84 @@ export default function CampaignsScreen() {
     );
   };
 
+  // Share campaign
+  const shareCampaign = async (campaign: Campaign) => {
+    const typeInfo = CAMPAIGN_TYPE_LABELS[campaign.campaign_type];
+    let discountText = '';
+    
+    if (campaign.discount_type === 'percentage') {
+      discountText = `${campaign.discount_value}% off`;
+    } else if (campaign.discount_type === 'fixed_amount') {
+      discountText = `R${campaign.discount_value} off`;
+    } else if (campaign.discount_type === 'waive_registration') {
+      discountText = 'Registration fee waived';
+    } else if (campaign.discount_type === 'first_month_free') {
+      discountText = 'First month free';
+    }
+
+    const promoText = campaign.promo_code ? `\n\n🎁 Use code: ${campaign.promo_code}` : '';
+    const endDate = new Date(campaign.end_date).toLocaleDateString('en-ZA', { 
+      day: 'numeric', 
+      month: 'long', 
+      year: 'numeric' 
+    });
+
+    const message = `🎉 ${campaign.name}\n\n` +
+      `✨ ${typeInfo.label} Special\n` +
+      `💰 ${discountText}${promoText}\n\n` +
+      `📅 Valid until ${endDate}\n\n` +
+      `${campaign.description || 'Limited time offer! Don\'t miss out!'}\n\n` +
+      `📱 Enroll now via EduDash Pro!`;
+
+    try {
+      // Try native share first (mobile)
+      if (Platform.OS !== 'web') {
+        await Share.share({
+          message,
+          title: campaign.name,
+        });
+      } else if (navigator.share) {
+        // Use Web Share API if available
+        await navigator.share({
+          title: campaign.name,
+          text: message,
+        });
+      } else {
+        // Fallback to clipboard copy
+        await Clipboard.setStringAsync(message);
+        Alert.alert(
+          'Copied to Clipboard! 📋',
+          'Campaign details copied. You can now paste and share via WhatsApp, email, or any other app.',
+          [{ text: 'OK' }]
+        );
+      }
+      
+      // Increment views count when shared
+      await supabase
+        .from('marketing_campaigns')
+        .update({ views_count: (campaign.views_count || 0) + 1 })
+        .eq('id', campaign.id);
+      
+      loadCampaigns();
+    } catch (error) {
+      // If share was cancelled, that's ok
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Error sharing campaign:', error);
+        // Fallback to clipboard on any error
+        try {
+          await Clipboard.setStringAsync(message);
+          Alert.alert(
+            'Copied to Clipboard! 📋',
+            'Campaign details copied. Share via WhatsApp, email, or any app.',
+            [{ text: 'OK' }]
+          );
+        } catch (clipError) {
+          console.error('Clipboard error:', clipError);
+        }
+      }
+    }
+  };
+
   // Toggle campaign status
   const toggleCampaignStatus = async (campaign: Campaign) => {
     try {
@@ -302,6 +358,39 @@ export default function CampaignsScreen() {
     } catch (error) {
       console.error('Error toggling campaign:', error);
     }
+  };
+
+  // Test conversion (for demo/testing purposes)
+  const testConversion = async (campaign: Campaign) => {
+    Alert.alert(
+      'Test Conversion',
+      `Simulate a conversion for "${campaign.name}"? This will increment the conversions count.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Add Conversion',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('marketing_campaigns')
+                .update({ 
+                  conversions_count: (campaign.conversions_count || 0) + 1,
+                  current_redemptions: (campaign.current_redemptions || 0) + 1
+                })
+                .eq('id', campaign.id);
+
+              if (error) throw error;
+              
+              Alert.alert('Success! 🎉', 'Conversion recorded successfully.');
+              loadCampaigns();
+            } catch (error) {
+              console.error('Error recording conversion:', error);
+              Alert.alert('Error', 'Failed to record conversion');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Render campaign card
@@ -331,15 +420,15 @@ export default function CampaignsScreen() {
           <View style={styles.statusBadge}>
             {isExpired ? (
               <View style={[styles.badge, { backgroundColor: '#ef4444' }]}>
-                <Text style={styles.badgeText}>Expired</Text>
+                <Text style={[styles.badgeText, { color: '#ffffff' }]}>Expired</Text>
               </View>
             ) : item.active ? (
               <View style={[styles.badge, { backgroundColor: '#22c55e' }]}>
-                <Text style={styles.badgeText}>Active</Text>
+                <Text style={[styles.badgeText, { color: '#ffffff' }]}>Active</Text>
               </View>
             ) : (
-              <View style={[styles.badge, { backgroundColor: theme.muted }]}>
-                <Text style={styles.badgeText}>Paused</Text>
+              <View style={[styles.badge, { backgroundColor: isDark ? '#4b5563' : theme.muted }]}>
+                <Text style={[styles.badgeText, { color: '#ffffff' }]}>Paused</Text>
               </View>
             )}
           </View>
@@ -363,7 +452,7 @@ export default function CampaignsScreen() {
           )}
         </View>
 
-        {/* Stats */}
+        {/* Stats - tap conversions to test */}
         <View style={styles.statsRow}>
           <View style={styles.stat}>
             <Ionicons name="eye-outline" size={14} color={theme.muted} />
@@ -372,18 +461,23 @@ export default function CampaignsScreen() {
             </Text>
           </View>
           <View style={styles.stat}>
-            <Ionicons name="checkmark-circle-outline" size={14} color={theme.muted} />
-            <Text style={[styles.statText, { color: theme.muted }]}>
+            <Ionicons name="checkmark-circle-outline" size={14} color={item.current_redemptions > 0 ? '#22c55e' : theme.muted} />
+            <Text style={[styles.statText, { color: item.current_redemptions > 0 ? '#22c55e' : theme.muted }]}>
               {item.current_redemptions}
               {item.max_redemptions ? `/${item.max_redemptions}` : ''} used
             </Text>
           </View>
-          <View style={styles.stat}>
-            <Ionicons name="trending-up-outline" size={14} color={theme.muted} />
-            <Text style={[styles.statText, { color: theme.muted }]}>
+          <TouchableOpacity 
+            style={styles.stat} 
+            onPress={() => testConversion(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="trending-up-outline" size={14} color={item.conversions_count > 0 ? '#3b82f6' : theme.muted} />
+            <Text style={[styles.statText, { color: item.conversions_count > 0 ? '#3b82f6' : theme.muted }]}>
               {item.conversions_count} conversions
             </Text>
-          </View>
+            <Ionicons name="add-circle-outline" size={12} color={theme.muted} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
         </View>
 
         {/* Actions */}
@@ -395,10 +489,19 @@ export default function CampaignsScreen() {
             <Ionicons
               name={item.active ? 'pause' : 'play'}
               size={16}
-              color={theme.text}
+              color={item.active ? '#f59e0b' : '#22c55e'}
             />
-            <Text style={[styles.actionButtonText, { color: theme.text }]}>
+            <Text style={[styles.actionButtonText, { color: item.active ? '#f59e0b' : '#22c55e' }]}>
               {item.active ? 'Pause' : 'Activate'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.shareButton]}
+            onPress={() => shareCampaign(item)}
+          >
+            <Ionicons name="share-social" size={16} color="#3b82f6" />
+            <Text style={[styles.actionButtonText, { color: '#3b82f6' }]}>
+              Share
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -435,11 +538,63 @@ export default function CampaignsScreen() {
     </View>
   );
 
+  // Feature flag check - campaigns not enabled
+  if (!flags.campaigns_enabled) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen
+          options={{
+            title: 'Campaigns',
+            headerStyle: { backgroundColor: theme.surface },
+            headerTintColor: theme.text,
+            headerTitleStyle: { color: theme.text },
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.headerButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+        <View style={styles.disabledContainer}>
+          <Ionicons name="megaphone-outline" size={64} color={theme.muted} />
+          <Text style={[styles.disabledText, { color: theme.text }]}>
+            Campaigns feature is not available
+          </Text>
+          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
+            Please upgrade your subscription to access marketing campaigns.
+          </Text>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen
         options={{
           title: 'Marketing Campaigns',
+          headerStyle: { backgroundColor: theme.surface },
+          headerTintColor: theme.text,
+          headerTitleStyle: { color: theme.text },
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.headerButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.text} />
+            </TouchableOpacity>
+          ),
           headerRight: () => (
             <TouchableOpacity
               onPress={() => {
@@ -456,15 +611,15 @@ export default function CampaignsScreen() {
 
       {/* Header Stats */}
       <LinearGradient
-        colors={isDark ? ['#1e293b', '#0f172a'] : ['#f0f9ff', '#e0f2fe']}
+        colors={isDark ? ['#1e293b', '#0f172a'] : ['#f8fafc', '#f1f5f9']}
         style={styles.header}
       >
         <View style={styles.headerStats}>
           <View style={styles.headerStat}>
-            <Text style={[styles.headerStatValue, { color: theme.text }]}>
+            <Text style={[styles.headerStatValue, { color: '#6366f1' }]}>
               {campaigns.length}
             </Text>
-            <Text style={[styles.headerStatLabel, { color: theme.muted }]}>
+            <Text style={[styles.headerStatLabel, { color: theme.text }]}>
               Total
             </Text>
           </View>
@@ -473,16 +628,16 @@ export default function CampaignsScreen() {
             <Text style={[styles.headerStatValue, { color: '#22c55e' }]}>
               {campaigns.filter((c) => c.active).length}
             </Text>
-            <Text style={[styles.headerStatLabel, { color: theme.muted }]}>
+            <Text style={[styles.headerStatLabel, { color: theme.text }]}>
               Active
             </Text>
           </View>
           <View style={styles.headerStatDivider} />
           <View style={styles.headerStat}>
-            <Text style={[styles.headerStatValue, { color: theme.primary }]}>
+            <Text style={[styles.headerStatValue, { color: '#f59e0b' }]}>
               {campaigns.reduce((sum, c) => sum + c.conversions_count, 0)}
             </Text>
-            <Text style={[styles.headerStatLabel, { color: theme.muted }]}>
+            <Text style={[styles.headerStatLabel, { color: theme.text }]}>
               Conversions
             </Text>
           </View>
@@ -793,14 +948,19 @@ const styles = StyleSheet.create({
   },
   headerStat: {
     alignItems: 'center',
+    minWidth: 70,
   },
   headerStatValue: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   headerStatLabel: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '500',
     marginTop: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   headerStatDivider: {
     width: 1,
@@ -831,8 +991,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   typeIcon: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -842,26 +1002,29 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   campaignName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   campaignType: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 3,
   },
   statusBadge: {
     marginLeft: 8,
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   badgeText: {
     color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   discountInfo: {
     flexDirection: 'row',
@@ -872,25 +1035,26 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(128,128,128,0.2)',
   },
   discountText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     marginLeft: 8,
   },
   promoCodeBadge: {
     marginLeft: 'auto',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   promoCodeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
   statsRow: {
     flexDirection: 'row',
     marginTop: 12,
     gap: 16,
+    flexWrap: 'wrap',
   },
   stat: {
     flexDirection: 'row',
@@ -898,26 +1062,32 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
+    fontWeight: '500',
     marginLeft: 4,
   },
   actionsRow: {
     flexDirection: 'row',
-    marginTop: 12,
-    gap: 12,
+    marginTop: 14,
+    gap: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+  },
+  shareButton: {
+    borderColor: '#3b82f6',
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
   },
   actionButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   emptyState: {
     alignItems: 'center',

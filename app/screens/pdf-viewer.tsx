@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
-import { useTheme } from '@/lib/hooks/useTheme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 // Conditional import for react-native-pdf (requires native module)
 let Pdf: any = null;

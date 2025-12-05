@@ -26,7 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
-import { useTheme } from '@/lib/hooks/useTheme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2;
@@ -89,22 +89,6 @@ export default function EBooksScreen() {
 
   // Check if feature is enabled
   const flags = getFeatureFlagsSync();
-  if (!flags.ebooks_enabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'E-Books' }} />
-        <View style={styles.disabledContainer}>
-          <Ionicons name="book-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            E-Books feature is not available
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Please contact your administrator to enable this feature.
-          </Text>
-        </View>
-      </View>
-    );
-  }
 
   // Load books from database
   const loadBooks = useCallback(async () => {
@@ -326,6 +310,24 @@ export default function EBooksScreen() {
       </TouchableOpacity>
     );
   };
+
+  // Feature flag check - e-books not enabled
+  if (!flags.ebooks_enabled) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ title: 'E-Books' }} />
+        <View style={styles.disabledContainer}>
+          <Ionicons name="book-outline" size={64} color={theme.muted} />
+          <Text style={[styles.disabledText, { color: theme.text }]}>
+            E-Books feature is not available
+          </Text>
+          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
+            Please contact your administrator to enable this feature.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
