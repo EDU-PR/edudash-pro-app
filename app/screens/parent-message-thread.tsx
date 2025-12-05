@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import {
   Message 
 } from '@/hooks/useParentMessaging';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCall } from '@/components/calls/CallProvider';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 
 // Format message timestamp
@@ -119,13 +121,37 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
 });
 
 export default function ParentMessageThreadScreen() {
-  const { threadId, title } = useLocalSearchParams<{ threadId: string; title: string }>();
+  const { threadId, title, teacherId, teacherName } = useLocalSearchParams<{ 
+    threadId: string; 
+    title: string; 
+    teacherId?: string;
+    teacherName?: string;
+  }>();
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const scrollViewRef = useRef<FlatList>(null);
+  
+  // Call functionality
+  let callContext: ReturnType<typeof useCall> | null = null;
+  try {
+    callContext = useCall();
+  } catch {
+    // Call provider not available
+  }
+  
+  // Check if calls are enabled
+  const callsEnabled = useMemo(() => {
+    try {
+      const flags = getFeatureFlagsSync();
+      return flags.video_calls_enabled || flags.voice_calls_enabled;
+    } catch {
+      return false;
+    }
+  }, []);
+  
   // Hooks
   const { data: messages = [], isLoading, error, refetch } = useThreadMessages(threadId);
   const sendMessageMutation = useSendMessage();
@@ -146,6 +172,43 @@ export default function ParentMessageThreadScreen() {
       }, 100);
     }
   }, [messages.length]);
+  
+  // Get the other participant's user ID for calling
+  const otherParticipantId = useMemo(() => {
+    if (teacherId) return teacherId;
+    // Try to find it from messages
+    const otherMessage = messages.find(m => m.sender_id !== user?.id);
+    return otherMessage?.sender_id;
+  }, [teacherId, messages, user?.id]);
+  
+  const otherParticipantName = useMemo(() => {
+    if (teacherName) return decodeURIComponent(teacherName);
+    if (title) return decodeURIComponent(title);
+    return t('parent.teacher', { defaultValue: 'Teacher' });
+  }, [teacherName, title, t]);
+  
+  // Call handlers
+  const handleVoiceCall = () => {
+    if (!callContext || !otherParticipantId) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('parent.cannotStartCall', { defaultValue: 'Unable to start call. Please try again.' })
+      );
+      return;
+    }
+    callContext.startVoiceCall(otherParticipantId, otherParticipantName);
+  };
+  
+  const handleVideoCall = () => {
+    if (!callContext || !otherParticipantId) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('parent.cannotStartCall', { defaultValue: 'Unable to start call. Please try again.' })
+      );
+      return;
+    }
+    callContext.startVideoCall(otherParticipantId, otherParticipantName);
+  };
   
   const handleSendMessage = async () => {
     const content = messageText.trim();
@@ -273,6 +336,30 @@ export default function ParentMessageThreadScreen() {
       marginHorizontal: 16,
       marginVertical: 4,
     },
+    callButtonsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      justifyContent: 'flex-end',
+      gap: 12,
+    },
+    callButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    voiceCallButton: {
+      backgroundColor: theme.success + '20',
+    },
+    videoCallButton: {
+      backgroundColor: theme.info + '20',
+    },
   });
   
   // Loading state
@@ -328,6 +415,27 @@ export default function ParentMessageThreadScreen() {
         title={title ? decodeURIComponent(title) : t('parent.messages')} 
         showBackButton 
       />
+      
+      {/* Call buttons bar - only show when calls are enabled and we have a recipient */}
+      {callsEnabled && otherParticipantId && Platform.OS !== 'web' && (
+        <View style={styles.callButtonsContainer}>
+          <Text style={{ flex: 1, color: theme.textSecondary, fontSize: 12 }}>
+            {otherParticipantName}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.callButton, styles.voiceCallButton]} 
+            onPress={handleVoiceCall}
+          >
+            <Ionicons name="call" size={20} color={theme.success} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.callButton, styles.videoCallButton]} 
+            onPress={handleVideoCall}
+          >
+            <Ionicons name="videocam" size={20} color={theme.info} />
+          </TouchableOpacity>
+        </View>
+      )}
       
       <View style={styles.content}>
         {messages.length === 0 ? (

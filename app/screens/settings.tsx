@@ -17,7 +17,7 @@ import { BiometricBackupManager } from "@/lib/BiometricBackupManager";
 import { assertSupabase } from "@/lib/supabase";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
-import { useThemedStyles, themedStyles } from "@/hooks/useThemedStyles";
+import { useThemedStyles, themedStyles, type Theme } from "@/hooks/useThemedStyles";
 import { ThemeLanguageSettings } from '@/components/settings/ThemeLanguageSettings';
 import InvoiceNotificationSettings from '@/components/settings/InvoiceNotificationSettings';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
@@ -73,7 +73,7 @@ export default function SettingsScreen() {
   const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(true);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
-  const styles = useThemedStyles((theme) => ({
+  const styles = useThemedStyles((theme: Theme) => ({
     container: {
       flex: 1,
       backgroundColor: theme.background,
@@ -333,12 +333,12 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <DesktopLayout role={(profile?.role as any) || 'teacher'} title="Settings">
+      <DesktopLayout role={(profile?.role as any) || 'teacher'} title={t('navigation.settings', { defaultValue: 'Settings' })} showBackButton>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={styles.loadingText}>{t('settings.loading.settings')}</Text>
+            <Text style={styles.loadingText}>{t('settings.loading.settings', { defaultValue: 'Loading settings...' })}</Text>
           </View>
         </View>
       </DesktopLayout>
@@ -346,7 +346,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <DesktopLayout role={(profile?.role as any) || 'teacher'} title="Settings">
+    <DesktopLayout role={(profile?.role as any) || 'teacher'} title={t('navigation.settings', { defaultValue: 'Settings' })} showBackButton>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
         <ScrollView

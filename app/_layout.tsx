@@ -34,6 +34,11 @@ import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { DashChatButton } from '@/components/ui/DashChatButton';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
 import { AnimatedSplash } from '@/components/ui/AnimatedSplash';
+// TEMP: Disabled until @daily-co/react-native-webrtc is properly installed
+// import { CallProvider, useCall } from '@/components/calls/CallProvider';
+// import { IncomingCallOverlay } from '@/components/calls/IncomingCallOverlay';
+// import { VoiceCallInterface } from '@/components/calls/VoiceCallInterface';
+// import { VideoCallInterface } from '@/components/calls/VideoCallInterface';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '@/hooks/useRouteGuard';
@@ -81,6 +86,15 @@ function LayoutContent() {
     }
   }, [authLoading, isAuthRoute]);
   
+  // Get call context for rendering call interfaces (wrapped in try-catch for safety)
+  // TEMP: Disabled until @daily-co/react-native-webrtc is properly installed
+  // let callContext: ReturnType<typeof useCall> | null = null;
+  // try {
+  //   callContext = useCall();
+  // } catch {
+  //   // CallProvider may not be available yet
+  // }
+  
   return (
     <View style={styles.container}>
       <StatusBar key={statusBarKey} style={isDark ? 'light' : 'dark'} animated />
@@ -106,6 +120,37 @@ function LayoutContent() {
       
       {/* Persistent Bottom Navigation - positioned at bottom */}
       <BottomTabBar />
+      
+      {/* Call Interfaces - TEMP: Disabled until @daily-co/react-native-webrtc is properly installed */}
+      {/* {Platform.OS !== 'web' && callContext && (
+        <>
+          <IncomingCallOverlay
+            callerName={callContext.incomingCall?.caller_name || 'Unknown'}
+            callType={callContext.incomingCall?.call_type || 'voice'}
+            onAnswer={callContext.answerCall}
+            onReject={callContext.rejectCall}
+            isVisible={!!callContext.incomingCall}
+          />
+          <VoiceCallInterface
+            isOpen={callContext.isInActiveCall && (callContext.outgoingCall?.callType === 'voice' || callContext.incomingCall?.call_type === 'voice')}
+            onClose={callContext.endCall}
+            userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
+            callId={callContext.incomingCall?.call_id}
+            meetingUrl={callContext.incomingCall?.meeting_url}
+            calleeId={callContext.outgoingCall?.userId}
+            isOwner={!!callContext.outgoingCall}
+          />
+          <VideoCallInterface
+            isOpen={callContext.isInActiveCall && (callContext.outgoingCall?.callType === 'video' || callContext.incomingCall?.call_type === 'video')}
+            onClose={callContext.endCall}
+            userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
+            callId={callContext.incomingCall?.call_id}
+            meetingUrl={callContext.incomingCall?.meeting_url}
+            calleeId={callContext.outgoingCall?.userId}
+            isOwner={!!callContext.outgoingCall}
+          />
+        </>
+      )} */}
     </View>
   );
 }
@@ -125,17 +170,20 @@ export default function RootLayout() {
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>
-            <OnboardingProvider>
-              <DashboardPreferencesProvider>
-                <TermsProvider>
-                  <ToastProvider>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                      <RootLayoutContent />
-                    </GestureHandlerRootView>
-                  </ToastProvider>
-                </TermsProvider>
-              </DashboardPreferencesProvider>
-            </OnboardingProvider>
+            {/* TEMP: CallProvider disabled until @daily-co/react-native-webrtc is properly installed */}
+            {/* <CallProvider> */}
+              <OnboardingProvider>
+                <DashboardPreferencesProvider>
+                  <TermsProvider>
+                    <ToastProvider>
+                      <GestureHandlerRootView style={{ flex: 1 }}>
+                        <RootLayoutContent />
+                      </GestureHandlerRootView>
+                    </ToastProvider>
+                  </TermsProvider>
+                </DashboardPreferencesProvider>
+              </OnboardingProvider>
+            {/* </CallProvider> */}
           </AuthProvider>
         </ThemeProvider>
       </QueryProvider>
