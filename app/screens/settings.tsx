@@ -23,6 +23,7 @@ import InvoiceNotificationSettings from '@/components/settings/InvoiceNotificati
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
+import { useAlert } from '@/components/ui/StyledAlert';
 // Safe useUpdates hook that handles missing provider
 const useSafeUpdates = () => {
   try {
@@ -57,6 +58,7 @@ export default function SettingsScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
   const { profile } = useAuth();
+  const alert = useAlert();
   const [refreshing, setRefreshing] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = useState(false);
@@ -576,7 +578,10 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={[styles.settingItem, styles.lastSettingItem]}
               onPress={() => {
-                Alert.alert(t('settings.feedback_test_alert.title'), t('settings.feedback_test_alert.message'));
+                alert.showWarning(
+                  t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }), 
+                  t('settings.feedback_test_alert.message', { defaultValue: 'Haptics and sound feedback are temporarily disabled.' })
+                );
               }}
             >
               <View style={styles.settingLeft}>

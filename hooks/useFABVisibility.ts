@@ -60,6 +60,17 @@ export const useFABVisibility = (pathname: string | null) => {
       return true;
     }
 
+    // Messaging routes - hide FAB to avoid overlap with compose/send buttons
+    if (
+      pathname.includes('messages') ||
+      pathname.includes('message-thread') ||
+      pathname.includes('parent-messages') ||
+      pathname.includes('teacher/messages') ||
+      pathname.includes('principal/messages')
+    ) {
+      return true;
+    }
+
     // PWA install page - hide FAB on installation instructions
     if (pathname === '/pwa-install' || pathname.startsWith('/pwa-install')) {
       return true;

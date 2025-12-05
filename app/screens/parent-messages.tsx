@@ -238,6 +238,128 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
   );
 });
 
+// Dash AI Chat Item - Special entry for AI assistant
+const DashAIItem: React.FC<{ onPress: () => void }> = React.memo(({ onPress }) => {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  
+  const styles = StyleSheet.create({
+    container: {
+      backgroundColor: theme.surface,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 16,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: '#8B5CF6' + '40',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#8B5CF6',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
+    },
+    inner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+    },
+    avatarGlow: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: '#8B5CF6' + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+    },
+    avatarInner: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: '#8B5CF6',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    content: {
+      flex: 1,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    name: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    sparkle: {
+      marginLeft: 6,
+    },
+    aiBadge: {
+      backgroundColor: '#8B5CF6' + '20',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      marginLeft: 8,
+    },
+    aiBadgeText: {
+      fontSize: 11,
+      color: '#8B5CF6',
+      fontWeight: '600',
+    },
+    subtitle: {
+      fontSize: 13,
+      color: '#8B5CF6',
+      fontWeight: '500',
+      marginBottom: 4,
+    },
+    description: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+    },
+  });
+  
+  return (
+    <TouchableOpacity 
+      style={styles.container} 
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.inner}>
+        <View style={styles.avatarGlow}>
+          <View style={styles.avatarInner}>
+            <Ionicons name="sparkles" size={24} color="white" />
+          </View>
+        </View>
+        
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <Text style={styles.name}>Dash AI</Text>
+            <Ionicons name="sparkles" size={14} color="#8B5CF6" style={styles.sparkle} />
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          </View>
+          <Text style={styles.subtitle}>
+            {t('parent.aiAssistantSubtitle', { defaultValue: '✨ AI Assistant for lesson planning & grading' })}
+          </Text>
+          <Text style={styles.description} numberOfLines={1}>
+            {t('parent.aiAssistantDesc', { defaultValue: "Hi! I'm Dash, your AI teaching assistant. I c..." })}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 export default function ParentMessagesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -265,6 +387,10 @@ export default function ParentMessagesScreen() {
   
   const handleStartNewMessage = useCallback(() => {
     router.push('/screens/parent-new-message');
+  }, []);
+  
+  const handleOpenDashAI = useCallback(() => {
+    router.push('/screens/dash-assistant');
   }, []);
   
   const handleSettings = useCallback(() => {
@@ -487,6 +613,10 @@ export default function ParentMessagesScreen() {
           onNewMessage={handleStartNewMessage}
           onSettings={handleSettings}
         />
+        {/* Still show Dash AI even when no messages */}
+        <View style={{ paddingTop: 8 }}>
+          <DashAIItem onPress={handleOpenDashAI} />
+        </View>
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.primary} />
@@ -527,6 +657,9 @@ export default function ParentMessagesScreen() {
             onPress={() => handleThreadPress(item)}
           />
         )}
+        ListHeaderComponent={
+          <DashAIItem onPress={handleOpenDashAI} />
+        }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
