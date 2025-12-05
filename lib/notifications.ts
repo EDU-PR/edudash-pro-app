@@ -137,6 +137,17 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
     }
 
     console.log('[Push Registration] Successfully registered device')
+    
+    // Activate this user's tokens and deactivate others on this device (multi-account support)
+    try {
+      const { reactivateUserTokens } = await import('./NotificationRouter');
+      await reactivateUserTokens(user.id);
+      console.log('[Push Registration] Token activation complete');
+    } catch (activationErr) {
+      console.warn('[Push Registration] Token activation failed (non-blocking):', activationErr);
+      // Non-fatal: registration succeeded, activation is a bonus
+    }
+    
     return { status: 'registered', token }
   } catch (error: any) {
     console.error('[Push Registration] Exception:', error?.message || error)
