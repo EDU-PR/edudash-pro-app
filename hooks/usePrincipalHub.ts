@@ -35,6 +35,7 @@ export interface SchoolStats {
   pendingPayments: { total: number; trend: string };
   monthlyRevenue: { total: number; trend: string };
   attendanceRate: { percentage: number; trend: string };
+  registrationFees?: { total: number; trend: string }; // Optional for schools tracking registration fees
   timestamp: string;
 }
 
@@ -560,7 +561,7 @@ export const usePrincipalHub = () => {
                 .from('students')
                 .select('id')
                 .in('class_id', classIds)
-                .then(res => (res.data || []).map((s: any) => s.id))
+                .then((res: { data: any[] | null }) => (res.data || []).map((s: any) => s.id))
               )
               .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) || { data: [] };
               
@@ -797,7 +798,7 @@ export const usePrincipalHub = () => {
         totalClasses: stats.classes.total,
         attendanceRate: stats.attendanceRate.percentage + '%',
         monthlyRevenue: 'R' + stats.monthlyRevenue.total.toLocaleString(),
-        teacherNames: teachers.map(t => t.full_name).join(', ') || 'None'
+        teacherNames: teachers.map((t: any) => t.full_name).join(', ') || 'None'
       });
       
       // Get real school name from database

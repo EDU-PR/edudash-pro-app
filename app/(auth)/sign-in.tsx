@@ -17,6 +17,7 @@ import { Link } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { BiometricAuthService } from '@/services/BiometricAuthService';
 
 export default function SignIn() {
   const { t } = useTranslation();
@@ -31,6 +32,8 @@ export default function SignIn() {
   const [rememberMe, setRememberMe] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricAttempted, setBiometricAttempted] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
 
 console.log('[SignIn] Component rendering, theme:', theme);
@@ -76,6 +79,80 @@ console.log('[SignIn] Component rendering, theme:', theme);
     }
   }, [searchParams, t]);
 
+  // Biometric-first sign-in: attempt biometric auth automatically for returning users
+  useEffect(() => {
+    const attemptBiometricSignIn = async () => {
+      // Skip on web or if already attempted
+      if (Platform.OS === 'web' || biometricAttempted) {
+        return;
+      }
+      
+      try {
+        setBiometricAttempted(true);
+        
+        // Check if biometrics are enabled and available
+        const isEnabled = await BiometricAuthService.isBiometricEnabled();
+        if (!isEnabled) {
+          console.log('[SignIn] Biometrics not enabled, skipping auto-prompt');
+          return;
+        }
+        
+        const capabilities = await BiometricAuthService.checkCapabilities();
+        if (!capabilities.isAvailable || !capabilities.isEnrolled) {
+          console.log('[SignIn] Biometrics not available or enrolled, skipping');
+          return;
+        }
+        
+        console.log('[SignIn] Attempting biometric sign-in...');
+        setBiometricLoading(true);
+        
+        // Attempt biometric authentication
+        const biometricData = await BiometricAuthService.attemptBiometricLogin();
+        
+        if (biometricData?.securityToken) {
+          console.log('[SignIn] Biometric auth successful, restoring session...');
+          
+          // Get refresh token from secure storage
+          const refreshToken = await BiometricAuthService.getStoredRefreshToken();
+          if (refreshToken) {
+            // Restore Supabase session using refresh token
+            const { data, error } = await assertSupabase().auth.setSession({
+              access_token: biometricData.securityToken,
+              refresh_token: refreshToken,
+            });
+            
+            if (error) {
+              console.error('[SignIn] Session restore failed:', error);
+              Alert.alert(
+                t('common.error', { defaultValue: 'Error' }),
+                t('auth.biometric_restore_failed', { defaultValue: 'Biometric authentication succeeded but session restore failed. Please sign in again.' })
+              );
+            } else {
+              console.log('[SignIn] Session restored via biometrics');
+              // AuthContext will handle navigation
+            }
+          } else {
+            console.warn('[SignIn] No refresh token found, cannot restore session');
+          }
+        } else {
+          console.log('[SignIn] Biometric auth failed or cancelled');
+        }
+      } catch (error) {
+        console.error('[SignIn] Biometric sign-in error:', error);
+        // Silently fail - user can still use email/password
+      } finally {
+        setBiometricLoading(false);
+      }
+    };
+    
+    // Small delay to ensure UI is ready
+    const timer = setTimeout(() => {
+      attemptBiometricSignIn();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
+  
   // Load saved credentials (web platform - no biometrics)
   useEffect(() => {
     const loadSavedCredentials = async () => {
@@ -320,6 +397,20 @@ console.log('[SignIn] Component rendering, theme:', theme);
       color: marketingTokens.colors.fg.secondary,
       textAlign: 'center',
     },
+    biometricLoadingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 16,
+      padding: 12,
+      backgroundColor: theme.surfaceVariant,
+      borderRadius: 8,
+      gap: 12,
+    },
+    biometricLoadingText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
     form: {
       marginTop: 16,
       gap: 12,
@@ -561,6 +652,15 @@ return (
               <View style={styles.header}>
                 <Text style={styles.title}>{t('auth.sign_in.welcome_back', { defaultValue: 'Welcome Back' })}</Text>
                 <Text style={styles.subtitle}>{t('auth.sign_in.sign_in_to_account', { defaultValue: 'Sign in to your account' })}</Text>
+                
+                {biometricLoading && (
+                  <View style={styles.biometricLoadingContainer}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={styles.biometricLoadingText}>
+                      {t('auth.sign_in.authenticating_biometric', { defaultValue: 'Authenticating with biometrics...' })}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {successMessage && (

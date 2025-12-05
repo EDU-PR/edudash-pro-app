@@ -196,28 +196,28 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         value: String(unreadCount),
         icon: 'mail-unread',
         color: theme.primary,
-        trend: unreadCount > 5 ? 'attention' : 'stable',
+        trend: (unreadCount > 5 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
       },
       {
         title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }),
         value: pendingHomework.toString(),
         icon: 'document-text',
         color: theme.warning,
-        trend: pendingHomework > 3 ? 'attention' : pendingHomework === 0 ? 'up' : 'stable',
+        trend: (pendingHomework > 3 ? 'attention' : pendingHomework === 0 ? 'up' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
       },
       {
         title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }),
         value: attendancePercentage,
         icon: 'calendar',
         color: theme.success,
-        trend: attendanceRate >= 90 ? 'up' : attendanceRate >= 75 ? 'stable' : 'attention',
+        trend: (attendanceRate >= 90 ? 'up' : attendanceRate >= 75 ? 'stable' : 'attention') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
       },
       {
         title: t('parent.total_children', { defaultValue: 'Total Children' }),
         value: (dashboardData.totalChildren ?? 0).toString(),
         icon: 'people',
         color: theme.secondary,
-        trend: 'stable',
+        trend: 'stable' as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
       },
     ];
   }, [dashboardData, unreadMessageCount, theme, t]);

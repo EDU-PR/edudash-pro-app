@@ -106,7 +106,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           style={styles.searchIcon}
         />
         <TextInput
-          style={styles.input}
+          style={styles.input as any}
           placeholder={placeholder}
           placeholderTextColor={theme.textSecondary}
           value={query}

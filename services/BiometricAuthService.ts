@@ -655,7 +655,26 @@ export class BiometricAuthService {
 
       return null;
     } catch (error) {
-      console.error("Error getting stored biometric data:", error);
+      console.error("Error retrieving biometric data:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get stored refresh token for session restoration
+   */
+  static async getStoredRefreshToken(): Promise<string | null> {
+    try {
+      // Try SecureStore first, fallback to AsyncStorage
+      let token = SecureStore 
+        ? await SecureStore.getItemAsync(BIOMETRIC_REFRESH_TOKEN_KEY).catch(() => null)
+        : null;
+      if (!token) {
+        token = await AsyncStorage.getItem(BIOMETRIC_REFRESH_TOKEN_KEY);
+      }
+      return token;
+    } catch (error) {
+      console.error("Error retrieving refresh token:", error);
       return null;
     }
   }
