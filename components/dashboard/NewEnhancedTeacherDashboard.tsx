@@ -11,7 +11,7 @@
  * - Optimized for touch interfaces and accessibility
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -54,6 +54,14 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   const insets = useSafeAreaInsets();
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
+  
+  // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
+      console.log('[TeacherDashboard] Clearing stuck dashboardSwitching flag');
+      delete (window as any).dashboardSwitching;
+    }
+  }, []);
   
   // State management hook
   const state = useNewEnhancedTeacherState();

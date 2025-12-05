@@ -75,6 +75,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   // Hooks for parent-specific data
   const { data: unreadMessageCount = 0 } = useUnreadMessageCount();
 
+  // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
+      console.log('[ParentDashboard] Clearing stuck dashboardSwitching flag');
+      delete (window as any).dashboardSwitching;
+    }
+  }, []);
+
   // Update children state when dashboard data changes
   useEffect(() => {
     if (dashboardData?.children) {

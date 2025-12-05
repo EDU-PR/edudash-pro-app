@@ -11,7 +11,7 @@
  * - Optimized for touch interfaces and accessibility
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -89,6 +89,14 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
     || '';
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
+  
+  // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
+      console.log('[PrincipalDashboard] Clearing stuck dashboardSwitching flag');
+      delete (window as any).dashboardSwitching;
+    }
+  }, []);
   
   const {
     data,
