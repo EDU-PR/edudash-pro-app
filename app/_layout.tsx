@@ -34,11 +34,10 @@ import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { DashChatButton } from '@/components/ui/DashChatButton';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
 import { AnimatedSplash } from '@/components/ui/AnimatedSplash';
-// TEMP: Disabled until @daily-co/react-native-webrtc is properly installed
-// import { CallProvider, useCall } from '@/components/calls/CallProvider';
-// import { IncomingCallOverlay } from '@/components/calls/IncomingCallOverlay';
-// import { VoiceCallInterface } from '@/components/calls/VoiceCallInterface';
-// import { VideoCallInterface } from '@/components/calls/VideoCallInterface';
+import { CallProvider, useCall } from '@/components/calls/CallProvider';
+import { IncomingCallOverlay } from '@/components/calls/IncomingCallOverlay';
+import { VoiceCallInterface } from '@/components/calls/VoiceCallInterface';
+import { VideoCallInterface } from '@/components/calls/VideoCallInterface';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '@/hooks/useRouteGuard';
@@ -87,13 +86,12 @@ function LayoutContent() {
   }, [authLoading, isAuthRoute]);
   
   // Get call context for rendering call interfaces (wrapped in try-catch for safety)
-  // TEMP: Disabled until @daily-co/react-native-webrtc is properly installed
-  // let callContext: ReturnType<typeof useCall> | null = null;
-  // try {
-  //   callContext = useCall();
-  // } catch {
-  //   // CallProvider may not be available yet
-  // }
+  let callContext: ReturnType<typeof useCall> | null = null;
+  try {
+    callContext = useCall();
+  } catch {
+    // CallProvider may not be available yet
+  }
   
   return (
     <View style={styles.container}>
@@ -121,8 +119,8 @@ function LayoutContent() {
       {/* Persistent Bottom Navigation - positioned at bottom */}
       <BottomTabBar />
       
-      {/* Call Interfaces - TEMP: Disabled until @daily-co/react-native-webrtc is properly installed */}
-      {/* {Platform.OS !== 'web' && callContext && (
+      {/* Call Interfaces */}
+      {Platform.OS !== 'web' && callContext && (
         <>
           <IncomingCallOverlay
             callerName={callContext.incomingCall?.caller_name || 'Unknown'}
@@ -150,7 +148,7 @@ function LayoutContent() {
             isOwner={!!callContext.outgoingCall}
           />
         </>
-      )} */}
+      )}
     </View>
   );
 }
@@ -170,8 +168,7 @@ export default function RootLayout() {
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>
-            {/* TEMP: CallProvider disabled until @daily-co/react-native-webrtc is properly installed */}
-            {/* <CallProvider> */}
+            <CallProvider>
               <OnboardingProvider>
                 <DashboardPreferencesProvider>
                   <TermsProvider>
@@ -183,7 +180,7 @@ export default function RootLayout() {
                   </TermsProvider>
                 </DashboardPreferencesProvider>
               </OnboardingProvider>
-            {/* </CallProvider> */}
+            </CallProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryProvider>

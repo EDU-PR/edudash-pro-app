@@ -36,7 +36,56 @@
     "now": "Now",
     "feature_in_development": "This feature is in development",
     "retry": "Retry",
-    "upgrade": "Upgrade"
+    "upgrade": "Upgrade",
+    "all": "All",
+    "processing": "Processing...",
+    "verified": "verified",
+    "review_needed": "review needed",
+    "last_activity": "Last activity:",
+    "last_7_days": "Last 7 days",
+    "last_30_days": "Last 30 days",
+    "all_time": "All time",
+    "custom_range": "Custom range",
+    "start_date": "Start date",
+    "end_date": "End date",
+    "apply": "Apply",
+    "ageYears": "{{age}} years old",
+    "ageUnknown": "Age unknown",
+    "noClass": "No class assigned",
+    "connectionError": "Connection error. Please check your internet.",
+    "optional": "Optional",
+    "add": "Add",
+    "record": "Record",
+    "uploading": "Uploading...",
+    "important": "Important",
+    "not_allowed": "Not allowed",
+    "info": "Information",
+    "confirm": "Are you sure?",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "refresh": "Refresh",
+    "save": "Save",
+    "submit": "Submit",
+    "continue": "Continue",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "school_stats_today": "📊 School Stats Today",
+    "school_stats_content": "Current Status:\n\n👥 Students Present: {{studentsPresent}}/{{totalStudents}} ({{studentsPercentage}}%)\n👨‍🏫 Teachers Present: {{teachersPresent}}/{{totalTeachers}} ({{teachersPercentage}}%)\n📚 Active Classes: {{activeClasses}}\n🍽️ Lunch Orders: {{lunchOrders}}\n🚌 Bus Routes: All on time\n\nLast updated: {{lastUpdated}}",
+    "view_details": "View Details",
+    "quick_settings_content": "🔧 Quick Settings",
+    "quick_settings_description": "Fast access to frequently used settings:\n\n⚙️ School Profile\n📋 Class Schedules\n🎨 Theme Settings\n🔔 Notification Preferences\n💾 Backup & Sync",
+    "whatsapp_connected": "WhatsApp Connected!",
+    "whatsapp_updates_enabled": "You can now receive school updates via WhatsApp.",
+    "menu": "Menu",
+    "my_profile": "My Profile",
+    "account_settings_subtitle": "Account settings, profile picture & biometrics",
+    "school_settings_modal_subtitle": "Configure school preferences & policies",
+    "classes": "classes",
+    "students": "students",
+    "email": "Email",
+    "status": "Status"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -202,12 +251,24 @@
       "choose_named": "Choose {{name}}"
     },
     "tier": {
-      "free": { "desc": "Perfect for small preschools getting started" },
-      "starter": { "desc": "Essential features for growing schools" },
-      "basic": { "desc": "Comprehensive tools for active schools" },
-      "premium": { "desc": "Professional features for established schools" },
-      "pro": { "desc": "Advanced solution for large schools" },
-      "enterprise": { "desc": "Complete solution for large organizations" }
+      "free": {
+        "desc": "Perfect for small preschools getting started"
+      },
+      "starter": {
+        "desc": "Essential features for growing schools"
+      },
+      "basic": {
+        "desc": "Comprehensive tools for active schools"
+      },
+      "premium": {
+        "desc": "Professional features for established schools"
+      },
+      "pro": {
+        "desc": "Advanced solution for large schools"
+      },
+      "enterprise": {
+        "desc": "Complete solution for large organizations"
+      }
     },
     "subtitle_marketing": "Flexible pricing for schools of all sizes. Start free and scale as you grow.",
     "plans_title": "Plans & Pricing",
@@ -328,7 +389,7 @@
     "syncStatus": "Synced",
     "whatsapp_not_connected": "Not Connected",
     "tierFree": "Free",
-    "tierPro": "Pro", 
+    "tierPro": "Pro",
     "tierEnterprise": "Enterprise",
     "tierLabel": "{{tier}} Tier",
     "upgradeHint": "Upgrade for more ✨",
@@ -357,21 +418,21 @@
     "details": "Details",
     "ai_insights": "AI Insights",
     "smart_analytics_recommendations": "Smart analytics & recommendations",
-      "ai_insights_smart_analytics": "AI Insights",
-      "smart_analytics_description": "Smart analytics & recommendations",
-      "upgrade": "Upgrade",
-      "need_help": "Need Help?",
-      "ai_upgrade_required_title": "Upgrade Required",
-      "ai_upgrade_required_message": "Your plan does not include this AI feature or your seat is not active.",
-      "ai_upgrade_required_cta": "Upgrade to use",
-      "ai_tools_enabled": "AI tools available",
-      "ai_tools_disabled": "AI tools disabled",
-      "ai_tools_info": "AI runs on a secure server. Access and usage are limited by your plan or trial.",
-      "ai_upgrade_nudge": "Unlock AI tools with Basic, Premium or Pro.",
-      "unlock_features": "Unlock more features",
-      "see_plans": "See plans",
-      "load_error": "Unable to load data. Please try again.",
-      "contact_support_whatsapp": "Contact support via WhatsApp • Get instant help",
+    "ai_insights_smart_analytics": "AI Insights",
+    "smart_analytics_description": "Smart analytics & recommendations",
+    "upgrade": "Upgrade",
+    "need_help": "Need Help?",
+    "ai_upgrade_required_title": "Upgrade Required",
+    "ai_upgrade_required_message": "Your plan does not include this AI feature or your seat is not active.",
+    "ai_upgrade_required_cta": "Upgrade to use",
+    "ai_tools_enabled": "AI tools available",
+    "ai_tools_disabled": "AI tools disabled",
+    "ai_tools_info": "AI runs on a secure server. Access and usage are limited by your plan or trial.",
+    "ai_upgrade_nudge": "Unlock AI tools with Basic, Premium or Pro.",
+    "unlock_features": "Unlock more features",
+    "see_plans": "See plans",
+    "load_error": "Unable to load data. Please try again.",
+    "contact_support_whatsapp": "Contact support via WhatsApp • Get instant help",
     "payment_history": "Payment History",
     "payment_history_subtitle": "Browse, filter & export payment records",
     "financial_overview_subtitle": "View revenue, expenses & cash flow trends",
@@ -395,7 +456,6 @@
     "no_description": "No description",
     "invalid_phone_number": "Invalid Phone Number",
     "enter_valid_phone": "Please enter a valid South African mobile number",
-    
     "announcement": {
       "create_announcement": "Create Announcement",
       "title": "Title",
@@ -430,7 +490,6 @@
       "sent_to": "Sent to: {{audience}}",
       "no_audience_selected": "No audience selected"
     },
-    
     "petty_cash": {
       "petty_cash": "Petty Cash",
       "current_balance": "Current Balance",
@@ -903,9 +962,9 @@
     "view_finances": "View Finances",
     "student_enrollment": "Student Enrollment",
     "student_enrollment_subtitle": "Review applications and enroll students",
-      "financial_reports": "Financial Reports",
-      "financial_reports_subtitle": "Revenue, expenses, and forecasting",
-      "meeting_rooms": "Meeting Rooms",
+    "financial_reports": "Financial Reports",
+    "financial_reports_subtitle": "Revenue, expenses, and forecasting",
+    "meeting_rooms": "Meeting Rooms",
     "meeting_rooms_subtitle": "Schedule meetings and video calls",
     "school_settings": "School Settings",
     "school_settings_subtitle": "Configure policies and preferences",
@@ -914,9 +973,9 @@
     "school_analytics": "School Analytics",
     "school_analytics_subtitle": "Performance insights and trends",
     "enroll_student": "Enroll Student",
-      "send_announcement": "Send Announcement",
-      "announcement_description": "Compose and send a school-wide announcement",
-      "parent_requests": "Parent Requests",
+    "send_announcement": "Send Announcement",
+    "announcement_description": "Compose and send a school-wide announcement",
+    "parent_requests": "Parent Requests",
     "seat_management": "Seat Management",
     "invite_parents": "Invite Parents",
     "export_data": "Export Data",
@@ -927,21 +986,21 @@
     "ai_homework_helper": "AI Homework Helper",
     "limit_reached": "Limit reached",
     "requests_left": "{{count}} requests left",
-      "whatsapp_connect": "WhatsApp Connect",
-      "connect_with_teachers": "Connect with teachers",
-      "connect_with_instructors": "Connect with teachers",
-      "whatsapp_premium_description": "Get instant communication with your teachers and receive real-time updates on assignments and progress",
-      "whatsapp_premium_description_org": "Get instant communication with your teachers and receive real-time updates on assignments and progress",
-      "dash_chat": "Chat with Dash",
-      "ai_assistant": "Your AI teaching assistant",
-      "learning_resources": "Learning Resources",
-      "access_study_materials": "Access study materials",
-      "learning_resources_premium_description": "Access premium study materials, interactive content, and curated educational resources",
-      "progress_analytics": "Progress Analytics",
-      "track_your_performance": "Track your performance",
-      "upgrade_to_unlock": "Upgrade to unlock",
-      "progress_analytics_premium_description": "Get detailed insights into your learning progress with advanced analytics and performance tracking",
-      "ai_lessons": "AI Lessons",
+    "whatsapp_connect": "WhatsApp Connect",
+    "connect_with_teachers": "Connect with teachers",
+    "connect_with_instructors": "Connect with teachers",
+    "whatsapp_premium_description": "Get instant communication with your teachers and receive real-time updates on assignments and progress",
+    "whatsapp_premium_description_org": "Get instant communication with your teachers and receive real-time updates on assignments and progress",
+    "dash_chat": "Chat with Dash",
+    "ai_assistant": "Your AI teaching assistant",
+    "learning_resources": "Learning Resources",
+    "access_study_materials": "Access study materials",
+    "learning_resources_premium_description": "Access premium study materials, interactive content, and curated educational resources",
+    "progress_analytics": "Progress Analytics",
+    "track_your_performance": "Track your performance",
+    "upgrade_to_unlock": "Upgrade to unlock",
+    "progress_analytics_premium_description": "Get detailed insights into your learning progress with advanced analytics and performance tracking",
+    "ai_lessons": "AI Lessons",
     "ai_lesson_generator": "✨ AI Lesson Generator",
     "ai_lesson_description": "Create engaging educational content for your students:\n\n• Age-appropriate lesson plans\n• Interactive activity suggestions\n• Assessment templates\n• Learning objectives alignment\n\nStart creating lessons now:",
     "create_lesson": "Create Lesson",
@@ -1040,15 +1099,15 @@
     "security": "Security",
     "securityPrivacy": "Security & Privacy",
     "dataProtection": "Data Protection",
-    "learnDataProtection": "Learn about data protection",
+    "learnDataProtection": "Learn how we protect your data",
     "appearanceLanguage": "Appearance & Language",
     "schoolOverview": "School Overview",
     "schoolName": "School Name",
     "timezone": "Timezone",
     "currency": "Currency",
-    "whatsappConfigured": "WhatsApp Configured",
-    "whatsappYes": "Yes",
-    "whatsappNo": "No",
+    "whatsappConfigured": "Configured",
+    "whatsappYes": "Yes, configured",
+    "whatsappNo": "Not configured",
     "aboutSupport": "About & Support",
     "pushNotifications": "Push Notifications",
     "manageAlerts": "Manage your alerts and reminders",
@@ -1061,55 +1120,35 @@
       "info": "Data protection info"
     },
     "biometric": {
-      "title": "Biometric Authentication",
-      "fingerprint": "Fingerprint Authentication",
-      "faceId": "Face ID Authentication",
+      "title": "Biometric Login",
+      "fingerprint": "Fingerprint Login",
+      "faceId": "Face ID Login",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "notAvailable": "Not available on this device",
-      "setupRequired": "Setup required in device settings",
-      "authRequired": "Use your fingerprint or device passcode to continue",
-      "authenticate": "Unlock",
-      "unlockApp": "Confirm it’s you",
-      "placeFingerprint": "Place your finger on the sensor to continue",
-      "dataSecure": "Your fingerprint data remains secure on your device",
-      "backupAvailable": "Device passcode is available as backup method",
-      "lastAuthenticated": "Last authenticated",
-      "authFailed": "Authentication failed",
-      "authCanceled": "Authentication canceled",
-      "enableLogin": "Enable biometric login",
-      "disableLogin": "Disable biometric login",
-      "loginWith": "Login with {{type}}",
-      "useFingerprint": "Use fingerprint to sign in",
-      "useFaceId": "Use Face ID to sign in",
-      "touchSensor": "Touch the sensor to sign in",
-      "biometricLogin": "Biometric Login",
-      "loginFailed": "Login failed",
-      "tryAgain": "Try again",
-      "setupFirst": "Set up biometric authentication on your device first"
+      "setupRequired": "Setup required in device settings"
     },
     "language": {
-      "title": "Language",
       "current": "Current Language",
+      "title": "Language",
       "available": "Available Languages",
       "comingSoon": "Coming Soon",
-      "soon": "Soon",
-      "sa_blurb": "We're working on adding support for all 11 official South African languages"
+      "soon": "Soon"
     },
     "theme": {
       "title": "Theme",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System",
       "preview": "Theme Preview",
       "primary": "Primary",
       "secondary": "Secondary",
-      "accent": "Accent"
+      "accent": "Accent",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
     },
     "preferences": {
       "title": "Preferences",
-      "autoTheme": "Automatic Theme",
-      "autoThemeDesc": "Switch theme based on system settings"
+      "autoTheme": "Auto Theme",
+      "autoThemeDesc": "Match system theme"
     },
     "about": "About",
     "support": "Support",
@@ -1117,23 +1156,16 @@
     "privacyPolicy": "Privacy Policy",
     "dashboard": {
       "title": "Dashboard Layout",
-      "current": "Current Layout",
-      "available": "Available Layouts",
       "classic": "Classic",
-      "classicDesc": "Traditional dashboard with familiar layout and navigation",
+      "classicDesc": "Classic dashboard layout",
       "enhanced": "Enhanced",
-      "enhancedDesc": "Modern dashboard with improved design and new features"
+      "enhancedDesc": "Modern enhanced dashboard",
+      "current": "Current Layout",
+      "available": "Available Layouts"
     },
-    "schoolOverview": "School Overview",
-    "schoolName": "School Name",
-    "timezone": "Timezone",
-    "currency": "Currency",
     "regionalSettings": "Regional Settings",
     "whatsappIntegration": "WhatsApp Integration",
-    "whatsappConfigured": "Configured",
-    "whatsappNotConfigured": "Not Configured",
-    "whatsappYes": "Yes, configured",
-    "whatsappNo": "Not configured",
+    "whatsappNotConfigured": "Not configured",
     "active": "Active",
     "activeFeatures": "Active Features",
     "editFullSettings": "Edit Full Settings",
@@ -1142,7 +1174,7 @@
     "failedToLoadSettings": "Failed to load settings",
     "feature": {
       "activityFeed": "Activity Feed",
-      "financials": "Financials",
+      "financials": "Financial Reports",
       "pettyCash": "Petty Cash"
     },
     "noFeaturesEnabled": "No features enabled",
@@ -1222,7 +1254,7 @@
       "title": "Feedback",
       "message": "Haptics and sound feedback are temporarily disabled."
     }
-},
+  },
   "trends": {
     "up": "Up",
     "down": "Down",
@@ -1234,23 +1266,6 @@
     "good": "Good",
     "warning": "Warning",
     "attention": "Attention"
-  },
-  "parent": {
-    "selectChild": "Select Child",
-    "myChildren": "My Children",
-    "noChildrenFound": "No children found",
-    "registerChild": "Register New Child"
-  },
-  "teacher": {
-    "performance": {
-      "active": "Active teacher",
-      "no_classes": "No classes assigned - requires attention",
-      "high_ratio": "High student ratio ({{ratio}}:1) - may need support",
-      "excellent": "Excellent performance - {{classes}} classes, {{ratio}}:1 ratio, {{attendance}}% attendance",
-      "strong": "Strong performance - {{classes}} classes, good attendance rates",
-      "good": "Good performance - managing {{students}} students effectively",
-      "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
-    }
   },
   "teacher": {
     "dashboard_subtitle": "Your classroom hub",
@@ -1345,72 +1360,11 @@
     "created": "Item created successfully",
     "updated": "Item updated successfully"
   },
-  "common": {
-    "all": "All",
-    "processing": "Processing...",
-    "verified": "verified",
-    "review_needed": "review needed",
-    "last_activity": "Last activity:",
-    "last_7_days": "Last 7 days",
-    "last_30_days": "Last 30 days",
-    "all_time": "All time",
-    "custom_range": "Custom range",
-    "start_date": "Start date",
-    "end_date": "End date",
-    "apply": "Apply",
-    "viewAll": "View All",
-    "ageYears": "{{age}} years old",
-    "ageUnknown": "Age unknown",
-    "noClass": "No class assigned",
-    "connectionError": "Connection error. Please check your internet.",
-    "loading": "Loading...",
-    "error": "Error",
-    "success": "Success",
-    "cancel": "Cancel",
-    "optional": "Optional",
-    "add": "Add",
-    "record": "Record",
-    "uploading": "Uploading...",
-    "important": "Important",
-    "not_allowed": "Not allowed",
-    "info": "Information",
-    "confirm": "Are you sure?",
-    "yes": "Yes",
-    "no": "No",
-    "ok": "OK",
-    "close": "Close",
-      "retry": "Retry",
-      "refresh": "Refresh",
-      "upgrade": "Upgrade",
-    "cancel": "Cancel",
-    "save": "Save",
-    "submit": "Submit",
-    "continue": "Continue",
-    "back": "Back",
-    "next": "Next",
-    "done": "Done",
-    "school_stats_today": "📊 School Stats Today",
-    "school_stats_content": "Current Status:\n\n👥 Students Present: {{studentsPresent}}/{{totalStudents}} ({{studentsPercentage}}%)\n👨‍🏫 Teachers Present: {{teachersPresent}}/{{totalTeachers}} ({{teachersPercentage}}%)\n📚 Active Classes: {{activeClasses}}\n🍽️ Lunch Orders: {{lunchOrders}}\n🚌 Bus Routes: All on time\n\nLast updated: {{lastUpdated}}",
-    "view_details": "View Details",
-    "quick_settings_content": "🔧 Quick Settings",
-    "quick_settings_description": "Fast access to frequently used settings:\n\n⚙️ School Profile\n📋 Class Schedules\n🎨 Theme Settings\n🔔 Notification Preferences\n💾 Backup & Sync",
-    "whatsapp_connected": "WhatsApp Connected!",
-    "whatsapp_updates_enabled": "You can now receive school updates via WhatsApp.",
-    "menu": "Menu",
-    "my_profile": "My Profile",
-    "account_settings_subtitle": "Account settings, profile picture & biometrics",
-    "school_settings_modal_subtitle": "Configure school preferences & policies",
-    "classes": "classes",
-    "students": "students",
-    "email": "Email",
-    "status": "Status",
-    "go_now": "Go now"
-  },
   "activity": {
     "loading": "Loading activity feed...",
     "recent_activity": "Recent Activity",
-    "no_recent_activity": "No Recent Activity",
-    "empty_description": "School activities will appear here in real-time",
+    "no_recent_activity": "No recent activity",
+    "empty_description": "Activity from your school will appear here",
     "live": "Live",
     "connecting": "Connecting...",
     "offline": "Offline",
@@ -1530,18 +1484,6 @@
     "no_financial_data_description": "Financial reports and revenue data will be shown here once available.",
     "view_reports": "View Reports"
   },
-  "trends": {
-    "up": "Up",
-    "down": "Down",
-    "stable": "Stable",
-    "good": "Good",
-    "excellent": "Excellent",
-    "warning": "Warning",
-    "attention": "Attention", 
-    "needs_attention": "Needs Attention",
-    "low": "Low",
-    "high": "High"
-  },
   "dash_ai": {
     "assistant_name": "Dash",
     "optimizing": "Dash AI is optimizing...",
@@ -1554,11 +1496,97 @@
     "help_dashboard": "I can help you switch between dashboard layouts, adjust preferences, or explore different views.",
     "layout_switched": "Dashboard layout has been changed!",
     "welcome_message": "Welcome! I'm here to help with teaching, dashboard management, and school administration.",
-      "initializing": "Initializing Dash..."
-    },
+    "initializing": "Initializing Dash..."
+  },
   "dash": {
     "voice": {
       "tooltip": "Tap to speak • Double-tap for chat"
+    },
+    "onboarding": {
+      "welcome": {
+        "title": "Meet Dash",
+        "subtitle": "Your AI assistant for EduDash Pro. I can help you save time and personalize learning.",
+        "start": "Get Started",
+        "skip": "Skip for now"
+      },
+      "roles": {
+        "title": "Tell me your role",
+        "subtitle": "I'll personalize recommendations for you.",
+        "options": {
+          "principal": "Principal",
+          "teacher": "Teacher",
+          "parent": "Parent",
+          "admin": "Administrator"
+        }
+      },
+      "communication_style": {
+        "title": "Choose communication style",
+        "subtitle": "How would you like Dash to communicate with you?",
+        "options": {
+          "professional": "Professional",
+          "casual": "Casual",
+          "encouraging": "Encouraging",
+          "formal": "Formal"
+        }
+      },
+      "features": {
+        "title": "Feature preferences",
+        "subtitle": "Enable what you want Dash to use proactively.",
+        "options": {
+          "voice": "Voice responses",
+          "proactiveHelp": "Proactive suggestions",
+          "memory": "Remember preferences",
+          "summaries": "Auto summaries",
+          "taskAssist": "Task assistance"
+        }
+      },
+      "voice_settings": {
+        "title": "Voice settings",
+        "subtitle": "Customize Dash's voice",
+        "language": "Language",
+        "voiceType": "Voice type",
+        "rate": "Speaking rate",
+        "pitch": "Pitch",
+        "testVoice": "Test voice",
+        "voiceTypeOptions": {
+          "female": "Female",
+          "male": "Male",
+          "neutral": "Neutral"
+        },
+        "languageOptions": {
+          "en-ZA": "English (South Africa)",
+          "en-US": "English (US)",
+          "en-GB": "English (UK)"
+        }
+      },
+      "review": {
+        "title": "Review your setup",
+        "subtitle": "Confirm your preferences before finishing.",
+        "finish": "Complete Setup",
+        "back": "Back",
+        "next": "Next",
+        "save": "Save",
+        "reset": "Reset",
+        "role": "Role",
+        "style": "Communication style",
+        "features": "Features",
+        "voice": "Voice"
+      },
+      "status": {
+        "completed": "Onboarding complete",
+        "incomplete": "Onboarding incomplete",
+        "saving": "Saving your preferences...",
+        "success": "Setup complete! Dash is ready to assist you."
+      },
+      "settings": {
+        "resetSetup": "Reset Dash Setup",
+        "resetSetupDescription": "Clear your onboarding and start over",
+        "resetConfirm": "Are you sure you want to reset Dash setup? This will clear all your personalization."
+      },
+      "errors": {
+        "saveFailed": "Failed to save preferences",
+        "loadFailed": "Failed to load onboarding state"
+      }
     }
   },
   "voice": {
@@ -1709,60 +1737,6 @@
     "logout_failed": "Failed to logout",
     "no_profile": "No user profile found"
   },
-  "settings": {
-    "title": "Settings",
-    "profile": "Profile Settings",
-    "notifications": "Notifications",
-    "privacy": "Privacy",
-    "securityPrivacy": "Security & Privacy",
-    "dataProtection": "Data Protection",
-    "learnDataProtection": "Learn how we protect your data",
-    "appearanceLanguage": "Appearance & Language",
-    "schoolOverview": "School Overview",
-    "schoolName": "School Name",
-    "regionalSettings": "Regional Settings",
-    "whatsappIntegration": "WhatsApp Integration",
-    "whatsappConfigured": "WhatsApp is configured",
-    "whatsappNotConfigured": "WhatsApp is not configured",
-    "active": "Active",
-    "activeFeatures": "Active Features",
-    "editFullSettings": "Edit Full Settings",
-    "configureAllSchoolSettings": "Configure all school settings",
-    "loadingSchoolSettings": "Loading school settings...",
-    "failedToLoadSettings": "Failed to load school settings",
-    "noFeaturesEnabled": "No features are currently enabled",
-    "aboutSupport": "About & Support",
-    "language": {
-      "title": "Language"
-    },
-    "theme": {
-      "title": "Theme",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System"
-    },
-    "biometric": {
-      "title": "Biometric Authentication",
-      "notAvailable": "Biometric authentication is not available on this device",
-      "setupRequired": "Please set up biometrics in your device settings first",
-      "enabled": "Biometric login is enabled",
-      "disabled": "Biometric login is disabled",
-      "fingerprint": "Fingerprint",
-      "faceId": "Face ID",
-      "not_available_desc": "Biometric authentication is not available on this device. This feature requires fingerprint or face recognition hardware."
-    },
-    "feature": {
-      "activityFeed": "Activity Feed",
-      "financials": "Financials",
-      "pettyCash": "Petty Cash"
-    },
-    "manage_alerts": "Manage your alerts",
-    "notifications_coming_soon_desc": "Notification settings will be available in the next update.",
-    "privacy_security": {
-      "title": "Privacy & Security",
-      "info": "Data protection info"
-    }
-  },
   "account": {
     "info": {
       "title": "Account Information",
@@ -1777,111 +1751,6 @@
     "placeholders": {
       "first_name": "Enter your first name",
       "last_name": "Enter your last name"
-    }
-  },
-  "trends": {
-    "up": "up",
-    "down": "down",
-    "stable": "stable",
-    "good": "good",
-    "excellent": "excellent",
-    "warning": "warning",
-    "attention": "attention",
-    "needs_attention": "needs attention",
-    "low": "low",
-    "high": "high"
-  },
-  "updates": {
-    "Restart App": "Restart App",
-    "Restart Now": "Restart Now",
-    "The app will restart to apply the update. Any unsaved changes will be lost.": "The app will restart to apply the update. Any unsaved changes will be lost."
-  },
-  "dash": {
-    "onboarding": {
-      "welcome": {
-        "title": "Meet Dash",
-        "subtitle": "Your AI assistant for EduDash Pro. I can help you save time and personalize learning.",
-        "start": "Get Started",
-        "skip": "Skip for now"
-      },
-      "roles": {
-        "title": "Tell me your role",
-        "subtitle": "I'll personalize recommendations for you.",
-        "options": {
-          "principal": "Principal",
-          "teacher": "Teacher",
-          "parent": "Parent",
-          "admin": "Administrator"
-        }
-      },
-      "communication_style": {
-        "title": "Choose communication style",
-        "subtitle": "How would you like Dash to communicate with you?",
-        "options": {
-          "professional": "Professional",
-          "casual": "Casual",
-          "encouraging": "Encouraging",
-          "formal": "Formal"
-        }
-      },
-      "features": {
-        "title": "Feature preferences",
-        "subtitle": "Enable what you want Dash to use proactively.",
-        "options": {
-          "voice": "Voice responses",
-          "proactiveHelp": "Proactive suggestions",
-          "memory": "Remember preferences",
-          "summaries": "Auto summaries",
-          "taskAssist": "Task assistance"
-        }
-      },
-      "voice_settings": {
-        "title": "Voice settings",
-        "subtitle": "Customize Dash's voice",
-        "language": "Language",
-        "voiceType": "Voice type",
-        "rate": "Speaking rate",
-        "pitch": "Pitch",
-        "testVoice": "Test voice",
-        "voiceTypeOptions": {
-          "female": "Female",
-          "male": "Male",
-          "neutral": "Neutral"
-        },
-        "languageOptions": {
-          "en-ZA": "English (South Africa)",
-          "en-US": "English (US)",
-          "en-GB": "English (UK)"
-        }
-      },
-      "review": {
-        "title": "Review your setup",
-        "subtitle": "Confirm your preferences before finishing.",
-        "finish": "Complete Setup",
-        "back": "Back",
-        "next": "Next",
-        "save": "Save",
-        "reset": "Reset",
-        "role": "Role",
-        "style": "Communication style",
-        "features": "Features",
-        "voice": "Voice"
-      },
-      "status": {
-        "completed": "Onboarding complete",
-        "incomplete": "Onboarding incomplete",
-        "saving": "Saving your preferences...",
-        "success": "Setup complete! Dash is ready to assist you."
-      },
-      "settings": {
-        "resetSetup": "Reset Dash Setup",
-        "resetSetupDescription": "Clear your onboarding and start over",
-        "resetConfirm": "Are you sure you want to reset Dash setup? This will clear all your personalization."
-      },
-      "errors": {
-        "saveFailed": "Failed to save preferences",
-        "loadFailed": "Failed to load onboarding state"
-      }
     }
   },
   "actions": {
@@ -2085,103 +1954,6 @@
     "verifying_email": "Verifying your email...",
     "email_verified": "Email verified. Opening app...",
     "email_verification_failed": "Email verification failed."
-  },
-  "metrics": {
-    "total_students": "Total Students",
-    "teaching_staff": "Teaching Staff",
-    "active_classes": "Active Classes",
-    "attendance_rate": "Attendance Rate",
-    "monthly_revenue": "Monthly Revenue",
-    "pending_applications": "Pending Applications",
-    "my_students": "My Students",
-    "pending_grading": "Pending Grading",
-    "lessons_today": "Lessons Today",
-    "across_classes": "across {{count}} classes",
-    "assignments_to_review": "assignments to review",
-    "scheduled_classes": "scheduled classes"
-  },
-  "trends": {
-    "up": "Up",
-    "down": "Down",
-    "good": "Good",
-    "excellent": "Excellent",
-    "warning": "Warning",
-    "attention": "Attention",
-    "needs_attention": "Needs attention",
-    "low": "Low",
-    "stable": "Stable",
-    "high": "High"
-  },
-  "settings": {
-    "securityPrivacy": "Security & Privacy",
-    "appearanceLanguage": "Appearance & Language",
-    "schoolOverview": "School Overview",
-    "loadingSchoolSettings": "Loading school settings...",
-    "schoolName": "School Name",
-    "regionalSettings": "Regional Settings",
-    "whatsappIntegration": "WhatsApp Integration",
-    "whatsappConfigured": "Configured",
-    "whatsappNotConfigured": "Not configured",
-    "active": "Active",
-    "activeFeatures": "Active Features",
-    "noFeaturesEnabled": "No features enabled",
-    "editFullSettings": "Edit Full Settings",
-    "configureAllSchoolSettings": "Configure all school settings",
-    "failedToLoadSettings": "Failed to load settings",
-    "feature": {
-      "activityFeed": "Activity Feed",
-      "financials": "Financial Reports",
-      "pettyCash": "Petty Cash"
-    },
-    "biometric": {
-      "title": "Biometric Login",
-      "fingerprint": "Fingerprint Login",
-      "faceId": "Face ID Login",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "notAvailable": "Not available on this device",
-      "setupRequired": "Setup required in device settings"
-    },
-    "dashboard": {
-      "title": "Dashboard Layout",
-      "classic": "Classic",
-      "classicDesc": "Classic dashboard layout",
-      "enhanced": "Enhanced",
-      "enhancedDesc": "Modern enhanced dashboard",
-      "current": "Current Layout",
-      "available": "Available Layouts"
-    },
-    "preferences": {
-      "title": "Preferences",
-      "autoTheme": "Auto Theme",
-      "autoThemeDesc": "Match system theme"
-    },
-    "language": {
-      "current": "Current Language"
-    },
-    "theme": {
-      "title": "Theme",
-      "preview": "Theme Preview",
-      "primary": "Primary",
-      "secondary": "Secondary",
-      "accent": "Accent",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System"
-    },
-    "aboutSupport": "About & Support",
-    "language": {
-      "title": "Language",
-      "current": "Current Language",
-      "available": "Available Languages",
-      "comingSoon": "Coming Soon",
-      "soon": "Soon"
-    }
-  },
-  "activity": {
-    "recent_activity": "Recent Activity",
-    "no_recent_activity": "No recent activity",
-    "empty_description": "Activity from your school will appear here"
   },
   "demo": {
     "header": {

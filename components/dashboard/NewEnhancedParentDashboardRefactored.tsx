@@ -178,10 +178,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const metrics = useMemo(() => {
     if (!dashboardData) {
       return [
-        { title: t('parent.unread_messages'), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const },
-        { title: t('parent.homework_pending'), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const },
-        { title: t('parent.attendance_rate'), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const },
-        { title: t('parent.total_children'), value: '...', icon: 'people', color: theme.secondary, trend: 'stable' as const },
+        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const },
+        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const },
+        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const },
+        { title: t('parent.total_children', { defaultValue: 'Total Children' }), value: '...', icon: 'people', color: theme.secondary, trend: 'stable' as const },
       ];
     }
 
