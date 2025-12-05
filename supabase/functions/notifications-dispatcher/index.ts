@@ -1268,24 +1268,47 @@ async function dispatchNotification(request: Request): Promise<Response> {
     }
 
     // Prepare Expo notification
-    const expoNotification: ExpoNotification = {
-      to: pushTokens.map(token => token.expo_push_token),
+    // IMPORTANT: Include user_id in data for multi-account notification routing
+    const enhancedData = {
+      ...(template.data || {}),
+      // Add user_id for each recipient (for multi-account support)
+      // Note: When sending to multiple users, each will get their own user_id
+    }
+    
+    // For multi-recipient notifications, we need to send individual notifications
+    // so each notification has the correct target user_id
+    const expoNotifications: ExpoNotification[] = pushTokens.map(tokenInfo => ({
+      to: [tokenInfo.expo_push_token], // Send to single token
       title: template.title,
       body: template.body,
-      data: template.data,
+      data: {
+        ...enhancedData,
+        user_id: tokenInfo.user_id, // Include target user_id for routing
+        recipient_id: tokenInfo.user_id, // Alias for compatibility
+        target_user_id: tokenInfo.user_id, // Another alias for clarity
+      },
       sound: template.sound,
       priority: template.priority,
       channelId: template.channelId,
       ttl: 86400, // 24 hours
-    }
+    }))
 
-    // Send notification
-    let expoResult: any
+    // Send notifications
+    let expoResults: any[] = []
     if (notificationRequest.send_immediately !== false) {
-      expoResult = await sendExpoNotification(expoNotification)
+      for (const notification of expoNotifications) {
+        try {
+          const result = await sendExpoNotification(notification)
+          expoResults.push(result)
+        } catch (error) {
+          console.error('Failed to send notification to:', notification.to[0], error)
+          expoResults.push({ success: false, error: String(error) })
+        }
+      }
     }
 
-    // Record notification in database
+    // Record notification in database (use first result for compatibility)
+    const expoResult = expoResults.length > 0 ? expoResults[0] : undefined
     await recordNotification(filteredUserIds, template, notificationRequest, expoResult)
 
     // Send email notifications for invoice events or when explicitly requested

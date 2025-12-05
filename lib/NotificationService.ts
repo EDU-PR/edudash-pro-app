@@ -145,14 +145,14 @@ class NotificationService {
 
       // Upsert push token in database
       const { error } = await assertSupabase()
-        .from('push_tokens')
+        .from('push_devices')
         .upsert(
           {
             ...pushTokenData,
             updated_at: new Date().toISOString(),
           },
           { 
-            onConflict: 'user_id,platform,token',
+            onConflict: 'user_id,device_installation_id',
           }
         );
 

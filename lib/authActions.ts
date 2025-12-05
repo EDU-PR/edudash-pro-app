@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { signOut } from '@/lib/sessionManager';
 import { Platform } from 'react-native';
+import { deactivateCurrentUserTokens } from './NotificationRouter';
 
 // Prevent duplicate sign-out calls
 let isSigningOut = false;
@@ -25,6 +26,21 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
   const targetRoute = options?.redirectTo ?? '/(auth)/sign-in';
   
   try {
+    // Deactivate push notification tokens for this user before sign-out
+    if (Platform.OS !== 'web') {
+      try {
+        const { assertSupabase } = await import('./supabase');
+        const { data: { session } } = await assertSupabase().auth.getSession();
+        if (session?.user?.id) {
+          console.log('[authActions] Deactivating push tokens for user:', session.user.id);
+          await deactivateCurrentUserTokens(session.user.id);
+        }
+      } catch (tokenErr) {
+        console.warn('[authActions] Failed to deactivate push tokens:', tokenErr);
+        // Non-fatal: continue with sign-out
+      }
+    }
+    
     // First, perform complete sign-out (clears Supabase session + storage)
     console.log('[authActions] Performing complete sign-out...');
     await signOut();

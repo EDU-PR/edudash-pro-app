@@ -14,6 +14,9 @@ if (__DEV__) {
     'Require cycle:', // Suppress circular dependency warnings in dev
   ]);
 }
+
+// Initialize notification router for multi-account support
+import { setupNotificationRouter } from '@/lib/NotificationRouter';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, usePathname } from 'expo-router';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
@@ -146,6 +149,19 @@ function RootLayoutContent() {
   const { session } = useAuth();
   
   if (__DEV__) console.log('[RootLayoutContent] Rendering...');
+  
+  // Setup notification router on native (once per app lifecycle)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    
+    console.log('[RootLayout] Setting up notification router...');
+    const cleanup = setupNotificationRouter();
+    
+    return () => {
+      console.log('[RootLayout] Cleaning up notification router');
+      cleanup();
+    };
+  }, []);
   
   // Register service worker for PWA (web-only)
   useEffect(() => {
