@@ -2,7 +2,7 @@
  * Animated Splash Screen Component
  * 
  * Beautiful animated splash screen with logo animations,
- * gradient background, and smooth transitions
+ * gradient background, letter-by-letter text reveal, and smooth transitions
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -15,6 +15,9 @@ const { width, height } = Dimensions.get('window');
 
 // Keep native splash visible until we're ready
 SplashScreen.preventAutoHideAsync();
+
+// Brand text to animate letter by letter
+const BRAND_TEXT = 'EduDash Pro';
 
 interface AnimatedSplashProps {
   onFinish?: () => void;
@@ -38,13 +41,47 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
   const sparkleOpacity = useRef(new Animated.Value(0)).current;
   const sparkleRotate = useRef(new Animated.Value(0)).current;
   
-  // Text animation values
-  const textOpacity = useRef(new Animated.Value(0)).current;
-  const textTranslateY = useRef(new Animated.Value(20)).current;
+  // Letter animation values - one for each letter
+  const letterAnimations = useRef(
+    BRAND_TEXT.split('').map(() => ({
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(-30),
+      scale: new Animated.Value(0.5),
+    }))
+  ).current;
+  
+  // Text container position - starts near logo, moves to bottom
+  const textContainerY = useRef(new Animated.Value(0)).current;
+  
+  // Tagline animation
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Hide native splash immediately when component mounts
     SplashScreen.hideAsync();
+
+    // Create letter animations - staggered appearance
+    const letterAppearAnimations = letterAnimations.map((anim, index) => 
+      Animated.parallel([
+        Animated.timing(anim.opacity, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.spring(anim.translateY, {
+          toValue: 0,
+          tension: 80,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.spring(anim.scale, {
+          toValue: 1,
+          tension: 80,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ])
+    );
 
     // Sequence of animations
     Animated.sequence([
@@ -63,50 +100,55 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
         }),
       ]),
       
-      // 2. Rings expand outward
-      Animated.stagger(150, [
-        Animated.parallel([
-          Animated.spring(ring1Scale, {
-            toValue: 1.3,
-            tension: 40,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring1Opacity, {
-            toValue: 0.6,
-            duration: 400,
-            useNativeDriver: true,
-          }),
+      // 2. Rings expand outward + letters start appearing
+      Animated.parallel([
+        // Rings animation
+        Animated.stagger(150, [
+          Animated.parallel([
+            Animated.spring(ring1Scale, {
+              toValue: 1.3,
+              tension: 40,
+              friction: 8,
+              useNativeDriver: true,
+            }),
+            Animated.timing(ring1Opacity, {
+              toValue: 0.6,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.spring(ring2Scale, {
+              toValue: 1.5,
+              tension: 40,
+              friction: 8,
+              useNativeDriver: true,
+            }),
+            Animated.timing(ring2Opacity, {
+              toValue: 0.4,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.spring(ring3Scale, {
+              toValue: 1.7,
+              tension: 40,
+              friction: 8,
+              useNativeDriver: true,
+            }),
+            Animated.timing(ring3Opacity, {
+              toValue: 0.2,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ]),
         ]),
-        Animated.parallel([
-          Animated.spring(ring2Scale, {
-            toValue: 1.5,
-            tension: 40,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring2Opacity, {
-            toValue: 0.4,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.parallel([
-          Animated.spring(ring3Scale, {
-            toValue: 1.7,
-            tension: 40,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-          Animated.timing(ring3Opacity, {
-            toValue: 0.2,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ]),
+        // Letters appear one by one during ring expansion
+        Animated.stagger(60, letterAppearAnimations),
       ]),
       
-      // 3. Sparkle effect
+      // 3. Sparkle effect + text moves to bottom
       Animated.parallel([
         Animated.timing(sparkleOpacity, {
           toValue: 1,
@@ -118,22 +160,21 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
           duration: 600,
           useNativeDriver: true,
         }),
+        // Move text container to bottom
+        Animated.spring(textContainerY, {
+          toValue: 1,
+          tension: 40,
+          friction: 10,
+          useNativeDriver: true,
+        }),
       ]),
       
-      // 4. Text fade in with slide up
-      Animated.parallel([
-        Animated.timing(textOpacity, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.spring(textTranslateY, {
-          toValue: 0,
-          tension: 50,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]),
+      // 4. Tagline fades in
+      Animated.timing(taglineOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
       
       // 5. Small delay before finishing
       Animated.delay(400),
@@ -162,6 +203,12 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
   const sparkleRotateInterpolate = sparkleRotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
+  });
+
+  // Text container moves from near logo to bottom
+  const textContainerTranslateY = textContainerY.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, height * 0.3], // Move down 30% of screen
   });
 
   return (
@@ -252,18 +299,37 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
           <Ionicons name="sparkles" size={40} color="#fbbf24" />
         </Animated.View>
         
-        {/* Animated EduDash Pro text */}
+        {/* Animated EduDash Pro text - letter by letter */}
         <Animated.View
           style={[
             styles.textContainer,
             {
-              opacity: textOpacity,
-              transform: [{ translateY: textTranslateY }],
+              transform: [{ translateY: textContainerTranslateY }],
             },
           ]}
         >
-          <Text style={styles.brandText}>EduDash Pro</Text>
-          <Text style={styles.tagline}>Empowering Education</Text>
+          <View style={styles.letterRow}>
+            {BRAND_TEXT.split('').map((letter, index) => (
+              <Animated.Text
+                key={index}
+                style={[
+                  styles.brandLetter,
+                  {
+                    opacity: letterAnimations[index].opacity,
+                    transform: [
+                      { translateY: letterAnimations[index].translateY },
+                      { scale: letterAnimations[index].scale },
+                    ],
+                  },
+                ]}
+              >
+                {letter === ' ' ? '\u00A0' : letter}
+              </Animated.Text>
+            ))}
+          </View>
+          <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+            Empowering Education
+          </Animated.Text>
         </Animated.View>
       </LinearGradient>
     </View>
@@ -310,14 +376,18 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     position: 'absolute',
-    bottom: height / 2 - 180,
+    bottom: height / 2 - 120,
     alignItems: 'center',
   },
-  brandText: {
+  letterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandLetter: {
     fontSize: 32,
     fontWeight: '700',
     color: '#ffffff',
-    letterSpacing: 1,
     textShadowColor: 'rgba(124, 58, 237, 0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
