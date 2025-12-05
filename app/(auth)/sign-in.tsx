@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/lib/storage';
@@ -21,6 +21,7 @@ import * as WebBrowser from 'expo-web-browser';
 export default function SignIn() {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { session, loading: authLoading } = useAuth();
   const searchParams = useLocalSearchParams();
   const [email, setEmail] = useState("");
@@ -482,7 +483,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
     },
     homeButtonContainer: {
       position: 'absolute',
-      top: Platform.OS === 'web' ? 16 : 8,
+      top: Platform.OS === 'web' ? 16 : Math.max(insets.top + 8, 16),
       right: 16,
       zIndex: 10,
     },
