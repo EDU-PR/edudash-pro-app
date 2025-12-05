@@ -147,6 +147,17 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'ai_homework_help':
         router.push('/screens/ai-homework-helper');
         break;
+      case 'ask_dash':
+        router.push('/screens/dash-assistant');
+        break;
+      case 'children':
+        // Show children list or scroll to child switcher
+        // For now, could navigate to profile or show modal
+        router.push('/screens/account');
+        break;
+      case 'calls':
+        router.push('/screens/calls');
+        break;
       default:
         Alert.alert(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }), 
@@ -174,14 +185,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
   };
 
-  // Metrics from dashboard data
+  // Metrics from dashboard data - now with onPress navigation
   const metrics = useMemo(() => {
     if (!dashboardData) {
       return [
-        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const },
-        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const },
-        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const },
-        { title: t('parent.total_children', { defaultValue: 'Total Children' }), value: '...', icon: 'people', color: theme.secondary, trend: 'stable' as const },
+        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const, action: 'messages' },
+        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const, action: 'view_homework' },
+        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const, action: 'check_attendance' },
+        { title: t('parent.total_children', { defaultValue: 'Total Children' }), value: '...', icon: 'people', color: theme.secondary, trend: 'stable' as const, action: 'children' },
       ];
     }
 
@@ -197,6 +208,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         icon: 'mail-unread',
         color: theme.primary,
         trend: (unreadCount > 5 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
+        action: 'messages',
       },
       {
         title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }),
@@ -204,6 +216,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         icon: 'document-text',
         color: theme.warning,
         trend: (pendingHomework > 3 ? 'attention' : pendingHomework === 0 ? 'up' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
+        action: 'view_homework',
       },
       {
         title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }),
@@ -211,6 +224,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         icon: 'calendar',
         color: theme.success,
         trend: (attendanceRate >= 90 ? 'up' : attendanceRate >= 75 ? 'stable' : 'attention') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
+        action: 'check_attendance',
       },
       {
         title: t('parent.total_children', { defaultValue: 'Total Children' }),
@@ -218,18 +232,21 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         icon: 'people',
         color: theme.secondary,
         trend: 'stable' as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
+        action: 'children',
       },
     ];
   }, [dashboardData, unreadMessageCount, theme, t]);
 
-  // Quick actions
+  // Quick actions - enhanced with more AI features
   const quickActions = useMemo(() => [
-    { id: 'view_homework', title: t('parent.view_homework'), icon: 'book', color: theme.primary },
-    { id: 'check_attendance', title: t('parent.check_attendance'), icon: 'calendar', color: theme.success },
-    { id: 'view_grades', title: t('parent.view_grades'), icon: 'school', color: theme.secondary },
-    { id: 'messages', title: t('parent.messages'), icon: 'chatbubbles', color: theme.info },
-    { id: 'events', title: t('parent.events'), icon: 'calendar-outline', color: theme.warning },
-    { id: 'ai_homework_help', title: t('parent.ai_homework_help'), icon: 'sparkles', color: '#8B5CF6', disabled: tier === 'free' },
+    { id: 'view_homework', title: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book', color: theme.primary },
+    { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar', color: theme.success },
+    { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school', color: theme.secondary },
+    { id: 'messages', title: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', color: theme.info },
+    { id: 'events', title: t('parent.events', { defaultValue: 'Events' }), icon: 'calendar-outline', color: theme.warning },
+    { id: 'calls', title: t('parent.calls', { defaultValue: 'Calls' }), icon: 'call', color: '#10B981' },
+    { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
+    { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
   ], [t, theme, tier]);
 
   if (loading && !dashboardData) {
@@ -296,7 +313,12 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                 icon={metric.icon}
                 color={metric.color}
                 trend={metric.trend}
-                onPress={() => track('parent.dashboard.metric_clicked', { metric: metric.title })}
+                onPress={() => {
+                  track('parent.dashboard.metric_clicked', { metric: metric.title });
+                  if (metric.action) {
+                    handleQuickAction(metric.action);
+                  }
+                }}
               />
             ))}
           </View>

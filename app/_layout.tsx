@@ -29,6 +29,7 @@ import { UpdatesProvider } from '@/contexts/UpdatesProvider';
 import { TermsProvider } from '@/contexts/TerminologyContext';
 import { OnboardingProvider } from '@/contexts/OnboardingContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { AlertProvider } from '@/components/ui/StyledAlert';
 import DashWakeWordListener from '@/components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { DashChatButton } from '@/components/ui/DashChatButton';
@@ -111,10 +112,10 @@ function LayoutContent() {
         </Stack>
       </View>
       
-      {/* Dash Chat FAB - temporarily hidden per user request */}
-      {/* {showFAB && !shouldHideFAB && (
+      {/* Dash Chat FAB - visible on dashboards and main screens */}
+      {showFAB && !shouldHideFAB && (
         <DashChatButton />
-      )} */}
+      )}
       
       {/* Persistent Bottom Navigation - positioned at bottom */}
       <BottomTabBar />
@@ -173,9 +174,11 @@ export default function RootLayout() {
                 <DashboardPreferencesProvider>
                   <TermsProvider>
                     <ToastProvider>
-                      <GestureHandlerRootView style={{ flex: 1 }}>
-                        <RootLayoutContent />
-                      </GestureHandlerRootView>
+                      <AlertProvider>
+                        <GestureHandlerRootView style={{ flex: 1 }}>
+                          <RootLayoutContent />
+                        </GestureHandlerRootView>
+                      </AlertProvider>
                     </ToastProvider>
                   </TermsProvider>
                 </DashboardPreferencesProvider>

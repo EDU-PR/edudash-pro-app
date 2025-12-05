@@ -16,6 +16,7 @@ import {
   FlatList,
   Alert,
   Keyboard,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessageHeader } from '@/components/messaging/MessageHeader';
+import { MessageAttachmentBar, MessageAttachment } from '@/components/messaging/MessageAttachmentBar';
+import { AttachmentPreview } from '@/components/messaging/AttachmentPreview';
 import { 
   useThreadMessages, 
   useSendMessage, 
@@ -235,6 +238,7 @@ export default function ParentMessageThreadScreen() {
   const [isSending, setIsSending] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   
   // Call functionality
   let callContext: ReturnType<typeof useCall> | null = null;
@@ -317,17 +321,46 @@ export default function ParentMessageThreadScreen() {
     callContext.startVideoCall(otherParticipantId, displayName);
   }, [callContext, otherParticipantId, displayName, t]);
   
+  // Attachment handlers
+  const handleAttach = useCallback((newAttachments: MessageAttachment[]) => {
+    setAttachments(prev => [...prev, ...newAttachments].slice(0, 5)); // Max 5 attachments
+  }, []);
+  
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
+  
   const handleSendMessage = useCallback(async () => {
     const content = messageText.trim();
-    if (!content || !threadId || isSending) return;
+    const hasAttachments = attachments.length > 0;
+    
+    if ((!content && !hasAttachments) || !threadId || isSending) return;
     
     setIsSending(true);
     try {
+      // Build message content
+      let finalContent = content;
+      
+      // For now, append attachment info to message content
+      // In a full implementation, attachments would be uploaded to storage
+      // and their URLs stored in a message_attachments table
+      if (hasAttachments) {
+        const attachmentInfo = attachments.map(a => 
+          a.type === 'audio' ? `🎤 Voice message (${Math.round((a.duration || 0) / 1000)}s)` :
+          a.type === 'image' ? `📷 Photo: ${a.name}` :
+          a.type === 'video' ? `🎬 Video: ${a.name}` :
+          `📎 ${a.name}`
+        ).join('\n');
+        
+        finalContent = content ? `${content}\n\n${attachmentInfo}` : attachmentInfo;
+      }
+      
       await sendMessageMutation.mutateAsync({
         threadId,
-        content
+        content: finalContent
       });
       setMessageText('');
+      setAttachments([]); // Clear attachments after sending
       // Scroll to bottom after sending
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -340,7 +373,7 @@ export default function ParentMessageThreadScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [messageText, threadId, isSending, sendMessageMutation, t]);
+  }, [messageText, threadId, isSending, attachments, sendMessageMutation, t]);
   
   // Process messages with date separators
   const processedMessages = useMemo(() => {
@@ -473,7 +506,7 @@ export default function ParentMessageThreadScreen() {
     inputContainer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 12,
+      paddingHorizontal: 8,
       paddingTop: 10,
       paddingBottom: 10,
     },
@@ -485,7 +518,7 @@ export default function ParentMessageThreadScreen() {
       borderColor: theme.border,
       paddingHorizontal: 16,
       paddingVertical: Platform.OS === 'ios' ? 10 : 6,
-      marginRight: 10,
+      marginRight: 8,
       maxHeight: 120,
     },
     textInput: {
@@ -633,7 +666,23 @@ export default function ParentMessageThreadScreen() {
       
       {/* Message input */}
       <View style={styles.inputWrapper}>
+        {/* Attachment Preview */}
+        {attachments.length > 0 && (
+          <AttachmentPreview
+            attachments={attachments}
+            onRemove={handleRemoveAttachment}
+          />
+        )}
+        
         <View style={styles.inputContainer}>
+          {/* Attachment Button */}
+          <MessageAttachmentBar
+            onAttach={handleAttach}
+            disabled={isSending}
+            maxAttachments={5}
+            currentAttachments={attachments}
+          />
+          
           <View style={styles.textInputContainer}>
             <TextInput
               style={styles.textInput}
@@ -649,10 +698,10 @@ export default function ParentMessageThreadScreen() {
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!messageText.trim() || isSending) && styles.sendButtonDisabled
+              (!messageText.trim() && attachments.length === 0 || isSending) && styles.sendButtonDisabled
             ]}
             onPress={handleSendMessage}
-            disabled={!messageText.trim() || isSending}
+            disabled={(!messageText.trim() && attachments.length === 0) || isSending}
             activeOpacity={0.7}
           >
             {isSending ? (
