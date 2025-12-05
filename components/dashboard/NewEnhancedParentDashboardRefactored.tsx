@@ -32,6 +32,7 @@ import Feedback from '@/lib/feedback';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { track } from '@/lib/analytics';
 import { useUnreadMessageCount } from '@/hooks/useParentMessaging';
+import { useMissedCallsCount } from '@/hooks/useMissedCalls';
 import { useParentDashboard } from '@/hooks/useDashboardData';
 import { logger } from '@/lib/logger';
 
@@ -74,6 +75,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   
   // Hooks for parent-specific data
   const { data: unreadMessageCount = 0 } = useUnreadMessageCount();
+  const { data: missedCallsCount = 0 } = useMissedCallsCount();
 
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {
@@ -133,7 +135,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/homework');
         break;
       case 'check_attendance':
-        router.push('/screens/attendance');
+        // Parents go to read-only attendance view, not teacher attendance management
+        router.push('/screens/parent-attendance');
         break;
       case 'view_grades':
         router.push('/screens/grades');
@@ -185,14 +188,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
   };
 
-  // Metrics from dashboard data - now with onPress navigation
+  // Metrics from dashboard data - now with onPress navigation, glow, and badges
   const metrics = useMemo(() => {
     if (!dashboardData) {
       return [
-        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const, action: 'messages' },
-        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const, action: 'view_homework' },
-        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const, action: 'check_attendance' },
-        { title: t('parent.total_children', { defaultValue: 'Total Children' }), value: '...', icon: 'people', color: theme.secondary, trend: 'stable' as const, action: 'children' },
+        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const, action: 'messages', glow: false, badge: 0 },
+        { title: t('parent.missed_calls', { defaultValue: 'Missed Calls' }), value: '...', icon: 'call', color: '#10B981', trend: 'stable' as const, action: 'calls', glow: false, badge: 0 },
+        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const, action: 'view_homework', glow: false, badge: 0 },
+        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const, action: 'check_attendance', glow: false, badge: 0 },
       ];
     }
 
@@ -209,6 +212,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         color: theme.primary,
         trend: (unreadCount > 5 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
         action: 'messages',
+        glow: unreadCount > 0,
+        badge: unreadCount,
+      },
+      {
+        title: t('parent.missed_calls', { defaultValue: 'Missed Calls' }),
+        value: String(missedCallsCount),
+        icon: 'call',
+        color: '#10B981',
+        trend: (missedCallsCount > 0 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
+        action: 'calls',
+        glow: missedCallsCount > 0,
+        badge: missedCallsCount,
       },
       {
         title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }),
@@ -217,6 +232,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         color: theme.warning,
         trend: (pendingHomework > 3 ? 'attention' : pendingHomework === 0 ? 'up' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
         action: 'view_homework',
+        glow: pendingHomework > 0,
+        badge: pendingHomework,
       },
       {
         title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }),
@@ -225,17 +242,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         color: theme.success,
         trend: (attendanceRate >= 90 ? 'up' : attendanceRate >= 75 ? 'stable' : 'attention') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
         action: 'check_attendance',
-      },
-      {
-        title: t('parent.total_children', { defaultValue: 'Total Children' }),
-        value: (dashboardData.totalChildren ?? 0).toString(),
-        icon: 'people',
-        color: theme.secondary,
-        trend: 'stable' as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
-        action: 'children',
+        glow: false,
+        badge: 0,
       },
     ];
-  }, [dashboardData, unreadMessageCount, theme, t]);
+  }, [dashboardData, unreadMessageCount, missedCallsCount, theme, t]);
 
   // Quick actions - enhanced with more AI features
   const quickActions = useMemo(() => [
@@ -272,9 +283,35 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Compact Header with Greeting */}
+        {/* Compact Header with Greeting + Tier/Role Badge */}
         <View style={styles.compactHeader}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <View style={styles.greetingRow}>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <View style={styles.badgeRow}>
+              {/* Role Badge */}
+              <View style={[styles.roleBadge, { backgroundColor: theme.primary + '20' }]}>
+                <Text style={[styles.roleBadgeText, { color: theme.primary }]}>
+                  {t('roles.parent', { defaultValue: 'Parent' })}
+                </Text>
+              </View>
+              {/* Tier Badge */}
+              <View style={[
+                styles.tierBadge, 
+                { backgroundColor: tier === 'free' ? theme.textSecondary + '20' : theme.success + '20' }
+              ]}>
+                <Text style={[
+                  styles.tierBadgeText, 
+                  { color: tier === 'free' ? theme.textSecondary : theme.success }
+                ]}>
+                  {tier === 'free' ? t('subscription.free', { defaultValue: 'Free' }) :
+                   tier === 'parent-starter' || tier === 'parent_starter' ? t('subscription.starter', { defaultValue: 'Starter' }) :
+                   tier === 'parent-plus' || tier === 'parent_plus' ? t('subscription.plus', { defaultValue: 'Plus' }) :
+                   tier === 'trial' ? t('subscription.trial', { defaultValue: 'Trial' }) :
+                   t('subscription.premium', { defaultValue: 'Premium' })}
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* PWA-Style Search Bar */}
@@ -313,6 +350,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                 icon={metric.icon}
                 color={metric.color}
                 trend={metric.trend}
+                glow={metric.glow}
+                badge={metric.badge}
                 onPress={() => {
                   track('parent.dashboard.metric_clicked', { metric: metric.title });
                   if (metric.action) {
@@ -378,10 +417,40 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) => Styl
   compactHeader: {
     marginBottom: 12,
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   greeting: {
     fontSize: isTablet ? 24 : isSmallScreen ? 18 : 20,
     fontWeight: '600',
     color: theme.text,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  roleBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  tierBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tierBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   searchSection: {
     marginBottom: 16,

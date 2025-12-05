@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketingLanding from '@/components/marketing/MarketingLanding';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
+import { useTheme } from '@/contexts/ThemeContext';
 
 /**
  * Root index route - handles different flows based on platform:
@@ -13,6 +14,7 @@ import { routeAfterLogin } from '@/lib/routeAfterLogin';
  */
 export default function Index() {
   const { session, user, profile, loading } = useAuth();
+  const { theme } = useTheme();
   const hasNavigatedRef = useRef(false);
   const isNative = Platform.OS !== 'web';
 
@@ -63,7 +65,23 @@ export default function Index() {
     // Web + not authenticated: Show landing page (default render)
   }, [session, user, profile, loading, isNative]);
 
-  // Native: Show nothing while redirecting (handled above)
+  // Native: Show loading indicator while redirecting (NEVER show landing page)
+  if (isNative) {
+    return (
+      <View style={[styles.nativeLoading, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+  
   // Web: Show landing page for unauthenticated users or while loading
   return <MarketingLanding />;
 }
+
+const styles = StyleSheet.create({
+  nativeLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

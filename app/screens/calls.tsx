@@ -98,6 +98,9 @@ const CallItem: React.FC<CallItemProps> = ({ call, currentUserId, onCall }) => {
   const otherUserId = isIncoming ? call.caller_id : call.callee_id;
   const otherUserName = isIncoming ? (call.caller_name || 'Unknown') : (call.callee_name || 'Unknown');
   
+  // Helper to determine if call was actually answered
+  const wasCallAnswered = (call.duration_seconds ?? 0) > 0;
+  
   const getStatusConfig = () => {
     switch (call.status) {
       case 'missed':
@@ -115,6 +118,25 @@ const CallItem: React.FC<CallItemProps> = ({ call, currentUserId, onCall }) => {
           iconRotation: 0,
         };
       case 'ended':
+        // If incoming call ended but was never answered (no duration), it's a missed call
+        if (isIncoming && !wasCallAnswered) {
+          return { 
+            icon: 'call-outline' as const, 
+            color: theme.error, 
+            label: t('calls.missed', { defaultValue: 'Missed' }),
+            iconRotation: 135,
+          };
+        }
+        // If outgoing call ended but was never answered, show as "No Answer"
+        if (!isIncoming && !wasCallAnswered) {
+          return { 
+            icon: 'call-outline' as const, 
+            color: theme.warning, 
+            label: t('calls.no_answer', { defaultValue: 'No Answer' }),
+            iconRotation: -45,
+          };
+        }
+        // Call was connected and ended normally
         return { 
           icon: isIncoming ? 'call-outline' : 'call-outline', 
           color: isIncoming ? theme.success : theme.info, 
@@ -313,18 +335,25 @@ export default function CallsScreen() {
     // Call provider not available
   }
   
+  // Helper to check if a call is considered "missed" (never answered)
+  const isMissedCall = useCallback((call: any, userId: string) => {
+    const isIncoming = call.callee_id === userId;
+    const wasAnswered = (call.duration_seconds ?? 0) > 0;
+    return isIncoming && (call.status === 'missed' || (call.status === 'ended' && !wasAnswered));
+  }, []);
+
   // Filter calls
   const filteredCalls = useMemo(() => {
     if (!user?.id) return [];
     
     return calls.filter((call: any) => {
       if (filter === 'all') return true;
-      if (filter === 'missed') return call.status === 'missed' && call.callee_id === user.id;
+      if (filter === 'missed') return isMissedCall(call, user.id);
       if (filter === 'incoming') return call.callee_id === user.id;
       if (filter === 'outgoing') return call.caller_id === user.id;
       return true;
     });
-  }, [calls, filter, user?.id]);
+  }, [calls, filter, user?.id, isMissedCall]);
   
   // Counts
   const counts = useMemo(() => {
@@ -332,17 +361,76 @@ export default function CallsScreen() {
     
     return {
       all: calls.length,
-      missed: calls.filter((c: any) => c.status === 'missed' && c.callee_id === user.id).length,
+      missed: calls.filter((c: any) => isMissedCall(c, user.id)).length,
       incoming: calls.filter((c: any) => c.callee_id === user.id).length,
       outgoing: calls.filter((c: any) => c.caller_id === user.id).length,
     };
-  }, [calls, user?.id]);
+  }, [calls, user?.id, isMissedCall]);
   
   const handleRefresh = async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
   };
+  
+  const handleClearCallHistory = useCallback(() => {
+    if (calls.length === 0) {
+      Alert.alert(
+        t('calls.no_history', { defaultValue: 'No History' }),
+        t('calls.history_empty', { defaultValue: 'Your call history is already empty.' })
+      );
+      return;
+    }
+    
+    Alert.alert(
+      t('calls.clear_history', { defaultValue: 'Clear Call History' }),
+      t('calls.clear_history_confirm', { defaultValue: 'Are you sure you want to clear all call history? This action cannot be undone.' }),
+      [
+        {
+          text: t('common.cancel', { defaultValue: 'Cancel' }),
+          style: 'cancel',
+        },
+        {
+          text: t('common.clear', { defaultValue: 'Clear' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              
+              // Delete calls where user is caller or callee
+              const { error } = await client
+                .from('active_calls')
+                .delete()
+                .or(`caller_id.eq.${user?.id},callee_id.eq.${user?.id}`);
+              
+              if (error) {
+                console.error('[ClearCallHistory] Error:', error);
+                Alert.alert(
+                  t('common.error', { defaultValue: 'Error' }),
+                  t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
+                );
+                return;
+              }
+              
+              // Refresh the list
+              await refetch();
+              
+              Alert.alert(
+                t('common.success', { defaultValue: 'Success' }),
+                t('calls.history_cleared', { defaultValue: 'Call history has been cleared.' })
+              );
+            } catch (error) {
+              console.error('[ClearCallHistory] Exception:', error);
+              Alert.alert(
+                t('common.error', { defaultValue: 'Error' }),
+                t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
+              );
+            }
+          },
+        },
+      ]
+    );
+  }, [calls.length, user?.id, refetch, t]);
   
   const handleCall = useCallback((userId: string, userName: string, callType: 'voice' | 'video') => {
     if (!callContext) {
@@ -365,6 +453,10 @@ export default function CallsScreen() {
       <ScreenHeader 
         title={t('calls.title', { defaultValue: 'Calls' })}
         subtitle={t('calls.history', { defaultValue: 'Call History' })}
+        rightAction={{
+          icon: 'trash-outline',
+          onPress: handleClearCallHistory,
+        }}
       />
       
       {/* Filter Chips */}
