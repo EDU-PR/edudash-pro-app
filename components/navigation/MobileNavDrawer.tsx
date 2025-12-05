@@ -20,7 +20,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { supabase } from '@/lib/supabase';
+import { signOutAndRedirect } from '@/lib/authActions';
 
 interface NavItem {
   id: string;
@@ -135,12 +135,8 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
 
   const handleSignOut = async () => {
     onClose();
-    try {
-      await supabase.auth.signOut();
-      router.replace('/sign-in');
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
+    // Use centralized sign out for proper session cleanup
+    await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
   };
 
   const isActive = (route: string) => {

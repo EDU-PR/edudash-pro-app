@@ -20,7 +20,8 @@ import { useTranslation } from "react-i18next";
 import { useThemedStyles, themedStyles } from "@/hooks/useThemedStyles";
 import { ThemeLanguageSettings } from '@/components/settings/ThemeLanguageSettings';
 import InvoiceNotificationSettings from '@/components/settings/InvoiceNotificationSettings';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 // Safe useUpdates hook that handles missing provider
 const useSafeUpdates = () => {
@@ -332,21 +333,23 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <RoleBasedHeader title="Settings" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>{t('settings.loading.settings')}</Text>
+      <DesktopLayout role={(profile?.role as any) || 'teacher'}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>{t('settings.loading.settings')}</Text>
+          </View>
         </View>
-      </View>
+      </DesktopLayout>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <RoleBasedHeader title="Settings" />
-
-      <ScrollView
+    <DesktopLayout role={(profile?.role as any) || 'teacher'}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.container}>
+        <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -868,6 +871,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+      </View>
+    </DesktopLayout>
   );
 }
