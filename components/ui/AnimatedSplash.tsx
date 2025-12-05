@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Animated, StyleSheet, Dimensions, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
@@ -277,12 +277,16 @@ export function AnimatedSplash({ onFinish }: AnimatedSplashProps) {
           ]}
         >
           <LinearGradient
-            colors={['#7c3aed', '#a855f7', '#ec4899']}
+            colors={['#1E293B', '#334155', '#1E293B']}
             style={styles.logoGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Ionicons name="trending-up" size={72} color="#ffffff" />
+            <Image
+              source={require('@/assets/icon.png')}
+              style={{ width: 80, height: 80 }}
+              resizeMode="contain"
+            />
           </LinearGradient>
         </Animated.View>
 

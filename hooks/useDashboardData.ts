@@ -99,15 +99,7 @@ const formatDueDate = (dueDateString: string): string => {
   }
 };
 
-const getAssignmentStatus = (dueDateString: string, status: string): 'pending' | 'graded' | 'overdue' => {
-  if (status === 'graded' || status === 'completed') return 'graded';
-  
-  const dueDate = new Date(dueDateString);
-  const now = new Date();
-  
-  if (dueDate < now) return 'overdue';
-  return 'pending';
-};
+// Note: getAssignmentStatus moved inline where needed (see recentAssignments mapping)
 
 // Types for dashboard data
 export interface PrincipalDashboardData {
@@ -1184,9 +1176,10 @@ const upcomingEvents = (eventsData || []).map((event: any) => {
     fetchData(true); // Force refresh from server
   }, [fetchData]);
 
-  // Refetch on window focus/visibility change (for web)
+  // Refetch on window focus/visibility change (for web only)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    // Skip on React Native - document doesn't exist
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
     const handleVisibilityChange = () => {
       // Only refetch if page becomes visible and we have existing data

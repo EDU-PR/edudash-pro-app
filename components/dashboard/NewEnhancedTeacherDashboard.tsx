@@ -45,8 +45,8 @@ interface NewEnhancedTeacherDashboardProps {
 }
 
 export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardProps> = ({ 
-  refreshTrigger, 
-  preferences 
+  refreshTrigger: _refreshTrigger, 
+  preferences: _preferences 
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
