@@ -75,74 +75,93 @@ export const useParentThreads = () => {
       
       const client = assertSupabase();
       
-      // Get threads with participants, student info, and last message
-      const { data: threads, error } = await client
-        .from('message_threads')
-        .select(`
-          *,
-          student:students(id, first_name, last_name),
-          participants:message_participants(
+      try {
+        // Get threads with participants, student info, and last message
+        const { data: threads, error } = await client
+          .from('message_threads')
+          .select(`
             *,
-            user_profile:profiles(first_name, last_name, role)
-          )
-        `)
-        .order('last_message_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      // Get last message and unread count for each thread
-      const threadsWithDetails = await Promise.all(
-        (threads || []).map(async (thread) => {
-          // Get last message
-          const { data: lastMessage } = await client
-            .from('messages')
-            .select(`
-              content,
-              created_at,
-              sender:profiles(first_name, last_name)
-            `)
-            .eq('thread_id', thread.id)
-            .is('deleted_at', null)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-          
-          // Get unread count (messages after user's last_read_at)
-          const userParticipant = thread.participants?.find(p => p.user_id === user.id);
-          let unreadCount = 0;
-          
-          if (userParticipant) {
-            const { count } = await client
-              .from('messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('thread_id', thread.id)
-              .gt('created_at', userParticipant.last_read_at)
-              .neq('sender_id', user.id)
-              .is('deleted_at', null);
-            
-            unreadCount = count || 0;
+            student:students(id, first_name, last_name),
+            participants:message_participants(
+              *,
+              user_profile:profiles(first_name, last_name, role)
+            )
+          `)
+          .order('last_message_at', { ascending: false });
+        
+        if (error) {
+          // Check if table doesn't exist - return empty array instead of throwing
+          if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            console.warn('[useParentThreads] message_threads table not found, returning empty');
+            return [];
           }
-          
-          return {
-            ...thread,
-            last_message: lastMessage ? {
-              content: lastMessage.content,
-              sender_name: (() => {
-                const s: any = lastMessage?.sender;
-                const sender = Array.isArray(s) ? s[0] : s;
-                return sender ? `${sender.first_name} ${sender.last_name}`.trim() : 'Unknown';
-              })(),
-              created_at: lastMessage.created_at
-            } : undefined,
-            unread_count: unreadCount
-          };
-        })
-      );
-      
-      return threadsWithDetails;
+          throw error;
+        }
+        
+        // If no threads, return empty array early
+        if (!threads || threads.length === 0) {
+          return [];
+        }
+        
+        // Get last message and unread count for each thread
+        const threadsWithDetails = await Promise.all(
+          threads.map(async (thread) => {
+            // Get last message
+            const { data: lastMessage } = await client
+              .from('messages')
+              .select(`
+                content,
+                created_at,
+                sender:profiles(first_name, last_name)
+              `)
+              .eq('thread_id', thread.id)
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+            
+            // Get unread count (messages after user's last_read_at)
+            const userParticipant = thread.participants?.find((p: any) => p.user_id === user.id);
+            let unreadCount = 0;
+            
+            if (userParticipant) {
+              const { count } = await client
+                .from('messages')
+                .select('id', { count: 'exact', head: true })
+                .eq('thread_id', thread.id)
+                .gt('created_at', userParticipant.last_read_at)
+                .neq('sender_id', user.id)
+                .is('deleted_at', null);
+              
+              unreadCount = count || 0;
+            }
+            
+            return {
+              ...thread,
+              last_message: lastMessage ? {
+                content: lastMessage.content,
+                sender_name: (() => {
+                  const s: any = lastMessage?.sender;
+                  const sender = Array.isArray(s) ? s[0] : s;
+                  return sender ? `${sender.first_name} ${sender.last_name}`.trim() : 'Unknown';
+                })(),
+                created_at: lastMessage.created_at
+              } : undefined,
+              unread_count: unreadCount
+            };
+          })
+        );
+        
+        return threadsWithDetails;
+      } catch (err: any) {
+        // Log error for debugging but don't crash the app
+        console.error('[useParentThreads] Error fetching threads:', err?.message || err);
+        throw err;
+      }
     },
     enabled: !!user?.id,
     staleTime: 1000 * 60 * 2, // 2 minutes
+    retry: 1, // Only retry once
   });
 };
 

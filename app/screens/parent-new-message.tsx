@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
@@ -260,12 +262,41 @@ export default function ParentNewMessageScreen() {
       lineHeight: 20,
     },
   }), [theme]);
+
+  const insets = useSafeAreaInsets();
+  
+  // Simple header component
+  const SimpleHeader = ({ title }: { title: string }) => (
+    <View style={{
+      backgroundColor: theme.surface,
+      paddingTop: Platform.OS === 'ios' ? insets.top : StatusBar.currentHeight || 0,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    }}>
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        minHeight: 56,
+      }}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          style={{ marginRight: 12 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={{ fontSize: 18, fontWeight: '600', color: theme.text }}>{title}</Text>
+      </View>
+    </View>
+  );
   
   // Loading state
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} showBackButton />
+        <SimpleHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} />
         <View style={styles.content}>
           <SkeletonLoader width="100%" height={80} borderRadius={12} style={{ marginBottom: 12 }} />
           <SkeletonLoader width="100%" height={80} borderRadius={12} style={{ marginBottom: 12 }} />
@@ -279,7 +310,7 @@ export default function ParentNewMessageScreen() {
   if (error) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} showBackButton />
+        <SimpleHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} />
         <View style={styles.errorContainer}>
           <Ionicons name="warning-outline" size={48} color={theme.error} />
           <Text style={styles.errorTitle}>{t('common.error', { defaultValue: 'Error' })}</Text>
@@ -293,7 +324,7 @@ export default function ParentNewMessageScreen() {
   if (!children || children.length === 0) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} showBackButton />
+        <SimpleHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} />
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color={theme.textSecondary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>{t('parent.noChildrenLinked', { defaultValue: 'No Children Linked' })}</Text>
@@ -307,7 +338,7 @@ export default function ParentNewMessageScreen() {
   
   return (
     <View style={styles.container}>
-      <RoleBasedHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} showBackButton />
+      <SimpleHeader title={t('parent.startNewMessage', { defaultValue: 'New Message' })} />
       <ScrollView style={styles.content}>
         {/* Header */}
         <View style={styles.header}>

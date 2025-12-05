@@ -1,19 +1,25 @@
-import React from 'react';
+/**
+ * Parent Messages Screen
+ * Modern, clean messaging list with improved UX
+ */
+
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
   Alert,
-  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { MessagesListHeader } from '@/components/messaging/MessageHeader';
 import { useParentThreads, MessageThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
@@ -35,18 +41,18 @@ const formatMessageTime = (timestamp: string): string => {
   }
 };
 
-// Thread item component
+// Thread item component - Modernized
 interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
 }
 
-const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onPress }) => {
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   
   // Get the other participant (teacher/principal)
-  const otherParticipant = thread.participants?.find(p => p.role !== 'parent');
+  const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
   const participantName = otherParticipant?.user_profile ? 
     `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim() :
     'Teacher';
@@ -56,39 +62,60 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onPress }) => {
   // Student name for context
   const studentName = thread.student ? 
     `${thread.student.first_name} ${thread.student.last_name}`.trim() :
-    'General';
+    null;
   
   const hasUnread = (thread.unread_count || 0) > 0;
+  
+  // Get initials for avatar
+  const initials = participantName
+    .split(' ')
+    .map(n => n.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
   
   const styles = StyleSheet.create({
     container: {
       backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 16,
+      overflow: 'hidden',
+      ...Platform.select({
+        ios: {
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 2,
+        },
+      }),
+    },
+    inner: {
       flexDirection: 'row',
       alignItems: 'center',
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-      borderLeftWidth: hasUnread ? 4 : 0,
-      borderLeftColor: theme.primary,
+      padding: 16,
     },
     avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: theme.primary + '20',
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: hasUnread ? theme.primary : theme.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 12,
+      marginRight: 14,
+    },
+    avatarText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: hasUnread ? theme.onPrimary : theme.primary,
     },
     content: {
       flex: 1,
     },
-    header: {
+    topRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -96,162 +123,198 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ thread, onPress }) => {
     },
     name: {
       fontSize: 16,
-      fontWeight: hasUnread ? '700' : '600',
+      fontWeight: hasUnread ? '700' : '500',
       color: theme.text,
+      flex: 1,
     },
     time: {
       fontSize: 12,
-      color: theme.textSecondary,
+      color: hasUnread ? theme.primary : theme.textSecondary,
+      fontWeight: hasUnread ? '600' : '400',
+      marginLeft: 8,
     },
-    roleStudent: {
+    contextRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 4,
+      marginBottom: 6,
     },
-    role: {
-      fontSize: 12,
+    roleBadge: {
+      backgroundColor: theme.primary + '15',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+    },
+    roleText: {
+      fontSize: 11,
       color: theme.primary,
+      fontWeight: '600',
       textTransform: 'capitalize',
     },
-    studentContext: {
+    studentText: {
       fontSize: 12,
       color: theme.textSecondary,
       marginLeft: 8,
     },
-    lastMessage: {
+    messagePreview: {
       fontSize: 14,
       color: hasUnread ? theme.text : theme.textSecondary,
       fontWeight: hasUnread ? '500' : '400',
+      lineHeight: 20,
     },
-    rightSection: {
-      alignItems: 'flex-end',
+    bottomRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 2,
     },
     unreadBadge: {
       backgroundColor: theme.primary,
-      borderRadius: 10,
-      minWidth: 20,
-      height: 20,
+      borderRadius: 12,
+      minWidth: 24,
+      height: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 4,
+      paddingHorizontal: 8,
     },
     unreadText: {
       color: theme.onPrimary,
       fontSize: 12,
-      fontWeight: '600',
+      fontWeight: '700',
     },
   });
   
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
-      <View style={styles.avatar}>
-        <Ionicons 
-          name={participantRole === 'principal' ? 'school' : 'person'} 
-          size={24} 
-          color={theme.primary} 
-        />
-      </View>
-      
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.name}>{participantName}</Text>
-          {thread.last_message && (
-            <Text style={styles.time}>
-              {formatMessageTime(thread.last_message.created_at)}
-            </Text>
-          )}
+    <TouchableOpacity 
+      style={styles.container} 
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.inner}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
         </View>
         
-        <View style={styles.roleStudent}>
-          <Text style={styles.role}>{t(`roles.${participantRole}`)}</Text>
-          {thread.student && (
-            <Text style={styles.studentContext}>• {studentName}</Text>
-          )}
-        </View>
-        
-        {thread.last_message ? (
-          <Text style={styles.lastMessage} numberOfLines={2}>
-            {getMessageDisplayText(thread.last_message.content)}
-          </Text>
-        ) : (
-          <Text style={[styles.lastMessage, { fontStyle: 'italic' }]} numberOfLines={2}>
-            {t('parent.noMessagesYet')}
-          </Text>
-        )}
-      </View>
-      
-      <View style={styles.rightSection}>
-        <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
-        {hasUnread && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>
-              {thread.unread_count && thread.unread_count > 9 ? '9+' : thread.unread_count}
-            </Text>
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <Text style={styles.name} numberOfLines={1}>{participantName}</Text>
+            {thread.last_message && (
+              <Text style={styles.time}>
+                {formatMessageTime(thread.last_message.created_at)}
+              </Text>
+            )}
           </View>
-        )}
+          
+          <View style={styles.contextRow}>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleText}>{participantRole}</Text>
+            </View>
+            {studentName && (
+              <Text style={styles.studentText}>• {studentName}</Text>
+            )}
+          </View>
+          
+          <View style={styles.bottomRow}>
+            {thread.last_message ? (
+              <Text style={styles.messagePreview} numberOfLines={1}>
+                {getMessageDisplayText(thread.last_message.content)}
+              </Text>
+            ) : (
+              <Text style={[styles.messagePreview, { fontStyle: 'italic' }]} numberOfLines={1}>
+                {t('parent.noMessagesYet', { defaultValue: 'No messages yet' })}
+              </Text>
+            )}
+            
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>
+                  {thread.unread_count && thread.unread_count > 99 ? '99+' : thread.unread_count}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 export default function ParentMessagesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { data: threads, isLoading, error, refetch } = useParentThreads();
+  const insets = useSafeAreaInsets();
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
+  
+  const handleThreadPress = useCallback((thread: MessageThread) => {
+    const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
+    const participantName = otherParticipant?.user_profile ? 
+      `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim() :
+      'Teacher';
+    
+    router.push({
+      pathname: '/screens/parent-message-thread',
+      params: {
+        threadId: thread.id,
+        title: participantName,
+        teacherId: otherParticipant?.user_id || '',
+        teacherName: participantName,
+      },
+    });
+  }, []);
+  
+  const handleStartNewMessage = useCallback(() => {
+    router.push('/screens/parent-new-message');
+  }, []);
+  
+  const handleSettings = useCallback(() => {
+    Alert.alert(
+      t('parent.messageSettings', { defaultValue: 'Message Settings' }),
+      t('parent.messageSettingsDesc', { defaultValue: 'Configure your messaging preferences' }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        { 
+          text: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }),
+          onPress: () => router.push('/screens/settings')
+        },
+      ]
+    );
+  }, [t]);
+  
+  // Filter threads by search
+  const filteredThreads = React.useMemo(() => {
+    if (!threads || !searchQuery.trim()) return threads || [];
+    
+    const query = searchQuery.toLowerCase();
+    return threads.filter(thread => {
+      const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
+      const name = otherParticipant?.user_profile 
+        ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`
+        : '';
+      const studentNameStr = thread.student 
+        ? `${thread.student.first_name} ${thread.student.last_name}`
+        : '';
+      const lastMessage = thread.last_message?.content || '';
+      
+      return (
+        name.toLowerCase().includes(query) ||
+        studentNameStr.toLowerCase().includes(query) ||
+        lastMessage.toLowerCase().includes(query)
+      );
+    });
+  }, [threads, searchQuery]);
   
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.background,
     },
-    content: {
+    loadingContainer: {
       flex: 1,
       padding: 16,
     },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 40,
-    },
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: theme.textSecondary,
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 40,
-    },
-    emptyIcon: {
-      marginBottom: 16,
-    },
-    emptyTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 8,
-      textAlign: 'center',
-    },
-    emptySubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      lineHeight: 20,
-      marginBottom: 24,
-    },
-    emptyButton: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 8,
-    },
-    emptyButtonText: {
-      color: theme.onPrimary,
-      fontSize: 16,
-      fontWeight: '600',
+    skeletonItem: {
+      marginBottom: 12,
     },
     errorContainer: {
       flex: 1,
@@ -259,70 +322,156 @@ export default function ParentMessagesScreen() {
       alignItems: 'center',
       padding: 40,
     },
+    errorIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.error + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 20,
+    },
     errorTitle: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
-      color: theme.error,
+      color: theme.text,
       marginBottom: 8,
       textAlign: 'center',
     },
     errorText: {
-      fontSize: 14,
+      fontSize: 15,
       color: theme.textSecondary,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: 22,
       marginBottom: 24,
+      paddingHorizontal: 20,
     },
     retryButton: {
       backgroundColor: theme.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 8,
+      paddingHorizontal: 32,
+      paddingVertical: 14,
+      borderRadius: 12,
     },
     retryButtonText: {
       color: theme.onPrimary,
       fontSize: 16,
       fontWeight: '600',
     },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 40,
+    },
+    emptyIcon: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: theme.primary + '10',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 24,
+    },
+    emptyTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 12,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      marginBottom: 28,
+      paddingHorizontal: 20,
+    },
+    emptyButton: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 32,
+      paddingVertical: 14,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    emptyButtonText: {
+      color: theme.onPrimary,
+      fontSize: 16,
+      fontWeight: '600',
+      marginLeft: 8,
+    },
+    listContent: {
+      paddingTop: 8,
+      paddingBottom: insets.bottom + 20,
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      bottom: insets.bottom + 20,
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: theme.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Platform.select({
+        ios: {
+          shadowColor: theme.primary,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 8,
+        },
+      }),
+    },
   });
   
-  const handleThreadPress = (thread: MessageThread) => {
-    const title = thread.student ? 
-      `${thread.student.first_name} ${thread.student.last_name}`.trim() :
-      'Messages';
-    router.push(`/message-thread?threadId=${thread.id}&title=${encodeURIComponent(title)}`);
-  };
-  
-  const handleStartNewMessage = () => {
-    // Navigate to child selection for new message
-    router.push('/screens/parent-new-message');
-  };
-  
   // Loading state
-  if (isLoading) {
+  if (isLoading && !threads) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.messages')} />
-        <View style={styles.content}>
-          <SkeletonLoader width="100%" height={80} borderRadius={12} style={{ marginBottom: 12 }} />
-          <SkeletonLoader width="100%" height={80} borderRadius={12} style={{ marginBottom: 12 }} />
-          <SkeletonLoader width="100%" height={80} borderRadius={12} style={{ marginBottom: 12 }} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          onNewMessage={handleStartNewMessage}
+          onSettings={handleSettings}
+        />
+        <View style={styles.loadingContainer}>
+          {[1, 2, 3, 4].map(i => (
+            <View key={i} style={styles.skeletonItem}>
+              <SkeletonLoader width="100%" height={90} borderRadius={16} />
+            </View>
+          ))}
         </View>
       </View>
     );
   }
   
   // Error state
-  if (error) {
+  if (error && !threads) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.messages')} />
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          onNewMessage={handleStartNewMessage}
+          onSettings={handleSettings}
+        />
         <View style={styles.errorContainer}>
-          <Ionicons name="warning-outline" size={48} color={theme.error} />
-          <Text style={styles.errorTitle}>{t('parent.messagesError')}</Text>
-          <Text style={styles.errorText}>{t('parent.messagesErrorDesc')}</Text>
+          <View style={styles.errorIcon}>
+            <Ionicons name="cloud-offline-outline" size={40} color={theme.error} />
+          </View>
+          <Text style={styles.errorTitle}>
+            {t('parent.messagesError', { defaultValue: 'Unable to Load Messages' })}
+          </Text>
+          <Text style={styles.errorText}>
+            {t('parent.messagesErrorDesc', { defaultValue: 'We couldn\'t load your messages. Please check your connection and try again.' })}
+          </Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+            <Text style={styles.retryButtonText}>
+              {t('common.retry', { defaultValue: 'Try Again' })}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -330,18 +479,29 @@ export default function ParentMessagesScreen() {
   }
   
   // Empty state
-  if (!threads || threads.length === 0) {
+  if (!filteredThreads || filteredThreads.length === 0) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title={t('parent.messages')} />
-        <View style={styles.emptyState}>
-          <Ionicons name="chatbubbles-outline" size={64} color={theme.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>{t('parent.noMessagesTitle')}</Text>
+        <MessagesListHeader
+          title={t('parent.messages', { defaultValue: 'Messages' })}
+          onNewMessage={handleStartNewMessage}
+          onSettings={handleSettings}
+        />
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="chatbubbles-outline" size={48} color={theme.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {t('parent.noMessagesTitle', { defaultValue: 'No Messages Yet' })}
+          </Text>
           <Text style={styles.emptySubtitle}>
-            {t('parent.noMessagesDesc')}
+            {t('parent.noMessagesDesc', { defaultValue: 'Start a conversation with your child\'s teacher to stay connected and informed.' })}
           </Text>
           <TouchableOpacity style={styles.emptyButton} onPress={handleStartNewMessage}>
-            <Text style={styles.emptyButtonText}>{t('parent.startNewMessage')}</Text>
+            <Ionicons name="chatbubble-outline" size={20} color={theme.onPrimary} />
+            <Text style={styles.emptyButtonText}>
+              {t('parent.startNewMessage', { defaultValue: 'Start a Conversation' })}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -351,25 +511,42 @@ export default function ParentMessagesScreen() {
   // Thread list
   return (
     <View style={styles.container}>
-      <RoleBasedHeader title={t('parent.messages')} />
-      <ScrollView 
-        style={styles.content}
+      <MessagesListHeader
+        title={t('parent.messages', { defaultValue: 'Messages' })}
+        subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
+        onNewMessage={handleStartNewMessage}
+        onSettings={handleSettings}
+      />
+      
+      <FlatList
+        data={filteredThreads}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ThreadItem
+            thread={item}
+            onPress={() => handleThreadPress(item)}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
+            refreshing={isRefetching}
             onRefresh={refetch}
             tintColor={theme.primary}
+            colors={[theme.primary]}
           />
         }
+      />
+      
+      {/* Floating Action Button */}
+      <TouchableOpacity 
+        style={styles.fab}
+        onPress={handleStartNewMessage}
+        activeOpacity={0.8}
       >
-        {threads.map((thread) => (
-          <ThreadItem
-            key={thread.id}
-            thread={thread}
-            onPress={() => handleThreadPress(thread)}
-          />
-        ))}
-      </ScrollView>
+        <Ionicons name="create" size={26} color={theme.onPrimary} />
+      </TouchableOpacity>
     </View>
   );
 }
