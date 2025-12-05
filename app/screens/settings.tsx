@@ -333,7 +333,7 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <DesktopLayout role={(profile?.role as any) || 'teacher'}>
+      <DesktopLayout role={(profile?.role as any) || 'teacher'} title="Settings">
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
           <View style={styles.loadingContainer}>
@@ -346,7 +346,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <DesktopLayout role={(profile?.role as any) || 'teacher'}>
+    <DesktopLayout role={(profile?.role as any) || 'teacher'} title="Settings">
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
         <ScrollView

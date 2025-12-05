@@ -522,18 +522,20 @@ return (
         }}
       />
 
-      {/* Go to Home button */}
-      <View style={styles.homeButtonContainer}>
-        <Link href="/" asChild>
-          <TouchableOpacity 
-            style={styles.homeButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="home-outline" size={20} color={marketingTokens.colors.accent.cyan400} />
-            <Text style={styles.homeButtonText}>{t('auth.go_to_home', { defaultValue: 'Go to Home' })}</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
+      {/* Native app doesn't show 'Go to Home' button since there's no landing page */}
+      {Platform.OS === 'web' && (
+        <View style={styles.homeButtonContainer}>
+          <Link href="/" asChild>
+            <TouchableOpacity 
+              style={styles.homeButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="home-outline" size={20} color={marketingTokens.colors.accent.cyan400} />
+              <Text style={styles.homeButtonText}>{t('auth.go_to_home', { defaultValue: 'Go to Home' })}</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={styles.keyboardView}

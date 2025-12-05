@@ -11,6 +11,7 @@ import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 interface DesktopLayoutProps {
   children: React.ReactNode;
   role?: 'principal' | 'teacher' | 'parent' | 'super_admin';
+  title?: string; // Custom title for mobile header (overrides tenant slug)
 }
 
 interface NavItem {
@@ -71,7 +72,7 @@ const NAV_ITEMS: NavItem[] = [
  *   <YourScreenContent />
  * </DesktopLayout>
  */
-export function DesktopLayout({ children, role }: DesktopLayoutProps) {
+export function DesktopLayout({ children, role, title }: DesktopLayoutProps) {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const permissions = usePermissions();
@@ -160,7 +161,7 @@ export function DesktopLayout({ children, role }: DesktopLayoutProps) {
             >
               <Ionicons name="menu" size={24} color={theme.text} />
             </TouchableOpacity>
-            <Text style={mobileStyles.headerTitle}>{tenantSlug}</Text>
+            <Text style={mobileStyles.headerTitle}>{title || tenantSlug}</Text>
           </View>
           <View style={mobileStyles.headerRight}>
             <TouchableOpacity
