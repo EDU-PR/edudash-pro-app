@@ -3,10 +3,11 @@
  * 
  * A reusable metric display card for dashboards.
  * Used by Principal, Teacher, and Parent dashboards.
+ * Supports glow animation for attention-needing items and badge counters.
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -24,6 +25,10 @@ export interface MetricCardProps {
   size?: 'small' | 'medium' | 'large';
   valueColor?: string;
   cardWidth?: number;
+  /** Show glow animation (e.g., for unread messages, missed calls) */
+  glow?: boolean;
+  /** Optional badge count (shown on icon) */
+  badge?: number;
 }
 
 export const MetricCard: React.FC<MetricCardProps> = ({ 
@@ -36,9 +41,49 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   size = 'medium',
   valueColor,
   cardWidth: customCardWidth,
+  glow = false,
+  badge,
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme, customCardWidth);
+  
+  // Animated value for glow effect
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  
+  // Start glow animation when glow prop is true
+  useEffect(() => {
+    if (glow) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: false,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1200,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [glow, glowAnim]);
+  
+  // Interpolate glow values
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.15, 0.4],
+  });
+  
+  const shadowRadius = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, 20],
+  });
 
   const getTrendColor = (trendType: string) => {
     switch (trendType) {
@@ -79,39 +124,60 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   };
 
   return (
-    <TouchableOpacity
+    <Animated.View
       style={[
-        styles.metricCard,
-        size === 'large' && styles.metricCardLarge,
-        size === 'small' && styles.metricCardSmall,
+        glow && {
+          shadowColor: color,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: glowOpacity,
+          shadowRadius: shadowRadius,
+          elevation: 8,
+        },
       ]}
-      onPress={onPress}
-      disabled={!onPress}
-      activeOpacity={0.7}
     >
-      <View style={styles.metricContent}>
-        <View style={styles.metricHeader}>
-          <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
-            <Ionicons 
-              name={icon as any} 
-              size={isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)} 
-              color={color} 
-            />
-          </View>
-          {trend && (
-            <View style={styles.trendContainer}>
-              <Text style={[styles.trendText, getTrendColor(trend)]}>
-                {getTrendIcon(trend)} {getTrendText(trend)}
-              </Text>
+      <TouchableOpacity
+        style={[
+          styles.metricCard,
+          size === 'large' && styles.metricCardLarge,
+          size === 'small' && styles.metricCardSmall,
+          glow && { borderWidth: 1, borderColor: color + '40' },
+        ]}
+        onPress={onPress}
+        disabled={!onPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.metricContent}>
+          <View style={styles.metricHeader}>
+            <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
+              <Ionicons 
+                name={icon as any} 
+                size={isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)} 
+                color={color} 
+              />
+              {/* Badge counter */}
+              {badge !== undefined && badge > 0 && (
+                <View style={[styles.badge, { backgroundColor: color }]}>
+                  <Text style={styles.badgeText}>
+                    {badge > 99 ? '99+' : badge}
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
+            {trend && (
+              <View style={styles.trendContainer}>
+                <Text style={[styles.trendText, getTrendColor(trend)]}>
+                  {getTrendIcon(trend)} {getTrendText(trend)}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.metricValue, valueColor && { color: valueColor }]}>
+            {value}
+          </Text>
+          <Text style={styles.metricTitle}>{title}</Text>
         </View>
-        <Text style={[styles.metricValue, valueColor && { color: valueColor }]}>
-          {value}
-        </Text>
-        <Text style={styles.metricTitle}>{title}</Text>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
@@ -162,6 +228,25 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       borderRadius: isSmallScreen ? 12 : 14,
       alignItems: 'center',
       justifyContent: 'center',
+      position: 'relative',
+    },
+    badge: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      minWidth: isSmallScreen ? 18 : 20,
+      height: isSmallScreen ? 18 : 20,
+      borderRadius: isSmallScreen ? 9 : 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+      borderWidth: 2,
+      borderColor: theme.cardBackground,
+    },
+    badgeText: {
+      color: '#FFFFFF',
+      fontSize: isSmallScreen ? 10 : 11,
+      fontWeight: '700',
     },
     trendContainer: {
       backgroundColor: theme.surface,

@@ -4,11 +4,11 @@
  * Provides media attachment options for messaging:
  * - Image picker (gallery)
  * - Camera capture
- * - Audio recording
+ * - Audio recording with glowing mic animation
  * - Document picker
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -65,11 +65,14 @@ export function MessageAttachmentBar({
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const micScaleAnim = useRef(new Animated.Value(1)).current;
   
   const canAddMore = currentAttachments.length < maxAttachments;
   
   // Pulse animation for recording indicator
   const startPulseAnimation = () => {
+    // Pulsing dot animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -84,12 +87,59 @@ export function MessageAttachmentBar({
         }),
       ])
     ).start();
+    
+    // Glowing effect animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+    
+    // Mic scale animation (breathing effect)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(micScaleAnim, {
+          toValue: 1.15,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(micScaleAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   };
   
   const stopPulseAnimation = () => {
     pulseAnim.stopAnimation();
     pulseAnim.setValue(1);
+    glowAnim.stopAnimation();
+    glowAnim.setValue(0);
+    micScaleAnim.stopAnimation();
+    micScaleAnim.setValue(1);
   };
+  
+  // Interpolate glow values for the mic container
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
+  
+  const glowScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.3],
+  });
   
   // Pick images from gallery
   const pickImages = async () => {
@@ -397,7 +447,7 @@ export function MessageAttachmentBar({
   
   return (
     <>
-      {/* Recording UI */}
+      {/* Recording UI with Glowing Mic */}
       {isRecording && (
         <View style={[styles.recordingBar, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
           <TouchableOpacity style={styles.cancelRecordingBtn} onPress={cancelRecording}>
@@ -405,13 +455,54 @@ export function MessageAttachmentBar({
           </TouchableOpacity>
           
           <View style={styles.recordingInfo}>
-            <Animated.View style={[styles.recordingDot, { transform: [{ scale: pulseAnim }] }]} />
-            <Text style={[styles.recordingDuration, { color: theme.text }]}>
-              {formatDuration(recordingDuration)}
-            </Text>
-            <Text style={[styles.recordingLabel, { color: theme.textSecondary }]}>
-              {t('messages.recording', { defaultValue: 'Recording...' })}
-            </Text>
+            {/* Glowing Microphone */}
+            <View style={styles.glowingMicContainer}>
+              {/* Outer glow ring */}
+              <Animated.View 
+                style={[
+                  styles.micGlowOuter, 
+                  { 
+                    backgroundColor: theme.error,
+                    opacity: glowOpacity,
+                    transform: [{ scale: glowScale }],
+                  }
+                ]} 
+              />
+              {/* Inner glow ring */}
+              <Animated.View 
+                style={[
+                  styles.micGlowInner, 
+                  { 
+                    backgroundColor: theme.error,
+                    opacity: 0.4,
+                  }
+                ]} 
+              />
+              {/* Mic icon */}
+              <Animated.View 
+                style={[
+                  styles.micIconContainer, 
+                  { 
+                    backgroundColor: theme.error,
+                    transform: [{ scale: micScaleAnim }],
+                  }
+                ]}
+              >
+                <Ionicons name="mic" size={20} color="#FFFFFF" />
+              </Animated.View>
+            </View>
+            
+            <View style={styles.recordingTextContainer}>
+              <Text style={[styles.recordingDuration, { color: theme.text }]}>
+                {formatDuration(recordingDuration)}
+              </Text>
+              <View style={styles.recordingLabelRow}>
+                <Animated.View style={[styles.recordingDot, { transform: [{ scale: pulseAnim }] }]} />
+                <Text style={[styles.recordingLabel, { color: theme.error }]}>
+                  {t('messages.recording', { defaultValue: 'Recording...' })}
+                </Text>
+              </View>
+            </View>
           </View>
           
           <TouchableOpacity 
@@ -572,20 +663,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  glowingMicContainer: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  micGlowOuter: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  micGlowInner: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  micIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  recordingTextContainer: {
+    alignItems: 'flex-start',
+  },
+  recordingLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   recordingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#EF4444',
-    marginRight: 8,
+    marginRight: 6,
   },
   recordingDuration: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginRight: 8,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   recordingLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
   },
   stopRecordingBtn: {
     width: 44,

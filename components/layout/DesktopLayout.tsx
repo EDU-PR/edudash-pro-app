@@ -7,6 +7,7 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -82,6 +83,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
   const insets = useSafeAreaInsets();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const notificationCount = useNotificationBadgeCount();
   
   // Use window dimensions for responsive behavior on web
   const { width: windowWidth } = useWindowDimensions();
@@ -181,7 +183,29 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
               style={mobileStyles.iconButton}
               onPress={() => router.push('/screens/notifications' as any)}
             >
-              <Ionicons name="notifications-outline" size={22} color={theme.textSecondary} />
+              <View>
+                <Ionicons name="notifications-outline" size={22} color={theme.textSecondary} />
+                {notificationCount > 0 && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    backgroundColor: theme.error,
+                    borderRadius: 10,
+                    minWidth: 18,
+                    height: 18,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 4,
+                    borderWidth: 2,
+                    borderColor: theme.surface,
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                      {notificationCount > 99 ? '99+' : notificationCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={mobileStyles.iconButton}
