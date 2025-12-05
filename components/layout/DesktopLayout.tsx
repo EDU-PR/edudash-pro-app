@@ -12,6 +12,7 @@ interface DesktopLayoutProps {
   children: React.ReactNode;
   role?: 'principal' | 'teacher' | 'parent' | 'super_admin';
   title?: string; // Custom title for mobile header (overrides tenant slug)
+  showBackButton?: boolean; // Show back button instead of hamburger menu
 }
 
 interface NavItem {
@@ -72,7 +73,7 @@ const NAV_ITEMS: NavItem[] = [
  *   <YourScreenContent />
  * </DesktopLayout>
  */
-export function DesktopLayout({ children, role, title }: DesktopLayoutProps) {
+export function DesktopLayout({ children, role, title, showBackButton }: DesktopLayoutProps) {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const permissions = usePermissions();
@@ -149,18 +150,30 @@ export function DesktopLayout({ children, role, title }: DesktopLayoutProps) {
   if (Platform.OS !== 'web' || isMobileWidth) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' as any }}>
-        {/* Mobile Header with Hamburger */}
+        {/* Mobile Header with Hamburger or Back Button */}
         <View style={mobileStyles.mobileHeader}>
           <View style={mobileStyles.headerLeft}>
-            <TouchableOpacity
-              style={mobileStyles.hamburgerButton}
-              onPress={() => {
-                console.log('[DesktopLayout] Hamburger pressed, opening drawer');
-                setMobileDrawerOpen(true);
-              }}
-            >
-              <Ionicons name="menu" size={24} color={theme.text} />
-            </TouchableOpacity>
+            {showBackButton ? (
+              <TouchableOpacity
+                style={mobileStyles.hamburgerButton}
+                onPress={() => {
+                  console.log('[DesktopLayout] Back button pressed');
+                  router.back();
+                }}
+              >
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={mobileStyles.hamburgerButton}
+                onPress={() => {
+                  console.log('[DesktopLayout] Hamburger pressed, opening drawer');
+                  setMobileDrawerOpen(true);
+                }}
+              >
+                <Ionicons name="menu" size={24} color={theme.text} />
+              </TouchableOpacity>
+            )}
             <Text style={mobileStyles.headerTitle}>{title || tenantSlug}</Text>
           </View>
           <View style={mobileStyles.headerRight}>
