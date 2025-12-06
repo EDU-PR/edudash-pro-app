@@ -16,8 +16,8 @@
  * Note: Requires a development build (npx expo prebuild) for native modules.
  */
 
-// Provider and Hook
-export { CallProvider, useCall } from './CallProvider';
+// Provider and Hooks
+export { CallProvider, useCall, useCallSafe } from './CallProvider';
 
 // Call Interfaces
 export { VoiceCallInterface } from './VoiceCallInterface';

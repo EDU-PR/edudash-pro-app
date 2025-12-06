@@ -64,9 +64,13 @@ export const useFABVisibility = (pathname: string | null) => {
     if (
       pathname.includes('messages') ||
       pathname.includes('message-thread') ||
+      pathname.includes('parent-message-thread') ||
+      pathname.includes('teacher-message-thread') ||
       pathname.includes('parent-messages') ||
+      pathname.includes('teacher-messages') ||
       pathname.includes('teacher/messages') ||
-      pathname.includes('principal/messages')
+      pathname.includes('principal/messages') ||
+      pathname.includes('new-message')
     ) {
       return true;
     }

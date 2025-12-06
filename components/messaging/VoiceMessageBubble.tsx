@@ -23,6 +23,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
+import {
+  PURPLE_LIGHT,
+  PURPLE_INDIGO,
+  SUCCESS_GREEN,
+  GRADIENT_PURPLE_INDIGO,
+} from './theme';
 
 // Generate random waveform bars (normalized 0-1)
 const generateWaveformBars = (count: number = 40): number[] => {
@@ -222,7 +228,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
       borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#7c3aed',
+      shadowColor: PURPLE_LIGHT,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.4,
       shadowRadius: 4,
@@ -263,7 +269,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
     },
     readReceipt: {
       fontSize: 10,
-      color: isRead ? '#34d399' : (isOwnMessage ? theme.onPrimary + '70' : theme.textSecondary),
+      color: isRead ? SUCCESS_GREEN : (isOwnMessage ? theme.onPrimary + '70' : theme.textSecondary),
       marginLeft: 2,
     },
     micIcon: {
@@ -316,7 +322,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
           style={{ marginRight: 10 }}
         >
           <LinearGradient
-            colors={['#7c3aed', '#ec4899']}
+            colors={GRADIENT_PURPLE_INDIGO}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.playButtonGradient}

@@ -25,7 +25,11 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone so Dash can hear your questions and provide voice responses.",
         "NSCameraUsageDescription": "This app needs camera access so you can take photos to share with Dash.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library so you can share images with Dash."
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library so you can share images with Dash.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ]
       }
     },
     "android": {

@@ -283,6 +283,8 @@ export const useMarkThreadRead = () => {
     onSuccess: () => {
       // Invalidate parent threads to update unread counts
       queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+      // Also invalidate the unread count query so badge updates
+      queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
     },
   });
 };

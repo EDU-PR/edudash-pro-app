@@ -14,7 +14,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -367,6 +367,13 @@ export default function ParentMessagesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
+  
+  // Refetch threads when screen gains focus to update unread badges
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
   
   const handleThreadPress = useCallback((thread: MessageThread) => {
     const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');

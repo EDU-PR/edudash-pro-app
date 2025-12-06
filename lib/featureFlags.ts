@@ -178,13 +178,13 @@ const DEFAULT_FLAGS: FeatureFlags = {
   sa_payment_methods: SA_TENANT_DEFAULT, // EFT, Ozow, SnapScan
   
   // ============================================
-  // PWA PARITY FEATURES (Native App) - Default: DISABLED
-  // Enable via environment variables when ready
+  // PWA PARITY FEATURES (Native App) - Default: ENABLED for development
+  // Disable via environment variables when needed
   // ============================================
   
   // Video/Voice Calls (Daily.co) - Requires prebuild for native modules
-  video_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
-  voice_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VOICE_CALLS === 'true',
+  video_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS !== 'false',
+  voice_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VOICE_CALLS !== 'false',
   group_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_GROUP_CALLS === 'true',
   live_lessons_enabled: process.env.EXPO_PUBLIC_ENABLE_LIVE_LESSONS === 'true',
   

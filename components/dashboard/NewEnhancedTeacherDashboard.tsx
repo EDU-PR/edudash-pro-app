@@ -171,7 +171,7 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) => Styl
   scrollContent: {
     paddingTop: topInset || 20,
     paddingHorizontal: cardPadding,
-    paddingBottom: bottomInset + 100,
+    paddingBottom: Math.max(bottomInset, 34) + 120, // Ensure space for bottom nav/FAB on all devices
   },
   loadingContainer: {
     flex: 1,
