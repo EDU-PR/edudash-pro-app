@@ -1,6 +1,6 @@
 /**
  * ThreadOptionsMenu Component
- * Bottom sheet with thread/chat options
+ * Dropdown menu from top with thread/chat options
  * - View contact
  * - Search in conversation
  * - Mute notifications
@@ -19,6 +19,8 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +35,12 @@ interface ThreadOptionsMenuProps {
   onClearChat?: () => void;
   onBlockUser?: () => void;
   onViewContact?: () => void;
+  onExportChat?: () => void;
+  onMediaLinksAndDocs?: () => void;
+  onStarredMessages?: () => void;
+  onDisappearingMessages?: () => void;
+  onAddShortcut?: () => void;
+  onReport?: () => void;
   isMuted?: boolean;
   contactName?: string;
 }
@@ -106,12 +114,18 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
   onClearChat,
   onBlockUser,
   onViewContact,
+  onExportChat,
+  onMediaLinksAndDocs,
+  onStarredMessages,
+  onDisappearingMessages,
+  onAddShortcut,
+  onReport,
   isMuted = false,
   contactName,
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const slideAnim = useRef(new Animated.Value(400)).current;
+  const slideAnim = useRef(new Animated.Value(500)).current;
 
   useEffect(() => {
     if (visible) {
@@ -122,13 +136,13 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
         friction: 11,
       }).start();
     } else {
-      slideAnim.setValue(400);
+      slideAnim.setValue(500);
     }
   }, [visible, slideAnim]);
 
   const handleClose = () => {
     Animated.timing(slideAnim, {
-      toValue: 400,
+      toValue: 500,
       duration: 200,
       useNativeDriver: true,
     }).start(() => onClose());
@@ -151,11 +165,13 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       paddingBottom: insets.bottom + 16,
+      paddingTop: 8,
+      maxHeight: Dimensions.get('window').height * 0.8,
       ...Platform.select({
         ios: {
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.1,
+          shadowOpacity: 0.15,
           shadowRadius: 8,
         },
         android: {
@@ -169,14 +185,15 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
       backgroundColor: theme.border,
       borderRadius: 2,
       alignSelf: 'center',
-      marginTop: 12,
-      marginBottom: 8,
+      marginTop: 8,
+      marginBottom: 12,
     },
     header: {
       paddingHorizontal: 20,
       paddingVertical: 12,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
+      paddingTop: 12,
     },
     headerTitle: {
       fontSize: 16,
@@ -192,6 +209,11 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
     },
     optionsContainer: {
       paddingTop: 8,
+      paddingBottom: 8,
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      maxHeight: Dimensions.get('window').height * 0.5,
     },
     divider: {
       height: 1,
@@ -228,12 +250,26 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                 </View>
               )}
               
-              <View style={styles.optionsContainer}>
+              <ScrollView 
+                style={styles.scrollContainer}
+                showsVerticalScrollIndicator={true}
+                bounces={false}
+              >
+                <View style={styles.optionsContainer}>
                 {onViewContact && (
                   <OptionItem
                     icon="person-outline"
                     label="View Contact"
                     onPress={() => handleOptionPress(onViewContact)}
+                    theme={theme}
+                  />
+                )}
+                
+                {onMediaLinksAndDocs && (
+                  <OptionItem
+                    icon="images-outline"
+                    label="Media, Links, and Docs"
+                    onPress={() => handleOptionPress(onMediaLinksAndDocs)}
                     theme={theme}
                   />
                 )}
@@ -256,6 +292,15 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                   />
                 )}
                 
+                {onDisappearingMessages && (
+                  <OptionItem
+                    icon="timer-outline"
+                    label="Disappearing Messages"
+                    onPress={() => handleOptionPress(onDisappearingMessages)}
+                    theme={theme}
+                  />
+                )}
+                
                 <OptionItem
                   icon="image-outline"
                   label="Change Wallpaper"
@@ -263,7 +308,44 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                   theme={theme}
                 />
                 
+                {onStarredMessages && (
+                  <OptionItem
+                    icon="star-outline"
+                    label="Starred Messages"
+                    onPress={() => handleOptionPress(onStarredMessages)}
+                    theme={theme}
+                  />
+                )}
+                
+                {onExportChat && (
+                  <OptionItem
+                    icon="download-outline"
+                    label="Export Chat"
+                    onPress={() => handleOptionPress(onExportChat)}
+                    theme={theme}
+                  />
+                )}
+                
+                {onAddShortcut && (
+                  <OptionItem
+                    icon="add-circle-outline"
+                    label="Add Shortcut"
+                    onPress={() => handleOptionPress(onAddShortcut)}
+                    theme={theme}
+                  />
+                )}
+                
                 <View style={styles.divider} />
+                
+                {onReport && (
+                  <OptionItem
+                    icon="flag-outline"
+                    label="Report"
+                    onPress={() => handleOptionPress(onReport)}
+                    destructive
+                    theme={theme}
+                  />
+                )}
                 
                 {onClearChat && (
                   <OptionItem
@@ -285,6 +367,7 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                   />
                 )}
               </View>
+              </ScrollView>
             </Animated.View>
           </TouchableWithoutFeedback>
         </View>

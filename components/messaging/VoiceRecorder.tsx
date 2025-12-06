@@ -28,6 +28,28 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  CYAN_PRIMARY,
+  CYAN_BORDER,
+  CYAN_GLOW,
+  PURPLE_PRIMARY,
+  PURPLE_LIGHT,
+  PURPLE_INDIGO,
+  AMBER_PRIMARY,
+  AMBER_DARK,
+  WAVEFORM_RECORDING,
+  WAVEFORM_PLAYED,
+  WAVEFORM_UNPLAYED,
+  DARK_SLATE_PRIMARY,
+  DARK_SLATE_SECONDARY,
+  ERROR_RED,
+  GRADIENT_PURPLE,
+  GRADIENT_PURPLE_INDIGO,
+  GRADIENT_AMBER,
+  GRADIENT_DARK_SLATE,
+  SHADOW_CYAN,
+  SHADOW_AMBER,
+} from './theme';
 
 const CANCEL_THRESHOLD = -80;
 const LOCK_THRESHOLD = -60;
@@ -398,22 +420,23 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     },
     waveformSection: { paddingVertical: 20, paddingHorizontal: 16 },
     waveformContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 60, marginBottom: 12 },
-    waveformBar: { width: 3, marginHorizontal: 1, borderRadius: 1.5, backgroundColor: '#ec4899' },
+    waveformBar: { width: 3, marginHorizontal: 1, borderRadius: 1.5, backgroundColor: WAVEFORM_RECORDING },
     recordingInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-    recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444' },
+    recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: ERROR_RED },
     recordingTime: { fontSize: 18, fontWeight: '600', color: '#fff', fontVariant: ['tabular-nums'] },
     controlBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 20, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)', minHeight: 100 },
     cancelHint: { flexDirection: 'row', alignItems: 'center', gap: 2, flex: 1 },
-    cancelText: { fontSize: 13, color: '#ef4444', fontWeight: '500' },
+    cancelText: { fontSize: 13, color: ERROR_RED, fontWeight: '500' },
     lockHint: { alignItems: 'center', gap: 6, flex: 1 },
-    lockIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(124, 58, 237, 0.2)', alignItems: 'center', justifyContent: 'center' },
+    lockIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(139, 92, 246, 0.2)', alignItems: 'center', justifyContent: 'center' },
     lockText: { fontSize: 11, color: '#9CA3AF', fontWeight: '500' },
     micButtonContainer: { alignItems: 'center', flex: 1 },
-    micButton: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 },
+    micButton: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: CYAN_BORDER, ...SHADOW_CYAN },
+    micButtonRecording: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.5)', ...SHADOW_AMBER },
     lockedControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)' },
-    discardButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(239, 68, 68, 0.2)', alignItems: 'center', justifyContent: 'center' },
+    discardButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${ERROR_RED}33`, alignItems: 'center', justifyContent: 'center' },
     sendButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-    stopButton: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' },
+    stopButton: { width: 56, height: 56, borderRadius: 12, backgroundColor: ERROR_RED, alignItems: 'center', justifyContent: 'center' },
     previewContainer: { backgroundColor: 'rgba(15, 23, 42, 0.98)', marginHorizontal: 12, marginBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 20, borderRadius: 24, overflow: 'hidden' },
     previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
     previewTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
@@ -454,13 +477,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             {isLocked ? (
               <View style={styles.lockedControls}>
                 <TouchableOpacity style={styles.discardButton} onPress={() => stopRecording(true)}>
-                  <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                  <Ionicons name="trash-outline" size={22} color={ERROR_RED} />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.stopButton} onPress={handleLockedStop}>
                   <Ionicons name="stop" size={24} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sendButton} onPress={handleLockedStop}>
-                  <LinearGradient colors={['#7c3aed', '#ec4899']} style={styles.sendButton}>
+                  <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButton}>
                     <Ionicons name="send" size={20} color="#fff" />
                   </LinearGradient>
                 </TouchableOpacity>
@@ -492,7 +515,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                       { translateY: slideUpAnim }
                     ] 
                   }}>
-                    <LinearGradient colors={['#7c3aed', '#ec4899']} style={styles.micButton}>
+                    <LinearGradient colors={GRADIENT_AMBER} style={styles.micButtonRecording}>
                       <Ionicons name="mic" size={28} color="#fff" />
                     </LinearGradient>
                   </Animated.View>
@@ -510,9 +533,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                   }]
                 }]}>
                   <View style={[styles.lockIcon, {
-                    backgroundColor: slideUpOffset < LOCK_THRESHOLD ? 'rgba(124, 58, 237, 0.5)' : 'rgba(124, 58, 237, 0.2)'
+                    backgroundColor: slideUpOffset < LOCK_THRESHOLD ? `${PURPLE_LIGHT}80` : `${PURPLE_LIGHT}33`
                   }]}>
-                    <Ionicons name="lock-closed" size={18} color={slideUpOffset < LOCK_THRESHOLD ? '#fff' : '#7c3aed'} />
+                    <Ionicons name="lock-closed" size={18} color={slideUpOffset < LOCK_THRESHOLD ? '#fff' : PURPLE_LIGHT} />
                   </View>
                   <Text style={styles.lockText}>Lock</Text>
                 </Animated.View>
@@ -533,23 +556,23 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             </View>
             <View style={styles.previewWaveform}>
               <TouchableOpacity onPress={handlePreviewPlayPause}>
-                <LinearGradient colors={['#7c3aed', '#ec4899']} style={styles.playButton}>
+                <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.playButton}>
                   <Ionicons name={isPlayingPreview ? 'pause' : 'play'} size={24} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
               <View style={styles.previewBars}>
                 {previewWaveformBars.map((height, index) => (
-                  <View key={index} style={[styles.previewBar, { height: height * 35, backgroundColor: index < playedBars ? '#ec4899' : 'rgba(236, 72, 153, 0.3)' }]} />
+                  <View key={index} style={[styles.previewBar, { height: height * 35, backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED }]} />
                 ))}
               </View>
               <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
             </View>
             <View style={styles.previewActions}>
               <TouchableOpacity style={styles.discardButton} onPress={handleDiscardPreview}>
-                <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                <Ionicons name="trash-outline" size={22} color={ERROR_RED} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSendPreview}>
-                <LinearGradient colors={['#7c3aed', '#ec4899']} style={[styles.sendButton, { width: 56, height: 56, borderRadius: 28 }]}>
+                <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={[styles.sendButton, { width: 56, height: 56, borderRadius: 28 }]}>
                   <Ionicons name="send" size={24} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
@@ -559,7 +582,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       </Modal>
       
       <TouchableOpacity onPressIn={handlePressIn} onPressOut={handlePressOut} disabled={disabled || showPreview} activeOpacity={1} style={styles.container}>
-        <Ionicons name="mic" size={24} color="#fff" />
+        <Ionicons name="mic" size={24} color={CYAN_PRIMARY} />
       </TouchableOpacity>
     </>
   );

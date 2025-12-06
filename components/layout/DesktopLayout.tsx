@@ -38,7 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'registrations', label: 'Registrations', icon: 'person-add-outline', route: '/screens/principal-registrations', roles: ['principal'] },
   { id: 'classes', label: 'Classes', icon: 'book-outline', route: '/screens/class-details', roles: ['principal', 'teacher'] },
   { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle-outline', route: '/screens/attendance', roles: ['principal', 'teacher'] },
-  { id: 'messages', label: 'Messages', icon: 'mail-outline', route: '/screens/teacher-messages', roles: ['principal', 'teacher'] },
+  { id: 'messages', label: 'Messages', icon: 'mail-outline', route: '/screens/teacher-message-list', roles: ['principal', 'teacher'] },
   { id: 'financials', label: 'Financials', icon: 'cash-outline', route: '/screens/financial-dashboard', roles: ['principal'] },
   { id: 'campaigns', label: 'Campaigns', icon: 'megaphone-outline', route: '/screens/campaigns', roles: ['principal'] },
   { id: 'reports', label: 'Reports', icon: 'document-text-outline', route: '/screens/teacher-reports', roles: ['principal', 'teacher'] },

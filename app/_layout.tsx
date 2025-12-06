@@ -131,7 +131,7 @@ function LayoutContent() {
             isVisible={!!callContext.incomingCall}
           />
           <VoiceCallInterface
-            isOpen={callContext.isInActiveCall && (callContext.outgoingCall?.callType === 'voice' || callContext.incomingCall?.call_type === 'voice')}
+            isOpen={callContext.isCallInterfaceOpen && (callContext.outgoingCall?.callType === 'voice' || callContext.incomingCall?.call_type === 'voice')}
             onClose={callContext.endCall}
             userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
             callId={callContext.incomingCall?.call_id}
@@ -140,7 +140,7 @@ function LayoutContent() {
             isOwner={!!callContext.outgoingCall}
           />
           <VideoCallInterface
-            isOpen={callContext.isInActiveCall && (callContext.outgoingCall?.callType === 'video' || callContext.incomingCall?.call_type === 'video')}
+            isOpen={callContext.isCallInterfaceOpen && (callContext.outgoingCall?.callType === 'video' || callContext.incomingCall?.call_type === 'video')}
             onClose={callContext.endCall}
             userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
             callId={callContext.incomingCall?.call_id}

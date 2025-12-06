@@ -173,7 +173,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#7C3AED",
       onPress: async () => {
         await maybeShowInterstitial('teacher_dashboard_message_parents');
-        router.push("/screens/teacher-messages");
+        router.push("/screens/teacher-message-list");
       },
       requiredCap: "communicate_with_parents",
     },

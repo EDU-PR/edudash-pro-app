@@ -16,6 +16,9 @@ import React, {
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { VoiceCallInterface } from './VoiceCallInterface';
+import { VideoCallInterface } from './VideoCallInterface';
+import { IncomingCallOverlay } from './IncomingCallOverlay';
 import type {
   ActiveCall,
   CallContextType,
@@ -33,6 +36,18 @@ const isCallsEnabled = () => {
 
 const CallContext = createContext<CallContextType | null>(null);
 
+/**
+ * Safe version of useCall that returns null instead of throwing when context is missing.
+ * Use this in components where calls are optional.
+ */
+export function useCallSafe(): CallContextType | null {
+  return useContext(CallContext);
+}
+
+/**
+ * Standard useCall hook - throws if used outside CallProvider.
+ * Prefer useCallSafe() for optional call functionality.
+ */
 export function useCall(): CallContextType {
   const context = useContext(CallContext);
   if (!context) {
@@ -40,6 +55,24 @@ export function useCall(): CallContextType {
   }
   return context;
 }
+
+/**
+ * Disabled context value - provides no-op functions when calls are disabled.
+ * This ensures useCall() never returns null, preventing crashes.
+ */
+const DISABLED_CONTEXT: CallContextType = {
+  startVoiceCall: () => console.warn('[CallProvider] Calls are disabled'),
+  startVideoCall: () => console.warn('[CallProvider] Calls are disabled'),
+  answerCall: () => {},
+  rejectCall: async () => {},
+  endCall: async () => {},
+  incomingCall: null,
+  outgoingCall: null,
+  isCallActive: false,
+  isInActiveCall: false,
+  callState: 'idle',
+  returnToCall: () => {},
+};
 
 interface CallProviderProps {
   children: ReactNode;
@@ -325,15 +358,76 @@ export function CallProvider({ children }: CallProviderProps) {
     returnToCall,
   };
 
-  // If calls are disabled, just render children without the call system
+  // If calls are disabled, provide disabled context with no-op functions
+  // This ensures useCall() always works and returns safe defaults
   if (!callsEnabled) {
-    return <>{children}</>;
+    return (
+      <CallContext.Provider value={DISABLED_CONTEXT}>
+        {children}
+      </CallContext.Provider>
+    );
   }
 
   return (
     <CallContext.Provider value={contextValue}>
       {children}
-      {/* Call interfaces will be rendered by components that use this provider */}
+      
+      {/* Incoming call overlay - full screen for mobile UX */}
+      <IncomingCallOverlay
+        isVisible={!!incomingCall && !answeringCall}
+        callerName={incomingCall?.caller_name}
+        callType={incomingCall?.call_type || 'voice'}
+        onAnswer={answerCall}
+        onReject={rejectCall}
+      />
+
+      {/* Voice call interface for outgoing calls */}
+      {outgoingCall && outgoingCall.callType === 'voice' && (
+        <VoiceCallInterface
+          isOpen={isCallInterfaceOpen && !answeringCall}
+          onClose={endCall}
+          roomName={`voice-${Date.now()}`}
+          userName={outgoingCall.userName}
+          isOwner={true}
+          calleeId={outgoingCall.userId}
+        />
+      )}
+
+      {/* Video call interface for outgoing calls */}
+      {outgoingCall && outgoingCall.callType === 'video' && (
+        <VideoCallInterface
+          isOpen={isCallInterfaceOpen && !answeringCall}
+          onClose={endCall}
+          roomName={`call-${Date.now()}`}
+          userName={outgoingCall.userName}
+          isOwner={true}
+          calleeId={outgoingCall.userId}
+        />
+      )}
+
+      {/* Voice call interface for answering calls */}
+      {answeringCall && answeringCall.call_type === 'voice' && answeringCall.meeting_url && (
+        <VoiceCallInterface
+          isOpen={isCallInterfaceOpen}
+          onClose={endCall}
+          roomName={answeringCall.meeting_url.split('/').pop() || `voice-${answeringCall.call_id}`}
+          userName={answeringCall.caller_name}
+          isOwner={false}
+          callId={answeringCall.call_id}
+        />
+      )}
+
+      {/* Video call interface for answering calls */}
+      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
+        <VideoCallInterface
+          isOpen={isCallInterfaceOpen}
+          onClose={endCall}
+          roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
+          userName={answeringCall.caller_name}
+          isOwner={false}
+          callId={answeringCall.call_id}
+        />
+      )}
     </CallContext.Provider>
   );
 }

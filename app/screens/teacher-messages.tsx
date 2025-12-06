@@ -13,8 +13,14 @@ export default function TeacherMessagesScreen() {
   const { profile, permissions } = useAuth()
   const { theme } = useTheme()
   
-  const hasActiveSeat = profile?.seat_status === 'active'
-  const canMessage = hasActiveSeat && permissions.can('communicate_with_parents')
+  // Get organization/preschool ID - check multiple sources like PWA does
+  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id
+  
+  // PWA doesn't check seat_status or strict permissions for viewing
+  // Match PWA behavior: teachers can use messaging if connected to a school
+  const isConnectedToSchool = !!organizationId
+  // For sending, we can optionally check permission (but PWA doesn't)
+  const canMessage = isConnectedToSchool
   
   const palette = {
     background: theme.background,
@@ -40,25 +46,26 @@ export default function TeacherMessagesScreen() {
   }, [params])
 
   const classesQuery = useQuery({
-    queryKey: ['teacher_classes_for_messages', profile?.id],
+    queryKey: ['teacher_classes_for_messages', profile?.id, organizationId],
     queryFn: async () => {
       // Restrict to teacher's org if available, to avoid cross-tenant data
-      const query = assertSupabase().from('classes').select('id,name').eq('is_active', true)
-      if ((profile as any)?.organization_id) {
-        query.eq('preschool_id', (profile as any).organization_id)
+      // Note: Production DB uses 'active' column, not 'is_active'
+      const query = assertSupabase().from('classes').select('id,name').eq('active', true)
+      if (organizationId) {
+        query.eq('preschool_id', organizationId)
       }
       const { data, error } = await query
       if (error) throw error
       return (data || []) as { id: string; name: string }[]
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.id && isConnectedToSchool,
     staleTime: 60_000,
   })
 
   const onSend = async () => {
+    if (!isConnectedToSchool) { Alert.alert('Not connected', 'Your account is not linked to a school.'); return }
     if (!classId) { Alert.alert('Select class', 'Please select a class.'); return }
     if (!message.trim()) { Alert.alert('Enter message', 'Please write a message.'); return }
-    if (!canMessage) { Alert.alert('No access', 'Your seat or plan does not allow messaging.'); return }
 
     setSending(true)
     try {
@@ -76,7 +83,7 @@ export default function TeacherMessagesScreen() {
         sent_at: new Date().toISOString()
       }
       // Include org for RLS when present
-      if ((profile as any)?.organization_id) payload.preschool_id = (profile as any).organization_id
+      if (organizationId) payload.preschool_id = organizationId
 
       const { error } = await assertSupabase().from('teacher_messages').insert(payload as any)
       if (error) throw error
@@ -100,13 +107,11 @@ export default function TeacherMessagesScreen() {
         subtitle="Send announcements to parent groups" 
       />
       <ScrollView contentContainerStyle={styles.content}>
-          {!canMessage && (
+          {!isConnectedToSchool && (
             <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
-              <Text style={[styles.cardTitle, { color: palette.text }]}>Access Restricted</Text>
+              <Text style={[styles.cardTitle, { color: palette.text }]}>Not Connected to School</Text>
               <Text style={[styles.label, { color: palette.textSecondary }]}>
-                {!hasActiveSeat 
-                  ? 'Your teacher seat is not active. Please contact your administrator.' 
-                  : 'Your account does not have messaging permissions. Please contact your administrator.'}
+                Your account is not linked to a school. Please contact your administrator to connect your teacher profile to your school.
               </Text>
             </View>
           )}

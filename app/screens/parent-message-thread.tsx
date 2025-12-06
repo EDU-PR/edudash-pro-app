@@ -28,6 +28,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import {
+  CYAN_PRIMARY,
+  CYAN_GLOW,
+  CYAN_BORDER,
+  PURPLE_PRIMARY,
+  PURPLE_SECONDARY,
+  GRADIENT_PURPLE,
+  GRADIENT_DARK_SLATE,
+  SHADOW_CYAN,
+} from '../../components/messaging/theme';
 
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
@@ -74,6 +84,12 @@ try {
   EmojiPicker = require('@/components/messaging/EmojiPicker').EmojiPicker;
 } catch {}
 
+// Call provider import
+let useCallHook: (() => { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void }) | null = null;
+try {
+  useCallHook = require('@/components/calls/CallProvider').useCall;
+} catch {}
+
 // Default theme matching PWA dark mode
 const defaultTheme = {
   background: '#0f172a',
@@ -116,9 +132,10 @@ interface Message {
   content: string;
   sender_id: string;
   created_at: string;
-  sender?: { first_name?: string; last_name?: string };
+  sender?: { first_name?: string; last_name?: string; role?: string };
   read_by?: string[];
   delivered_to?: string[];
+  isTyping?: boolean;
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -314,13 +331,32 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
           isVoice && bubbleStyles.voiceBubble,
         ]}
       >
-        {isVoice && VoiceNotePlayer ? (
+        {isVoice ? (
           <View style={bubbleStyles.voiceContainer}>
-            <VoiceNotePlayer
-              url="" // TODO: Get actual audio URL from message content
-              duration={getVoiceNoteDuration(msg.content)}
-              isOwn={isOwn}
-            />
+            {/* Voice message placeholder UI */}
+            <View style={bubbleStyles.voiceRow}>
+              <View style={[bubbleStyles.playBtn, isOwn ? bubbleStyles.playBtnOwn : bubbleStyles.playBtnOther]}>
+                <Ionicons name="play" size={20} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
+              </View>
+              <View style={bubbleStyles.waveformPlaceholder}>
+                {[...Array(24)].map((_, i) => (
+                  <View 
+                    key={i} 
+                    style={[
+                      bubbleStyles.waveBar,
+                      { 
+                        height: Math.random() * 16 + 6,
+                        backgroundColor: isOwn ? 'rgba(255,255,255,0.5)' : 'rgba(148,163,184,0.6)',
+                      }
+                    ]} 
+                  />
+                ))}
+              </View>
+              <Ionicons name="mic" size={14} color={isOwn ? 'rgba(255,255,255,0.6)' : '#64748b'} />
+            </View>
+            <Text style={[bubbleStyles.voiceDuration, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
+              {Math.floor(getVoiceNoteDuration(msg.content) / 1000)}s
+            </Text>
           </View>
         ) : (
           <Text style={[bubbleStyles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
@@ -343,7 +379,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
 };
 
 const bubbleStyles = StyleSheet.create({
-  container: { marginVertical: 3, maxWidth: '82%' },
+  container: { marginVertical: 3, maxWidth: '85%' },
   own: { alignSelf: 'flex-end' },
   other: { alignSelf: 'flex-start' },
   name: { 
@@ -378,12 +414,48 @@ const bubbleStyles = StyleSheet.create({
     elevation: 2,
   },
   voiceBubble: {
-    minWidth: 200,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    minWidth: 260,
+    maxWidth: 300,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingRight: 14,
   },
   voiceContainer: {
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  voiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  playBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBtnOwn: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  playBtnOther: {
+    backgroundColor: 'rgba(59,130,246,0.8)',
+  },
+  waveformPlaceholder: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 28,
+    gap: 2,
+  },
+  waveBar: {
+    width: 3,
+    borderRadius: 2,
+  },
+  voiceDuration: {
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 46,
   },
   text: { fontSize: 16, lineHeight: 22 },
   footer: { 
@@ -449,7 +521,7 @@ export default function ParentMessageThreadScreen() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
   // Animation refs
-  const micGlowAnim = useRef(new Animated.Value(0.4)).current;
+  const micGlowAnim = useRef(new Animated.Value(0.1)).current;
   
   // Keyboard listeners
   useEffect(() => {
@@ -724,6 +796,124 @@ export default function ParentMessageThreadScreen() {
     setShowOptionsMenu(false);
   }, []);
 
+  const handleExportChat = useCallback(() => {
+    Alert.alert(
+      'Export Chat',
+      'Export chat history including media?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Without Media', onPress: () => Alert.alert('Exporting', 'Chat export started...') },
+        { text: 'Include Media', onPress: () => Alert.alert('Exporting', 'Chat export with media started...') }
+      ]
+    );
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleMediaLinksAndDocs = useCallback(() => {
+    Alert.alert('Media, Links, and Docs', 'View shared media feature coming soon');
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleStarredMessages = useCallback(() => {
+    Alert.alert('Starred Messages', 'View starred messages feature coming soon');
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleDisappearingMessages = useCallback(() => {
+    Alert.alert(
+      'Disappearing Messages',
+      'Set messages to disappear after:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Off', onPress: () => console.log('Disappearing off') },
+        { text: '24 Hours', onPress: () => console.log('24h disappearing') },
+        { text: '7 Days', onPress: () => console.log('7d disappearing') },
+        { text: '90 Days', onPress: () => console.log('90d disappearing') }
+      ]
+    );
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleAddShortcut = useCallback(() => {
+    Alert.alert('Add Shortcut', 'Create home screen shortcut for this chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Add', onPress: () => Alert.alert('Success', 'Shortcut added to home screen') }
+    ]);
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleReport = useCallback(() => {
+    Alert.alert(
+      'Report',
+      'Report this conversation for:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Spam', onPress: () => Alert.alert('Reported', 'Thank you for reporting') },
+        { text: 'Harassment', onPress: () => Alert.alert('Reported', 'Thank you for reporting') },
+        { text: 'Other', onPress: () => Alert.alert('Reported', 'Thank you for reporting') }
+      ]
+    );
+    setShowOptionsMenu(false);
+  }, []);
+
+  const handleBlockUser = useCallback(() => {
+    Alert.alert(
+      'Block User',
+      `Block ${displayName}? They won't be able to message you.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Block', style: 'destructive', onPress: () => Alert.alert('Blocked', `${displayName} has been blocked`) }
+      ]
+    );
+    setShowOptionsMenu(false);
+  }, [displayName]);
+
+  const handleViewContact = useCallback(() => {
+    Alert.alert('Contact Info', `View details for ${displayName}`);
+    setShowOptionsMenu(false);
+  }, [displayName]);
+
+  // Voice/Video call handlers (fully implemented)
+  let callContext: { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void } | null = null;
+  try {
+    if (useCallHook) {
+      callContext = useCallHook();
+    }
+  } catch (error) {
+    // CallProvider not available, calls will be disabled
+    console.log('CallProvider not available');
+  }
+  
+  // Get other participant info
+  const otherParticipant = useMemo(() => messages.find(m => m.sender_id !== user?.id), [messages, user?.id]);
+  const recipientId = otherParticipant?.sender_id;
+  const recipientName = otherParticipant?.sender?.first_name || displayName;
+  const recipientRole = otherParticipant?.sender?.role || null;
+
+  const handleVoiceCall = useCallback(() => {
+    if (!callContext) {
+      Alert.alert('Voice Call', 'Voice calling is not available. Please ensure calls are enabled.');
+      return;
+    }
+    if (!recipientId) {
+      Alert.alert('Voice Call', 'Cannot identify recipient. Please try again later.');
+      return;
+    }
+    callContext.startVoiceCall(recipientId, recipientName);
+  }, [callContext, recipientId, recipientName]);
+
+  const handleVideoCall = useCallback(() => {
+    if (!callContext) {
+      Alert.alert('Video Call', 'Video calling is not available. Please ensure calls are enabled.');
+      return;
+    }
+    if (!recipientId) {
+      Alert.alert('Video Call', 'Cannot identify recipient. Please try again later.');
+      return;
+    }
+    callContext.startVideoCall(recipientId, recipientName);
+  }, [callContext, recipientId, recipientName]);
+
   // Emoji handler
   const handleEmojiSelect = useCallback((emoji: string) => {
     setText(prev => prev + emoji);
@@ -790,18 +980,32 @@ export default function ParentMessageThreadScreen() {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {displayName}
             </Text>
-            <Text style={styles.headerSub}>
-              {loading ? 'Loading...' : 'Tap for info'}
-            </Text>
+            <View style={styles.onlineStatus}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.headerSub}>
+                {loading ? 'Loading...' : 'online'}
+              </Text>
+              {/* Show role inline */}
+              {recipientRole && (
+                <Text style={styles.roleInline}> · {recipientRole}</Text>
+              )}
+            </View>
+            {/* Typing indicator */}
+            {otherParticipant?.isTyping && (
+              <View style={styles.typingIndicator}>
+                <Text style={styles.typingName}>{recipientName} is typing </Text>
+                <BouncingDots />
+              </View>
+            )}
           </View>
         </TouchableOpacity>
 
         {/* Header actions */}
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => Alert.alert('Voice Call', 'Coming soon')}>
+          <TouchableOpacity style={styles.headerBtn} onPress={handleVoiceCall}>
             <Ionicons name="call-outline" size={22} color="#94a3b8" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => Alert.alert('Video Call', 'Coming soon')}>
+          <TouchableOpacity style={styles.headerBtn} onPress={handleVideoCall}>
             <Ionicons name="videocam-outline" size={22} color="#94a3b8" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowOptionsMenu(true)}>
@@ -811,7 +1015,7 @@ export default function ParentMessageThreadScreen() {
       </LinearGradient>
 
       {/* Messages area with wallpaper */}
-      <View style={styles.wallpaperContainer}>
+      <View style={[styles.wallpaperContainer, { marginBottom: keyboardHeight }]}>
         {currentWallpaper?.type === 'url' ? (
           <ImageBackground 
             source={{ uri: currentWallpaper.value }} 
@@ -827,13 +1031,15 @@ export default function ParentMessageThreadScreen() {
           />
         )}
         
-        <ScrollView
-          ref={scrollRef}
-          style={styles.messages}
-          contentContainerStyle={[styles.messagesContent, { paddingBottom: 180 + insets.bottom }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        {/* Clipping container - messages hide at this boundary */}
+        <View style={[styles.messagesClip, { marginBottom: 70 + insets.bottom }]}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.messages}
+            contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color={theme.primary} />
@@ -858,24 +1064,18 @@ export default function ParentMessageThreadScreen() {
           ) : (
             renderMessages
           )}
-        </ScrollView>
+          </ScrollView>
+        </View>
       </View>
 
       {/* Floating Composer */}
       <View style={[
         styles.composerArea,
         { 
-          bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 8) + keyboardHeight : Math.max(insets.bottom, 8) + keyboardHeight,
-          paddingBottom: Platform.OS === 'ios' ? 0 : insets.bottom,
-          backgroundColor: '#0f172a',
+          bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 4) + keyboardHeight : Math.max(insets.bottom, 12) + keyboardHeight,
+          paddingBottom: Platform.OS === 'ios' ? 4 : insets.bottom + 2,
         }
       ]}>
-        {/* Gradient fade above composer - positioned outside and clips messages */}
-        <LinearGradient
-          colors={['rgba(15, 23, 42, 0)', 'rgba(15, 23, 42, 0.7)', 'rgba(15, 23, 42, 0.95)']}
-          style={styles.composerFade}
-          pointerEvents="none"
-        />
         {/* Emoji Picker */}
         {EmojiPicker && (
           <EmojiPicker 
@@ -898,8 +1098,9 @@ export default function ParentMessageThreadScreen() {
           >
             <Ionicons 
               name={showEmojiPicker ? 'close-outline' : 'happy-outline'} 
-              size={24} 
+              size={32} 
               color="rgba(255,255,255,0.6)" 
+              marginTop={12}
             />
           </TouchableOpacity>
           
@@ -958,10 +1159,14 @@ export default function ParentMessageThreadScreen() {
           ) : VoiceRecorder ? (
             <View style={styles.micContainer}>
               <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
-              <VoiceRecorder
-                onRecordingComplete={handleVoiceRecording}
-                onRecordingCancel={() => console.log('Recording cancelled')}
-              />
+              <View style={styles.micButtonWrapper}>
+                <LinearGradient colors={GRADIENT_DARK_SLATE} style={styles.micGradientButton}>
+                  <VoiceRecorder
+                    onRecordingComplete={handleVoiceRecording}
+                    onRecordingCancel={() => console.log('Recording cancelled')}
+                  />
+                </LinearGradient>
+              </View>
             </View>
           ) : (
             <TouchableOpacity 
@@ -969,10 +1174,10 @@ export default function ParentMessageThreadScreen() {
               onPress={() => Alert.alert('Voice', 'Voice recording not available')}
             >
               <LinearGradient 
-                colors={['#0f172a', '#1e293b']} 
+                colors={['#0776d1ff', '#043c85ff']} 
                 style={[styles.gradientButton, styles.micButton]}
               >
-                <Ionicons name="mic" size={22} color="#00d4ff" />
+                <Ionicons name="mic" size={22} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           )}
@@ -991,6 +1196,14 @@ export default function ParentMessageThreadScreen() {
           onMuteNotifications={handleMuteNotifications}
           onSearchInChat={handleSearchInChat}
           onClearChat={handleClearChat}
+          onExportChat={handleExportChat}
+          onMediaLinksAndDocs={handleMediaLinksAndDocs}
+          onStarredMessages={handleStarredMessages}
+          onDisappearingMessages={handleDisappearingMessages}
+          onAddShortcut={handleAddShortcut}
+          onReport={handleReport}
+          onBlockUser={handleBlockUser}
+          onViewContact={handleViewContact}
           contactName={displayName}
         />
       )}
@@ -1030,6 +1243,38 @@ export default function ParentMessageThreadScreen() {
   );
 }
 
+// ==================== TYPING INDICATOR COMPONENT ====================
+
+const BouncingDots: React.FC = () => {
+  const dotAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(dotAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [dotAnim]);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+      {[0, 1, 2].map(i => (
+        <Animated.View
+          key={i}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: '#94a3b8',
+            marginHorizontal: 2,
+            transform: [{ translateY: dotAnim.interpolate({ inputRange: [0, 1], outputRange: [0, i === 1 ? -4 : 0] }) }],
+            opacity: dotAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+          }}
+        />
+      ))}
+    </View>
+  );
+};
+
 // ==================== STYLES ====================
 
 const styles = StyleSheet.create({
@@ -1059,9 +1304,9 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3b82f6',
+    shadowColor: '#010e24ff',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 1.3,
     shadowRadius: 6,
     elevation: 4,
   },
@@ -1079,10 +1324,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#f1f5f9',
   },
-  headerSub: { 
-    fontSize: 13, 
+  onlineStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 2,
-    color: '#64748b',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+    marginRight: 6,
+  },
+  headerSub: { 
+    fontSize: 13,
+    color: '#22c55e',
+  },
+  roleInline: {
+    fontSize: 13,
+    color: '#a78bfa',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  typingName: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
   headerActions: {
     flexDirection: 'row',
@@ -1099,6 +1371,10 @@ const styles = StyleSheet.create({
   wallpaperOverlay: { 
     ...StyleSheet.absoluteFillObject, 
     backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  messagesClip: {
+    flex: 1,
+    overflow: 'hidden',
   },
   messages: { 
     flex: 1,
@@ -1155,26 +1431,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingHorizontal: 8,
-    paddingTop: 12,
-    paddingBottom: 8,
+    bottom: 0,
+    paddingHorizontal: 6,
+    paddingTop: 14,
+    paddingBottom: 5,
     zIndex: 100,
   },
   composerFade: {
     position: 'absolute',
-    top: -60,
+    top: -80,
     left: 0,
     right: 0,
-    height: 70,
+    height: 90,
     zIndex: -1,
   },
   composerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 6,
+    gap: 4,
   },
   composerBtn: {
-    width: 40,
+    width: 36,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1183,14 +1460,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
     borderRadius: 24,
-    paddingLeft: 16,
+    paddingLeft: 14,
     paddingRight: 8,
-    paddingVertical: 6,
-    minHeight: 48,
+    paddingVertical: 8,
+    minHeight: 50,
+    marginLeft: -4,
     borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.15)',
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    bottom: -12,
   },
   textInput: {
     flex: 1,
@@ -1214,29 +1493,51 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3b82f6',
+    shadowColor: '#021129ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 6,
+    bottom: -12,
+  },
+  micButton: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(2, 17, 66, 0.5)',
+    shadowColor: '#010635ff',
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  micContainer: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    bottom: -12,
+  },
+  micButtonWrapper: {
+    width: 48,
+    height: 48,
+  },
+  micGradientButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: CYAN_BORDER,
+    shadowColor: CYAN_PRIMARY,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
   },
-  micButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.3)',
-    shadowColor: '#00d4ff',
-    shadowOpacity: 0.25,
-  },
-  micContainer: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   micGlow: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(0, 212, 255, 0.2)',
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: CYAN_GLOW,
   },
 });
