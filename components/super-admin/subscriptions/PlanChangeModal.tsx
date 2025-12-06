@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
-import { adminUpdateSubscriptionPlan, listActivePlans, type SubscriptionPlan } from '@/lib/supabase/rpc-subscriptions';
+import { adminUpdateSubscriptionPlan, listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
 import { createCheckout } from '@/lib/payments';
 import { track } from '@/lib/analytics';
 import { Linking } from 'react-native';

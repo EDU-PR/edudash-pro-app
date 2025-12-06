@@ -3,14 +3,20 @@
  * 
  * Combines unread messages, missed calls, and announcement counts
  * for the notification bell badge in the header.
+ * 
+ * Uses "last seen" timestamps to only count NEW notifications since
+ * user last viewed each category.
  */
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUnreadMessageCount } from '@/hooks/useParentMessaging';
 import { useMissedCallsCount } from '@/hooks/useMissedCalls';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const ANNOUNCEMENTS_LAST_SEEN_KEY = 'announcements_last_seen_at';
 
 interface NotificationCounts {
   messages: number;
@@ -20,7 +26,31 @@ interface NotificationCounts {
 }
 
 /**
- * Hook to get unread announcement count for the current user
+ * Get the last time user viewed announcements
+ */
+const getLastSeenAnnouncements = async (userId: string): Promise<string | null> => {
+  try {
+    const key = `${ANNOUNCEMENTS_LAST_SEEN_KEY}_${userId}`;
+    return await AsyncStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Save the current time as last seen announcements
+ */
+const setLastSeenAnnouncements = async (userId: string): Promise<void> => {
+  try {
+    const key = `${ANNOUNCEMENTS_LAST_SEEN_KEY}_${userId}`;
+    await AsyncStorage.setItem(key, new Date().toISOString());
+  } catch (error) {
+    console.error('[setLastSeenAnnouncements] Error:', error);
+  }
+};
+
+/**
+ * Hook to get unread (unseen) announcement count for the current user
  */
 export const useUnreadAnnouncementsCount = () => {
   const { user, profile } = useAuth();
@@ -36,16 +66,26 @@ export const useUnreadAnnouncementsCount = () => {
       if (!preschoolId) return 0;
       
       try {
-        // Get announcements from the last 30 days that haven't been read
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Get last seen timestamp
+        const lastSeen = await getLastSeenAnnouncements(user.id);
         
-        const { count, error } = await client
+        // Build query for announcements
+        let query = client
           .from('announcements')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .eq('status', 'published')
-          .gte('created_at', thirtyDaysAgo.toISOString());
+          .eq('status', 'published');
+        
+        // Only count announcements after last seen (or last 30 days if never seen)
+        if (lastSeen) {
+          query = query.gt('created_at', lastSeen);
+        } else {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          query = query.gte('created_at', thirtyDaysAgo.toISOString());
+        }
+        
+        const { count, error } = await query;
         
         if (error) {
           // Table might not exist
@@ -64,6 +104,24 @@ export const useUnreadAnnouncementsCount = () => {
     },
     enabled: !!user?.id,
     staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+};
+
+/**
+ * Hook to mark announcements as seen
+ */
+export const useMarkAnnouncementsSeen = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async () => {
+      if (!user?.id) return;
+      await setLastSeenAnnouncements(user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+    },
   });
 };
 
