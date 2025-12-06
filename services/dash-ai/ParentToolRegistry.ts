@@ -353,7 +353,7 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
           // Get student and teacher info
           const { data: student, error: studentError } = await client
             .from('students')
-            .select('first_name, last_name, class_id, classes!left(teacher_id, users!left(first_name, last_name))')
+            .select('first_name, last_name, class_id, classes!left(teacher_id, teacher:profiles!left(first_name, last_name))')
             .eq('id', args.student_id)
             .single();
 
@@ -401,7 +401,7 @@ Keep it concise (under 200 words).`
             success: true,
             data: {
               draft_message: data.content,
-              teacher_name: `${(student.classes as any).users?.first_name || ''} ${(student.classes as any).users?.last_name || ''}`.trim() || 'Teacher',
+              teacher_name: `${(student.classes as any).teacher?.first_name || ''} ${(student.classes as any).teacher?.last_name || ''}`.trim() || 'Teacher',
               student_name: `${student.first_name} ${student.last_name}`,
               action_required: 'review_and_send'
             },

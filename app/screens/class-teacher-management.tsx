@@ -131,11 +131,10 @@ export default function ClassTeacherManagementScreen() {
           room_number,
           schedule,
           created_at,
-          users!classes_teacher_id_fkey (
+          profiles!classes_teacher_id_fkey (
             id,
             first_name,
-            last_name,
-            name
+            last_name
           ),
           students(id)
         `)
@@ -148,11 +147,9 @@ export default function ClassTeacherManagementScreen() {
 
       // Compute student counts per class from the joined students array (avoids N+1 queries)
       const processedClasses = (classesData || []).map((cls: any) => {
-        const teacher = cls.users || null;
+        const teacher = cls.profiles || null;
         const teacherName = teacher
-          ? ((teacher.first_name && teacher.last_name)
-              ? `${teacher.first_name} ${teacher.last_name}`
-              : (teacher.name || null))
+          ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim()
           : null;
         const studentCount = Array.isArray(cls.students) ? cls.students.length : 0;
         return {

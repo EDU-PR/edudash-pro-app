@@ -1314,7 +1314,7 @@ const cachedData = await offlineCacheService.getParentDashboard(
             first_name,
             last_name,
             grade_level,
-            student_class:classes(id, name, teacher:users(first_name, last_name))
+            student_class:classes(id, name, teacher:profiles(first_name, last_name))
           `)
           .eq('parent_id', user.id);
 

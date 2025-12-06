@@ -106,7 +106,7 @@ export const useParentThreads = () => {
         // Get last message and unread count for each thread
         const threadsWithDetails = await Promise.all(
           threads.map(async (thread) => {
-            // Get last message
+            // Get last message - use maybeSingle() to handle empty results gracefully
             const { data: lastMessage } = await client
               .from('messages')
               .select(`
@@ -118,7 +118,7 @@ export const useParentThreads = () => {
               .is('deleted_at', null)
               .order('created_at', { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
             
             // Get unread count (messages after user's last_read_at)
             const userParticipant = thread.participants?.find((p: any) => p.user_id === user.id);

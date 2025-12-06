@@ -2,7 +2,7 @@ import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform, LogBox } from 'react-native';
 // Initialize i18n globally (web + native)
-import '@/lib/i18n';
+import '../lib/i18n';
 
 // Suppress known dev warnings
 if (__DEV__) {
@@ -16,35 +16,35 @@ if (__DEV__) {
 }
 
 // Initialize notification router for multi-account support
-import { setupNotificationRouter } from '@/lib/NotificationRouter';
+import { setupNotificationRouter } from '../lib/NotificationRouter';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, usePathname } from 'expo-router';
-import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
-import ToastProvider from '@/components/ui/ToastProvider';
-import { QueryProvider } from '@/lib/query/queryClient';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import ToastProvider from '../components/ui/ToastProvider';
+import { QueryProvider } from '../lib/query/queryClient';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { DashboardPreferencesProvider } from '@/contexts/DashboardPreferencesContext';
-import { UpdatesProvider } from '@/contexts/UpdatesProvider';
-import { TermsProvider } from '@/contexts/TerminologyContext';
-import { OnboardingProvider } from '@/contexts/OnboardingContext';
+import { DashboardPreferencesProvider } from '../contexts/DashboardPreferencesContext';
+import { UpdatesProvider } from '../contexts/UpdatesProvider';
+import { TermsProvider } from '../contexts/TerminologyContext';
+import { OnboardingProvider } from '../contexts/OnboardingContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AlertProvider } from '@/components/ui/StyledAlert';
-import DashWakeWordListener from '@/components/ai/DashWakeWordListener';
-import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
-import { DashChatButton } from '@/components/ui/DashChatButton';
-import { BottomTabBar } from '@/components/navigation/BottomTabBar';
-import { AnimatedSplash } from '@/components/ui/AnimatedSplash';
-import { CallProvider, useCall } from '@/components/calls/CallProvider';
-import { IncomingCallOverlay } from '@/components/calls/IncomingCallOverlay';
-import { VoiceCallInterface } from '@/components/calls/VoiceCallInterface';
-import { VideoCallInterface } from '@/components/calls/VideoCallInterface';
+import { AlertProvider } from '../components/ui/StyledAlert';
+import DashWakeWordListener from '../components/ai/DashWakeWordListener';
+import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
+import { DashChatButton } from '../components/ui/DashChatButton';
+import { BottomTabBar } from '../components/navigation/BottomTabBar';
+import { AnimatedSplash } from '../components/ui/AnimatedSplash';
+import { CallProvider, useCall } from '../components/calls/CallProvider';
+import { IncomingCallOverlay } from '../components/calls/IncomingCallOverlay';
+import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
+import { VideoCallInterface } from '../components/calls/VideoCallInterface';
 
 // Extracted utilities and hooks (WARP.md refactoring)
-import { useAuthGuard, useMobileWebGuard } from '@/hooks/useRouteGuard';
-import { useFABVisibility } from '@/hooks/useFABVisibility';
-import { setupPWAMetaTags } from '@/lib/utils/pwa';
-import { injectWebStyles } from '@/lib/utils/web-styles';
+import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
+import { useFABVisibility } from '../hooks/useFABVisibility';
+import { setupPWAMetaTags } from '../lib/utils/pwa';
+import { injectWebStyles } from '../lib/utils/web-styles';
 
 // Inner component with access to AuthContext
 function LayoutContent() {
@@ -247,7 +247,7 @@ function RootLayoutContent() {
     
     (async () => {
       try {
-        const module = await import('@/services/dash-ai/DashAICompat');
+        const module = await import('../services/dash-ai/DashAICompat');
         const DashClass = (module as any).DashAIAssistant || (module as any).default;
         const dash: IDashAIAssistant | null = DashClass?.getInstance?.() || null;
         if (dash) {
@@ -256,10 +256,10 @@ function RootLayoutContent() {
           // Best-effort: sync Dash user context (language, traits)
           // Only call Edge Functions when authenticated
           try {
-            const { getCurrentLanguage } = await import('@/lib/i18n');
-            const { syncDashContext } = await import('@/lib/agent/dashContextSync');
-            const { getAgenticCapabilities } = await import('@/lib/utils/agentic-mode');
-            const { getCurrentProfile } = await import('@/lib/sessionManager');
+            const { getCurrentLanguage } = await import('../lib/i18n');
+            const { syncDashContext } = await import('../lib/agent/dashContextSync');
+            const { getAgenticCapabilities } = await import('../lib/utils/agentic-mode');
+            const { getCurrentProfile } = await import('../lib/sessionManager');
             const profile = await getCurrentProfile().catch(() => null as any);
             const role = profile?.role as string | undefined;
             const caps = getAgenticCapabilities(role);

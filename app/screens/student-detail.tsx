@@ -129,16 +129,17 @@ export default function StudentDetailScreen() {
             name,
             grade_level,
             teacher_id,
-            users!classes_teacher_id_fkey (
+            profiles!classes_teacher_id_fkey (
               id,
-              name
+              first_name,
+              last_name
             )
           ),
-          users!parent_id (
+          profiles!students_parent_id_fkey (
             id,
-            name,
-            email,
-            phone
+            first_name,
+            last_name,
+            email
           ),
           age_groups!students_age_group_id_fkey (
             name
@@ -197,10 +198,10 @@ export default function StudentDetailScreen() {
         age_months: ageInfo.months,
         age_years: ageInfo.years,
         class_name: studentData.classes?.name,
-        teacher_name: studentData.classes?.users?.name,
-        parent_name: studentData.users?.name,
-        parent_email: studentData.users?.email,
-        parent_phone: studentData.users?.phone,
+        teacher_name: studentData.classes?.profiles ? `${studentData.classes.profiles.first_name} ${studentData.classes.profiles.last_name}` : undefined,
+        parent_name: studentData.profiles ? `${studentData.profiles.first_name} ${studentData.profiles.last_name}` : undefined,
+        parent_email: studentData.profiles?.email,
+        parent_phone: undefined, // profiles doesn't have phone directly
         age_group_name: studentData.age_groups?.name,
         attendance_rate: attendanceRate,
         last_attendance: lastAttendance,
@@ -216,9 +217,10 @@ export default function StudentDetailScreen() {
           .from('classes')
           .select(`
             *,
-            users!classes_teacher_id_fkey (
+            profiles!classes_teacher_id_fkey (
               id,
-              name
+              first_name,
+              last_name
             ),
             students!inner (
               id
@@ -231,8 +233,8 @@ export default function StudentDetailScreen() {
           id: cls.id,
           name: cls.name,
           grade_level: cls.grade_level,
-          teacher_id: cls.users?.id || null,
-          teacher_name: cls.users?.name,
+          teacher_id: (cls as any).profiles?.id || null,
+          teacher_name: (cls as any).profiles ? `${(cls as any).profiles.first_name} ${(cls as any).profiles.last_name}` : undefined,
           capacity: cls.capacity || 25,
           current_enrollment: cls.students?.length || 0,
         })) || [];

@@ -13,8 +13,8 @@ const EXPO_PROJECT_ID = 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc'
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
     // SDK >= 51 supports banner/list behavior on iOS
     shouldShowBanner: true,
     shouldShowList: true,
