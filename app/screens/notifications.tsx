@@ -8,7 +8,7 @@
  * - School announcements
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +29,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { useAlert } from '@/components/ui/StyledAlert';
+import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
+import { useMarkAnnouncementsSeen } from '@/hooks/useNotificationCount';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const NOTIFICATIONS_LAST_SEEN_KEY = 'notifications_last_seen_at';
 
 interface Notification {
   id: string;
@@ -267,12 +273,27 @@ const useNotifications = () => {
 export default function NotificationsScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   
   const { data: notifications = [], isLoading, refetch } = useNotifications();
+  
+  // Hooks to mark categories as seen
+  const { mutate: markCallsSeen } = useMarkCallsSeen();
+  const { mutate: markAnnouncementsSeen } = useMarkAnnouncementsSeen();
+  
+  // Mark all notifications as seen when screen mounts
+  useEffect(() => {
+    const markAllAsSeen = async () => {
+      markCallsSeen();
+      markAnnouncementsSeen();
+      // Also update last seen for messages (handled by message_participants.last_read_at)
+    };
+    markAllAsSeen();
+  }, [markCallsSeen, markAnnouncementsSeen]);
   
   // Unread count
   const unreadCount = useMemo(() => 
@@ -320,23 +341,114 @@ export default function NotificationsScreen() {
     alert.showConfirm(
       t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }),
       t('notifications.markAllReadConfirm', { defaultValue: 'Are you sure you want to mark all notifications as read?' }),
-      () => {
-        // Mark all as read (would need backend support)
+      async () => {
+        // Mark all categories as seen
+        markCallsSeen();
+        markAnnouncementsSeen();
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+        queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+        queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
       }
     );
-  }, [alert, t, queryClient]);
+  }, [alert, t, queryClient, markCallsSeen, markAnnouncementsSeen]);
+  
+  // Clear call history
+  const handleClearCalls = useCallback(async () => {
+    if (!user?.id) return;
+    
+    Alert.alert(
+      t('notifications.clearCalls', { defaultValue: 'Clear Call History' }),
+      t('notifications.clearCallsConfirm', { defaultValue: 'Are you sure you want to clear all call history?' }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('common.clear', { defaultValue: 'Clear' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              await client
+                .from('active_calls')
+                .delete()
+                .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`);
+              
+              markCallsSeen();
+              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['call-history'] });
+              queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+            } catch (error) {
+              console.error('[ClearCalls] Error:', error);
+              Alert.alert(t('common.error', { defaultValue: 'Error' }), t('notifications.clearError', { defaultValue: 'Failed to clear. Please try again.' }));
+            }
+          }
+        }
+      ]
+    );
+  }, [user?.id, t, refetch, queryClient, markCallsSeen]);
+  
+  // Clear messages (mark all threads as read)
+  const handleClearMessages = useCallback(async () => {
+    if (!user?.id) return;
+    
+    Alert.alert(
+      t('notifications.clearMessages', { defaultValue: 'Mark Messages as Read' }),
+      t('notifications.clearMessagesConfirm', { defaultValue: 'Mark all message threads as read?' }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('common.markRead', { defaultValue: 'Mark Read' }),
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              // Update last_read_at for all threads the user participates in
+              await client
+                .from('message_participants')
+                .update({ last_read_at: new Date().toISOString() })
+                .eq('user_id', user.id);
+              
+              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+              queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+            } catch (error) {
+              console.error('[ClearMessages] Error:', error);
+              Alert.alert(t('common.error', { defaultValue: 'Error' }), t('notifications.clearError', { defaultValue: 'Failed to clear. Please try again.' }));
+            }
+          }
+        }
+      ]
+    );
+  }, [user?.id, t, refetch, queryClient]);
   
   const handleClearAll = useCallback(() => {
     alert.showConfirm(
       t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }),
       t('notifications.clearAllConfirm', { defaultValue: 'Are you sure you want to clear all notifications? This cannot be undone.' }),
-      () => {
-        // Clear all (would need backend support)
+      async () => {
+        // Mark all as read/seen
+        markCallsSeen();
+        markAnnouncementsSeen();
+        
+        // Update message read status
+        if (user?.id) {
+          try {
+            const client = assertSupabase();
+            await client
+              .from('message_participants')
+              .update({ last_read_at: new Date().toISOString() })
+              .eq('user_id', user.id);
+          } catch (error) {
+            console.error('[ClearAll] Error updating messages:', error);
+          }
+        }
+        
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+        queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+        queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
       }
     );
-  }, [alert, t, queryClient]);
+  }, [alert, t, queryClient, user?.id, markCallsSeen, markAnnouncementsSeen]);
   
   // Loading state
   if (isLoading) {
@@ -386,15 +498,37 @@ export default function NotificationsScreen() {
         rightAction={{
           icon: 'ellipsis-vertical',
           onPress: () => {
-            alert.show(
-              t('notifications.options', { defaultValue: 'Options' }),
-              undefined,
+            Alert.alert(
+              t('notifications.options', { defaultValue: 'Notification Options' }),
+              t('notifications.optionsDesc', { defaultValue: 'Choose an action' }),
               [
-                { text: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }), onPress: handleMarkAllRead },
-                { text: t('notifications.clearAll', { defaultValue: 'Clear All' }), style: 'destructive', onPress: handleClearAll },
+                { 
+                  text: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }), 
+                  onPress: () => {
+                    markCallsSeen();
+                    markAnnouncementsSeen();
+                    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+                    queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+                    queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+                    queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+                  }
+                },
+                { 
+                  text: t('notifications.clearMessages', { defaultValue: 'Clear Messages' }), 
+                  onPress: handleClearMessages
+                },
+                { 
+                  text: t('notifications.clearCalls', { defaultValue: 'Clear Call History' }), 
+                  onPress: handleClearCalls,
+                  style: 'destructive'
+                },
+                { 
+                  text: t('notifications.clearAll', { defaultValue: 'Clear All' }), 
+                  style: 'destructive', 
+                  onPress: handleClearAll 
+                },
                 { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-              ],
-              { type: 'info' }
+              ]
             );
           }
         }}

@@ -20,10 +20,11 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { useCall } from '@/components/calls/CallProvider';
+import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
 
 // Custom Header Component
 interface ScreenHeaderProps {
@@ -322,10 +323,19 @@ export default function CallsScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'missed' | 'incoming' | 'outgoing'>('all');
   
   const { data: calls = [], isLoading, refetch } = useCallHistory();
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Mark calls as seen when screen mounts
+  const { mutate: markCallsSeen } = useMarkCallsSeen();
+  
+  // Mark as seen on mount
+  React.useEffect(() => {
+    markCallsSeen();
+  }, [markCallsSeen]);
   
   // Get call context for making calls
   let callContext: ReturnType<typeof useCall> | null = null;

@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { createCheckout } from '@/lib/payments';
-import { adminUpdateSubscriptionPlan } from '@/lib/supabase/rpc-subscriptions';
+import { adminUpdateSubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
