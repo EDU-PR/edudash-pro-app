@@ -24,6 +24,7 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAlert } from '@/components/ui/StyledAlert';
+import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 // Safe useUpdates hook that handles missing provider
 const useSafeUpdates = () => {
   try {
@@ -53,6 +54,154 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Haptics temporarily disabled to prevent device-specific crashes
 // import { Vibration } from 'react-native';
 // import Feedback from '@/lib/feedback';
+
+/**
+ * App Preferences Section - FAB & Tutorial settings
+ */
+function AppPreferencesSection() {
+  const { theme } = useTheme();
+  const { t } = useTranslation('common');
+  const { 
+    showDashFAB, 
+    setShowDashFAB, 
+    tutorialCompleted, 
+    setTutorialCompleted,
+    isLoaded 
+  } = useAppPreferencesSafe();
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  const prefStyles = useThemedStyles((theme: Theme) => ({
+    section: {
+      padding: 20,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      fontWeight: '600' as const,
+      color: theme.text,
+      marginBottom: 16,
+    },
+    settingsCard: {
+      ...themedStyles.card(theme),
+      padding: 0,
+      overflow: 'hidden' as const,
+    },
+    settingItem: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.divider,
+    },
+    lastSettingItem: {
+      borderBottomWidth: 0,
+    },
+    settingLeft: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      flex: 1,
+    },
+    settingIcon: {
+      marginRight: 16,
+    },
+    settingContent: {
+      flex: 1,
+    },
+    settingTitle: {
+      fontSize: 16,
+      fontWeight: '500' as const,
+      color: theme.text,
+      marginBottom: 2,
+    },
+    settingSubtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+  }));
+
+  // Show tutorial modal when triggered
+  useEffect(() => {
+    if (showTutorial) {
+      // Reset tutorial state and navigate to trigger it
+      setTutorialCompleted(false);
+      setShowTutorial(false);
+      // Force re-render by navigating away and back, or show inline
+      Alert.alert(
+        t('settings.tutorial.replaying_title', { defaultValue: 'Tutorial' }),
+        t('settings.tutorial.replaying_message', { defaultValue: 'The app tutorial will show on next app restart or when you return to the home screen.' }),
+        [{ text: t('common.ok') }]
+      );
+    }
+  }, [showTutorial, setTutorialCompleted, t]);
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  return (
+    <View style={prefStyles.section}>
+      <Text style={prefStyles.sectionTitle}>
+        {t('settings.app_preferences.title', { defaultValue: 'App Preferences' })}
+      </Text>
+      
+      <View style={prefStyles.settingsCard}>
+        {/* Dash AI FAB Toggle */}
+        <View style={prefStyles.settingItem}>
+          <View style={prefStyles.settingLeft}>
+            <Ionicons 
+              name="sparkles" 
+              size={24} 
+              color={showDashFAB ? '#8B5CF6' : theme.textSecondary} 
+              style={prefStyles.settingIcon} 
+            />
+            <View style={prefStyles.settingContent}>
+              <Text style={prefStyles.settingTitle}>
+                {t('settings.app_preferences.dash_fab_title', { defaultValue: 'Show Dash AI Button' })}
+              </Text>
+              <Text style={prefStyles.settingSubtitle}>
+                {t('settings.app_preferences.dash_fab_subtitle', { defaultValue: 'Floating button to chat with Dash AI' })}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={showDashFAB}
+            onValueChange={setShowDashFAB}
+            trackColor={{ false: theme.border, true: '#8B5CF6' }}
+            thumbColor={showDashFAB ? '#FFFFFF' : theme.textTertiary}
+          />
+        </View>
+
+        {/* Replay Tutorial */}
+        <TouchableOpacity
+          style={[prefStyles.settingItem, prefStyles.lastSettingItem]}
+          onPress={() => setShowTutorial(true)}
+        >
+          <View style={prefStyles.settingLeft}>
+            <Ionicons 
+              name="school" 
+              size={24} 
+              color={theme.textSecondary} 
+              style={prefStyles.settingIcon} 
+            />
+            <View style={prefStyles.settingContent}>
+              <Text style={prefStyles.settingTitle}>
+                {t('settings.app_preferences.replay_tutorial_title', { defaultValue: 'Replay App Tutorial' })}
+              </Text>
+              <Text style={prefStyles.settingSubtitle}>
+                {tutorialCompleted 
+                  ? t('settings.app_preferences.replay_tutorial_completed', { defaultValue: 'View the app introduction again' })
+                  : t('settings.app_preferences.replay_tutorial_not_completed', { defaultValue: 'Tutorial not yet completed' })
+                }
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 export default function SettingsScreen() {
   const { theme } = useTheme();
@@ -605,6 +754,9 @@ export default function SettingsScreen() {
         <View style={styles.themeSectionContainer}>
           <ThemeLanguageSettings />
         </View>
+
+        {/* App Preferences - FAB & Tutorial */}
+        <AppPreferencesSection />
 
         {/* School Settings - Enhanced Overview */}
         {(profile?.role === 'principal' || profile?.role === 'principal_admin' || profile?.role === 'super_admin') && (

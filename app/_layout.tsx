@@ -32,7 +32,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../components/ui/StyledAlert';
 import DashWakeWordListener from '../components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
-import { DashChatButton } from '../components/ui/DashChatButton';
+import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
 import { BottomTabBar } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider, useCall } from '../components/calls/CallProvider';
@@ -41,6 +41,8 @@ import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
 import { VideoCallInterface } from '../components/calls/VideoCallInterface';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
+import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
+import { AppTutorial } from '../components/onboarding/AppTutorial';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -55,6 +57,9 @@ function LayoutContent() {
   const { isDark } = useTheme();
   const [showFAB, setShowFAB] = useState(false);
   const [statusBarKey, setStatusBarKey] = useState(0);
+  
+  // App preferences for FAB visibility
+  const { showDashFAB, tutorialCompleted } = useAppPreferencesSafe();
   
   // Route guards (auth + mobile web)
   useAuthGuard();
@@ -96,9 +101,17 @@ function LayoutContent() {
     // CallProvider may not be available yet
   }
   
+  // Determine if FAB should be visible (user pref + route logic)
+  const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB;
+  
   return (
     <View style={styles.container}>
       <StatusBar key={statusBarKey} style={isDark ? 'light' : 'dark'} animated />
+      
+      {/* App Tutorial - shows on first launch */}
+      {Platform.OS !== 'web' && !tutorialCompleted && (
+        <AppTutorial />
+      )}
       
       {/* Update Banner - shows when OTA update is ready */}
       {Platform.OS !== 'web' && <GlobalUpdateBanner />}
@@ -118,9 +131,9 @@ function LayoutContent() {
         </Stack>
       </View>
       
-      {/* Dash Chat FAB - visible on dashboards and main screens */}
-      {showFAB && !shouldHideFAB && (
-        <DashChatButton />
+      {/* Draggable Dash Chat FAB - visible on dashboards and main screens */}
+      {shouldShowFAB && (
+        <DraggableDashFAB />
       )}
       
       {/* Persistent Bottom Navigation - positioned at bottom */}
@@ -175,23 +188,27 @@ export default function RootLayout() {
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>
-            <NotificationProvider>
-              <CallProvider>
-                <OnboardingProvider>
-                  <DashboardPreferencesProvider>
-                    <TermsProvider>
-                      <ToastProvider>
-                        <AlertProvider>
-                          <GestureHandlerRootView style={{ flex: 1 }}>
-                            <RootLayoutContent />
-                          </GestureHandlerRootView>
-                        </AlertProvider>
-                      </ToastProvider>
-                    </TermsProvider>
-                  </DashboardPreferencesProvider>
-                </OnboardingProvider>
-              </CallProvider>
-            </NotificationProvider>
+            <UpdatesProvider>
+              <AppPreferencesProvider>
+                <NotificationProvider>
+                  <CallProvider>
+                    <OnboardingProvider>
+                      <DashboardPreferencesProvider>
+                        <TermsProvider>
+                          <ToastProvider>
+                            <AlertProvider>
+                              <GestureHandlerRootView style={{ flex: 1 }}>
+                                <RootLayoutContent />
+                              </GestureHandlerRootView>
+                            </AlertProvider>
+                          </ToastProvider>
+                        </TermsProvider>
+                      </DashboardPreferencesProvider>
+                    </OnboardingProvider>
+                  </CallProvider>
+                </NotificationProvider>
+              </AppPreferencesProvider>
+            </UpdatesProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryProvider>

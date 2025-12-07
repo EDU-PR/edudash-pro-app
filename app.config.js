@@ -7,12 +7,14 @@
  * Dynamic behaviors:
  * 1. Conditionally include expo-dev-client (only for development builds)
  * 2. Dynamic AdMob IDs from environment variables (for different environments)
+ * 3. App variant suffix for dev builds (allows both dev and preview on same device)
  * 
  * @param {import('@expo/config').ConfigContext} ctx
  */
 module.exports = ({ config }) => {
   const profile = process.env.EAS_BUILD_PROFILE || '';
-  const isDevBuild = profile === 'development';
+  const appVariant = process.env.APP_VARIANT || '';
+  const isDevBuild = profile === 'development' || appVariant === 'development';
   const isWeb = process.env.EXPO_PUBLIC_PLATFORM === 'web';
 
   // Get AdMob IDs from environment (fallback to test IDs)
@@ -40,8 +42,22 @@ module.exports = ({ config }) => {
     plugins.push('expo-dev-client');
   }
 
+  // Development variant config (different package name so both can be installed)
+  const devConfig = isDevBuild ? {
+    name: 'EduDashPro Dev',
+    android: {
+      ...config.android,
+      package: 'com.edudashpro.dev',
+    },
+    ios: {
+      ...config.ios,
+      bundleIdentifier: 'com.k1ngdevops.edudashpro.dev',
+    },
+  } : {};
+
   return {
     ...config,
+    ...devConfig,
     plugins,
   };
 };
