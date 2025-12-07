@@ -17,7 +17,12 @@ import {
   getInitials,
   getRoleGradient,
   getAvatarGradient,
+  getDateSeparatorLabel,
+  getDateKey,
 } from '@/lib/messaging/types';
+
+// Re-export utilities used by messaging pages
+export { formatMessageTime, getDateSeparatorLabel, getDateKey };
 
 interface ThreadItemProps {
   thread: MessageThread;
