@@ -12,7 +12,7 @@ import { styles } from '../DashAssistant.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
-import { renderCAPSResults } from '@/lib/caps';
+import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 
 interface DashMessageBubbleProps {
   message: DashMessage;

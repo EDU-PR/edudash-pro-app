@@ -6,8 +6,8 @@
 
 import React from 'react';
 import { View } from 'react-native';
-import CAPSSearchResults from '../../components/caps/CAPSSearchResults';
-import { CAPSDocument } from '../../components/caps/CAPSDocumentCard';
+import CAPSSearchResults from '@/components/caps/CAPSSearchResults';
+import { CAPSDocument } from '@/components/caps/CAPSDocumentCard';
 
 export interface CAPSToolResult {
   tool_name: string;

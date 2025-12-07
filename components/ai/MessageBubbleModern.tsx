@@ -14,7 +14,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { DashAvatar } from './DashAvatar';
 import { BrandGradients, BrandColors } from '@/components/branding';
 import type { DashMessage } from '@/services/dash-ai/types';
-import { renderCAPSResults } from '@/lib/caps';
+import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 
 export interface MessageBubbleModernProps {
   message: DashMessage;
