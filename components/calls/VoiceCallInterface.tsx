@@ -188,6 +188,20 @@ export function VoiceCallInterface({
         // Cleanup existing instance
         cleanupCall();
 
+        // Get valid session token early - we'll need it for API calls
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        let accessToken = sessionData.session?.access_token;
+        
+        // If no session or token looks expired, try to refresh
+        if (!accessToken || sessionError) {
+          console.log('[VoiceCall] Session missing or expired, attempting refresh...');
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError || !refreshData.session?.access_token) {
+            throw new Error('Not authenticated. Please sign in again.');
+          }
+          accessToken = refreshData.session.access_token;
+        }
+
         let roomUrl = meetingUrl;
 
         if (isOwner && !roomUrl) {
@@ -198,7 +212,7 @@ export function VoiceCallInterface({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                Authorization: `Bearer ${accessToken}`,
               },
               body: JSON.stringify({
                 name: `voice-${Date.now()}`,
@@ -265,14 +279,14 @@ export function VoiceCallInterface({
 
         if (isCleanedUp) return;
 
-        // Get meeting token
+        // Get meeting token (accessToken was validated above)
         const tokenResponse = await fetch(
           `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               roomName: roomUrl.split('/').pop(),
