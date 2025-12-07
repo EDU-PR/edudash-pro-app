@@ -162,8 +162,10 @@ Thumbs.db
 
 .vercel
 google-services.json
-docs/*
-docs/edudashpro-firebase-adminsdk-fbsvc-bdcbc9a33a.jsondocs/edudashpro-firebase-adminsdk-fbsvc-bdcbc9a33a.json
+
+# Docs: ignore sensitive files but track documentation
+!docs/
+docs/edudashpro-firebase-adminsdk-fbsvc-bdcbc9a33a.json
 
 # --- Copilot: Additional recommended ignores ---
 # OS/Editor
