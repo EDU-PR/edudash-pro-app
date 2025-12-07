@@ -21,122 +21,19 @@ import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
 import { getMessageDisplayText } from '@/lib/messaging/messageContent';
-
-interface MessageThread {
-  id: string;
-  type: string;
-  subject: string;
-  student_id: string | null;
-  last_message_at: string;
-  student?: {
-    id: string;
-    first_name: string;
-    last_name: string;
-  };
-  participants?: Array<{
-    user_id: string;
-    role: string;
-    user_profile?: {
-      first_name: string;
-      last_name: string;
-      role: string;
-    };
-  }>;
-  message_participants?: Array<{
-    user_id: string;
-    role: string;
-    last_read_at?: string;
-    user_profile?: {
-      first_name: string;
-      last_name: string;
-      role: string;
-    };
-  }>;
-  last_message?: {
-    content: string;
-    created_at: string;
-    sender_id: string;
-    read_at?: string | null;
-    delivered_at?: string | null;
-  };
-  unread_count?: number;
-}
-
-const formatMessageTime = (timestamp: string | undefined | null): string => {
-  if (!timestamp) return '';
-  
-  const now = new Date();
-  const messageTime = new Date(timestamp);
-  
-  // Handle invalid dates
-  if (isNaN(messageTime.getTime())) return '';
-  
-  const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
-  
-  if (diffInHours < 1) return 'Just now';
-  if (diffInHours < 24) return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (diffInHours < 168) return messageTime.toLocaleDateString([], { weekday: 'short' });
-  return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
-};
-
-// Helper to get date separator label (Today, Yesterday, Weekday, or Date)
-const getDateSeparatorLabel = (timestamp: string): string => {
-  const messageDate = new Date(timestamp);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  
-  // Reset time parts for comparison
-  const messageDateOnly = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
-  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-  
-  if (messageDateOnly.getTime() === todayOnly.getTime()) {
-    return 'Today';
-  }
-  if (messageDateOnly.getTime() === yesterdayOnly.getTime()) {
-    return 'Yesterday';
-  }
-  
-  // Check if within the last 7 days - show weekday name
-  const daysDiff = Math.floor((todayOnly.getTime() - messageDateOnly.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysDiff < 7) {
-    return messageDate.toLocaleDateString([], { weekday: 'long' });
-  }
-  
-  // Older than a week - show full date
-  return messageDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: messageDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
-};
-
-// Helper to get date key for grouping
-const getDateKey = (timestamp: string): string => {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-};
-
-// Date Separator Component
-const DateSeparator = ({ label }: { label: string }) => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '12px 0',
-  }}>
-    <div style={{
-      background: 'rgba(30, 41, 59, 0.8)',
-      backdropFilter: 'blur(8px)',
-      padding: '6px 14px',
-      borderRadius: 8,
-      fontSize: 12,
-      fontWeight: 500,
-      color: 'rgba(148, 163, 184, 0.9)',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-      border: '1px solid rgba(148, 163, 184, 0.1)',
-    }}>
-      {label}
-    </div>
-  </div>
-);
+import { 
+  type MessageThread,
+  DASH_AI_THREAD_ID, 
+  DASH_AI_USER_ID,
+  createDashAIThread
+} from '@/lib/messaging/types';
+import { 
+  ThreadItem, 
+  DateSeparator, 
+  formatMessageTime, 
+  getDateSeparatorLabel, 
+  getDateKey 
+} from '@/components/messaging/ThreadList';
 
 interface ThreadItemProps {
   thread: MessageThread;
@@ -145,41 +42,8 @@ interface ThreadItemProps {
   currentUserId?: string;
 }
 
-// Dash AI Virtual Contact Constants (same as parent page)
-const DASH_AI_THREAD_ID = 'dash-ai-assistant';
-const DASH_AI_USER_ID = 'dash-ai-system';
-
-// Create virtual Dash AI thread that appears as a contact
-const createDashAIThread = (lastMessage?: string, lastMessageAt?: string): MessageThread => ({
-  id: DASH_AI_THREAD_ID,
-  type: 'dash_ai',
-  subject: 'Dash AI',
-  student_id: null,
-  last_message_at: lastMessageAt || new Date().toISOString(),
-  message_participants: [
-    {
-      user_id: DASH_AI_USER_ID,
-      role: 'ai_assistant',
-      user_profile: {
-        first_name: 'Dash',
-        last_name: 'AI',
-        role: 'ai_assistant',
-      },
-    },
-  ],
-  last_message: lastMessage ? {
-    content: lastMessage,
-    created_at: lastMessageAt || new Date().toISOString(),
-    sender_id: DASH_AI_USER_ID,
-  } : {
-    content: 'Hi! I\'m Dash, your AI teaching assistant. I can help with lesson plans, activities, and more! 🎓',
-    created_at: new Date().toISOString(),
-    sender_id: DASH_AI_USER_ID,
-  },
-  unread_count: 0,
-});
-
-const ThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemProps) => {
+// Teacher-specific ThreadItem with custom message status rendering
+const TeacherThreadItem = ({ thread, isActive, onSelect, currentUserId }: ThreadItemProps) => {
   const isDashAI = thread.id === DASH_AI_THREAD_ID || thread.type === 'dash_ai';
   const participants = thread.message_participants || thread.participants || [];
   // Find the OTHER participant (the contact, not the current user)
@@ -1687,7 +1551,7 @@ function TeacherMessagesPage() {
               </div>
             ) : filteredThreads.length > 0 ? (
               filteredThreads.map((thread) => (
-                <ThreadItem
+                <TeacherThreadItem
                   key={thread.id}
                   thread={thread}
                   isActive={thread.id === selectedThreadId}

@@ -270,21 +270,39 @@ export const useMarkThreadRead = () => {
   
   return useMutation({
     mutationFn: async ({ threadId }: { threadId: string }) => {
+      if (!user?.id) {
+        console.warn('[useMarkThreadRead] No user ID');
+        return;
+      }
+      
       const client = assertSupabase();
       
-      const { error } = await client
-        .from('message_participants')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('thread_id', threadId)
-        .eq('user_id', user?.id);
+      console.log('[useMarkThreadRead] Marking thread as read:', { threadId, userId: user.id });
       
-      if (error) throw error;
+      // Use RPC function to mark thread as read (updates both messages and participants)
+      const { error } = await client.rpc('mark_thread_messages_as_read', {
+        thread_id: threadId,
+        reader_id: user.id,
+      });
+      
+      if (error) {
+        console.error('[useMarkThreadRead] RPC error:', error);
+        throw error;
+      }
+      
+      console.log('[useMarkThreadRead] Success');
     },
     onSuccess: () => {
       // Invalidate parent threads to update unread counts
       queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
-      // Also invalidate the unread count query so badge updates
+      // Invalidate the legacy unread count query
       queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+      // Invalidate the unified notification context queries
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'messages'] });
+      console.log('[useMarkThreadRead] Queries invalidated');
+    },
+    onError: (err) => {
+      console.error('[useMarkThreadRead] Failed:', err);
     },
   });
 };

@@ -31,10 +31,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import Feedback from '@/lib/feedback';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { track } from '@/lib/analytics';
-import { useUnreadMessageCount } from '@/hooks/useParentMessaging';
-import { useMissedCallsCount } from '@/hooks/useMissedCalls';
+import { useNotificationsWithFocus } from '@/hooks/useNotifications';
 import { useParentDashboard } from '@/hooks/useDashboardData';
-import { logger } from '@/lib/logger';
 
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
@@ -73,9 +71,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     refresh,
   } = useParentDashboard();
   
-  // Hooks for parent-specific data
-  const { data: unreadMessageCount = 0 } = useUnreadMessageCount();
-  const { data: missedCallsCount = 0 } = useMissedCallsCount();
+  // Unified notification hook - auto-refreshes on screen focus
+  const { messages: unreadMessageCount, calls: missedCallsCount } = useNotificationsWithFocus();
 
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {

@@ -39,6 +39,7 @@ import { CallProvider, useCall } from '../components/calls/CallProvider';
 import { IncomingCallOverlay } from '../components/calls/IncomingCallOverlay';
 import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
 import { VideoCallInterface } from '../components/calls/VideoCallInterface';
+import { NotificationProvider } from '../contexts/NotificationContext';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -169,21 +170,23 @@ export default function RootLayout() {
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>
-            <CallProvider>
-              <OnboardingProvider>
-                <DashboardPreferencesProvider>
-                  <TermsProvider>
-                    <ToastProvider>
-                      <AlertProvider>
-                        <GestureHandlerRootView style={{ flex: 1 }}>
-                          <RootLayoutContent />
-                        </GestureHandlerRootView>
-                      </AlertProvider>
-                    </ToastProvider>
-                  </TermsProvider>
-                </DashboardPreferencesProvider>
-              </OnboardingProvider>
-            </CallProvider>
+            <NotificationProvider>
+              <CallProvider>
+                <OnboardingProvider>
+                  <DashboardPreferencesProvider>
+                    <TermsProvider>
+                      <ToastProvider>
+                        <AlertProvider>
+                          <GestureHandlerRootView style={{ flex: 1 }}>
+                            <RootLayoutContent />
+                          </GestureHandlerRootView>
+                        </AlertProvider>
+                      </ToastProvider>
+                    </TermsProvider>
+                  </DashboardPreferencesProvider>
+                </OnboardingProvider>
+              </CallProvider>
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryProvider>
