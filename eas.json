@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 5.8.0",
+    "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -26,7 +26,8 @@
       "channel": "preview",
       "credentialsSource": "remote",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "latest"
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",

@@ -1,6 +1,10 @@
 # Ignore large local artifacts and non-build files to reduce EAS upload size
 
-# VCS - MUST be at top
+# Native project folders - CRITICAL: EAS Prebuild generates fresh android/ios
+android/
+ios/
+
+# VCS
 .git
 .git/
 .github
