@@ -178,25 +178,34 @@ export function VoiceCallInterface({
         setError(null);
         setCallDuration(0);
 
-        // Get valid session token first - refresh if needed
+        // Get valid session token first - always try to refresh for calls
+        console.log('[VoiceCall] Getting session...');
         let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         let accessToken = sessionData.session?.access_token;
         
-        // If no session or token looks expired, try to refresh
-        if (!accessToken || sessionError) {
-          console.log('[VoiceCall] Session missing or expired, attempting refresh...');
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError || !refreshData.session?.access_token) {
-            throw new Error('Not authenticated. Please sign in again.');
-          }
+        // Always attempt refresh for calls to ensure fresh token
+        console.log('[VoiceCall] Refreshing session to ensure valid token...');
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshData?.session?.access_token) {
           accessToken = refreshData.session.access_token;
           sessionData = refreshData;
+          console.log('[VoiceCall] Session refreshed successfully');
+        } else if (!accessToken) {
+          // Only fail if we have no token at all
+          console.error('[VoiceCall] No valid session:', refreshError || sessionError);
+          throw new Error('Please sign in to make calls.');
+        } else {
+          console.log('[VoiceCall] Using existing session token');
         }
 
         const user = sessionData.session?.user;
         if (!user) {
-          throw new Error('Not authenticated');
+          throw new Error('Please sign in to make calls.');
         }
+
+        console.log('[VoiceCall] Creating room with auth token...');
+        console.log('[VoiceCall] User ID:', user.id);
 
         if (isCleanedUp) return;
 
@@ -207,6 +216,10 @@ export function VoiceCallInterface({
 
         if (isOwner && !roomUrl) {
           // Create a new room via API
+          console.log('[VoiceCall] Creating room via Edge Function...');
+          console.log('[VoiceCall] URL:', `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-rooms`);
+          console.log('[VoiceCall] Has access token:', !!accessToken);
+          
           const response = await fetch(
             `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-rooms`,
             {
@@ -224,13 +237,23 @@ export function VoiceCallInterface({
             }
           );
 
+          console.log('[VoiceCall] Room creation response status:', response.status);
+          
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to create room');
+            let errorMsg = 'Failed to create room';
+            try {
+              const errorData = await response.json();
+              errorMsg = errorData.error || errorData.message || errorMsg;
+            } catch (e) {
+              errorMsg = `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`;
+            }
+            console.error('[VoiceCall] Room creation failed:', errorMsg);
+            throw new Error(errorMsg);
           }
 
           const { room } = await response.json();
           roomUrl = room.url;
+          console.log('[VoiceCall] Room created successfully:', roomUrl);
 
           // Create call signaling record
           if (calleeId) {
@@ -299,7 +322,14 @@ export function VoiceCallInterface({
 
         if (!tokenResponse.ok) {
           const errorData = await tokenResponse.json();
-          throw new Error(errorData.error || 'Failed to get token');
+          // Map technical errors to user-friendly messages
+          const errorMessage = errorData.error || 'Failed to get token';
+          if (errorMessage.toLowerCase().includes('not authenticated') || 
+              errorMessage.toLowerCase().includes('authentication') ||
+              errorMessage.toLowerCase().includes('unauthorized')) {
+            throw new Error('Session expired. Please sign out and sign in again.');
+          }
+          throw new Error(errorMessage);
         }
 
         const { token } = await tokenResponse.json();
