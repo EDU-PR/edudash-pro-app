@@ -40,6 +40,7 @@ import { IncomingCallOverlay } from '../components/calls/IncomingCallOverlay';
 import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
 import { VideoCallInterface } from '../components/calls/VideoCallInterface';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -98,6 +99,10 @@ function LayoutContent() {
   return (
     <View style={styles.container}>
       <StatusBar key={statusBarKey} style={isDark ? 'light' : 'dark'} animated />
+      
+      {/* Update Banner - shows when OTA update is ready */}
+      {Platform.OS !== 'web' && <GlobalUpdateBanner />}
+      
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       
       {/* Main content area - leave space for bottom nav */}

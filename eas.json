@@ -9,6 +9,12 @@
       "distribution": "internal",
       "channel": "development",
       "credentialsSource": "remote",
+      "android": {
+        "applicationId": "com.edudashpro.dev"
+      },
+      "ios": {
+        "bundleIdentifier": "com.k1ngdevops.edudashpro.dev"
+      },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",

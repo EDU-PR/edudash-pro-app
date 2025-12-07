@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { assertSupabase } from '@/lib/supabase';
+import { useEffect } from 'react';
+import { assertSupabase, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Types (shared with parent messaging)
@@ -335,4 +336,98 @@ export const useTeacherMarkThreadRead = () => {
       queryClient.invalidateQueries({ queryKey: ['teacher', 'unread-count'] });
     },
   });
+};
+
+/**
+ * Hook for real-time message updates in a thread
+ * Subscribes to new messages and updates the query cache incrementally
+ */
+export const useTeacherMessagesRealtime = (threadId: string | null) => {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!threadId || !user?.id) return;
+
+    const channel = supabase
+      .channel(`messages:thread:${threadId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${threadId}`,
+        },
+        async (payload) => {
+          console.log('[MessagesRealtime] New message received:', payload.new.id);
+          
+          // Fetch sender profile for the new message
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, role')
+            .eq('id', payload.new.sender_id)
+            .single();
+          
+          const newMessage = {
+            ...payload.new,
+            sender: senderProfile,
+          };
+          
+          // Update query cache incrementally (no full refetch)
+          queryClient.setQueryData(
+            ['teacher', 'messages', threadId],
+            (old: Message[] | undefined) => {
+              if (!old) return [newMessage];
+              // Avoid duplicates
+              if (old.some(m => m.id === newMessage.id)) return old;
+              return [...old, newMessage];
+            }
+          );
+          
+          // Also update threads list to reflect new last_message
+          queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [threadId, user?.id, queryClient]);
+};
+
+/**
+ * Hook for real-time thread list updates
+ * Subscribes to thread changes (new threads, last_message_at updates)
+ */
+export const useTeacherThreadsRealtime = (organizationId: string | null) => {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!organizationId || !user?.id) return;
+
+    const channel = supabase
+      .channel(`threads:org:${organizationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'message_threads',
+          filter: `preschool_id=eq.${organizationId}`,
+        },
+        (payload) => {
+          console.log('[ThreadsRealtime] Thread changed:', payload.eventType);
+          // Invalidate threads query to refetch
+          queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [organizationId, user?.id, queryClient]);
 };

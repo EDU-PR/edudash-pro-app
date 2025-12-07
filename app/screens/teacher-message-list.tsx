@@ -20,8 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
-import { useTeacherThreads, MessageThread } from '@/hooks/useTeacherMessaging';
+import { useTeacherThreads, useTeacherThreadsRealtime, MessageThread } from '@/hooks/useTeacherMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
 
@@ -362,10 +363,16 @@ const DashAIItem: React.FC<{ onPress: () => void }> = React.memo(({ onPress }) =
 export default function TeacherMessageListScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   
+  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
+  
   const { data: threads, isLoading, error, refetch, isRefetching } = useTeacherThreads();
+  
+  // Subscribe to real-time thread updates (new messages update list without full reload)
+  useTeacherThreadsRealtime(organizationId);
   
   // Refetch threads when screen gains focus to update unread badges
   useFocusEffect(

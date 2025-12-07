@@ -85,11 +85,13 @@ const defaultTheme = {
 
 try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
+let useTeacherMessagesRealtime: (id: string | null) => void = () => {};
 try {
   const h = require('@/hooks/useTeacherMessaging');
   useTeacherThreadMessages = h.useTeacherThreadMessages;
   useTeacherSendMessage = h.useTeacherSendMessage;
   useTeacherMarkThreadRead = h.useTeacherMarkThreadRead;
+  useTeacherMessagesRealtime = h.useTeacherMessagesRealtime;
 } catch {
   useTeacherThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} });
   useTeacherSendMessage = () => ({ mutateAsync: async () => ({}), isPending: false });
@@ -351,6 +353,9 @@ export default function TeacherMessageThreadScreen() {
   const { data: messages = [], isLoading, error, refetch } = useTeacherThreadMessages(threadId);
   const { mutateAsync: sendMessage, isPending: sending } = useTeacherSendMessage();
   const { mutate: markRead } = useTeacherMarkThreadRead();
+  
+  // Subscribe to real-time message updates (no page reload needed)
+  useTeacherMessagesRealtime(threadId);
   
   const otherIds = useMemo(() => parentId ? [parentId] : [], [parentId]);
   
