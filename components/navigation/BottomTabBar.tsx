@@ -1,11 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const isSmallScreen = SCREEN_WIDTH < 360;
+const isShortScreen = SCREEN_HEIGHT < 700;
+const isCompact = isSmallScreen || isShortScreen;
 
 interface TabItem {
   id: string;
@@ -165,10 +170,6 @@ export function BottomTabBar() {
     return pathname === route || pathname?.startsWith(route);
   };
 
-  // Hide entirely - navigation is now handled by MobileNavDrawer via hamburger menu
-  // This applies to both web and native platforms
-  return null;
-
   // Don't show on auth/onboarding/landing screens only
   const shouldHide = 
     !pathname ||
@@ -194,31 +195,31 @@ export function BottomTabBar() {
     container: {
       flexDirection: 'row',
       backgroundColor: theme.surface,
-      borderTopWidth: 1,
+      borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
-      paddingBottom: insets.bottom,
-      paddingTop: 8,
+      paddingBottom: Math.max(insets.bottom, 4),
+      paddingTop: isCompact ? 4 : 6,
       shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: -2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 8,
+      shadowOffset: { width: 0, height: -1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 4,
     },
     tab: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 8,
-      minHeight: 56,
+      paddingVertical: isCompact ? 2 : 4,
+      minHeight: isCompact ? 44 : 50,
     },
     iconContainer: {
-      marginBottom: 4,
+      marginBottom: isCompact ? 1 : 2,
     },
     label: {
-      fontSize: 11,
+      fontSize: isCompact ? 9 : 10,
       fontWeight: '600',
       color: theme.textSecondary,
-      marginTop: 2,
+      marginTop: 1,
     },
     labelActive: {
       color: theme.primary,
@@ -239,11 +240,11 @@ export function BottomTabBar() {
             <View style={styles.iconContainer}>
               <Ionicons
                 name={(active ? tab.activeIcon : tab.icon) as any}
-                size={24}
+                size={isCompact ? 20 : 22}
                 color={active ? theme.primary : theme.textSecondary}
               />
             </View>
-            <Text style={[styles.label, active && styles.labelActive]}>
+            <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
               {t(`navigation.${tab.label.toLowerCase()}`, { defaultValue: tab.label })}
             </Text>
           </TouchableOpacity>

@@ -160,7 +160,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   );
 };
 
-const createStyles = (theme: any, topInset: number, bottomInset: number) => StyleSheet.create({
+const createStyles = (theme: any, _topInset: number, bottomInset: number) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -169,9 +169,9 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) => Styl
     flex: 1,
   },
   scrollContent: {
-    paddingTop: topInset || 20,
+    paddingTop: 20, // Fixed padding - DesktopLayout handles safe area for header
     paddingHorizontal: cardPadding,
-    paddingBottom: Math.max(bottomInset, 34) + 120, // Ensure space for bottom nav/FAB on all devices
+    paddingBottom: 20, // Just scroll breathing room - BottomTabBar handles its own safe area
   },
   loadingContainer: {
     flex: 1,
