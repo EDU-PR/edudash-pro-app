@@ -193,7 +193,22 @@ export function VideoCallInterface({
         setError(null);
         setCallDuration(0);
 
-        const { data: { user } } = await supabase.auth.getUser();
+        // Get valid session token first - refresh if needed
+        let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        let accessToken = sessionData.session?.access_token;
+        
+        // If no session or token looks expired, try to refresh
+        if (!accessToken || sessionError) {
+          console.log('[VideoCall] Session missing or expired, attempting refresh...');
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError || !refreshData.session?.access_token) {
+            throw new Error('Not authenticated. Please sign in again.');
+          }
+          accessToken = refreshData.session.access_token;
+          sessionData = refreshData;
+        }
+
+        const user = sessionData.session?.user;
         if (!user) {
           throw new Error('Not authenticated');
         }
@@ -212,7 +227,7 @@ export function VideoCallInterface({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                Authorization: `Bearer ${accessToken}`,
               },
               body: JSON.stringify({
                 name: `video-${Date.now()}`,
@@ -279,14 +294,14 @@ export function VideoCallInterface({
 
         if (isCleanedUp) return;
 
-        // Get meeting token
+        // Get meeting token (accessToken was validated earlier)
         const tokenResponse = await fetch(
           `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               roomName: roomUrl.split('/').pop(),

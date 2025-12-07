@@ -81,7 +81,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Messages', 
     icon: 'chatbubble-outline', 
     activeIcon: 'chatbubble', 
-    route: '/screens/teacher-messages', 
+    route: '/screens/teacher-message-list', 
     roles: ['teacher'] 
   },
   { 

@@ -178,18 +178,8 @@ export function VoiceCallInterface({
         setError(null);
         setCallDuration(0);
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          throw new Error('Not authenticated');
-        }
-
-        if (isCleanedUp) return;
-
-        // Cleanup existing instance
-        cleanupCall();
-
-        // Get valid session token early - we'll need it for API calls
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        // Get valid session token first - refresh if needed
+        let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         let accessToken = sessionData.session?.access_token;
         
         // If no session or token looks expired, try to refresh
@@ -200,7 +190,18 @@ export function VoiceCallInterface({
             throw new Error('Not authenticated. Please sign in again.');
           }
           accessToken = refreshData.session.access_token;
+          sessionData = refreshData;
         }
+
+        const user = sessionData.session?.user;
+        if (!user) {
+          throw new Error('Not authenticated');
+        }
+
+        if (isCleanedUp) return;
+
+        // Cleanup existing instance
+        cleanupCall();
 
         let roomUrl = meetingUrl;
 

@@ -63,9 +63,11 @@ export const useFABVisibility = (pathname: string | null) => {
     // Messaging routes - hide FAB to avoid overlap with compose/send buttons
     if (
       pathname.includes('messages') ||
+      pathname.includes('message-list') ||
       pathname.includes('message-thread') ||
       pathname.includes('parent-message-thread') ||
       pathname.includes('teacher-message-thread') ||
+      pathname.includes('teacher-message-list') ||
       pathname.includes('parent-messages') ||
       pathname.includes('teacher-messages') ||
       pathname.includes('teacher/messages') ||
