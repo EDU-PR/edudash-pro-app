@@ -220,8 +220,8 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
           </View>
         </View>
 
-        {/* Main Content - with bottom safe area for edge-to-edge */}
-        <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+        {/* Main Content */}
+        <View style={{ flex: 1 }}>
           {children}
         </View>
 

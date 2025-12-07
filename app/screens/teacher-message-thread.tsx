@@ -577,7 +577,7 @@ export default function TeacherMessageThreadScreen() {
       </View>
       
       {/* Messages Container - Clean cut before composer */}
-      <View style={styles.messagesWrapper}>
+      <View style={[styles.messagesWrapper, { marginBottom: 70 + insets.bottom }]}>
         {bgSource ? (
           <ImageBackground source={bgSource} style={styles.messagesArea} resizeMode="cover">
             <ScrollView

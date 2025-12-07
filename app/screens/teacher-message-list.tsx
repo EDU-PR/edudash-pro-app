@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -535,15 +536,15 @@ export default function TeacherMessageListScreen() {
     },
     listContent: {
       paddingTop: 8,
-      paddingBottom: insets.bottom + 20,
+      paddingBottom: insets.bottom + 160, // Extra space for stacked FABs
     },
     fab: {
       position: 'absolute',
       right: 20,
-      bottom: insets.bottom + 20,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
+      bottom: insets.bottom + 90, // Above Dash FAB
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       backgroundColor: theme.primary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -552,6 +553,26 @@ export default function TeacherMessageListScreen() {
           shadowColor: theme.primary,
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.4,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 8,
+        },
+      }),
+    },
+    dashFab: {
+      position: 'absolute',
+      right: 20,
+      bottom: insets.bottom + 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      overflow: 'hidden',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#00f5ff',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.5,
           shadowRadius: 8,
         },
         android: {
@@ -678,13 +699,29 @@ export default function TeacherMessageListScreen() {
         }
       />
       
-      {/* Floating Action Button */}
+      {/* Compose FAB - positioned above Dash */}
       <TouchableOpacity 
         style={styles.fab}
         onPress={handleStartNewMessage}
         activeOpacity={0.8}
       >
-        <Ionicons name="create" size={26} color={theme.onPrimary} />
+        <Ionicons name="create" size={24} color={theme.onPrimary} />
+      </TouchableOpacity>
+
+      {/* Dash AI FAB - positioned at bottom */}
+      <TouchableOpacity 
+        style={styles.dashFab}
+        onPress={handleOpenDashAI}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={['#00f5ff', '#7c3aed', '#ec4899']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Ionicons name="sparkles" size={24} color="#ffffff" />
+        </LinearGradient>
       </TouchableOpacity>
     </View>
   );
