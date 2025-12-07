@@ -3,5 +3,17 @@
     "deploymentEnabled": {
       "main": true
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/data-deletion-request",
+      "destination": "/data-deletion",
+      "permanent": true
+    },
+    {
+      "source": "/data-deletion.html",
+      "destination": "/data-deletion",
+      "permanent": true
+    }
+  ]
 }

@@ -9,6 +9,7 @@ import {
   Switch,
   ActivityIndicator,
   Platform,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -593,7 +594,7 @@ export default function SettingsScreen() {
 
             {/* Privacy & Data Protection */}
             <TouchableOpacity
-              style={[styles.settingItem, styles.lastSettingItem]}
+              style={styles.settingItem}
               onPress={() =>
                 Alert.alert(
                   t('settings.privacy_alert.title'),
@@ -616,6 +617,32 @@ export default function SettingsScreen() {
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Request Data Deletion */}
+            <TouchableOpacity
+              style={[styles.settingItem, styles.lastSettingItem]}
+              onPress={() =>
+                Linking.openURL('https://edudashpro.org.za/data-deletion')
+              }
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons
+                  name="trash-outline"
+                  size={24}
+                  color={theme.error || '#ff4444'}
+                  style={styles.settingIcon}
+                />
+                <View style={styles.settingContent}>
+                  <Text style={[styles.settingTitle, { color: theme.error || '#ff4444' }]}>
+                    {t('settings.requestDataDeletion', { defaultValue: 'Request Data Deletion' })}
+                  </Text>
+                  <Text style={styles.settingSubtitle}>
+                    {t('settings.requestDataDeletionSubtitle', { defaultValue: 'GDPR/POPIA compliant data removal' })}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="open-outline" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
