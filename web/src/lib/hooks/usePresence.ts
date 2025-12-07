@@ -193,7 +193,7 @@ export function usePresence(
       .channel('user-presence-changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'user_presence' },
-        (payload) => {
+        (payload: { new?: UserPresence; old?: UserPresence; eventType: string }) => {
           const presence = (payload.new || payload.old) as UserPresence;
           if (presence) {
             setOnlineUsers(prev => {
