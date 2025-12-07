@@ -16,9 +16,10 @@ builds/
 web/
 web
 
-# Large non-essential folders
-CAPS/
-CAPS
+# Large non-essential folders (Note: be careful with case-sensitivity)
+# Exclude top-level CAPS data folder but NOT components/caps/ or services/caps/
+/CAPS/
+/CAPS
 docs/
 docs
 temp/
