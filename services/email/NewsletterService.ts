@@ -5,9 +5,12 @@
  * Extracted from services/EmailTemplateService.ts per WARP.md standards.
  */
 
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import type { Newsletter, EmailSendResponse } from '@/types/email';
 import { getTemplates, renderTemplate, sendEmail } from './EmailTemplateCore';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 /**
  * Recipient data for newsletters
@@ -66,7 +69,7 @@ export const generateNewsletterEmail = async (
 export const saveNewsletter = async (
   newsletter: Omit<Newsletter, 'id'>
 ): Promise<Newsletter | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('newsletters')
     .insert(newsletter)
     .select()
@@ -87,7 +90,7 @@ export const updateNewsletter = async (
   newsletterId: string,
   updates: Partial<Omit<Newsletter, 'id'>>
 ): Promise<Newsletter | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('newsletters')
     .update(updates)
     .eq('id', newsletterId)
@@ -106,7 +109,7 @@ export const updateNewsletter = async (
  * Get newsletters for a preschool
  */
 export const getNewsletters = async (preschoolId: string): Promise<Newsletter[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('newsletters')
     .select('*')
     .eq('preschool_id', preschoolId)
@@ -124,7 +127,7 @@ export const getNewsletters = async (preschoolId: string): Promise<Newsletter[]>
  * Get a single newsletter by ID
  */
 export const getNewsletter = async (newsletterId: string): Promise<Newsletter | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('newsletters')
     .select('*')
     .eq('id', newsletterId)
@@ -148,7 +151,7 @@ const trackNewsletterRecipient = async (
   error?: string
 ): Promise<void> => {
   try {
-    await supabase.from('newsletter_recipients').insert({
+    await getSupabase().from('newsletter_recipients').insert({
       newsletter_id: newsletterId,
       user_id: recipient.user_id,
       email: recipient.email,
@@ -207,7 +210,7 @@ export const sendNewsletter = async (
 
     // Update newsletter stats
     if (newsletter.id) {
-      await supabase
+      await getSupabase()
         .from('newsletters')
         .update({
           status: 'sent',

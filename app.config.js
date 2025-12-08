@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 /**
  * app.config.js - Minimal Dynamic Configuration
  * 
@@ -59,5 +62,13 @@ module.exports = ({ config }) => {
     ...config,
     ...devConfig,
     plugins,
+    extra: {
+      ...config.extra,
+      // Explicitly expose environment variables to the app
+      EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      EXPO_PUBLIC_API_BASE: process.env.EXPO_PUBLIC_API_BASE,
+      DAILY_API_KEY: process.env.DAILY_API_KEY,
+    },
   };
 };

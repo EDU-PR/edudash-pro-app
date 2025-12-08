@@ -20,7 +20,7 @@ const PII_PATTERNS = [
 /**
  * Scrub PII from data before sending to monitoring services
  */
-function scrubPII(data: any): any {
+function scrubPII(data: unknown): unknown {
   if (typeof data === 'string') {
     let scrubbed = data;
     PII_PATTERNS.forEach(pattern => {
@@ -33,9 +33,9 @@ function scrubPII(data: any): any {
     return data.map(scrubPII);
   }
   
-  if (data && typeof data === 'object') {
-    const scrubbed: any = {};
-    Object.keys(data).forEach(key => {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const scrubbed: Record<string, unknown> = {};
+    Object.keys(data as Record<string, unknown>).forEach(key => {
       // Always scrub known sensitive fields
       if (['email', 'phone', 'firstName', 'lastName', 'name', 'studentId', 'parentId'].includes(key)) {
         scrubbed[key] = '[REDACTED]';
@@ -120,7 +120,7 @@ function configurePostHogForAndroid() {
     defaultProperties: {
       platform_testing: flags.android_only_mode ? 'android' : 'multi',
       production_db_dev: flags.production_db_dev_mode,
-      app_version: '1.0.0', // TODO: Get from package.json
+      app_version: require('../package.json').version,
       environment: process.env.EXPO_PUBLIC_ENVIRONMENT || 'development',
     },
   };
@@ -292,9 +292,11 @@ export function trackPerformance(eventName: string, duration: number, context?: 
       return;
     }
 
-    const scrubbed = process.env.EXPO_PUBLIC_PII_SCRUBBING_ENABLED === 'true'
-      ? scrubPII(context)
-      : context;
+    const scrubbed: Record<string, any> = context
+      ? (process.env.EXPO_PUBLIC_PII_SCRUBBING_ENABLED === 'true'
+        ? (scrubPII(context) as Record<string, any> || {})
+        : context)
+      : {};
 
     const Native = (Sentry as any).Native;
     if (Native && typeof Native.addBreadcrumb === 'function') {

@@ -5,12 +5,15 @@
  * Extracted from services/EmailTemplateService.ts per WARP.md standards.
  */
 
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import * as Print from 'expo-print';
 import * as FileSystem from 'expo-file-system';
 import type { ProgressReport, EmailSendResponse } from '@/types/email';
 import { getTemplates, renderTemplate, sendEmail } from './EmailTemplateCore';
 import { generateProgressReportPDFHTML } from './ProgressReportPDFGenerator';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 /**
  * Generate subjects table HTML for email templates
@@ -129,7 +132,7 @@ export const sendProgressReport = async (
 
     // Update report with email tracking info
     if (result.success && report.id) {
-      await supabase
+      await getSupabase()
         .from('progress_reports')
         .update({
           email_sent_at: new Date().toISOString(),
@@ -200,7 +203,7 @@ export const saveProgressReport = async (
 ): Promise<ProgressReport | null> => {
   try {
     // Check if report exists for this student and period
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await getSupabase()
       .from('progress_reports')
       .select('id')
       .eq('student_id', report.student_id)
@@ -214,7 +217,7 @@ export const saveProgressReport = async (
 
     // Update if exists
     if (existing) {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('progress_reports')
         .update({
           ...report,
@@ -233,7 +236,7 @@ export const saveProgressReport = async (
     }
 
     // Insert new report
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('progress_reports')
       .insert(report)
       .select()
@@ -255,7 +258,7 @@ export const saveProgressReport = async (
  * Get progress reports for a student
  */
 export const getProgressReports = async (studentId: string): Promise<ProgressReport[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('progress_reports')
     .select('*')
     .eq('student_id', studentId)
@@ -273,7 +276,7 @@ export const getProgressReports = async (studentId: string): Promise<ProgressRep
  * Get a single progress report by ID
  */
 export const getProgressReport = async (reportId: string): Promise<ProgressReport | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('progress_reports')
     .select('*')
     .eq('id', reportId)

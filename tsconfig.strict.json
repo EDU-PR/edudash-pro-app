@@ -19,6 +19,12 @@
     "lib/debug.ts",
     "lib/perf.ts",
     "lib/global-errors.ts",
+    "lib/routeAfterLogin.ts",
+    "lib/smart-memo.ts",
+    "lib/monitoring.ts",
+    "lib/rbac/**/*",
+    "lib/voice/openaiWhisperProvider.ts",
+    "lib/voice/openaiWhisperStreamingProvider.ts",
     "hooks/**/*"
   ],
   "exclude": [

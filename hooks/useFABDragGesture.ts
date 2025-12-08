@@ -31,31 +31,31 @@ export function useFABDragGesture(initialPosition: FABPosition | Position = 'bot
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5 || Math.abs(g.dy) > 5,
       onPanResponderGrant: () => {
         isDraggingRef.current = false;
-        // @ts-ignore private RN value access is acceptable here
-        pan.setOffset({ x: pan.x._value, y: pan.y._value });
+        // Access private _value property for performance (documented React Native pattern)
+        const animatedX = pan.x as unknown as { _value: number };
+        const animatedY = pan.y as unknown as { _value: number };
+        pan.setOffset({ x: animatedX._value, y: animatedY._value });
       },
       onPanResponderMove: (_, g) => {
         if (Math.abs(g.dx) > 15 || Math.abs(g.dy) > 15) {
           isDraggingRef.current = true;
         }
-        // @ts-ignore
-        const ox = pan.x._offset || 0;
-        // @ts-ignore
-        const oy = pan.y._offset || 0;
+        const animatedX = pan.x as unknown as { _offset?: number; setValue: (v: number) => void };
+        const animatedY = pan.y as unknown as { _offset?: number; setValue: (v: number) => void };
+        const ox = animatedX._offset || 0;
+        const oy = animatedY._offset || 0;
         const targetX = ox + g.dx;
         const targetY = oy + g.dy;
         const clamped = clampPosition(targetX, targetY);
-        // @ts-ignore
-        pan.x.setValue(clamped.x - ox);
-        // @ts-ignore
-        pan.y.setValue(clamped.y - oy);
+        animatedX.setValue(clamped.x - ox);
+        animatedY.setValue(clamped.y - oy);
       },
       onPanResponderRelease: (_, g) => {
         pan.flattenOffset();
-        // @ts-ignore
-        const currentX = pan.x._value || 0;
-        // @ts-ignore
-        const currentY = pan.y._value || 0;
+        const animatedX = pan.x as unknown as { _value?: number };
+        const animatedY = pan.y as unknown as { _value?: number };
+        const currentX = animatedX._value || 0;
+        const currentY = animatedY._value || 0;
         const clamped = clampPosition(currentX, currentY);
         if (clamped.x !== currentX || clamped.y !== currentY) {
           Animated.spring(pan, {

@@ -20,7 +20,6 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   ScrollView,
-  Alert,
   Animated,
   ImageBackground,
   Keyboard,
@@ -28,6 +27,7 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
+import { toast } from '@/components/ui/ToastProvider';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -59,8 +59,8 @@ let EmojiPicker: React.FC<any> | null = null;
 let getStoredWallpaper: (() => Promise<any>) | null = null;
 let VoiceMessageBubble: React.FC<any> | null = null;
 
-try { InlineVoiceRecorder = require('@/components/messaging/InlineVoiceRecorder').InlineVoiceRecorder; } catch {}
-try { VoiceMessageBubble = require('@/components/messaging/VoiceMessageBubble').VoiceMessageBubble; } catch {}
+try { InlineVoiceRecorder = require('@/components/messaging/InlineVoiceRecorder').InlineVoiceRecorder; } catch (e) { console.warn('InlineVoiceRecorder load failed:', e); }
+try { VoiceMessageBubble = require('@/components/messaging/VoiceMessageBubble').VoiceMessageBubble; } catch (e) { console.warn('VoiceMessageBubble load failed:', e); }
 
 // Voice storage service
 let uploadVoiceNote: ((uri: string, duration: number, conversationId?: string) => Promise<{ publicUrl: string; storagePath: string }>) | null = null;
@@ -273,7 +273,7 @@ const MessageBubble: React.FC<{
           <View style={bubbleStyles.voiceRow}>
             <TouchableOpacity 
               style={[bubbleStyles.playBtn, isOwn && bubbleStyles.playBtnOwn]}
-              onPress={() => Alert.alert('Voice Note', 'Voice playback requires audio URL')}
+              onPress={() => toast.info('Voice playback requires audio URL', 'Voice Note')}
             >
               <Ionicons name="play" size={18} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
             </TouchableOpacity>
@@ -457,7 +457,7 @@ export default function TeacherMessageThreadScreen() {
       await sendMessage({ threadId, content, senderId: user.id });
       refetch();
     } catch {
-      Alert.alert('Error', 'Failed to send message');
+      toast.error('Failed to send message');
       setText(content);
     }
   }, [text, threadId, user?.id, sendMessage, refetch]);
@@ -490,7 +490,7 @@ export default function TeacherMessageThreadScreen() {
       refetch();
     } catch (error) {
       console.error('Voice send error:', error);
-      Alert.alert('Error', 'Failed to send voice message');
+      toast.error('Failed to send voice message');
     }
   }, [threadId, user?.id, sendMessage, refetch]);
 
@@ -538,11 +538,11 @@ export default function TeacherMessageThreadScreen() {
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) {
-      Alert.alert('Voice Call', 'Voice calling is not available. Please ensure calls are enabled.');
+      toast.warn('Voice calling is not available. Please ensure calls are enabled.', 'Voice Call');
       return;
     }
     if (!recipientId) {
-      Alert.alert('Voice Call', 'Cannot identify recipient. Please try again later.');
+      toast.warn('Cannot identify recipient. Please try again later.', 'Voice Call');
       return;
     }
     callContext.startVoiceCall(recipientId, recipientName);
@@ -550,11 +550,11 @@ export default function TeacherMessageThreadScreen() {
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) {
-      Alert.alert('Video Call', 'Video calling is not available. Please ensure calls are enabled.');
+      toast.warn('Video calling is not available. Please ensure calls are enabled.', 'Video Call');
       return;
     }
     if (!recipientId) {
-      Alert.alert('Video Call', 'Cannot identify recipient. Please try again later.');
+      toast.warn('Cannot identify recipient. Please try again later.', 'Video Call');
       return;
     }
     callContext.startVideoCall(recipientId, recipientName);
@@ -774,13 +774,13 @@ export default function TeacherMessageThreadScreen() {
                   
                   {/* Camera (hide when typing) */}
                   {!text.trim() && (
-                    <TouchableOpacity style={styles.inlineBtn} onPress={() => Alert.alert('Camera', 'Coming soon')}>
+                    <TouchableOpacity style={styles.inlineBtn} onPress={() => toast.info('Coming soon', 'Camera')}>
                       <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
                     </TouchableOpacity>
                   )}
                   
                   {/* Attachment */}
-                  <TouchableOpacity style={styles.inlineBtn} onPress={() => Alert.alert('Attach', 'Coming soon')}>
+                  <TouchableOpacity style={styles.inlineBtn} onPress={() => toast.info('Coming soon', 'Attach')}>
                     <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
                   </TouchableOpacity>
                 </View>
@@ -808,7 +808,7 @@ export default function TeacherMessageThreadScreen() {
                         onRecordingStart={handleVoiceStart}
                       />
                     ) : (
-                      <TouchableOpacity onPress={() => Alert.alert('Voice', 'Not available')}>
+                      <TouchableOpacity onPress={() => toast.warn('Voice not available')}>
                         <LinearGradient colors={[CYAN_PRIMARY, '#0891b2']} style={styles.micBtnGradient}>
                           <Ionicons name="mic" size={22} color="#fff" />
                         </LinearGradient>
@@ -828,14 +828,14 @@ export default function TeacherMessageThreadScreen() {
           visible={showOptions}
           onClose={() => setShowOptions(false)}
           onChangeWallpaper={() => { setShowOptions(false); setShowWallpaper(true); }}
-          onMuteNotifications={() => { setShowOptions(false); Alert.alert('Muted', 'Notifications muted'); }}
-          onSearchInChat={() => { setShowOptions(false); Alert.alert('Search', 'Coming soon'); }}
-          onClearChat={() => { setShowOptions(false); Alert.alert('Clear', 'Chat cleared'); }}
-          onBlockUser={() => { setShowOptions(false); Alert.alert('Block', 'User blocked'); }}
-          onViewContact={() => { setShowOptions(false); Alert.alert('Contact', displayName); }}
-          onExportChat={() => { setShowOptions(false); Alert.alert('Export', 'Coming soon'); }}
-          onMediaLinksAndDocs={() => { setShowOptions(false); Alert.alert('Media', 'Coming soon'); }}
-          onStarredMessages={() => { setShowOptions(false); Alert.alert('Starred', 'Coming soon'); }}
+          onMuteNotifications={() => { setShowOptions(false); toast.success('Notifications muted'); }}
+          onSearchInChat={() => { setShowOptions(false); toast.info('Coming soon', 'Search'); }}
+          onClearChat={() => { setShowOptions(false); toast.success('Chat cleared'); }}
+          onBlockUser={() => { setShowOptions(false); toast.warn('User blocked'); }}
+          onViewContact={() => { setShowOptions(false); toast.info(displayName, 'Contact'); }}
+          onExportChat={() => { setShowOptions(false); toast.info('Coming soon', 'Export'); }}
+          onMediaLinksAndDocs={() => { setShowOptions(false); toast.info('Coming soon', 'Media'); }}
+          onStarredMessages={() => { setShowOptions(false); toast.info('Coming soon', 'Starred'); }}
           contactName={displayName}
         />
       )}
@@ -851,8 +851,8 @@ export default function TeacherMessageThreadScreen() {
           onReact={(emoji: string) => { setShowActions(false); }}
           onReply={handleReply}
           onCopy={() => setShowActions(false)}
-          onForward={() => { setShowActions(false); Alert.alert('Forward', 'Coming soon'); }}
-          onDelete={() => { setShowActions(false); Alert.alert('Delete', 'Message deleted'); }}
+          onForward={() => { setShowActions(false); toast.info('Coming soon', 'Forward'); }}
+          onDelete={() => { setShowActions(false); toast.success('Message deleted'); }}
         />
       )}
       

@@ -205,6 +205,8 @@ export interface DocumentSpec {
   tone?: string;
   audience?: string;
   brandingHints?: BrandingOptions;
+  studentId?: string;
+  classId?: string;
 }
 
 /**
@@ -213,10 +215,13 @@ export interface DocumentSpec {
 export interface KnowledgeBaseItem {
   id: string;
   title: string;
-  snippet: string;
+  snippet?: string;
+  content?: string;
   uri?: string;
-  type: 'document' | 'image' | 'lesson' | 'student' | 'class' | 'assignment';
-  confidence: number;
+  type: 'document' | 'image' | 'lesson' | 'student' | 'class' | 'assignment' | 'entity';
+  confidence?: number;
+  relevance?: number;
+  source?: string;
   metadata?: Record<string, any>;
 }
 
@@ -724,7 +729,7 @@ class DashPDFGeneratorImpl {
     try {
       const supabase = assertSupabase();
       const session = await getCurrentSession();
-      if (!session?.user?.id) {
+      if (!session?.user_id) {
         console.warn('[DashPDFGenerator] No session for knowledge base search');
         return [];
       }
@@ -826,7 +831,7 @@ class DashPDFGeneratorImpl {
     try {
       const supabase = assertSupabase();
       const session = await getCurrentSession();
-      if (!session?.user?.id) return {};
+      if (!session?.user_id) return {};
 
       const profile = await getCurrentProfile();
       const preschoolId = profile?.preschool_id;
@@ -835,7 +840,7 @@ class DashPDFGeneratorImpl {
       const entities: Record<string, any> = {
         preschool_id: preschoolId,
         generated_at: new Date().toISOString(),
-        generated_by: session.user.id,
+        generated_by: session.user_id,
       };
 
       // Fetch school information
