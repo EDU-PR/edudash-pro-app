@@ -1,0 +1,226 @@
+{
+  "app": {
+    "name": "EduDash",
+    "tagline": "Potencializando a Educação através da IA",
+    "version": "1.0.0"
+  },
+  "navigation": {
+    "dashboard": "Painel",
+    "profile": "Perfil",
+    "settings": "Configurações",
+    "account": "Conta",
+    "logout": "Sair",
+    "back": "Voltar",
+    "next": "Próximo",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "add": "Adicionar",
+    "search": "Pesquisar",
+    "retry": "Tentar Novamente",
+    "close": "Fechar",
+    "switch_account": "Trocar de conta"
+  },
+  "auth": {
+    "signIn": "Entrar",
+    "signUp": "Cadastrar",
+    "signOut": "Sair",
+    "forgotPassword": "Esqueci a Senha",
+    "resetPassword": "Redefinir Senha",
+    "email": "E-mail",
+    "password": "Senha",
+    "confirmPassword": "Confirmar Senha",
+    "firstName": "Nome",
+    "lastName": "Sobrenome",
+    "loading": "Carregando...",
+    "signingIn": "Entrando...",
+    "signingUp": "Criando conta...",
+    "invalidCredentials": "E-mail ou senha inválidos",
+    "accountCreated": "Conta criada com sucesso",
+    "passwordResetSent": "Link de redefinição enviado para seu e-mail",
+    "remember_me": "Lembrar de mim",
+    "dont_have_account": "Não tem uma conta?",
+    "sign_in": {
+      "enter_email_password": "Por favor, insira e-mail e senha",
+      "failed": "Falha no Login",
+      "signing_in": "Entrando...",
+      "cta": "Entrar",
+      "no_saved_credentials": "Nenhuma credencial salva encontrada. Por favor, entre com sua senha."
+    },
+    "biometric": {
+      "prompt": "Entrar no EduDash Pro",
+      "use_face_id": "Usar Face ID",
+      "use_fingerprint": "Usar Impressão Digital",
+      "use_biometric": "Usar Biometria",
+      "enabled_for": "Login biométrico ativado"
+    },
+    "biometric_not_available": {
+      "title": "Biometria Não Disponível",
+      "desc": "Por favor, use sua senha para entrar."
+    },
+    "biometric_failed": {
+      "title": "Autenticação Falhou",
+      "desc": "A autenticação biométrica falhou",
+      "unexpected": "Ocorreu um erro durante a autenticação biométrica"
+    },
+    "oauth": {
+      "failed_start": "Falha ao iniciar login social",
+      "config_error": "Erro de configuração OAuth. Entre em contato com o suporte.",
+      "unavailable": "Login Indisponível",
+      "error": "Erro de Login"
+    },
+    "sign_up_parent": "Cadastrar como Pai/Mãe",
+    "sign_up_teacher": "Cadastrar como Professor(a)",
+    "school_register_q": "Deseja registrar uma escola?"
+  },
+  "ai": {
+    "homework": {
+      "title": "Assistente IA para Lições de Casa",
+      "description": "Obtenha ajuda passo a passo com suas lições de casa",
+      "loading": "Pensando...",
+      "error": "Desculpe, não consegui ajudar com essa pergunta. Tente novamente."
+    },
+    "lessons": {
+      "title": "Gerador IA de Aulas",
+      "description": "Crie aulas envolventes com assistência de IA",
+      "loading": "Criando aula...",
+      "error": "Falha ao gerar a aula. Tente novamente."
+    }
+  },
+  "dashboard": {
+    "loading_profile": "Loading profile...",
+    "no_school_found_redirect": "No school found. Redirecting to onboarding…",
+    "principal_hub_load_error": "Unable to Load Principal Hub",
+    "your_school": "your school",
+    "unlock_premium_subtitle": "Advanced analytics, AI insights & more • Transform your school today!",
+    "capacity_students": "{{current}} / {{capacity}} students",
+    "utilized_percentage": "{{percentage}}% utilized"
+  },
+  "settings": {
+    "title": "Configurações",
+    "profile": "Configurações do Perfil",
+    "notifications": "Notificações",
+    "privacy": "Privacidade",
+    "biometric": {
+      "title": "Autenticação biométrica",
+      "not_available_desc": "A autenticação biométrica não está disponível neste dispositivo. Requer hardware de impressão digital ou reconhecimento facial."
+    },
+    "privacy_security": {
+      "title": "Privacidade e Segurança",
+      "info": "Informações de proteção de dados"
+    },
+    "manage_alerts": "Gerencie seus alertas",
+    "notifications_coming_soon_desc": "As configurações de notificação estarão disponíveis na próxima atualização.",
+    "language": {
+      "title": "Idioma",
+      "comingSoon": "Em Breve",
+      "soon": "Em Breve"
+    },
+    "theme": {
+      "title": "Tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema",
+      "preview": "Prévia do Tema",
+      "primary": "Primário",
+      "secondary": "Secundário",
+      "accent": "Destaque"
+    },
+    "preferences": {
+      "title": "Preferências",
+      "autoTheme": "Tema Automático",
+      "autoThemeDesc": "Alterar tema baseado nas configurações do sistema"
+    },
+    "about": "Sobre",
+    "support": "Suporte",
+    "termsOfService": "Termos de Serviço",
+    "privacyPolicy": "Política de Privacidade"
+  },
+  "teacher": {
+    "performance": {
+      "active": "Active teacher",
+      "no_classes": "No classes assigned - requires attention",
+      "high_ratio": "High student ratio ({{ratio}}:1) - may need support",
+      "excellent": "Excellent performance - {{classes}} classes, {{ratio}}:1 ratio, {{attendance}}% attendance",
+      "strong": "Strong performance - {{classes}} classes, good attendance rates",
+      "good": "Good performance - managing {{students}} students effectively",
+      "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
+    }
+  },
+  "common": {
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso",
+    "warning": "Aviso",
+    "info": "Informação",
+    "email": "Email",
+    "status": "Status",
+    "go_now": "Go now",
+    "not_set": "Não definido",
+    "enabled": "Ativado",
+    "disabled": "Desativado",
+    "not_available": "Indisponível",
+    "coming_soon": "Em breve"
+  },
+  "quick_actions": {
+    "seat_management_subtitle": "Assign or revoke teacher seats"
+  },
+  "account": {
+    "info": {
+      "title": "Informações da Conta",
+      "full_name": "Nome completo",
+      "role": "Função",
+      "school_id": "ID da Escola"
+    },
+    "edit": {
+      "title": "Editar Perfil",
+      "personal_information": "Informações Pessoais"
+    },
+    "placeholders": {
+      "first_name": "Digite seu nome",
+      "last_name": "Digite seu sobrenome"
+    }
+  },
+  "subscription": {
+    "choose_your_plan": "Choose Your Plan"
+  },
+  "curriculum": {
+    "standards": {
+      "placeholder": "{{subject}} - Padrões da {{grade}}ª Série"
+    }
+  }
+  ,
+  "subscription": {
+    "choose_your_plan": "Escolha seu plano",
+    "managePlan": "Gerenciar plano",
+    "tiers": {
+      "free": "Grátis",
+      "starter": "Inicial",
+      "basic": "Básico",
+      "premium": "Premium",
+      "pro": "Pro",
+      "enterprise": "Empresarial"
+    },
+    "tierSource": {
+      "caption": "Origem: {{source}}",
+      "organization": "Plano da organização",
+      "school_plan": "Assinatura da escola",
+      "school_default": "Padrão da escola",
+      "user": "Configuração do usuário",
+      "unknown": "Desconhecido"
+    }
+  },
+  "trends": {
+    "up": "em alta",
+    "down": "em baixa",
+    "stable": "estável",
+    "good": "bom",
+    "excellent": "excelente",
+    "warning": "alerta",
+    "attention": "atenção",
+    "needs_attention": "precisa de atenção",
+    "low": "baixo",
+    "high": "alto"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "title": "WhatsApp Integration",
+  "connected": "Connected",
+  "notConnected": "Not Connected",
+  "checking": "Checking...",
+  "pleaseWait": "Please wait",
+  
+  "connectWhatsApp": "Connect WhatsApp",
+  "openWhatsApp": "Open WhatsApp",
+  "chatWithSchool": "Chat with your school",
+  "getInstantUpdates": "Get instant school updates",
+  "upgradeRequired": "Upgrade to Pro for WhatsApp features",
+  
+  "enterPhoneTitle": "Enter Your Phone Number",
+  "enterPhoneDescription": "We'll connect your WhatsApp account to receive school updates and communicate with teachers directly through WhatsApp.",
+  "phoneNumberLabel": "Phone Number",
+  "phoneHint": "Enter your South African mobile number",
+  
+  "consentTitle": "Permission to Connect",
+  "consentDescription": "By connecting WhatsApp, you agree to receive school communications via WhatsApp. You can disconnect at any time.",
+  "consentText": "I consent to receive school updates via WhatsApp and agree to the",
+  "privacyPolicy": "Privacy Policy",
+  "consentRequired": "Consent Required",
+  "consentRequiredMessage": "Please consent to WhatsApp communications to continue.",
+  
+  "connecting": "Connecting...",
+  "connect": "Connect WhatsApp",
+  "disconnect": "Disconnect",
+  
+  "connectionSuccessTitle": "WhatsApp Connected!",
+  "connectionSuccessDescription": "You're now connected to your school's WhatsApp. You'll receive instant updates and can chat directly with teachers.",
+  
+  "alreadyConnected": "WhatsApp Connected",
+  "connectedPhone": "Connected phone",
+  
+  "sendTestMessage": "Send Test Message",
+  "sendingTest": "Sending...",
+  "testMessageSent": "Test Message Sent",
+  "testMessageSentMessage": "Check your WhatsApp for a welcome message from your school!",
+  "testMessageFailed": "Test Message Failed",
+  "testMessageFailedMessage": "Unable to send test message. Please try again or contact support.",
+  
+  "confirmOptOut": "Disconnect WhatsApp?",
+  "confirmOptOutMessage": "You will no longer receive school updates via WhatsApp. You can reconnect at any time.",
+  "optOut": "Disconnect",
+  
+  "invalidPhone": "Invalid Phone Number",
+  "invalidPhoneMessage": "Please enter a valid South African mobile number (e.g., 081 234 5678).",
+  
+  "optInFailed": "Connection Failed",
+  "optInFailedMessage": "Unable to connect WhatsApp. Please check your phone number and try again.",
+  
+  "openFailed": "Cannot Open WhatsApp",
+  "openFailedMessage": "WhatsApp is not installed or cannot be opened. Please install WhatsApp and try again.",
+  
+  "noSchoolNumber": "School WhatsApp Not Available",
+  "noSchoolNumberMessage": "Your school hasn't set up WhatsApp integration yet. Contact your school for more information.",
+  
+  "messageReceived": "WhatsApp message received",
+  "messageSent": "WhatsApp message sent",
+  
+  "features": {
+    "instantMessages": "Instant Messages",
+    "instantMessagesDesc": "Get school updates delivered instantly to WhatsApp",
+    
+    "directChat": "Direct Teacher Chat",
+    "directChatDesc": "Chat directly with your child's teacher via WhatsApp",
+    
+    "homeworkReminders": "Homework Reminders",
+    "homeworkRemindersDesc": "Never miss homework deadlines with WhatsApp reminders",
+    
+    "voiceMessages": "Voice Messages",
+    "voiceMessagesDesc": "Send voice messages in your preferred language",
+    
+    "mediaSharing": "Photo & Document Sharing",
+    "mediaSharingDesc": "Share homework photos and documents easily",
+    
+    "workOffline": "Works Offline",
+    "workOfflineDesc": "WhatsApp works even with poor internet connection"
+  },
+  
+  "benefits": {
+    "title": "Why Connect WhatsApp?",
+    "familyFriendly": "📱 Use the app your family already knows",
+    "instantDelivery": "⚡ Instant message delivery and read receipts",
+    "worksOffline": "🌍 Works even with poor internet connection",
+    "noAppSwitching": "🔄 No need to switch between apps",
+    "voiceSupport": "🗣️ Send voice messages in your language",
+    "mediaFriendly": "📷 Easy photo and document sharing"
+  },
+  
+  "troubleshooting": {
+    "notReceiving": "Not receiving messages?",
+    "checkConnection": "Check your WhatsApp connection status",
+    "updatePhone": "Update your phone number if it changed",
+    "contactSupport": "Contact school support if issues persist"
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "app": {
+    "name": "EduDash",
+    "tagline": "Go matlafatša thuto ka go šomiša AI",
+    "version": "1.0.0"
+  },
+  "navigation": {
+    "dashboard": "Boto ya taolo",
+    "profile": "Kemedi",
+    "settings": "Dipeakanyo",
+    "account": "Akhaonte",
+    "logout": "Etšwa",
+    "back": "Morago",
+    "next": "Latelago",
+    "cancel": "Khansela",
+    "save": "Boloka",
+    "edit": "Fetola",
+    "delete": "Tlošwa",
+    "add": "Oketša",
+    "search": "Nyaka",
+    "switch_account": "Fetola ak'haonte"
+  },
+  "auth": {
+    "signIn": "Tsena",
+    "signUp": "Ngwadiša",
+    "signOut": "Etšwa",
+    "forgotPassword": "O lebetše lentšu la sephiri",
+    "resetPassword": "Beakanya lentšu la sephiri",
+    "email": "Imeile",
+    "password": "Lentšu la sephiri",
+    "confirmPassword": "Tiišetša lentšu la sephiri",
+    "firstName": "Leina la mathomo",
+    "lastName": "Sefane",
+    "loading": "Go na go laetšwa...",
+    "signingIn": "Go na go tsenwa...",
+    "signingUp": "Go na go hlangwa akhaonte...",
+    "invalidCredentials": "Imeile goba lentšu la sephiri ga se la kgonthe",
+    "accountCreated": "Akhaonte e hlanggilwe ka katlego",
+    "passwordResetSent": "Lomaganyo la go beakanya lentšu la sephiri lo romelilwe go imeile ya gago",
+    "remember_me": "Ngopola",
+    "dont_have_account": "Ga o na akhaonte?",
+    "sign_in": {
+      "enter_email_password": "Ka kgopelo tsenya imeile le lentšu la sephiri",
+      "failed": "Go Tsena Go Paletšwe",
+      "signing_in": "Go na go tsenwa...",
+      "cta": "Tsena",
+      "no_saved_credentials": "Ga go ditshwayotshwayo tšeo di bolokilwego. Ka kgopelo tsena ka lentšu la gago la sephiri."
+    },
+    "biometric": {
+      "prompt": "Tsena go EduDash Pro",
+      "use_face_id": "Šomiša Sefahleho ID",
+      "use_fingerprint": "Šomiša Seswao sa Monwana",
+      "use_biometric": "Šomiša Biometric",
+      "enabled_for": "Go tsena ka biometric go kgontšhitšwe"
+    },
+    "biometric_not_available": {
+      "title": "Biometric Ga e Gona",
+      "desc": "Ka kgopelo šomiša lentšu la gago la sephiri go tsena."
+    },
+    "biometric_failed": {
+      "title": "Tiišetšo e Paletšwe",
+      "desc": "Tiišetšo ya biometric e paletšwe",
+      "unexpected": "Phošo e diregile nakong ya tiišetšo ya biometric"
+    },
+    "oauth": {
+      "failed_start": "Go paletšwe go thoma go tsena ka setšhaba",
+      "config_error": "Phošo ya peakanyo ya OAuth. Ka kgopelo ikgokaganye le thekgo.",
+      "unavailable": "Go Tsena Ga go Gona",
+      "error": "Phošo ya go Tsena"
+    },
+    "sign_up_parent": "Ngwadiša bjalo ka Motswadi",
+    "sign_up_teacher": "Ngwadiša bjalo ka Morutiši",
+    "school_register_q": "O nyaka go ngwadiša sekolo?"
+  },
+  "roles": {
+    "parent": "Motswadi",
+    "teacher": "Morutiši",
+    "principal": "Modulasetulo",
+    "admin": "Mofeniši",
+    "superAdmin": "Mofeniši yo Mogolo"
+  },
+  "dashboard": {
+    "welcome": "Re a go amogela gape, {{name}}!",
+    "quickActions": "Ditiro tša kapelopele",
+    "recentActivity": "Ditiro tša bošego",
+    "statistics": "Dipalopalo",
+    "notifications": "Dikitsišo",
+    "noActivity": "Ga go na ditiro tša bošego",
+    "loading": "Go na go laetšwa boto ya taolo...",
+    "principal_hub": "Lefelo la Modulasetulo",
+    "managing_school": "Go laola {{schoolName}}",
+    "school_overview": "Pono ya Sekolo",
+    "financial_management": "Taolo ya Ditšhelete",
+    "ai_analytics": "AI le Tshekatsheko",
+    "good_morning": "Thobela",
+    "good_afternoon": "Thobela",
+    "good_evening": "Thobela",
+    "loading_profile": "Loading profile...",
+    "no_school_found_redirect": "No school found. Redirecting to onboarding…",
+    "principal_hub_load_error": "Unable to Load Principal Hub",
+    "your_school": "your school",
+    "unlock_premium_subtitle": "Advanced analytics, AI insights & more • Transform your school today!",
+    "capacity_students": "{{current}} / {{capacity}} students",
+    "utilized_percentage": "{{percentage}}% utilized"
+  },
+  "ai": {
+    "homework": {
+      "title": "Mothusi wa AI wa Mešomo ya Gae",
+      "description": "Hwetša thušo ya kgato ka kgato mešomong ya gago ya gae",
+      "askQuestion": "Botšiša potšišo ka mešomo ya gago ya gae",
+      "questionPlaceholder": "Tsenya potšišo ya gago ya mešomo ya gae mo...",
+      "subject": "Thuto",
+      "gradeLevel": "Tekanyetšo ya kreiti",
+      "difficulty": "Tekanyetšo ya bothata",
+      "getHelp": "Hwetša Thušo",
+      "explanation": "Tlhalošo",
+      "stepByStep": "Kgato ka kgato",
+      "hints": "Dikaonafalo",
+      "relatedConcepts": "Ditlhagišo tšeo di amanago",
+      "practiceProblems": "Mathata a koetlišo",
+      "loading": "Go na go naganwa...",
+      "error": "Tshwarelo, ga ke kgonanga go thuša ka potšišo yeo. Ka kgopelo leka gape.",
+      "noQuestion": "Ka kgopelo tsenya potšišo gore o hwetše thušo."
+    },
+    "lessons": {
+      "title": "Mohlami wa Dithuto tša AI",
+      "description": "Hlola dithuto tše di kgahlišago ka thušo ya AI",
+      "topic": "Sehlooho sa thuto",
+      "topicPlaceholder": "Tsenya sehlooho sa motheo sa thuto ya gago",
+      "subject": "Thuto",
+      "gradeLevel": "Tekanyetšo ya kreiti",
+      "duration": "Lebaka (metsotso)",
+      "objectives": "Maikemisetšo a go ithuta",
+      "objectivePlaceholder": "Baithuti ba swanetše go ithuta eng?",
+      "generate": "Tšweletša Thuto",
+      "materials": "Didirišwa tšeo di nyakagago",
+      "activities": "Ditiro",
+      "assessment": "Tekolo",
+      "extensions": "Ditlaleletšo",
+      "loading": "Go na go hlamiwa thuto...",
+      "error": "Go paletšwe go tšweletša thuto. Ka kgopelo leka gape."
+    },
+    "usage": {
+      "title": "Tšhomišo ya AI",
+      "monthly": "Kgwedi ye",
+      "daily": "Lehono",
+      "tokens": "Ditokene tšeo di šomišitšwego",
+      "requests": "Dikgopelo tšeo di dirilwego",
+      "cost": "Tefo",
+      "remaining": "Seo se šetšego",
+      "unlimited": "Ga go na mofako",
+      "upgradeRequired": "Go nyakega kaonafatšo ya tšhomišo e oketšegilego",
+      "rateLimited": "Mofako wa selekanyo o fetišitšwe. Ka kgopelo leka gape ka morago."
+    }
+  },
+  "homework": {
+    "title": "Mešomo ya Gae",
+    "assignments": "Dikabo",
+    "dueDate": "Letšatši la mafelelo",
+    "status": "Boemo",
+    "pending": "E sa le go emetše",
+    "completed": "E feditšwe",
+    "overdue": "E fetile",
+    "submit": "Romela",
+    "viewDetails": "Lebelela dintlha",
+    "noAssignments": "Ga go na mešomo ya gae ye e abelwego"
+  },
+  "lessons": {
+    "title": "Dithuto",
+    "create": "Hlola Thuto",
+    "edit": "Fetola Thuto",
+    "delete": "Tlošwa Thuto",
+    "duplicate": "Pheta",
+    "share": "Abelana",
+    "preview": "Lekola",
+    "publish": "Phatlalatša",
+    "draft": "Kemedi",
+    "published": "E phatlaladitšwe"
+  },
+  "students": {
+    "title": "Baithuti",
+    "addStudent": "Oketša Moithuti",
+    "studentName": "Leina la moithuti",
+    "class": "Phapošing",
+    "grade": "Kreiti",
+    "status": "Boemo",
+    "active": "Ye e šomago",
+    "inactive": "Ga e šome",
+    "viewProfile": "Lebelela kemedi",
+    "editProfile": "Fetola kemedi"
+  },
+  "classes": {
+    "title": "Diphapošing",
+    "addClass": "Oketša Phapošing",
+    "className": "Leina la phapošing",
+    "teacher": "Morutiši",
+    "students": "Baithuti",
+    "schedule": "Lenaneo",
+    "assignments": "Dikabo"
+  },
+  "reports": {
+    "title": "Dipego",
+    "generate": "Tšweletša Pego",
+    "export": "Tšwela kantle",
+    "performance": "Pego ya tshwaro",
+    "attendance": "Pego ya go ba gona",
+    "progress": "Pego ya tšwelopele",
+    "dateRange": "Moo wa letšatši",
+    "from": "Go tloga",
+    "to": "Go ya"
+  },
+  "settings": {
+    "title": "Dipeakanyo",
+    "profile": "Dipeakanyo tša kemedi",
+    "notifications": "Dikitsišo",
+    "privacy": "Sephiri",
+    "biometric": {
+      "title": "Netefatso ka biometric",
+      "not_available_desc": "Netefatso ka biometric ha e fumanehe sesebelisoa sena. E hloka menoana kapa ho tseba sefahleho."
+    },
+    "privacy_security": {
+      "title": "Bophelo ba lekunutu & Tšireletso",
+      "info": "Tlhahisoleseling ea tšireletso ea data"
+    },
+    "manage_alerts": "Laola litsebiso tsa hao",
+    "notifications_coming_soon_desc": "Lisetoa tsa litsebiso li tla fumaneha ntlafatsong e latelang.",
+    "language": {
+      "title": "Polelo",
+      "comingSoon": "E tla fihla",
+      "soon": "Hawe"
+    },
+    "theme": {
+      "title": "Moko",
+      "light": "Lesedi",
+      "dark": "Lefifi",
+      "system": "Tshepetšo",
+      "preview": "Ponelopele ya moko",
+      "primary": "Ya pele",
+      "secondary": "Ya bobedi",
+      "accent": "Mogato"
+    },
+    "preferences": {
+      "title": "Dikgetho",
+      "autoTheme": "Moko wa itiriši",
+      "autoThemeDesc": "Fetola moko go ya ka dipeakanyo tša tshepetšo"
+    },
+    "about": "Ka ga",
+    "support": "Thekgo",
+    "termsOfService": "Dipeelano tša tirelo",
+    "privacyPolicy": "Pholisi ya sephiri"
+  },
+  "notifications": {
+    "title": "Dikitsišo",
+    "markAllRead": "Swaya tšohle bjalo ka tše di balwego",
+    "noNotifications": "Ga go na dikitsišo",
+    "newAssignment": "Kabo e mpsha: {{title}}",
+    "gradePosted": "Kreiti e posetšwe go {{assignment}}",
+    "reminderDue": "Segopotšo: {{title}} e fela gosasa"
+  },
+  "errors": {
+    "generic": "Go bile le phošo. Ka kgopelo leka gape.",
+    "network": "Phošo ya networkeng. Ka kgopelo lekola kgokaganyo ya gago.",
+    "unauthorized": "Ga o na tumelelo ya go fihlelela sehloko se.",
+    "notFound": "Sehloko seo se kgopelwago ga se a hwetšwa.",
+    "validation": "Ka kgopelo lekola tsenyogang ya gago gomme o leke gape.",
+    "serverError": "Phošo ya seva. Ka kgopelo leka gape ka morago."
+  },
+  "success": {
+    "saved": "Diphetogo di bolokilwe ka katlego",
+    "deleted": "Selo se tlošitšwe ka katlego",
+    "created": "Selo se hlangwe ka katlego",
+    "updated": "Selo se mpshafaditšwe ka katlego"
+  },
+  "teacher": {
+    "performance": {
+      "active": "Active teacher",
+      "no_classes": "No classes assigned - requires attention",
+      "high_ratio": "High student ratio ({{ratio}}:1) - may need support",
+      "excellent": "Excellent performance - {{classes}} classes, {{ratio}}:1 ratio, {{attendance}}% attendance",
+      "strong": "Strong performance - {{classes}} classes, good attendance rates",
+      "good": "Good performance - managing {{students}} students effectively",
+      "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
+    }
+  },
+  "common": {
+    "loading": "Go na go laetšwa...",
+    "error": "Phošo",
+    "success": "Katlego",
+    "warning": "Temošo",
+    "info": "Tshedimošo",
+    "ok": "Go lokile",
+    "yes": "Ee",
+    "no": "Aowa",
+    "close": "Tswalela",
+    "submit": "Romela",
+    "confirm": "Tiišetša",
+    "continue": "Tšwela pele",
+    "skip": "Tlola",
+    "done": "Phethagetšwe",
+    "retry": "Leka gape",
+    "refresh": "Mpshafatša",
+    "filter": "Sefa",
+    "sort": "Hlela",
+    "viewMore": "Lebelela go feta",
+    "viewLess": "Lebelela go nyane",
+    "email": "Email",
+    "status": "Status",
+    "go_now": "Go now",
+    "not_set": "Ha e so beoe",
+    "enabled": "E buletsoe",
+    "disabled": "E koetsoe",
+    "not_available": "Ha e fumanehe",
+    "coming_soon": "E tla tla haufinyane"
+  },
+  "quick_actions": {
+    "seat_management_subtitle": "Assign or revoke teacher seats"
+  },
+  "account": {
+    "info": {
+      "title": "Tlhahisoleseling ea Ak'haonte",
+      "full_name": "Lebitso le felletseng",
+      "role": "Karolo",
+      "school_id": "ID ea Sekolo"
+    },
+    "edit": {
+      "title": "Fetola Profaele",
+      "personal_information": "Tlhahisoleseling ea Botho"
+    },
+    "placeholders": {
+      "first_name": "Kenya lebitso la hao",
+      "last_name": "Kenya fane ea hao"
+    }
+  },
+  "subscription": {
+    "choose_your_plan": "Kgetha lenaneo",
+    "managePlan": "Laola leano",
+    "tiers": {
+      "free": "Free",
+      "starter": "Starter",
+      "basic": "Basic",
+      "premium": "Premium",
+      "pro": "Pro",
+      "enterprise": "Enterprise"
+    },
+    "tierSource": {
+      "caption": "Mohlodi: {{source}}",
+      "organization": "Leano la mokgatlo",
+      "school_plan": "Lenaneo la sekolo",
+      "school_default": "Tirelwa ya sekolo",
+      "user": "Peakanyo ya modiriši",
+      "unknown": "Ga e tsebjwe"
+    }
+  },
+  "trends": {
+    "up": "holimo",
+    "down": "tlase",
+    "stable": "tsitsitse",
+    "good": "hantle",
+    "excellent": "hantle haholo",
+    "warning": "temošo",
+    "attention": "tlhokomelo",
+    "needs_attention": "e hloka tlhokomelo",
+    "low": "tlase",
+    "high": "holimo"
+  }
+}

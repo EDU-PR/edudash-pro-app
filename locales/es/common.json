@@ -1,0 +1,365 @@
+{
+  "app": {
+    "name": "EduDash",
+    "tagline": "Potenciando la Educación a través de IA",
+    "version": "1.0.0"
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "profile": "Perfil",
+    "settings": "Configuración",
+    "account": "Cuenta",
+    "logout": "Cerrar Sesión",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "add": "Agregar",
+    "search": "Buscar",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "switch_account": "Cambiar de cuenta"
+  },
+  "auth": {
+    "signIn": "Iniciar Sesión",
+    "signUp": "Registrarse",
+    "signOut": "Cerrar Sesión",
+    "forgotPassword": "Olvidé mi Contraseña",
+    "resetPassword": "Restablecer Contraseña",
+    "email": "Correo Electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar Contraseña",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "loading": "Cargando...",
+    "signingIn": "Iniciando sesión...",
+    "signingUp": "Creando cuenta...",
+    "invalidCredentials": "Correo o contraseña inválidos",
+    "accountCreated": "Cuenta creada exitosamente",
+    "passwordResetSent": "Enlace de restablecimiento enviado a su correo",
+    "remember_me": "Recordarme",
+    "dont_have_account": "¿No tienes una cuenta?",
+    "sign_in": {
+      "enter_email_password": "Por favor ingresa correo y contraseña",
+      "failed": "Inicio de Sesión Fallido",
+      "signing_in": "Iniciando sesión...",
+      "cta": "Iniciar Sesión",
+      "no_saved_credentials": "No se encontraron credenciales guardadas. Por favor inicia sesión con tu contraseña."
+    },
+    "biometric": {
+      "prompt": "Iniciar sesión en EduDash Pro",
+      "use_face_id": "Usar Face ID",
+      "use_fingerprint": "Usar Huella Digital",
+      "use_biometric": "Usar Biometría",
+      "enabled_for": "Inicio de sesión biométrico activado"
+    },
+    "biometric_not_available": {
+      "title": "Biometría No Disponible",
+      "desc": "Por favor usa tu contraseña para iniciar sesión."
+    },
+    "biometric_failed": {
+      "title": "Autenticación Fallida",
+      "desc": "La autenticación biométrica falló",
+      "unexpected": "Ocurrió un error durante la autenticación biométrica"
+    },
+    "oauth": {
+      "failed_start": "No se pudo iniciar el inicio de sesión social",
+      "config_error": "Error de configuración OAuth. Por favor contacta soporte.",
+      "unavailable": "Inicio de Sesión No Disponible",
+      "error": "Error de Inicio de Sesión"
+    },
+    "sign_up_parent": "Registrarse como Padre/Madre",
+    "sign_up_teacher": "Registrarse como Profesor/a",
+    "school_register_q": "¿Buscas registrar una escuela?"
+  },
+  "roles": {
+    "parent": "Padre/Madre",
+    "teacher": "Profesor/a",
+    "principal": "Director/a",
+    "admin": "Administrador/a",
+    "superAdmin": "Super Administrador/a"
+  },
+  "dashboard": {
+    "welcome": "¡Bienvenido/a, {{name}}!",
+    "quickActions": "Acciones Rápidas",
+    "recentActivity": "Actividad Reciente",
+    "statistics": "Estadísticas",
+    "notifications": "Notificaciones",
+    "noActivity": "Sin actividad reciente",
+    "loading": "Cargando panel...",
+    "loading_profile": "Loading profile...",
+    "no_school_found_redirect": "No school found. Redirecting to onboarding…",
+    "principal_hub_load_error": "Unable to Load Principal Hub",
+    "your_school": "your school",
+    "unlock_premium_subtitle": "Advanced analytics, AI insights & more • Transform your school today!",
+    "capacity_students": "{{current}} / {{capacity}} students",
+    "utilized_percentage": "{{percentage}}% utilized"
+  },
+  "ai": {
+    "homework": {
+      "title": "Asistente IA para Tareas",
+      "description": "Obtén ayuda paso a paso con tus tareas",
+      "askQuestion": "Haz una pregunta sobre tu tarea",
+      "questionPlaceholder": "Escribe tu pregunta sobre la tarea aquí...",
+      "subject": "Materia",
+      "gradeLevel": "Nivel de Grado",
+      "difficulty": "Nivel de Dificultad",
+      "getHelp": "Obtener Ayuda",
+      "explanation": "Explicación",
+      "stepByStep": "Paso a Paso",
+      "hints": "Pistas",
+      "relatedConcepts": "Conceptos Relacionados",
+      "practiceProblems": "Problemas de Práctica",
+      "loading": "Pensando...",
+      "error": "Lo siento, no pude ayudar con esa pregunta. Inténtalo de nuevo.",
+      "noQuestion": "Por favor ingresa una pregunta para obtener ayuda."
+    },
+    "lessons": {
+      "title": "Generador IA de Lecciones",
+      "description": "Crea lecciones atractivas con asistencia de IA",
+      "topic": "Tema de la Lección",
+      "topicPlaceholder": "Ingresa el tema principal de tu lección",
+      "subject": "Materia",
+      "gradeLevel": "Nivel de Grado",
+      "duration": "Duración (minutos)",
+      "objectives": "Objetivos de Aprendizaje",
+      "objectivePlaceholder": "¿Qué deben aprender los estudiantes?",
+      "generate": "Generar Lección",
+      "materials": "Materiales Necesarios",
+      "activities": "Actividades",
+      "assessment": "Evaluación",
+      "extensions": "Extensiones",
+      "loading": "Creando lección...",
+      "error": "Error al generar la lección. Inténtalo de nuevo."
+    },
+    "usage": {
+      "title": "Uso de IA",
+      "monthly": "Este Mes",
+      "daily": "Hoy",
+      "tokens": "Tokens Usados",
+      "requests": "Solicitudes Realizadas",
+      "cost": "Costo",
+      "remaining": "Cuota Restante",
+      "unlimited": "Ilimitado",
+      "upgradeRequired": "Actualización requerida para más uso",
+      "rateLimited": "Límite de velocidad excedido. Inténtalo más tarde."
+    }
+  },
+  "homework": {
+    "title": "Tareas",
+    "assignments": "Asignaciones",
+    "dueDate": "Fecha de Vencimiento",
+    "status": "Estado",
+    "pending": "Pendiente",
+    "completed": "Completado",
+    "overdue": "Vencido",
+    "submit": "Entregar",
+    "viewDetails": "Ver Detalles",
+    "noAssignments": "Sin tareas asignadas"
+  },
+  "lessons": {
+    "title": "Lecciones",
+    "create": "Crear Lección",
+    "edit": "Editar Lección",
+    "delete": "Eliminar Lección",
+    "duplicate": "Duplicar",
+    "share": "Compartir",
+    "preview": "Vista Previa",
+    "publish": "Publicar",
+    "draft": "Borrador",
+    "published": "Publicado"
+  },
+  "students": {
+    "title": "Estudiantes",
+    "addStudent": "Agregar Estudiante",
+    "studentName": "Nombre del Estudiante",
+    "class": "Clase",
+    "grade": "Grado",
+    "status": "Estado",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "viewProfile": "Ver Perfil",
+    "editProfile": "Editar Perfil"
+  },
+  "classes": {
+    "title": "Clases",
+    "addClass": "Agregar Clase",
+    "className": "Nombre de la Clase",
+    "teacher": "Profesor/a",
+    "students": "Estudiantes",
+    "schedule": "Horario",
+    "assignments": "Asignaciones"
+  },
+  "reports": {
+    "title": "Reportes",
+    "generate": "Generar Reporte",
+    "export": "Exportar",
+    "performance": "Reporte de Rendimiento",
+    "attendance": "Reporte de Asistencia",
+    "progress": "Reporte de Progreso",
+    "dateRange": "Rango de Fechas",
+    "from": "Desde",
+    "to": "Hasta"
+  },
+  "settings": {
+    "title": "Configuración",
+    "profile": "Configuraciones del Perfil",
+    "notifications": "Notificaciones",
+    "privacy": "Privacidad",
+    "biometric": {
+      "title": "Autenticación biométrica",
+      "not_available_desc": "La autenticación biométrica no está disponible en este dispositivo. Requiere lector de huellas o reconocimiento facial."
+    },
+    "privacy_security": {
+      "title": "Privacidad y Seguridad",
+      "info": "Información sobre protección de datos"
+    },
+    "manage_alerts": "Gestiona tus alertas",
+    "notifications_coming_soon_desc": "La configuración de notificaciones estará disponible en la próxima actualización.",
+    "language": {
+      "title": "Tema",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "system": "Sistema",
+      "preview": "Vista Previa del Tema",
+      "primary": "Primario",
+      "secondary": "Secundario",
+      "accent": "Acento"
+    },
+    "language": {
+      "title": "Idioma",
+      "comingSoon": "Próximamente",
+      "soon": "Pronto"
+    },
+    "preferences": {
+      "title": "Preferencias",
+      "autoTheme": "Tema Automático",
+      "autoThemeDesc": "Cambiar tema según configuración del sistema"
+    },
+    "about": "Acerca de",
+    "support": "Soporte",
+    "termsOfService": "Términos de Servicio",
+    "privacyPolicy": "Política de Privacidad"
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "markAllRead": "Marcar Todo como Leído",
+    "noNotifications": "Sin notificaciones",
+    "newAssignment": "Nueva asignación: {{title}}",
+    "gradePosted": "Calificación publicada para {{assignment}}",
+    "reminderDue": "Recordatorio: {{assignment}} vence mañana"
+  },
+  "errors": {
+    "generic": "Algo salió mal. Inténtalo de nuevo.",
+    "network": "Error de red. Verifica tu conexión.",
+    "unauthorized": "No tienes permisos para acceder a este recurso.",
+    "notFound": "El recurso solicitado no fue encontrado.",
+    "validation": "Verifica tu entrada e inténtalo de nuevo.",
+    "serverError": "Error del servidor. Inténtalo más tarde."
+  },
+  "success": {
+    "saved": "Cambios guardados exitosamente",
+    "deleted": "Elemento eliminado exitosamente",
+    "created": "Elemento creado exitosamente",
+    "updated": "Elemento actualizado exitosamente"
+  },
+  "teacher": {
+    "performance": {
+      "active": "Active teacher",
+      "no_classes": "No classes assigned - requires attention",
+      "high_ratio": "High student ratio ({{ratio}}:1) - may need support",
+      "excellent": "Excellent performance - {{classes}} classes, {{ratio}}:1 ratio, {{attendance}}% attendance",
+      "strong": "Strong performance - {{classes}} classes, good attendance rates",
+      "good": "Good performance - managing {{students}} students effectively",
+      "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
+    }
+  },
+  "common": {
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "warning": "Advertencia",
+    "info": "Información",
+    "confirm": "¿Estás seguro/a?",
+    "yes": "Sí",
+    "no": "No",
+    "ok": "OK",
+    "close": "Cerrar",
+    "retry": "Reintentar",
+    "refresh": "Actualizar",
+    "email": "Email",
+    "status": "Status",
+    "go_now": "Go now",
+    "not_set": "No establecido",
+    "enabled": "Habilitado",
+    "disabled": "Deshabilitado",
+    "not_available": "No disponible",
+    "coming_soon": "Próximamente"
+  },
+  "curriculum": {
+    "standards": {
+      "placeholder": "{{subject}} - Estándares de Grado {{grade}}"
+    }
+  },
+  "quick_actions": {
+    "seat_management_subtitle": "Assign or revoke teacher seats"
+  },
+  "account": {
+    "info": {
+      "title": "Información de la cuenta",
+      "full_name": "Nombre completo",
+      "role": "Rol",
+      "school_id": "ID de la escuela"
+    },
+    "edit": {
+      "title": "Editar perfil",
+      "personal_information": "Información personal"
+    },
+    "placeholders": {
+      "first_name": "Ingresa tu nombre",
+      "last_name": "Ingresa tu apellido"
+    }
+  },
+  "subscription": {
+    "free": "Gratis",
+    "starter": "Inicial",
+    "premium": "Premium", 
+    "enterprise": "Empresarial",
+    "upgrade": "Actualizar Plan",
+    "billing": "Facturación",
+    "usage": "Uso",
+    "limits": "Límites del Plan",
+    "choose_your_plan": "Elige tu plan",
+    "managePlan": "Administrar plan",
+    "tiers": {
+      "free": "Gratis",
+      "starter": "Inicial",
+      "basic": "Básico",
+      "premium": "Premium",
+      "pro": "Pro",
+      "enterprise": "Empresarial"
+    },
+    "tierSource": {
+      "caption": "Fuente: {{source}}",
+      "organization": "Plan de la organización",
+      "school_plan": "Suscripción del colegio",
+      "school_default": "Predeterminado del colegio",
+      "user": "Configuración del usuario",
+      "unknown": "Desconocido"
+    }
+  },
+  "trends": {
+    "up": "al alza",
+    "down": "a la baja",
+    "stable": "estable",
+    "good": "bueno",
+    "excellent": "excelente",
+    "warning": "advertencia",
+    "attention": "atención",
+    "needs_attention": "necesita atención",
+    "low": "bajo",
+    "high": "alto"
+  }
+}

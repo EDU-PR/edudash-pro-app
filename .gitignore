@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.log
+
+# Production builds
+dist/
+builds/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Expo
+.expo/
+.expo-shared/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials (NEVER COMMIT)
+credentials-backup/
+google-services.json
+*.p12
+*.pem
+*.key
+
+# Documentation (in separate repo)
+docs/
+archive/
+artifacts/
+playstore-assets/
+exam-papers-official/
+textbook-downloads/
+CAPS/
+edudashpro-dev/
+*.md
+!README.md
+!supabase/README.md
+
+# Build artifacts
+*.apk
+*.aab
+*.ipa
+
+# Temporary
+tmp/
+temp/
+*.tmp

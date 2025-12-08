@@ -1,0 +1,272 @@
+-- Standard Tenant Isolation Policies
+-- Date: 2025-09-21
+-- Purpose: Create RLS policies for tables with standard tenant columns
+-- Covers: preschool_id, organization_id, school_id columns (44 tables total)
+
+BEGIN;
+
+-- ====================================================================
+-- PART 1: POLICIES FOR TABLES WITH PRESCHOOL_ID COLUMN (34 tables)
+-- ====================================================================
+
+-- Generic function to create standard preschool_id policies
+CREATE OR REPLACE FUNCTION create_preschool_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Create tenant isolation policy for SELECT
+    EXECUTE format('CREATE POLICY "%s_tenant_select"
+                    ON %I FOR SELECT TO authenticated
+                    USING (preschool_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))', table_name, table_name);
+    
+    -- Create tenant isolation policy for INSERT/UPDATE/DELETE
+    EXECUTE format('CREATE POLICY "%s_tenant_modify"
+                    ON %I FOR ALL TO authenticated
+                    USING (preschool_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))
+                    WITH CHECK (preschool_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                        AND role IN (''teacher'', ''admin'', ''principal'')
+                    ))', table_name, table_name);
+                    
+    RAISE NOTICE 'Created policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Apply policies to tables with preschool_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'preschool_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_preschool_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 2: POLICIES FOR TABLES WITH ORGANIZATION_ID COLUMN (5 tables)  
+-- ====================================================================
+
+-- Generic function to create standard organization_id policies
+CREATE OR REPLACE FUNCTION create_organization_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Create tenant isolation policy for SELECT
+    EXECUTE format('CREATE POLICY "%s_org_select"
+                    ON %I FOR SELECT TO authenticated
+                    USING (organization_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))', table_name, table_name);
+    
+    -- Create tenant isolation policy for INSERT/UPDATE/DELETE
+    EXECUTE format('CREATE POLICY "%s_org_modify"
+                    ON %I FOR ALL TO authenticated
+                    USING (organization_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))
+                    WITH CHECK (organization_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                        AND role IN (''teacher'', ''admin'', ''principal'')
+                    ))', table_name, table_name);
+                    
+    RAISE NOTICE 'Created organization policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create organization policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Apply policies to tables with organization_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'organization_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_organization_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 3: POLICIES FOR TABLES WITH SCHOOL_ID COLUMN (5 tables)
+-- ====================================================================
+
+-- Generic function to create standard school_id policies  
+CREATE OR REPLACE FUNCTION create_school_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Create tenant isolation policy for SELECT
+    EXECUTE format('CREATE POLICY "%s_school_select"
+                    ON %I FOR SELECT TO authenticated
+                    USING (school_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))', table_name, table_name);
+    
+    -- Create tenant isolation policy for INSERT/UPDATE/DELETE
+    EXECUTE format('CREATE POLICY "%s_school_modify"
+                    ON %I FOR ALL TO authenticated
+                    USING (school_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                    ))
+                    WITH CHECK (school_id IN (
+                        SELECT organization_id FROM profiles
+                        WHERE id = auth.uid()
+                        AND role IN (''teacher'', ''admin'', ''principal'')
+                    ))', table_name, table_name);
+                    
+    RAISE NOTICE 'Created school policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create school policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Apply policies to tables with school_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'school_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_school_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 4: GRANT PERMISSIONS ON NEWLY SECURED TABLES
+-- ====================================================================
+
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    -- Grant permissions to all tables we just secured
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        old_tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+            AND policyname NOT LIKE '%_tenant_select'
+            AND policyname NOT LIKE '%_tenant_modify'
+            AND policyname NOT LIKE '%_org_select'
+            AND policyname NOT LIKE '%_org_modify'
+            AND policyname NOT LIKE '%_school_select'
+            AND policyname NOT LIKE '%_school_modify'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN old_tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND (
+            EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name IN ('preschool_id', 'organization_id', 'school_id'))
+        )
+        ORDER BY rt.tablename
+    LOOP
+        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', table_record.tablename);
+        RAISE NOTICE 'Granted permissions on table: %', table_record.tablename;
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 5: CLEANUP HELPER FUNCTIONS
+-- ====================================================================
+
+-- Clean up helper functions
+DROP FUNCTION IF EXISTS create_preschool_policies(text);
+DROP FUNCTION IF EXISTS create_organization_policies(text);  
+DROP FUNCTION IF EXISTS create_school_policies(text);
+
+COMMIT;
