@@ -1,0 +1,392 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-09-21",
+    "description": "EduDash Pro Roles and Permissions Matrix - Phase 1 Core Roles",
+    "compatibleWith": "Existing 5-role system (super_admin, principal, teacher, parent, student)"
+  },
+  "roles": {
+    "admin": {
+      "id": "admin",
+      "name": "Administrator",
+      "level": 4,
+      "description": "System administrator with cross-organizational access",
+      "scope": "global",
+      "inheritsFrom": [],
+      "mapToExisting": ["super_admin", "principal_admin"],
+      "permissions": [
+        "manage_users",
+        "manage_courses",
+        "manage_enrollments", 
+        "manage_assignments",
+        "view_courses",
+        "grade_assignments",
+        "view_submissions",
+        "manage_organizations",
+        "manage_billing",
+        "manage_subscriptions",
+        "view_system_logs",
+        "manage_ai_quotas",
+        "access_admin_dashboard",
+        "manage_roles",
+        "view_audit_logs",
+        "manage_ai_tiers"
+      ]
+    },
+    "instructor": {
+      "id": "instructor", 
+      "name": "Instructor",
+      "level": 2,
+      "description": "Teacher with course and student management capabilities",
+      "scope": "organization",
+      "inheritsFrom": [],
+      "mapToExisting": ["teacher", "principal"],
+      "permissions": [
+        "manage_courses",
+        "manage_enrollments",
+        "manage_assignments", 
+        "view_courses",
+        "grade_assignments",
+        "view_submissions",
+        "create_join_codes",
+        "view_course_roster",
+        "communicate_with_students",
+        "view_student_progress",
+        "use_ai_lesson_tools",
+        "use_ai_grading_tools",
+        "access_instructor_dashboard"
+      ]
+    },
+    "student": {
+      "id": "student",
+      "name": "Student", 
+      "level": 1,
+      "description": "Student with course enrollment and assignment submission capabilities",
+      "scope": "self",
+      "inheritsFrom": [],
+      "mapToExisting": ["parent", "student"],
+      "permissions": [
+        "view_courses",
+        "enroll_in_courses",
+        "submit_assignments",
+        "view_own_submissions",
+        "view_own_grades",
+        "communicate_with_instructors", 
+        "access_student_dashboard",
+        "use_ai_homework_helper",
+        "view_own_progress"
+      ]
+    }
+  },
+  "permissions": {
+    "manage_users": {
+      "id": "manage_users",
+      "name": "Manage Users",
+      "category": "user_management",
+      "description": "Create, update, delete user accounts",
+      "resources": ["users", "profiles"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "manage_courses": {
+      "id": "manage_courses", 
+      "name": "Manage Courses",
+      "category": "course_management",
+      "description": "Create, update, delete courses",
+      "resources": ["courses"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "manage_enrollments": {
+      "id": "manage_enrollments",
+      "name": "Manage Enrollments", 
+      "category": "course_management",
+      "description": "Add/remove students from courses",
+      "resources": ["enrollments"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "manage_assignments": {
+      "id": "manage_assignments",
+      "name": "Manage Assignments",
+      "category": "course_management", 
+      "description": "Create, update, delete assignments",
+      "resources": ["assignments"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "view_courses": {
+      "id": "view_courses",
+      "name": "View Courses",
+      "category": "course_access",
+      "description": "View course information and content",
+      "resources": ["courses"],
+      "actions": ["read"]
+    },
+    "enroll_in_courses": {
+      "id": "enroll_in_courses",
+      "name": "Enroll in Courses",
+      "category": "course_access",
+      "description": "Self-enroll in courses using join codes",
+      "resources": ["enrollments"],
+      "actions": ["create"]
+    },
+    "submit_assignments": {
+      "id": "submit_assignments",
+      "name": "Submit Assignments", 
+      "category": "assignments",
+      "description": "Submit work for assignments",
+      "resources": ["submissions"],
+      "actions": ["create", "update"]
+    },
+    "grade_assignments": {
+      "id": "grade_assignments",
+      "name": "Grade Assignments",
+      "category": "assignments",
+      "description": "Grade and provide feedback on submissions", 
+      "resources": ["submissions", "grades"],
+      "actions": ["create", "read", "update"]
+    },
+    "view_submissions": {
+      "id": "view_submissions",
+      "name": "View Submissions",
+      "category": "assignments", 
+      "description": "View student submissions",
+      "resources": ["submissions"],
+      "actions": ["read"]
+    },
+    "view_own_submissions": {
+      "id": "view_own_submissions",
+      "name": "View Own Submissions",
+      "category": "assignments",
+      "description": "View own assignment submissions",
+      "resources": ["submissions"],
+      "actions": ["read"],
+      "scope": "self"
+    },
+    "view_own_grades": {
+      "id": "view_own_grades", 
+      "name": "View Own Grades",
+      "category": "assignments",
+      "description": "View own grades and feedback",
+      "resources": ["grades"],
+      "actions": ["read"],
+      "scope": "self"
+    },
+    "create_join_codes": {
+      "id": "create_join_codes",
+      "name": "Create Join Codes",
+      "category": "course_management",
+      "description": "Generate join codes for course enrollment",
+      "resources": ["join_codes"],
+      "actions": ["create", "read"]
+    },
+    "view_course_roster": {
+      "id": "view_course_roster",
+      "name": "View Course Roster", 
+      "category": "course_management",
+      "description": "View list of enrolled students",
+      "resources": ["enrollments", "users"],
+      "actions": ["read"]
+    },
+    "communicate_with_students": {
+      "id": "communicate_with_students",
+      "name": "Communicate with Students",
+      "category": "communication",
+      "description": "Send messages to enrolled students", 
+      "resources": ["messages"],
+      "actions": ["create", "read"]
+    },
+    "communicate_with_instructors": {
+      "id": "communicate_with_instructors",
+      "name": "Communicate with Instructors",
+      "category": "communication", 
+      "description": "Send messages to course instructors",
+      "resources": ["messages"], 
+      "actions": ["create", "read"]
+    },
+    "view_student_progress": {
+      "id": "view_student_progress",
+      "name": "View Student Progress",
+      "category": "analytics",
+      "description": "View progress and analytics for enrolled students",
+      "resources": ["analytics", "progress"],
+      "actions": ["read"]
+    },
+    "view_own_progress": {
+      "id": "view_own_progress",
+      "name": "View Own Progress", 
+      "category": "analytics",
+      "description": "View own progress and analytics",
+      "resources": ["analytics", "progress"],
+      "actions": ["read"],
+      "scope": "self"
+    },
+    "manage_organizations": {
+      "id": "manage_organizations",
+      "name": "Manage Organizations",
+      "category": "admin",
+      "description": "Create, update, delete organizations",
+      "resources": ["organizations"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "manage_billing": {
+      "id": "manage_billing",
+      "name": "Manage Billing",
+      "category": "admin", 
+      "description": "Manage billing and payment information",
+      "resources": ["billing", "subscriptions"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "manage_subscriptions": {
+      "id": "manage_subscriptions",
+      "name": "Manage Subscriptions",
+      "category": "admin",
+      "description": "Manage subscription plans and features",
+      "resources": ["subscriptions"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "view_system_logs": {
+      "id": "view_system_logs", 
+      "name": "View System Logs",
+      "category": "admin",
+      "description": "View system logs and audit trails",
+      "resources": ["logs", "audit_logs"],
+      "actions": ["read"]
+    },
+    "manage_ai_quotas": {
+      "id": "manage_ai_quotas",
+      "name": "Manage AI Quotas",
+      "category": "ai",
+      "description": "Allocate and manage AI usage quotas", 
+      "resources": ["ai_quotas"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "use_ai_lesson_tools": {
+      "id": "use_ai_lesson_tools",
+      "name": "Use AI Lesson Tools",
+      "category": "ai",
+      "description": "Use AI for lesson planning and content generation",
+      "resources": ["ai_services"],
+      "actions": ["create", "read"]
+    },
+    "use_ai_grading_tools": {
+      "id": "use_ai_grading_tools", 
+      "name": "Use AI Grading Tools",
+      "category": "ai",
+      "description": "Use AI for assignment grading assistance",
+      "resources": ["ai_services"],
+      "actions": ["create", "read"]
+    },
+    "use_ai_homework_helper": {
+      "id": "use_ai_homework_helper",
+      "name": "Use AI Homework Helper",
+      "category": "ai",
+      "description": "Use AI for homework assistance (limited)",
+      "resources": ["ai_services"],
+      "actions": ["create", "read"]
+    },
+    "access_admin_dashboard": {
+      "id": "access_admin_dashboard",
+      "name": "Access Admin Dashboard", 
+      "category": "ui",
+      "description": "Access administrator dashboard and tools",
+      "resources": ["dashboards"],
+      "actions": ["read"]
+    },
+    "access_instructor_dashboard": {
+      "id": "access_instructor_dashboard",
+      "name": "Access Instructor Dashboard",
+      "category": "ui",
+      "description": "Access instructor dashboard and tools", 
+      "resources": ["dashboards"],
+      "actions": ["read"]
+    },
+    "access_student_dashboard": {
+      "id": "access_student_dashboard", 
+      "name": "Access Student Dashboard",
+      "category": "ui",
+      "description": "Access student dashboard and tools",
+      "resources": ["dashboards"],
+      "actions": ["read"]
+    },
+    "manage_roles": {
+      "id": "manage_roles",
+      "name": "Manage Roles",
+      "category": "admin",
+      "description": "Assign and modify user roles",
+      "resources": ["roles", "user_roles"],
+      "actions": ["create", "read", "update", "delete"]
+    },
+    "view_audit_logs": {
+      "id": "view_audit_logs",
+      "name": "View Audit Logs",
+      "category": "admin", 
+      "description": "View security and audit logs",
+      "resources": ["audit_logs"],
+      "actions": ["read"]
+    },
+    "manage_ai_tiers": {
+      "id": "manage_ai_tiers",
+      "name": "Manage AI Tiers",
+      "category": "admin",
+      "description": "Configure AI tier access and restrictions",
+      "resources": ["ai_tiers"],
+      "actions": ["create", "read", "update", "delete"]
+    }
+  },
+  "categories": {
+    "user_management": {
+      "name": "User Management",
+      "description": "Permissions related to managing user accounts"
+    },
+    "course_management": {
+      "name": "Course Management", 
+      "description": "Permissions related to managing courses and enrollment"
+    },
+    "course_access": {
+      "name": "Course Access",
+      "description": "Permissions related to accessing course content"
+    },
+    "assignments": {
+      "name": "Assignments",
+      "description": "Permissions related to assignments and submissions"
+    },
+    "communication": {
+      "name": "Communication",
+      "description": "Permissions related to messaging and communication"
+    },
+    "analytics": {
+      "name": "Analytics",
+      "description": "Permissions related to progress tracking and analytics"
+    },
+    "admin": {
+      "name": "Administration",
+      "description": "System administration permissions"
+    },
+    "ai": {
+      "name": "AI Features",
+      "description": "Permissions related to AI functionality"
+    },
+    "ui": {
+      "name": "User Interface",
+      "description": "Permissions related to dashboard and UI access"
+    }
+  },
+  "hierarchyRules": {
+    "description": "Role hierarchy and inheritance rules",
+    "rules": [
+      {
+        "rule": "level_inheritance",
+        "description": "Higher level roles inherit permissions from lower levels",
+        "implementation": "admin (level 4) > instructor (level 2) > student (level 1)"
+      },
+      {
+        "rule": "scope_restriction", 
+        "description": "Permissions are scoped based on role context",
+        "implementation": "admin: global, instructor: organization, student: self"
+      },
+      {
+        "rule": "resource_filtering",
+        "description": "Access to resources is filtered by role and relationships",
+        "implementation": "instructors see only their courses, students see only enrolled courses"
+      }
+    ]
+  }
+}

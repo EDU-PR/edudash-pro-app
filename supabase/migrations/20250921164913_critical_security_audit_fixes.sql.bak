@@ -1,0 +1,436 @@
+-- Critical Security Audit and Fixes
+-- Date: 2025-09-21
+-- Purpose: Enable RLS and create security policies for ALL core tables
+-- Found: 10 tables without RLS, 129 tables with RLS but no policies
+
+BEGIN;
+
+-- ====================================================================
+-- PART 1: ENABLE RLS ON CRITICAL TABLES WITHOUT IT
+-- ====================================================================
+
+-- Core identity and organization tables - CRITICAL SECURITY ISSUE
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE preschools ENABLE ROW LEVEL SECURITY; 
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE seats ENABLE ROW LEVEL SECURITY; -- seats table doesn't exist, use subscription_seats
+ALTER TABLE student_groups ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY; -- Check if table exists first
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE superadmin_notification_rules ENABLE ROW LEVEL SECURITY;
+
+-- Keep error_logs without RLS for system functionality
+-- ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY; -- Skip this for system operations
+
+-- ====================================================================
+-- PART 2: CRITICAL CORE TABLE POLICIES
+-- ====================================================================
+
+-- PROFILES TABLE POLICIES (CRITICAL)
+CREATE POLICY "Users can view their own profile"
+ON profiles FOR SELECT TO authenticated
+USING (id = auth.uid());
+
+CREATE POLICY "Users can update their own profile"  
+ON profiles FOR UPDATE TO authenticated
+USING (id = auth.uid());
+
+CREATE POLICY "Admins can view profiles in their organization"
+ON profiles FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles admin
+        WHERE admin.id = auth.uid()
+        AND admin.role IN ('admin', 'principal', 'superadmin')
+        AND (admin.organization_id = profiles.organization_id OR admin.role = 'superadmin')
+    )
+);
+
+CREATE POLICY "Service role full access to profiles"
+ON profiles FOR ALL TO service_role
+USING (true);
+
+-- PRESCHOOLS TABLE POLICIES (CRITICAL)
+CREATE POLICY "Users can view their own preschool"
+ON preschools FOR SELECT TO authenticated  
+USING (
+    id IN (
+        SELECT organization_id FROM profiles 
+        WHERE id = auth.uid()
+    )
+);
+
+CREATE POLICY "Admins can manage their preschool"
+ON preschools FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND organization_id = preschools.id
+        AND role IN ('admin', 'principal')
+    )
+);
+
+CREATE POLICY "Service role full access to preschools"
+ON preschools FOR ALL TO service_role  
+USING (true);
+
+-- GROUPS TABLE POLICIES (uses organization_id added in previous migration)
+CREATE POLICY "Organization members can view groups"
+ON groups FOR SELECT TO authenticated
+USING (
+    organization_id IN (
+        SELECT organization_id FROM profiles
+        WHERE id = auth.uid()
+    )
+);
+
+CREATE POLICY "Teachers can manage groups in their organization"
+ON groups FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND organization_id = groups.organization_id
+        AND role IN ('teacher', 'admin', 'principal')
+    )
+);
+
+-- ORGANIZATION_MEMBERS TABLE POLICIES
+CREATE POLICY "Members can view organization members"
+ON organization_members FOR SELECT TO authenticated
+USING (
+    organization_id IN (
+        SELECT organization_id FROM profiles
+        WHERE id = auth.uid()
+    )
+);
+
+CREATE POLICY "Admins can manage organization members"
+ON organization_members FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND organization_id = organization_members.organization_id
+        AND role IN ('admin', 'principal')
+    )
+);
+
+-- SUBSCRIPTION_SEATS TABLE POLICIES (uses preschool_id added in previous migration)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables 
+               WHERE table_schema = 'public' AND table_name = 'subscription_seats') THEN
+        
+        -- Replace existing policy if it exists
+        DROP POLICY IF EXISTS "Users can view subscription seats for their school" ON subscription_seats;
+        
+        CREATE POLICY "Organization members can view subscription seats"
+        ON subscription_seats FOR SELECT TO authenticated
+        USING (
+            preschool_id IN (
+                SELECT organization_id FROM profiles
+                WHERE id = auth.uid()
+            )
+        );
+        
+        CREATE POLICY "Admins can manage subscription seats"
+        ON subscription_seats FOR ALL TO authenticated
+        USING (
+            EXISTS (
+                SELECT 1 FROM profiles
+                WHERE id = auth.uid()
+                AND organization_id = subscription_seats.preschool_id
+                AND role IN ('admin', 'principal')
+            )
+        );
+    END IF;
+END
+$$;
+
+-- STUDENT_GROUPS TABLE POLICIES (via groups organization_id)
+CREATE POLICY "Organization members can view student groups"
+ON student_groups FOR SELECT TO authenticated
+USING (
+    group_id IN (
+        SELECT g.id FROM groups g
+        JOIN profiles p ON p.organization_id = g.organization_id
+        WHERE p.id = auth.uid()
+    )
+);
+
+CREATE POLICY "Teachers can manage student groups"
+ON student_groups FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM groups g
+        JOIN profiles p ON p.id = auth.uid()
+        WHERE g.id = student_groups.group_id
+        AND p.organization_id = g.organization_id
+        AND p.role IN ('teacher', 'admin', 'principal')
+    )
+);
+
+-- USER_PROFILES TABLE POLICIES (if table exists with correct structure)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables 
+               WHERE table_schema = 'public' AND table_name = 'user_profiles') THEN
+        
+        -- Enable RLS first
+        ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+        
+        -- Check if user_id column exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = 'user_profiles' 
+                   AND column_name = 'user_id') THEN
+            
+            CREATE POLICY "Users can view their own user profile"
+            ON user_profiles FOR SELECT TO authenticated
+            USING (user_id = auth.uid());
+            
+            CREATE POLICY "Users can manage their own user profile"
+            ON user_profiles FOR ALL TO authenticated
+            USING (user_id = auth.uid());
+            
+            RAISE NOTICE 'Created RLS policies for user_profiles table';
+        ELSE
+            RAISE NOTICE 'user_profiles table exists but missing user_id column - skipping policies';
+        END IF;
+    ELSE
+        RAISE NOTICE 'user_profiles table does not exist - skipping';
+    END IF;
+END
+$$;
+
+-- ADMIN_USERS TABLE POLICIES  
+CREATE POLICY "Admins can view admin users in organization"
+ON admin_users FOR SELECT TO authenticated
+USING (
+    organization_id IN (
+        SELECT organization_id FROM profiles
+        WHERE id = auth.uid()
+        AND role IN ('admin', 'principal', 'superadmin')
+    )
+);
+
+CREATE POLICY "Superadmins can manage admin users"
+ON admin_users FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND role = 'superadmin'
+    )
+);
+
+-- SUPERADMIN_NOTIFICATION_RULES TABLE POLICIES
+CREATE POLICY "Only superadmins can access notification rules"
+ON superadmin_notification_rules FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+        AND role = 'superadmin'
+    )
+);
+
+-- ====================================================================
+-- PART 3: ESSENTIAL SUPPORTING TABLE POLICIES  
+-- ====================================================================
+
+-- STUDENT_PARENT_RELATIONSHIPS (Critical for parent access)
+CREATE POLICY "Parents can view their relationships"
+ON student_parent_relationships FOR SELECT TO authenticated
+USING (parent_id = auth.uid());
+
+CREATE POLICY "Students can view their parent relationships"  
+ON student_parent_relationships FOR SELECT TO authenticated
+USING (student_id = auth.uid());
+
+CREATE POLICY "Admins can manage parent relationships"
+ON student_parent_relationships FOR ALL TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM profiles p
+        WHERE p.id = auth.uid()
+        AND p.role IN ('admin', 'principal')
+        AND p.organization_id IN (
+            SELECT organization_id FROM profiles
+            WHERE id = student_parent_relationships.student_id
+        )
+    )
+);
+
+-- NOTIFICATIONS (Essential for system communication) - conditional based on structure
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables 
+               WHERE table_schema = 'public' AND table_name = 'notifications') THEN
+        
+        -- Check if recipient_id column exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = 'notifications' 
+                   AND column_name = 'recipient_id') THEN
+            
+            CREATE POLICY "Users can view their notifications"
+            ON notifications FOR SELECT TO authenticated
+            USING (recipient_id = auth.uid());
+            
+            CREATE POLICY "Users can update their notifications"
+            ON notifications FOR UPDATE TO authenticated  
+            USING (recipient_id = auth.uid());
+            
+            CREATE POLICY "System can create notifications"
+            ON notifications FOR INSERT TO authenticated
+            WITH CHECK (true);
+            
+            RAISE NOTICE 'Created RLS policies for notifications table';
+        -- Check if user_id column exists instead
+        ELSIF EXISTS (SELECT 1 FROM information_schema.columns 
+                      WHERE table_schema = 'public' 
+                      AND table_name = 'notifications' 
+                      AND column_name = 'user_id') THEN
+            
+            CREATE POLICY "Users can view their notifications"
+            ON notifications FOR SELECT TO authenticated
+            USING (user_id = auth.uid());
+            
+            CREATE POLICY "Users can update their notifications"
+            ON notifications FOR UPDATE TO authenticated  
+            USING (user_id = auth.uid());
+            
+            CREATE POLICY "System can create notifications"
+            ON notifications FOR INSERT TO authenticated
+            WITH CHECK (true);
+            
+            RAISE NOTICE 'Created RLS policies for notifications table using user_id';
+        ELSE
+            RAISE NOTICE 'notifications table exists but missing recipient_id/user_id column - skipping policies';
+        END IF;
+    ELSE
+        RAISE NOTICE 'notifications table does not exist - skipping';
+    END IF;
+END
+$$;
+
+-- MESSAGES (Essential for communication) - conditional based on structure
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables 
+               WHERE table_schema = 'public' AND table_name = 'messages') THEN
+        
+        -- Check if sender_id column exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = 'messages' 
+                   AND column_name = 'sender_id') THEN
+            
+            -- Check if recipient_id also exists
+            IF EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_schema = 'public' 
+                       AND table_name = 'messages' 
+                       AND column_name = 'recipient_id') THEN
+                
+                CREATE POLICY "Users can view messages they sent or received"
+                ON messages FOR SELECT TO authenticated
+                USING (
+                    sender_id = auth.uid() OR
+                    recipient_id = auth.uid() OR
+                    id IN (
+                        SELECT message_id FROM message_recipients
+                        WHERE recipient_id = auth.uid()
+                    )
+                );
+            ELSE
+                -- Only sender_id exists
+                CREATE POLICY "Users can view messages they sent"
+                ON messages FOR SELECT TO authenticated
+                USING (sender_id = auth.uid());
+            END IF;
+            
+            CREATE POLICY "Users can send messages"
+            ON messages FOR INSERT TO authenticated
+            WITH CHECK (sender_id = auth.uid());
+            
+            RAISE NOTICE 'Created RLS policies for messages table';
+        ELSE
+            RAISE NOTICE 'messages table exists but missing sender_id column - skipping policies';
+        END IF;
+    ELSE
+        RAISE NOTICE 'messages table does not exist - skipping';
+    END IF;
+END
+$$;
+
+-- EVENTS (Essential for school events) - conditional based on structure
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables 
+               WHERE table_schema = 'public' AND table_name = 'events') THEN
+        
+        -- Check if organization_id column exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = 'events' 
+                   AND column_name = 'organization_id') THEN
+            
+            CREATE POLICY "Organization members can view events"
+            ON events FOR SELECT TO authenticated
+            USING (
+                organization_id IN (
+                    SELECT organization_id FROM profiles
+                    WHERE id = auth.uid()
+                )
+            );
+            
+            CREATE POLICY "Teachers and admins can manage events"
+            ON events FOR ALL TO authenticated
+            USING (
+                EXISTS (
+                    SELECT 1 FROM profiles
+                    WHERE id = auth.uid()
+                    AND organization_id = events.organization_id
+                    AND role IN ('teacher', 'admin', 'principal')
+                )
+            );
+            
+            RAISE NOTICE 'Created RLS policies for events table';
+        ELSE
+            RAISE NOTICE 'events table exists but missing organization_id column - skipping policies';
+        END IF;
+    ELSE
+        RAISE NOTICE 'events table does not exist - skipping';
+    END IF;
+END
+$$;
+
+-- ====================================================================
+-- PART 4: GRANT NECESSARY PERMISSIONS
+-- ====================================================================
+
+-- Grant permissions for core tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON preschools TO authenticated; 
+GRANT SELECT, INSERT, UPDATE, DELETE ON groups TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON organization_members TO authenticated;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON seats TO authenticated; -- seats table doesn't exist
+GRANT SELECT, INSERT, UPDATE, DELETE ON student_groups TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON admin_users TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON superadmin_notification_rules TO authenticated;
+
+-- Grant permissions for supporting tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON student_parent_relationships TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON notifications TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON events TO authenticated;
+
+-- Grant usage on sequences
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+COMMIT;
