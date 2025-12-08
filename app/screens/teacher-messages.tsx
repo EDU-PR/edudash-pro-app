@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { assertSupabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { ScreenHeader } from '@/components/ui/ScreenHeader'
 import { useLocalSearchParams } from 'expo-router'
+import { toast } from '@/components/ui/ToastProvider'
 
 export default function TeacherMessagesScreen() {
   const { profile, permissions } = useAuth()
@@ -63,9 +64,9 @@ export default function TeacherMessagesScreen() {
   })
 
   const onSend = async () => {
-    if (!isConnectedToSchool) { Alert.alert('Not connected', 'Your account is not linked to a school.'); return }
-    if (!classId) { Alert.alert('Select class', 'Please select a class.'); return }
-    if (!message.trim()) { Alert.alert('Enter message', 'Please write a message.'); return }
+    if (!isConnectedToSchool) { toast.warn('Your account is not linked to a school.', 'Not Connected'); return }
+    if (!classId) { toast.warn('Please select a class.', 'Select Class'); return }
+    if (!message.trim()) { toast.warn('Please write a message.', 'Enter Message'); return }
 
     setSending(true)
     try {
@@ -89,10 +90,10 @@ export default function TeacherMessagesScreen() {
       if (error) throw error
       
       track('edudash.messages.sent', { classId, subject, length: message.length })
-      Alert.alert('Message sent', 'Parents will receive this in their app or email (where configured).')
+      toast.success('Parents will receive this in their app or email (where configured).', 'Message Sent')
       setMessage('')
     } catch (e: any) {
-      Alert.alert('Failed', e?.message || 'Could not send message.')
+      toast.error(e?.message || 'Could not send message.', 'Failed')
     } finally {
       setSending(false)
     }

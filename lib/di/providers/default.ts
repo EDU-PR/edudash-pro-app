@@ -32,48 +32,86 @@ class FeatureFlagServiceImpl implements FeatureFlagService {
 import { StorageAdapter } from '../adapters/storage';
 import { AuthAdapter } from '../adapters/auth';
 import { AIProxyAdapter } from '../adapters/ai';
-import { EventBusService } from '../../../services/EventBus';
-import { MemoryServiceClass } from '../../../services/MemoryService';
-import { LessonsService } from '../../../services/LessonsService';
-import { SMSService } from '../../../services/SMSService';
-import { GoogleCalendarService } from '../../../services/GoogleCalendarService';
-import { DashTaskAutomation } from '../../../services/DashTaskAutomation';
-import { DashDecisionEngine } from '../../../services/DashDecisionEngine';
-import { DashNavigationHandler } from '../../../services/DashNavigationHandler';
-import { DashWebSearchService } from '../../../services/DashWebSearchService';
-import { SemanticMemoryEngine } from '../../../services/SemanticMemoryEngine';
-import { DashProactiveEngine } from '../../../services/DashProactiveEngine';
-import { DashDiagnosticEngine } from '../../../services/DashDiagnosticEngine';
-import { DashAIAssistant } from '../../../services/dash-ai/DashAICompat';
-import { DashWhatsAppIntegration } from '../../../services/DashWhatsAppIntegration';
-import { DashContextAnalyzer } from '../../../services/DashContextAnalyzer';
-import { DashRealTimeAwareness } from '../../../services/DashRealTimeAwareness';
-import { DashAgenticEngine } from '../../../services/DashAgenticEngine';
-import { AgentOrchestratorClass } from '../../../services/AgentOrchestrator';
 
+// Use lazy imports to break circular dependencies
+// Services will only be imported when actually resolved
 container
   .registerFactory(TOKENS.organization, () => new OrganizationServiceImpl(), { singleton: true })
   .registerFactory(TOKENS.features, () => new FeatureFlagServiceImpl(), { singleton: true })
   .registerFactory(TOKENS.storage, () => new StorageAdapter(), { singleton: true })
   .registerFactory(TOKENS.auth, () => new AuthAdapter(), { singleton: true })
   .registerFactory(TOKENS.ai, () => new AIProxyAdapter(), { singleton: true })
-  .registerFactory(TOKENS.eventBus, () => new EventBusService(), { singleton: true })
-  .registerFactory(TOKENS.memory, () => new MemoryServiceClass(), { singleton: true })
-  .registerFactory(TOKENS.lessons, () => new LessonsService(), { singleton: true })
-  .registerFactory(TOKENS.sms, () => new SMSService(), { singleton: true })
-  .registerFactory(TOKENS.googleCalendar, () => new GoogleCalendarService(), { singleton: true })
-  .registerFactory(TOKENS.dashTaskAutomation, () => new DashTaskAutomation(), { singleton: true })
-  .registerFactory(TOKENS.dashDecisionEngine, () => new DashDecisionEngine(), { singleton: true })
-  .registerFactory(TOKENS.dashNavigation, () => new DashNavigationHandler(), { singleton: true })
-  .registerFactory(TOKENS.dashWebSearch, () => new DashWebSearchService(), { singleton: true })
-  .registerFactory(TOKENS.semanticMemory, () => new SemanticMemoryEngine(), { singleton: true })
-  .registerFactory(TOKENS.dashProactive, () => new DashProactiveEngine(), { singleton: true })
-  .registerFactory(TOKENS.dashDiagnostic, () => new DashDiagnosticEngine(), { singleton: true })
-  .registerFactory(TOKENS.dashAI, () => DashAIAssistant.getInstance() as any, { singleton: true })
-  .registerFactory(TOKENS.dashWhatsApp, () => new DashWhatsAppIntegration(), { singleton: true })
-  .registerFactory(TOKENS.dashContextAnalyzer, () => new DashContextAnalyzer(), { singleton: true })
-  .registerFactory(TOKENS.dashRealTimeAwareness, () => new DashRealTimeAwareness(), { singleton: true })
-  .registerFactory(TOKENS.dashAgenticEngine, () => new DashAgenticEngine(), { singleton: true })
-  .registerFactory(TOKENS.agentOrchestrator, () => new AgentOrchestratorClass(), { singleton: true });
+  .registerFactory(TOKENS.eventBus, async () => {
+    const { EventBusService } = await import('../../../services/EventBus');
+    return new EventBusService();
+  }, { singleton: true })
+  .registerFactory(TOKENS.memory, async () => {
+    const { MemoryServiceClass } = await import('../../../services/MemoryService');
+    return new MemoryServiceClass();
+  }, { singleton: true })
+  .registerFactory(TOKENS.lessons, async () => {
+    const { LessonsService } = await import('../../../services/LessonsService');
+    return new LessonsService();
+  }, { singleton: true })
+  .registerFactory(TOKENS.sms, async () => {
+    const { SMSService } = await import('../../../services/SMSService');
+    return new SMSService();
+  }, { singleton: true })
+  .registerFactory(TOKENS.googleCalendar, async () => {
+    const { GoogleCalendarService } = await import('../../../services/GoogleCalendarService');
+    return new GoogleCalendarService();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashTaskAutomation, async () => {
+    const { DashTaskAutomation } = await import('../../../services/DashTaskAutomation');
+    return new DashTaskAutomation();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashDecisionEngine, async () => {
+    const { DashDecisionEngine } = await import('../../../services/DashDecisionEngine');
+    return new DashDecisionEngine();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashNavigation, async () => {
+    const { DashNavigationHandler } = await import('../../../services/DashNavigationHandler');
+    return new DashNavigationHandler();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashWebSearch, async () => {
+    const { DashWebSearchService } = await import('../../../services/DashWebSearchService');
+    return new DashWebSearchService();
+  }, { singleton: true })
+  .registerFactory(TOKENS.semanticMemory, async () => {
+    const { SemanticMemoryEngine } = await import('../../../services/SemanticMemoryEngine');
+    return new SemanticMemoryEngine();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashProactive, async () => {
+    const { DashProactiveEngine } = await import('../../../services/DashProactiveEngine');
+    return new DashProactiveEngine();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashDiagnostic, async () => {
+    const { DashDiagnosticEngine } = await import('../../../services/DashDiagnosticEngine');
+    return new DashDiagnosticEngine();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashAI, async () => {
+    const { DashAIAssistant } = await import('../../../services/dash-ai/DashAICompat');
+    return DashAIAssistant.getInstance() as any;
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashWhatsApp, async () => {
+    const { DashWhatsAppIntegration } = await import('../../../services/DashWhatsAppIntegration');
+    return new DashWhatsAppIntegration();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashContextAnalyzer, async () => {
+    const { DashContextAnalyzer } = await import('../../../services/DashContextAnalyzer');
+    return new DashContextAnalyzer();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashRealTimeAwareness, async () => {
+    const { DashRealTimeAwareness } = await import('../../../services/DashRealTimeAwareness');
+    return new DashRealTimeAwareness();
+  }, { singleton: true })
+  .registerFactory(TOKENS.dashAgenticEngine, async () => {
+    const { DashAgenticEngine } = await import('../../../services/DashAgenticEngine');
+    return new DashAgenticEngine();
+  }, { singleton: true })
+  .registerFactory(TOKENS.agentOrchestrator, async () => {
+    const { AgentOrchestratorClass } = await import('../../../services/AgentOrchestrator');
+    return new AgentOrchestratorClass();
+  }, { singleton: true });
 
 export { container, TOKENS };

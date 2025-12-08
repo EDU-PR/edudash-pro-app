@@ -10,7 +10,6 @@ if (__DEV__) {
     'shadow* style props are deprecated',
     'textShadow* style props are deprecated',
     'props.pointerEvents is deprecated',
-    '[expo-av]: Expo AV has been deprecated',
     'Require cycle:', // Suppress circular dependency warnings in dev
   ]);
 }

@@ -17,7 +17,10 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 interface LiveLesson {
   id: string;
@@ -58,7 +61,7 @@ export function JoinLiveLesson({
 
     try {
       // Clean up expired calls
-      await supabase
+      await getSupabase()
         .from('video_calls')
         .update({ status: 'ended', actual_end: now })
         .eq('preschool_id', preschoolId)
@@ -66,7 +69,7 @@ export function JoinLiveLesson({
         .lt('scheduled_end', now);
 
       // Fetch live lessons
-      let query = supabase
+      let query = getSupabase()
         .from('video_calls')
         .select(`
           id,
@@ -107,7 +110,7 @@ export function JoinLiveLesson({
     fetchLiveLessons(false);
 
     // Set up realtime subscription
-    const channel = supabase
+    const channel = getSupabase()
       .channel(`live-lessons-${preschoolId}`)
       .on(
         'postgres_changes',
@@ -135,7 +138,7 @@ export function JoinLiveLesson({
     const pollInterval = setInterval(() => fetchLiveLessons(false), 10000);
 
     return () => {
-      supabase.removeChannel(channel);
+      getSupabase().removeChannel(channel);
       clearInterval(pollInterval);
     };
   }, [preschoolId, fetchLiveLessons]);

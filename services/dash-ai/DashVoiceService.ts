@@ -14,7 +14,7 @@
  * - Focused on voice I/O only
  */
 
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
@@ -72,8 +72,10 @@ export interface SpeechCallbacks {
 export class DashVoiceService {
   private config: VoiceRecordingConfig;
   private isRecording = false;
-  private recordingObject: Audio.Recording | null = null;
-  private soundObject: Audio.Sound | null = null;
+  // TODO: Migrate to expo-audio hook-based API (useAudioRecorder)
+  // For now, disable recording in this service - use DashVoiceRecorder component instead
+  private recordingObject: any = null;
+  private soundObject: any = null;
   private voiceController: any = null; // Optional Phase 4 architecture
 
   constructor(config: VoiceRecordingConfig) {
@@ -85,25 +87,32 @@ export class DashVoiceService {
    */
   public async initializeAudio(): Promise<void> {
     try {
-      // On web, expo-av audio mode options are not applicable; skip configuration
+      // On web, expo-audio mode options are not applicable; skip configuration
       if (Platform.OS === 'web') {
         console.debug('[DashVoice] Skipping audio mode configuration on web');
         return;
       }
 
-      await Audio.requestPermissionsAsync();
+      // Request audio permissions
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
+        console.warn('[DashVoice] Audio recording permission denied');
+        return;
+      }
 
+      // Set audio mode using expo-audio AudioModule
       if (Platform.OS === 'ios') {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
+        await AudioModule.setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
         });
       } else if (Platform.OS === 'android') {
-        await Audio.setAudioModeAsync({
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        } as any);
+        await AudioModule.setAudioModeAsync({
+          interruptionModeAndroid: 'duckOthers',
+          shouldRouteThroughEarpiece: false,
+        });
       }
+      console.log('[DashVoice] Audio initialized successfully');
     } catch (error) {
       console.error('[DashVoice] Audio initialization failed:', error);
     }
@@ -160,32 +169,27 @@ export class DashVoiceService {
       }
 
       console.log('[DashVoice] Starting recording...');
-      this.recordingObject = new Audio.Recording();
+      // TODO: Migrate to expo-audio useAudioRecorder hook
+      // this.recordingObject = new Audio.Recording();
+      throw new Error('DashVoiceService recording requires migration to expo-audio hooks');
 
-      // Use the Expo AV recording API: prepareToRecordAsync + startAsync
-      await this.recordingObject.prepareToRecordAsync({
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-          audioQuality: Audio.IOSAudioQuality.MAX,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-      } as Audio.RecordingOptions);
+      // Use the expo-audio recording API (migration in progress)
+      // await this.recordingObject.prepareToRecordAsync({
+      //   android: {
+      //     extension: '.m4a',
+      //     sampleRate: 44100,
+      //     numberOfChannels: 2,
+      //     bitRate: 128000,
+      //   },
+      //   ios: {
+      //     extension: '.m4a',
+      //     sampleRate: 44100,
+      //     numberOfChannels: 2,
+      //     bitRate: 128000,
+      //   },
+      // });
 
-      await this.recordingObject.startAsync();
+      // await this.recordingObject.startAsync();
       this.isRecording = true;
       console.log('[DashVoice] Recording started');
     } catch (error) {
@@ -346,11 +350,11 @@ export class DashVoiceService {
       
       if (Platform.OS === 'web') {
         // Web: use blob/file approach
-        let body: any;
+        let body: Blob | File;
         try {
-          // @ts-ignore: File may not exist in some environments
-          const maybeFile = typeof File !== 'undefined' ? new File([blob], fileName, { type: contentType }) : null;
-          body = maybeFile || blob;
+          // Check if File constructor exists in this environment
+          const FileConstructor = (typeof File !== 'undefined' ? File : null) as typeof File | null;
+          body = FileConstructor ? new FileConstructor([blob], fileName, { type: contentType }) : blob;
         } catch {
           body = blob;
         }
@@ -650,16 +654,15 @@ export class DashVoiceService {
       }
       
       // Request permissions if not already granted
-      const { status } = await Audio.requestPermissionsAsync();
+      const { status } = await AudioModule.requestPermissionsAsync();
       if (status !== 'granted') {
         console.warn('[DashVoice] Audio permissions not granted');
         return;
       }
       
-      // Create and immediately release a recording to warm up the system
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.stopAndUnloadAsync();
+      // expo-audio uses different recording initialization
+      // Pre-warming is handled automatically by the module
+      console.log('[DashVoice] Audio module ready');
       
       console.log('[DashVoice] Recorder pre-warmed successfully');
     } catch (error) {

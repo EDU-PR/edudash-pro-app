@@ -3,6 +3,8 @@
  * 
  * WhatsApp-style voice note player with animated waveform visualization,
  * playback controls, and seek functionality for React Native.
+ * 
+ * Migrated to expo-audio hook-based API (expo-audio ~0.4.9+)
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,8 +16,9 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -78,97 +81,74 @@ export const VoiceNotePlayer: React.FC<VoiceNotePlayerProps> = ({
   onError,
   theme = defaultTheme,
 }) => {
-  // Playback state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(duration || 0);
-  const [progress, setProgress] = useState(0);
+  // Use expo-audio hooks
+  const player = useAudioPlayer(url);
+  const status = useAudioPlayerStatus(player);
+  
+  // Local state
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  const [previouslyPlaying, setPreviouslyPlaying] = useState(false);
   
   // Refs
-  const soundRef = useRef<Audio.Sound | null>(null);
   const waveformBars = useRef<number[]>(generateWaveformBars(WAVEFORM_BAR_COUNT)).current;
   
   // Animation values
   const playButtonScale = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Load audio on mount
+  // Configure audio mode on mount
   useEffect(() => {
-    let isMounted = true;
-
-    const loadAudio = async () => {
+    const configureAudio = async () => {
       try {
-        // Configure audio mode for playback
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-
-        // Create and load sound
-        const { sound, status } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: false },
-          onPlaybackStatusUpdate
-        );
-
-        if (!isMounted) {
-          sound.unloadAsync();
-          return;
-        }
-
-        soundRef.current = sound;
-        
-        if (status.isLoaded) {
-          setTotalDuration(status.durationMillis || duration || 0);
-          setIsLoading(false);
+        if (Platform.OS !== 'web') {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            interruptionMode: 'duckOthers',
+            interruptionModeAndroid: 'duckOthers',
+          });
         }
       } catch (error) {
-        console.error('[VoiceNotePlayer] Failed to load audio:', error);
-        if (isMounted) {
-          setIsLoading(false);
-          onError?.(error as Error);
-        }
+        console.warn('[VoiceNotePlayer] Failed to configure audio mode:', error);
       }
     };
+    configureAudio();
+  }, []);
 
-    loadAudio();
+  // Computed values from status
+  const isLoading = !status.isLoaded;
+  const isPlaying = status.playing;
+  const currentPosition = (status.currentTime || 0) * 1000; // Convert to ms
+  const totalDuration = (status.duration || (duration ? duration / 1000 : 0)) * 1000; // Convert to ms
+  const progress = totalDuration > 0 ? currentPosition / totalDuration : 0;
+  const didJustFinish = status.didJustFinish;
 
-    return () => {
-      isMounted = false;
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
+  // Update progress animation
+  useEffect(() => {
+    progressAnim.setValue(progress);
+  }, [progress, progressAnim]);
+
+  // Handle playback callbacks
+  useEffect(() => {
+    if (isPlaying && !previouslyPlaying) {
+      if (!hasStartedPlaying) {
+        setHasStartedPlaying(true);
+        onPlaybackStart?.();
       }
-    };
-  }, [url, duration, onError]);
-
-  // Playback status update handler
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-
-    setCurrentPosition(status.positionMillis);
-    
-    if (status.durationMillis) {
-      const newProgress = status.positionMillis / status.durationMillis;
-      setProgress(newProgress);
-      progressAnim.setValue(newProgress);
     }
+    setPreviouslyPlaying(isPlaying);
+  }, [isPlaying, previouslyPlaying, hasStartedPlaying, onPlaybackStart]);
 
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-      setCurrentPosition(0);
-      setProgress(0);
-      progressAnim.setValue(0);
+  // Handle playback end
+  useEffect(() => {
+    if (didJustFinish) {
+      setHasStartedPlaying(false);
       onPlaybackEnd?.();
     }
-  }, [onPlaybackEnd, progressAnim]);
+  }, [didJustFinish, onPlaybackEnd]);
 
   // Toggle playback
   const togglePlayback = useCallback(async () => {
-    if (!soundRef.current || isLoading) return;
+    if (isLoading) return;
 
     // Button press animation
     Animated.sequence([
@@ -187,39 +167,33 @@ export const VoiceNotePlayer: React.FC<VoiceNotePlayerProps> = ({
 
     try {
       if (isPlaying) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
+        player.pause();
       } else {
         // Reset to beginning if finished
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded && status.positionMillis === status.durationMillis) {
-          await soundRef.current.setPositionAsync(0);
+        if (didJustFinish || (status.currentTime !== undefined && status.duration !== undefined && 
+            Math.abs(status.currentTime - status.duration) < 0.1)) {
+          await player.seekTo(0);
         }
-        
-        await soundRef.current.playAsync();
-        setIsPlaying(true);
-        onPlaybackStart?.();
+        player.play();
       }
     } catch (error) {
       console.error('[VoiceNotePlayer] Playback error:', error);
       onError?.(error as Error);
     }
-  }, [isPlaying, isLoading, onPlaybackStart, onError, playButtonScale]);
+  }, [isPlaying, isLoading, player, didJustFinish, status.currentTime, status.duration, onError, playButtonScale]);
 
   // Seek to position
   const seekToPosition = useCallback(async (percentage: number) => {
-    if (!soundRef.current || isLoading) return;
+    if (isLoading || totalDuration <= 0) return;
 
     try {
-      const position = Math.floor(percentage * totalDuration);
-      await soundRef.current.setPositionAsync(position);
-      setCurrentPosition(position);
-      setProgress(percentage);
+      const positionSeconds = (percentage * totalDuration) / 1000;
+      await player.seekTo(positionSeconds);
       progressAnim.setValue(percentage);
     } catch (error) {
       console.error('[VoiceNotePlayer] Seek error:', error);
     }
-  }, [totalDuration, isLoading, progressAnim]);
+  }, [totalDuration, isLoading, player, progressAnim]);
 
   // Pan responder for waveform seeking
   const waveformWidth = useRef(0);

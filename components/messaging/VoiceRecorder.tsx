@@ -24,7 +24,13 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { 
+  useAudioPlayer, 
+  useAudioRecorder, 
+  setAudioModeAsync, 
+  requestRecordingPermissionsAsync,
+  RecordingPresets,
+} from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -84,8 +90,46 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
   
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const previewSoundRef = useRef<Audio.Sound | null>(null);
+  // Hook-based audio recorder
+  const audioRecorder = useAudioRecorder(
+    { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true }
+  );
+  
+  // Manual metering polling when recording (avoid useAudioRecorderState lifecycle issues)
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    const meteringInterval = setInterval(() => {
+      try {
+        const status = audioRecorder.getStatus();
+        if (status.isRecording && status.metering !== undefined) {
+          const normalized = Math.max(0, Math.min(1, (status.metering + 60) / 60));
+          const value = 0.15 + normalized * 0.7 + Math.random() * 0.1;
+          setWaveformData(prev => {
+            const newData = [...prev.slice(1), value];
+            newData.forEach((val, idx) => {
+              Animated.timing(waveformAnims[idx], {
+                toValue: val, duration: 50, useNativeDriver: false,
+              }).start();
+            });
+            return newData;
+          });
+        }
+      } catch (e) {
+        // Recorder may not be ready yet
+      }
+    }, 100);
+    
+    return () => clearInterval(meteringInterval);
+  }, [isRecording, audioRecorder, waveformAnims]);
+  
+  // Audio player for preview playback
+  const previewPlayer = useAudioPlayer(previewUri || undefined);
+  
+  // Note: recordingRef is no longer needed with hook-based API
+  // const recordingRef = useRef<Audio.Recording | null>(null);
+  const previewSoundRef = useRef<any>(null); // Managed by useAudioPlayer hook
+  const isRecordingActiveRef = useRef(false);
   const recordingStartTime = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,36 +169,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
   }, [isRecording, pulseAnim]);
 
-  useEffect(() => {
-    if (isRecording && meteringEnabled && recordingRef.current) {
-      meteringIntervalRef.current = setInterval(async () => {
-        try {
-          if (recordingRef.current) {
-            const status = await recordingRef.current.getStatusAsync();
-            if (status.isRecording && status.metering !== undefined) {
-              const normalized = Math.max(0, Math.min(1, (status.metering + 60) / 60));
-              const value = 0.15 + normalized * 0.7 + Math.random() * 0.1;
-              setWaveformData(prev => {
-                const newData = [...prev.slice(1), value];
-                newData.forEach((val, idx) => {
-                  Animated.timing(waveformAnims[idx], {
-                    toValue: val, duration: 50, useNativeDriver: false,
-                  }).start();
-                });
-                return newData;
-              });
-            }
-          }
-        } catch (e) {}
-      }, 50);
-      return () => {
-        if (meteringIntervalRef.current) {
-          clearInterval(meteringIntervalRef.current);
-          meteringIntervalRef.current = null;
-        }
-      };
-    }
-  }, [isRecording, meteringEnabled, waveformAnims]);
+  // Metering is now handled by useAudioRecorder callback above
   
   const formatDuration = (ms: number): string => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -165,17 +180,18 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') return;
       
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      if (Platform.OS !== 'web') {
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      }
       
-      const { recording } = await Audio.Recording.createAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
-      });
+      // Prepare and start recording using hook-based recorder
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       
-      recordingRef.current = recording;
+      isRecordingActiveRef.current = true;
       recordingStartTime.current = Date.now();
       setIsRecording(true);
       setRecordingDuration(0);
@@ -199,7 +215,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   };
   
   const stopRecording = async (cancelled: boolean = false) => {
-    if (!recordingRef.current) return;
+    if (!isRecordingActiveRef.current) return;
     
     if (durationIntervalRef.current) { clearInterval(durationIntervalRef.current); durationIntervalRef.current = null; }
     if (meteringIntervalRef.current) { clearInterval(meteringIntervalRef.current); meteringIntervalRef.current = null; }
@@ -208,14 +224,16 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     setMeteringEnabled(false);
     
     try {
-      await recordingRef.current.stopAndUnloadAsync();
+      // Stop using hook-based recorder
+      await audioRecorder.stop();
+      isRecordingActiveRef.current = false;
       
       if (cancelled || duration < MIN_RECORDING_DURATION) {
         Vibration.vibrate(30);
         onRecordingCancel?.();
         resetState();
       } else {
-        const uri = recordingRef.current.getURI();
+        const uri = audioRecorder.uri;
         if (uri) {
           if (isLocked) {
             setPreviewUri(uri);
@@ -235,8 +253,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       resetState();
     }
     
-    recordingRef.current = null;
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    if (Platform.OS !== 'web') {
+      await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    }
   };
   
   const resetState = () => {
@@ -259,44 +278,33 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       Animated.timing(lockOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
     ]).start();
     
-    if (previewSoundRef.current) {
-      previewSoundRef.current.unloadAsync();
-      previewSoundRef.current = null;
-    }
+    // previewPlayer is automatically cleaned up when previewUri becomes null
   };
   
   const handlePreviewPlayPause = async () => {
-    if (!previewUri) return;
+    if (!previewUri || !previewPlayer) return;
     try {
-      if (!previewSoundRef.current) {
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: previewUri },
-          { shouldPlay: true },
-          (status: AVPlaybackStatus) => {
-            if (!status.isLoaded) return;
-            if (status.didJustFinish) {
-              setIsPlayingPreview(false);
-              setPreviewProgress(0);
-            } else if (status.isPlaying && status.durationMillis) {
-              setPreviewProgress(status.positionMillis / status.durationMillis);
-            }
-          }
-        );
-        previewSoundRef.current = sound;
-        setIsPlayingPreview(true);
+      if (previewPlayer.playing) {
+        previewPlayer.pause();
+        setIsPlayingPreview(false);
       } else {
-        const status = await previewSoundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await previewSoundRef.current.pauseAsync();
-            setIsPlayingPreview(false);
-          } else {
-            await previewSoundRef.current.playAsync();
-            setIsPlayingPreview(true);
-          }
-        }
+        previewPlayer.play();
+        setIsPlayingPreview(true);
       }
     } catch (e) { console.error('Preview playback error:', e); }
+  };
+  
+  // Update preview progress based on player status
+  useEffect(() => {
+    if (previewPlayer && previewPlayer.duration > 0) {
+      const progress = previewPlayer.currentTime / previewPlayer.duration;
+      setPreviewProgress(progress);
+      if (previewPlayer.currentTime >= previewPlayer.duration) {
+        setIsPlayingPreview(false);
+        setPreviewProgress(0);
+      }
+    }
+  }, [previewPlayer?.currentTime, previewPlayer?.duration]);
   };
   
   const handleSendPreview = () => {

@@ -26,10 +26,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 // Note: Daily.co React Native SDK is conditionally imported
 let Daily: any = null;
@@ -223,7 +226,7 @@ export function WhatsAppStyleVideoCall({
 
     const currentCallId = callIdRef.current;
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel(`video-status-${currentCallId}`)
       .on(
         'postgres_changes',
@@ -245,7 +248,7 @@ export function WhatsAppStyleVideoCall({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      getSupabase().removeChannel(channel);
     };
   }, [callState, onClose]);
 
@@ -272,7 +275,7 @@ export function WhatsAppStyleVideoCall({
         
         // Update call status to missed
         if (callIdRef.current) {
-          await supabase
+          await getSupabase()
             .from('active_calls')
             .update({ status: 'missed' })
             .eq('call_id', callIdRef.current);
@@ -332,11 +335,11 @@ export function WhatsAppStyleVideoCall({
         setCallDuration(0);
 
         // Get valid session token first
-        let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        let { data: sessionData, error: sessionError } = await getSupabase().auth.getSession();
         let accessToken = sessionData.session?.access_token;
         
         if (!accessToken || sessionError) {
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          const { data: refreshData, error: refreshError } = await getSupabase().auth.refreshSession();
           if (refreshError || !refreshData.session?.access_token) {
             throw new Error('Not authenticated. Please sign in again.');
           }
@@ -387,7 +390,7 @@ export function WhatsAppStyleVideoCall({
             const newCallId = uuidv4();
             callIdRef.current = newCallId;
 
-            const { data: callerProfile } = await supabase
+            const { data: callerProfile } = await getSupabase()
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', user.id)
@@ -397,7 +400,7 @@ export function WhatsAppStyleVideoCall({
               ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
               : 'Someone';
 
-            await supabase.from('active_calls').insert({
+            await getSupabase().from('active_calls').insert({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
@@ -407,7 +410,7 @@ export function WhatsAppStyleVideoCall({
               meeting_url: roomUrl,
             });
 
-            await supabase.from('call_signals').insert({
+            await getSupabase().from('call_signals').insert({
               call_id: newCallId,
               from_user_id: user.id,
               to_user_id: calleeId,
@@ -559,7 +562,7 @@ export function WhatsAppStyleVideoCall({
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
     if (callIdRef.current) {
-      await supabase
+      await getSupabase()
         .from('active_calls')
         .update({ status: 'ended' })
         .eq('call_id', callIdRef.current);
