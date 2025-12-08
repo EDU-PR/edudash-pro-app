@@ -51,11 +51,13 @@ export interface Message {
   thread_id: string;
   sender_id: string;
   content: string;
-  content_type: 'text' | 'system';
+  content_type: 'text' | 'system' | 'voice' | 'image';
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
   read_by?: string[];
+  voice_url?: string | null;
+  voice_duration?: number | null;
   // Joined data
   sender?: {
     first_name: string;
@@ -232,9 +234,12 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
           thread_id,
           sender_id,
           content,
+          content_type,
           created_at,
           read_by,
-          deleted_at
+          deleted_at,
+          voice_url,
+          voice_duration
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -269,10 +274,22 @@ export const useTeacherSendMessage = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ threadId, content }: { threadId: string; content: string }) => {
+    mutationFn: async ({ 
+      threadId, 
+      content,
+      voiceUrl,
+      voiceDuration,
+    }: { 
+      threadId: string; 
+      content: string;
+      voiceUrl?: string;
+      voiceDuration?: number;
+    }) => {
       if (!user?.id) throw new Error('User not authenticated');
       
       const client = assertSupabase();
+      
+      const isVoice = !!voiceUrl;
       
       const { data, error } = await client
         .from('messages')
@@ -280,7 +297,9 @@ export const useTeacherSendMessage = () => {
           thread_id: threadId,
           sender_id: user.id,
           content,
-          content_type: 'text',
+          content_type: isVoice ? 'voice' : 'text',
+          voice_url: voiceUrl || null,
+          voice_duration: voiceDuration || null,
         })
         .select()
         .single();

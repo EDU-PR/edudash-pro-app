@@ -1,0 +1,6 @@
+# Configuration for submit-deletion-request Edge Function
+# This function handles public data deletion requests (GDPR/POPIA compliance)
+# JWT verification is disabled since users don't need to be logged in to request deletion
+
+[function]
+verify_jwt = false

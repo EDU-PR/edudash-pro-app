@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,19 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  Animated,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { SubPageHeader } from '@/components/SubPageHeader';
 import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { formatFileSize } from '@/lib/popUpload';
 import ProfileImageService from '@/services/ProfileImageService';
+import { PictureOfProgressAI, ImageAnalysisResult } from '@/services/PictureOfProgressAI';
+import { useCelebration } from '@/hooks/useCelebration';
 
 // Subject options (common subjects for early childhood)
 const SUBJECTS = [
@@ -61,6 +64,7 @@ export default function PictureOfProgressScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const createUpload = useCreatePOPUpload();
+  const { celebrate, successHaptic, milestoneHaptic, selectionHaptic, lightHaptic } = useCelebration();
   
   // Form state
   const [title, setTitle] = useState('');
@@ -72,6 +76,16 @@ export default function PictureOfProgressScreen() {
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const [showSubjects, setShowSubjects] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  
+  // AI-powered enhancements state
+  const [aiSuggestions, setAiSuggestions] = useState<ImageAnalysisResult | null>(null);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [showMilestoneAlert, setShowMilestoneAlert] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Animation refs for celebrations
+  const celebrationScale = useState(new Animated.Value(1))[0];
+  const milestoneOpacity = useState(new Animated.Value(0))[0];
 
   // Convert local image URIs to data URIs for web compatibility
   useEffect(() => {
@@ -97,6 +111,59 @@ export default function PictureOfProgressScreen() {
     
     convertImageUri();
   }, [selectedFile]);
+  
+  // AI-powered auto-tagging when description or subject changes
+  useEffect(() => {
+    if (description.trim().length > 10) {
+      const tags = PictureOfProgressAI.generateTags(description, subject);
+      setSuggestedTags(tags);
+      
+      // Check for milestone
+      const milestoneResult = PictureOfProgressAI.detectMilestone(description);
+      if (milestoneResult.detected && !showMilestoneAlert) {
+        setShowMilestoneAlert(true);
+        triggerMilestoneAnimation();
+        milestoneHaptic();
+      }
+    }
+  }, [description, subject]);
+  
+  // Play celebration animation when milestone detected
+  const triggerMilestoneAnimation = useCallback(() => {
+    // Pulse animation
+    Animated.sequence([
+      Animated.spring(celebrationScale, {
+        toValue: 1.1,
+        useNativeDriver: true,
+        friction: 3,
+      }),
+      Animated.spring(celebrationScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 3,
+      }),
+    ]).start();
+    
+    // Fade in milestone banner
+    Animated.timing(milestoneOpacity, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, [celebrationScale, milestoneOpacity]);
+  
+  // Handle dropdown selection with haptic
+  const handleSubjectSelect = useCallback((value: string) => {
+    setSubject(value);
+    setShowSubjects(false);
+    selectionHaptic();
+  }, [selectionHaptic]);
+  
+  const handleAchievementSelect = useCallback((value: string) => {
+    setAchievementLevel(value);
+    setShowAchievements(false);
+    selectionHaptic();
+  }, [selectionHaptic]);
   
   const styles = StyleSheet.create({
     container: {
@@ -250,6 +317,76 @@ export default function PictureOfProgressScreen() {
       marginTop: 4,
       lineHeight: 20,
     },
+    // Milestone celebration styles
+    milestoneBanner: {
+      backgroundColor: '#FEF3C7',
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: '#F59E0B',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    milestoneContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    milestoneEmoji: {
+      fontSize: 32,
+      marginRight: 12,
+    },
+    milestoneTextContainer: {
+      flex: 1,
+    },
+    milestoneTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#92400E',
+      marginBottom: 4,
+    },
+    milestoneSubtitle: {
+      fontSize: 14,
+      color: '#B45309',
+      lineHeight: 20,
+    },
+    // AI Suggested tags
+    tagsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 8,
+      gap: 8,
+    },
+    tag: {
+      backgroundColor: theme.primary + '20',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.primary + '40',
+    },
+    tagText: {
+      fontSize: 12,
+      color: theme.primary,
+      fontWeight: '500',
+    },
+    aiInsightContainer: {
+      backgroundColor: theme.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginTop: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.primary,
+    },
+    aiInsightText: {
+      fontSize: 14,
+      color: theme.text,
+      lineHeight: 20,
+      fontStyle: 'italic',
+    },
   });
   
   const handleImagePicker = async () => {
@@ -344,6 +481,14 @@ export default function PictureOfProgressScreen() {
     if (!studentId || !selectedFile) return;
     
     try {
+      // Get AI-generated tags for the upload
+      const tags = suggestedTags.length > 0 
+        ? suggestedTags 
+        : PictureOfProgressAI.generateTags(description, subject);
+      
+      // Check for milestone
+      const milestoneResult = PictureOfProgressAI.detectMilestone(description);
+      
       const uploadData: CreatePOPUploadData = {
         student_id: studentId,
         upload_type: 'picture_of_progress',
@@ -354,13 +499,28 @@ export default function PictureOfProgressScreen() {
         subject: subject,
         achievement_level: achievementLevel || undefined,
         learning_area: learningArea.trim() || undefined,
+        // Include AI-generated metadata
+        tags: tags.length > 0 ? tags : undefined,
+        is_milestone: milestoneResult.detected,
+        milestone_type: milestoneResult.milestone?.name,
       };
       
       await createUpload.mutateAsync(uploadData);
       
+      // Celebrate successful upload! 🎉
+      if (milestoneResult.detected) {
+        await celebrate({ type: 'milestone' });
+      } else {
+        await celebrate({ type: 'upload' });
+      }
+      
       Alert.alert(
-        t('pop.progressUploadSuccess'),
-        t('pop.progressUploadSuccessDesc'),
+        milestoneResult.detected 
+          ? '🎉 Milestone Captured!' 
+          : t('pop.progressUploadSuccess'),
+        milestoneResult.detected
+          ? `Amazing! You've captured a special milestone: ${milestoneResult.milestone?.name || 'Achievement'}. This moment has been saved to your child's learning journey!`
+          : t('pop.progressUploadSuccessDesc'),
         [
           {
             text: t('common.ok'),
@@ -388,9 +548,8 @@ export default function PictureOfProgressScreen() {
   
   return (
     <View style={styles.container}>
-      <RoleBasedHeader 
+      <SubPageHeader 
         title={t('pop.uploadPictureOfProgress')} 
-        showBackButton
       />
       
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -401,6 +560,34 @@ export default function PictureOfProgressScreen() {
               {t('pop.progressFor')}: {decodeURIComponent(studentName)}
             </Text>
           </View>
+        )}
+        
+        {/* Milestone Celebration Banner */}
+        {showMilestoneAlert && (
+          <Animated.View 
+            style={[
+              styles.milestoneBanner, 
+              { 
+                opacity: milestoneOpacity,
+                transform: [{ scale: celebrationScale }] 
+              }
+            ]}
+          >
+            <View style={styles.milestoneContent}>
+              <Text style={styles.milestoneEmoji}>🎉</Text>
+              <View style={styles.milestoneTextContainer}>
+                <Text style={styles.milestoneTitle}>Milestone Detected!</Text>
+                <Text style={styles.milestoneSubtitle}>
+                  {aiSuggestions?.celebrationSuggestion || 
+                    PictureOfProgressAI.getCelebrationSuggestion(
+                      PictureOfProgressAI.detectMilestone(description).milestone
+                    ) ||
+                    "What an amazing achievement! 🌟"
+                  }
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
         )}
         
         {/* Progress Details */}
@@ -420,7 +607,10 @@ export default function PictureOfProgressScreen() {
           <View style={styles.dropdown}>
             <TouchableOpacity 
               style={styles.dropdownButton}
-              onPress={() => setShowSubjects(!showSubjects)}
+              onPress={() => {
+                setShowSubjects(!showSubjects);
+                lightHaptic();
+              }}
             >
               <Text style={styles.dropdownButtonText}>
                 {getSelectedSubjectLabel()}
@@ -437,10 +627,7 @@ export default function PictureOfProgressScreen() {
                   <TouchableOpacity
                     key={subjectOption.value}
                     style={styles.dropdownItem}
-                    onPress={() => {
-                      setSubject(subjectOption.value);
-                      setShowSubjects(false);
-                    }}
+                    onPress={() => handleSubjectSelect(subjectOption.value)}
                   >
                     <Text style={styles.dropdownItemText}>{subjectOption.label}</Text>
                   </TouchableOpacity>
@@ -453,7 +640,10 @@ export default function PictureOfProgressScreen() {
           <View style={styles.dropdown}>
             <TouchableOpacity 
               style={styles.dropdownButton}
-              onPress={() => setShowAchievements(!showAchievements)}
+              onPress={() => {
+                setShowAchievements(!showAchievements);
+                lightHaptic();
+              }}
             >
               <Text style={styles.dropdownButtonText}>
                 {getSelectedAchievementLabel()}
@@ -470,10 +660,7 @@ export default function PictureOfProgressScreen() {
                   <TouchableOpacity
                     key={achievement.value}
                     style={styles.dropdownItem}
-                    onPress={() => {
-                      setAchievementLevel(achievement.value);
-                      setShowAchievements(false);
-                    }}
+                    onPress={() => handleAchievementSelect(achievement.value)}
                   >
                     <Text style={styles.dropdownItemText}>{achievement.label}</Text>
                   </TouchableOpacity>
@@ -506,6 +693,35 @@ export default function PictureOfProgressScreen() {
           <Text style={styles.helpText}>
             Tell us what makes you proud of this work. What did your child learn or accomplish?
           </Text>
+          
+          {/* AI-Generated Tags */}
+          {suggestedTags.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.label, { fontSize: 14 }]}>
+                ✨ AI-Suggested Tags
+              </Text>
+              <View style={styles.tagsContainer}>
+                {suggestedTags.map((tag, index) => (
+                  <View key={`${tag}-${index}`} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+          
+          {/* Developmental Insight */}
+          {description.trim().length > 20 && (
+            <View style={styles.aiInsightContainer}>
+              <Text style={styles.aiInsightText}>
+                💡 {PictureOfProgressAI.getDevelopmentalInsight(
+                  subject, 
+                  achievementLevel,
+                  PictureOfProgressAI.detectMilestone(description).milestone
+                )}
+              </Text>
+            </View>
+          )}
         </View>
         
         {/* Photo Upload */}

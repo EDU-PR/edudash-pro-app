@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { VoiceCallInterface } from './VoiceCallInterface';
 import { VideoCallInterface } from './VideoCallInterface';
 import { IncomingCallOverlay } from './IncomingCallOverlay';
+import { usePresence } from '@/lib/hooks/usePresence';
 
 // Simple error boundary for call components
 interface CallErrorBoundaryProps {
@@ -112,6 +113,8 @@ interface CallContextType {
   isCallActive: boolean;
   isInActiveCall: boolean;
   returnToCall: () => void;
+  isUserOnline: (userId: string) => boolean;
+  getLastSeenText: (userId: string) => string;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -139,6 +142,9 @@ export function CallProvider({ children }: CallProviderProps) {
     callType: 'voice' | 'video';
   } | null>(null);
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
+  
+  // Track presence for online/offline detection
+  const { isUserOnline, getLastSeenText } = usePresence(currentUserId);
 
   // Get current user
   useEffect(() => {
@@ -392,18 +398,52 @@ export function CallProvider({ children }: CallProviderProps) {
   const startVoiceCall = useCallback((userId: string, userName?: string) => {
     if (!currentUserId) {
       console.error('[CallProvider] Cannot start call - no current user');
+      alert('Unable to start call. Please sign in and try again.');
       return;
     }
+    
+    // Check if user is online before starting call
+    if (!isUserOnline(userId)) {
+      const lastSeenText = getLastSeenText(userId);
+      const confirmed = confirm(
+        `${userName || 'This user'} appears to be offline (${lastSeenText}). ` +
+        'They may not receive your call. Do you want to continue?'
+      );
+      if (!confirmed) {
+        console.log('[CallProvider] User cancelled call to offline user');
+        return;
+      }
+    }
+    
     // VoiceCallInterface will create the Daily.co room and active_calls record
     setOutgoingCall({ userId, userName, callType: 'voice' });
     setIsCallInterfaceOpen(true);
-  }, [currentUserId]);
+  }, [currentUserId, isUserOnline, getLastSeenText]);
 
   // Start video call (Daily.co-based)
   const startVideoCall = useCallback((userId: string, userName?: string) => {
+    if (!currentUserId) {
+      console.error('[CallProvider] Cannot start call - no current user');
+      alert('Unable to start call. Please sign in and try again.');
+      return;
+    }
+    
+    // Check if user is online before starting call
+    if (!isUserOnline(userId)) {
+      const lastSeenText = getLastSeenText(userId);
+      const confirmed = confirm(
+        `${userName || 'This user'} appears to be offline (${lastSeenText}). ` +
+        'They may not receive your call. Do you want to continue?'
+      );
+      if (!confirmed) {
+        console.log('[CallProvider] User cancelled call to offline user');
+        return;
+      }
+    }
+    
     setOutgoingCall({ userId, userName, callType: 'video' });
     setIsCallInterfaceOpen(true);
-  }, []);
+  }, [currentUserId, isUserOnline, getLastSeenText]);
 
   // Helper function to fetch meeting URL when it's missing
   const fetchMeetingUrl = useCallback(async (callId: string): Promise<string | undefined> => {
@@ -521,7 +561,16 @@ export function CallProvider({ children }: CallProviderProps) {
   const isInActiveCall = !!(outgoingCall || answeringCall);
 
   return (
-    <CallContext.Provider value={{ startVoiceCall, startVideoCall, incomingCall, isCallActive, isInActiveCall, returnToCall }}>
+    <CallContext.Provider value={{ 
+      startVoiceCall, 
+      startVideoCall, 
+      incomingCall, 
+      isCallActive, 
+      isInActiveCall, 
+      returnToCall,
+      isUserOnline,
+      getLastSeenText
+    }}>
       {children}
 
       {/* Floating "Return to Call" button when in active call but interface is closed */}

@@ -47,7 +47,7 @@ module.exports = ({ config }) => {
     name: 'EduDashPro Dev',
     android: {
       ...config.android,
-      package: 'com.edudashpro.dev',
+      package: 'com.edudashpro.app.dev',
     },
     ios: {
       ...config.ios,

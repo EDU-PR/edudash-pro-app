@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 
-const VOICE_BUCKET = 'voice-notes';
+const VOICE_BUCKET = 'voice_recordings';
 const MAX_VOICE_SIZE_MB = 10; // 10MB max for voice notes
 
 export interface VoiceNoteMetadata {

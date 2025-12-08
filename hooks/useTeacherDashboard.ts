@@ -90,12 +90,23 @@ export const useTeacherDashboard = () => {
 
       // Resolve teacher organization and role with robust fallbacks
       let resolvedTeacherUser: Record<string, unknown> | null = teacherUser || null;
+      
+      log('👨‍🏫 Initial teacher user:', { 
+        teacherUser: teacherUser ? { id: teacherUser.id, preschool_id: teacherUser.preschool_id, role: teacherUser.role } : null 
+      });
+      
       if (!resolvedTeacherUser || !resolvedTeacherUser.preschool_id || !(String(resolvedTeacherUser.role || '').toLowerCase().includes('teacher'))) {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
           .select('id, preschool_id, role, first_name, last_name, organization_id')
           .eq('id', user.id)
           .maybeSingle();
+        
+        log('👨‍🏫 Profile fallback:', { 
+          prof: prof ? { id: prof.id, preschool_id: prof.preschool_id, organization_id: prof.organization_id, role: prof.role } : null,
+          profErr 
+        });
+        
         if (!profErr && prof) {
           const roleStr = String((prof as Record<string, unknown>).role || '').toLowerCase();
           if (!resolvedTeacherUser || roleStr.includes('teacher')) {
@@ -110,44 +121,78 @@ export const useTeacherDashboard = () => {
           }
         }
       }
+      
+      log('👨‍🏫 Resolved teacher user:', resolvedTeacherUser);
 
       let dashboardData: TeacherDashboardData;
 
       if (resolvedTeacherUser) {
-        const teacherId = resolvedTeacherUser.id as string;
+        // Use auth user ID for teacher_id since classes.teacher_id references auth.users(id)
+        const teacherId = user.id;
+        const usersTableId = resolvedTeacherUser.id as string;
         let schoolName = 'Unknown School';
+        let schoolTier: 'free' | 'starter' | 'premium' | 'enterprise' | 'solo' | 'group_5' | 'group_10' = 'free';
         const schoolIdToUse = resolvedTeacherUser.preschool_id as string;
         
+        log('👨‍🏫 Using IDs:', { authUserId: teacherId, usersTableId, schoolIdToUse });
+        
         if (schoolIdToUse) {
+          // First try to get preschool with its organization
           const { data: school } = await supabase
             .from('preschools')
-            .select('id, name')
+            .select('id, name, organization_id')
             .eq('id', schoolIdToUse)
             .maybeSingle();
           
-          if (!school) {
+          if (school) {
+            schoolName = school.name || schoolName;
+            // Get tier from the organization (preschool inherits tier from organization)
+            if (school.organization_id) {
+              const { data: org } = await supabase
+                .from('organizations')
+                .select('plan_tier')
+                .eq('id', school.organization_id)
+                .maybeSingle();
+              schoolTier = (org?.plan_tier as any) || 'free';
+            }
+          } else {
+            // Fallback: schoolIdToUse might be an organization ID
             const { data: org } = await supabase
               .from('organizations')
-              .select('id, name')
+              .select('id, name, plan_tier')
               .eq('id', schoolIdToUse)
               .maybeSingle();
             schoolName = org?.name || schoolName;
-          } else {
-            schoolName = school.name || schoolName;
+            schoolTier = (org?.plan_tier as any) || 'free';
           }
         }
 
         // Fetch teacher's classes with student and attendance data
-        const { data: classesData } = await supabase
+        // Filter by teacher_id, and optionally by preschool_id if available
+        let classesQuery = supabase
           .from('classes')
           .select(`
             id,
             name,
             grade_level,
             room_number,
-            students!inner(id, first_name, last_name)
+            preschool_id,
+            students(id, first_name, last_name)
           `)
           .eq('teacher_id', teacherId);
+        
+        // Only filter by preschool_id if we have one
+        if (schoolIdToUse) {
+          classesQuery = classesQuery.eq('preschool_id', schoolIdToUse);
+        }
+        
+        const { data: classesData, error: classesError } = await classesQuery;
+        
+        if (classesError) {
+          logError('Classes fetch error:', classesError);
+        }
+        
+        log('📚 Classes fetched:', { teacherId, schoolIdToUse, classCount: classesData?.length || 0 });
 
         // Get today's attendance for all teacher's students
         const today = new Date().toISOString().split('T')[0];
@@ -209,14 +254,28 @@ export const useTeacherDashboard = () => {
           .order('created_at', { ascending: false })
           .limit(3);
 
-        // Fetch upcoming events for teacher's school
-        const { data: eventsData } = await supabase
-          .from('events')
-          .select('id, title, event_date, event_type, description')
-          .eq('preschool_id', resolvedTeacherUser.preschool_id as string)
-          .gte('event_date', new Date().toISOString())
-          .order('event_date', { ascending: true })
-          .limit(5);
+        // Fetch upcoming events for teacher's school (only if we have a school ID)
+        let upcomingEvents: Array<{ id: string; title: string; time: string; type: 'meeting' | 'activity' | 'assessment' }> = [];
+        if (schoolIdToUse) {
+          const { data: eventsData } = await supabase
+            .from('events')
+            .select('id, title, event_date, event_type, description')
+            .eq('preschool_id', schoolIdToUse)
+            .gte('event_date', new Date().toISOString())
+            .order('event_date', { ascending: true })
+            .limit(5);
+          
+          upcomingEvents = (eventsData || []).map((event: Record<string, unknown>) => {
+            const eventDate = new Date(event.event_date as string);
+            
+            return {
+              id: event.id as string,
+              title: event.title as string,
+              time: formatEventTime(eventDate),
+              type: ((event.event_type as string) || 'event') as 'meeting' | 'activity' | 'assessment'
+            };
+          });
+        }
 
         const recentAssignments = (assignmentsData || []).map((assignment: Record<string, unknown>) => {
           const submissions = (assignment.homework_submissions as Array<{ status: string }>) || [];
@@ -245,19 +304,9 @@ export const useTeacherDashboard = () => {
           .filter((a) => a.status === 'pending')
           .reduce((sum: number, a) => sum + a.submitted, 0);
 
-        const upcomingEvents = (eventsData || []).map((event: Record<string, unknown>) => {
-          const eventDate = new Date(event.event_date as string);
-          
-          return {
-            id: event.id as string,
-            title: event.title as string,
-            time: formatEventTime(eventDate),
-            type: ((event.event_type as string) || 'event') as 'meeting' | 'activity' | 'assessment'
-          };
-        }) || [];
-
         dashboardData = {
           schoolName,
+          schoolTier,
           totalStudents,
           totalClasses: myClasses.length,
           upcomingLessons: Math.min(myClasses.length, 3),

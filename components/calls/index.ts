@@ -24,6 +24,14 @@ export { VoiceCallInterface } from './VoiceCallInterface';
 export { VideoCallInterface } from './VideoCallInterface';
 export { IncomingCallOverlay } from './IncomingCallOverlay';
 
+// WhatsApp-Style Components (Enhanced UI)
+export { WhatsAppStyleIncomingCall } from './WhatsAppStyleIncomingCall';
+export { WhatsAppStyleVideoCall } from './WhatsAppStyleVideoCall';
+
+// Live Lessons (Group Calls)
+export { StartLiveLesson } from './StartLiveLesson';
+export { JoinLiveLesson } from './JoinLiveLesson';
+
 // Types
 export type {
   CallState,

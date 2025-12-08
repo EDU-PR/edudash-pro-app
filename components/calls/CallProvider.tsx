@@ -13,12 +13,13 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { VoiceCallInterface } from './VoiceCallInterface';
-import { VideoCallInterface } from './VideoCallInterface';
-import { IncomingCallOverlay } from './IncomingCallOverlay';
+import { WhatsAppStyleVideoCall } from './WhatsAppStyleVideoCall';
+import { WhatsAppStyleIncomingCall } from './WhatsAppStyleIncomingCall';
+import { usePresence } from '@/hooks/usePresence';
 import type {
   ActiveCall,
   CallContextType,
@@ -89,6 +90,9 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
+  
+  // Track presence for online/offline detection
+  const { isUserOnline, getLastSeenText } = usePresence(currentUserId);
 
   // Get current user
   useEffect(() => {
@@ -265,13 +269,43 @@ export function CallProvider({ children }: CallProviderProps) {
     (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
+        Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
+      
+      // Check if user is online before starting call
+      const userOnline = isUserOnline(userId);
+      const lastSeenText = getLastSeenText(userId);
+      console.log('[CallProvider] Presence check:', {
+        userId,
+        userName,
+        userOnline,
+        lastSeenText
+      });
+      
+      if (!userOnline) {
+        console.log('[CallProvider] User offline, showing alert');
+        Alert.alert(
+          'Unable to Call',
+          `${userName || 'This user'} is currently offline (${lastSeenText}). Please try again when they are online.`,
+          [
+            { 
+              text: 'OK', 
+              style: 'default',
+              onPress: () => console.log('[CallProvider] User acknowledged offline status')
+            }
+          ]
+        );
+        return;
+      }
+      
+      console.log('[CallProvider] User is online, starting call');
+      
       setOutgoingCall({ userId, userName, callType: 'voice' });
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
-    [currentUserId, callsEnabled]
+    [currentUserId, callsEnabled, isUserOnline, getLastSeenText]
   );
 
   // Start video call
@@ -279,13 +313,43 @@ export function CallProvider({ children }: CallProviderProps) {
     (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
+        Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
+      
+      // Check if user is online before starting call
+      const userOnline = isUserOnline(userId);
+      const lastSeenText = getLastSeenText(userId);
+      console.log('[CallProvider] Video presence check:', {
+        userId,
+        userName,
+        userOnline,
+        lastSeenText
+      });
+      
+      if (!userOnline) {
+        console.log('[CallProvider] User offline, showing video call alert');
+        Alert.alert(
+          'Unable to Video Call',
+          `${userName || 'This user'} is currently offline (${lastSeenText}). Please try again when they are online.`,
+          [
+            { 
+              text: 'OK', 
+              style: 'default',
+              onPress: () => console.log('[CallProvider] User acknowledged offline status')
+            }
+          ]
+        );
+        return;
+      }
+      
+      console.log('[CallProvider] User is online, starting video call');
+      
       setOutgoingCall({ userId, userName, callType: 'video' });
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
-    [currentUserId, callsEnabled]
+    [currentUserId, callsEnabled, isUserOnline, getLastSeenText]
   );
 
   // Answer incoming call
@@ -372,10 +436,11 @@ export function CallProvider({ children }: CallProviderProps) {
     <CallContext.Provider value={contextValue}>
       {children}
       
-      {/* Incoming call overlay - full screen for mobile UX */}
-      <IncomingCallOverlay
+      {/* WhatsApp-Style Incoming call overlay */}
+      <WhatsAppStyleIncomingCall
         isVisible={!!incomingCall && !answeringCall}
-        callerName={incomingCall?.caller_name}
+        callerName={incomingCall?.caller_name || 'Unknown'}
+        callerPhoto={null} // TODO: Fetch caller photo from profile
         callType={incomingCall?.call_type || 'voice'}
         onAnswer={answerCall}
         onReject={rejectCall}
@@ -393,13 +458,14 @@ export function CallProvider({ children }: CallProviderProps) {
         />
       )}
 
-      {/* Video call interface for outgoing calls */}
+      {/* WhatsApp-Style Video call interface for outgoing calls */}
       {outgoingCall && outgoingCall.callType === 'video' && (
-        <VideoCallInterface
+        <WhatsAppStyleVideoCall
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={endCall}
           roomName={`call-${Date.now()}`}
           userName={outgoingCall.userName}
+          remoteUserName={outgoingCall.userName}
           isOwner={true}
           calleeId={outgoingCall.userId}
         />
@@ -417,15 +483,17 @@ export function CallProvider({ children }: CallProviderProps) {
         />
       )}
 
-      {/* Video call interface for answering calls */}
+      {/* WhatsApp-Style Video call interface for answering calls */}
       {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
-        <VideoCallInterface
+        <WhatsAppStyleVideoCall
           isOpen={isCallInterfaceOpen}
           onClose={endCall}
           roomName={answeringCall.meeting_url.split('/').pop() || `call-${answeringCall.call_id}`}
           userName={answeringCall.caller_name}
+          remoteUserName={answeringCall.caller_name}
           isOwner={false}
           callId={answeringCall.call_id}
+          meetingUrl={answeringCall.meeting_url}
         />
       )}
     </CallContext.Provider>

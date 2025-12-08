@@ -50,10 +50,12 @@ export interface Message {
   thread_id: string;
   sender_id: string;
   content: string;
-  content_type: 'text' | 'system';
+  content_type: 'text' | 'system' | 'voice' | 'image';
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  voice_url?: string | null;
+  voice_duration?: number | null;
   // Joined data
   sender?: {
     first_name: string;
@@ -203,8 +205,20 @@ export const useSendMessage = () => {
   const { user } = useAuth();
   
   return useMutation({
-    mutationFn: async ({ threadId, content }: { threadId: string; content: string }) => {
+    mutationFn: async ({ 
+      threadId, 
+      content,
+      voiceUrl,
+      voiceDuration,
+    }: { 
+      threadId: string; 
+      content: string;
+      voiceUrl?: string;
+      voiceDuration?: number;
+    }) => {
       const client = assertSupabase();
+      
+      const isVoice = !!voiceUrl;
       
       const { data, error } = await client
         .from('messages')
@@ -212,7 +226,9 @@ export const useSendMessage = () => {
           thread_id: threadId,
           sender_id: user?.id,
           content: content.trim(),
-          content_type: 'text'
+          content_type: isVoice ? 'voice' : 'text',
+          voice_url: voiceUrl || null,
+          voice_duration: voiceDuration || null,
         })
         .select()
         .single();

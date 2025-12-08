@@ -112,6 +112,7 @@ export interface UserProfile {
   role: 'super_admin' | 'principal_admin' | 'principal' | 'teacher' | 'parent';
   organization_id?: string;
   organization_name?: string;
+  preschool_id?: string;
   first_name?: string;
   last_name?: string;
   avatar_url?: string;

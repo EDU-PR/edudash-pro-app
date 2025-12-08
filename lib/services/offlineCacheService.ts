@@ -269,9 +269,16 @@ class OfflineCacheService {
         const cached = await AsyncStorage.getItem(key);
         if (cached) {
           totalSize += cached.length;
-          const cacheItem: CacheItem<any> = JSON.parse(cached);
-          oldestTimestamp = Math.min(oldestTimestamp, cacheItem.timestamp);
-          newestTimestamp = Math.max(newestTimestamp, cacheItem.timestamp);
+          try {
+            const cacheItem: CacheItem<any> = JSON.parse(cached);
+            if (cacheItem && typeof cacheItem.timestamp === 'number') {
+              oldestTimestamp = Math.min(oldestTimestamp, cacheItem.timestamp);
+              newestTimestamp = Math.max(newestTimestamp, cacheItem.timestamp);
+            }
+          } catch (parseError) {
+            // Skip corrupted cache entries - they'll be cleaned up on next write
+            console.warn(`Skipping corrupted cache entry: ${key}`);
+          }
         }
 
         const metadata = this.cacheMetrics.get(key);

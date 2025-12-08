@@ -14,11 +14,24 @@ import {
   TouchableOpacity,
   View,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import type { CallState } from './types';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
+
+// Conditionally import InCallManager (may not be available in some environments)
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+} catch (error) {
+  console.warn('[VoiceCall] InCallManager not available:', error);
+}
 
 // Note: Daily.co React Native SDK is conditionally imported
 // This allows the app to build even without the native module
@@ -56,7 +69,7 @@ export function VoiceCallInterface({
 }: VoiceCallInterfaceProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
-  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false); // Start with earpiece
   const [isMinimized, setIsMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [participantCount, setParticipantCount] = useState(0);
@@ -64,8 +77,13 @@ export function VoiceCallInterface({
 
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
-  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Ring timeout duration (30 seconds like WhatsApp)
+  const RING_TIMEOUT_MS = 30000;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Update callIdRef when prop changes
   useEffect(() => {
@@ -87,6 +105,69 @@ export function VoiceCallInterface({
       useNativeDriver: true,
     }).start();
   }, [isOpen, fadeAnim]);
+
+  // Pulsing animation for ringing state
+  useEffect(() => {
+    if (callState === 'connecting' || callState === 'ringing') {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [callState, pulseAnim]);
+
+  // Device ringback tone via InCallManager
+  useEffect(() => {
+    if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+      try {
+        console.log('[VoiceCall] Starting device ringback via InCallManager');
+        if (InCallManager) {
+          // '_DTMF_' or '_DEFAULT_' uses system default ringback
+          InCallManager.start({ media: 'audio', ringback: '_DEFAULT_' });
+          InCallManager.setForceSpeakerphoneOn(false);
+          console.log('[VoiceCall] Device ringback started');
+        }
+      } catch (error) {
+        console.error('[VoiceCall] Failed to start device ringback:', error);
+      }
+    } else {
+      // Stop ringback when connected or ended
+      try {
+        console.log('[VoiceCall] Stopping device ringback');
+        if (InCallManager) {
+          InCallManager.stopRingback();
+        }
+        console.log('[VoiceCall] Device ringback stopped');
+      } catch (error) {
+        console.warn('[VoiceCall] Failed to stop ringback:', error);
+      }
+    };
+
+    return () => {
+      // Cleanup ringback on unmount
+      try {
+        if (InCallManager) {
+          InCallManager.stopRingback();
+        }
+      } catch (error) {
+        console.warn('[VoiceCall] Failed to cleanup ringback:', error);
+      }
+    };
+  }, [callState, isOwner]);
 
   // Call duration timer
   useEffect(() => {
@@ -150,16 +231,77 @@ export function VoiceCallInterface({
 
   // Cleanup call resources
   const cleanupCall = useCallback(() => {
+    console.log('[VoiceCall] Cleaning up call resources');
+    
     if (dailyRef.current) {
       try {
         dailyRef.current.leave();
         dailyRef.current.destroy();
+        console.log('[VoiceCall] Daily call object cleaned up');
       } catch (err) {
         console.warn('[VoiceCall] Cleanup error:', err);
       }
       dailyRef.current = null;
     }
+    
+    // Stop InCallManager and reset audio routing
+    try {
+      if (InCallManager) {
+        InCallManager.stopRingback(); // Stop any ringback
+        InCallManager.stop(); // Stop InCallManager
+        console.log('[VoiceCall] InCallManager stopped');
+      }
+    } catch (err) {
+      console.warn('[VoiceCall] InCallManager stop error:', err);
+    }
   }, []);
+
+  // Ringing timeout - end call if not answered within 30 seconds
+  useEffect(() => {
+    if (callState === 'ringing' && isOwner) {
+      console.log('[VoiceCall] Starting ring timeout:', RING_TIMEOUT_MS, 'ms');
+      
+      ringingTimeoutRef.current = setTimeout(async () => {
+        console.log('[VoiceCall] Ring timeout - no answer, marking as missed');
+        
+        // Update call status to missed
+        if (callIdRef.current) {
+          await supabase
+            .from('active_calls')
+            .update({ status: 'missed' })
+            .eq('call_id', callIdRef.current);
+        }
+        
+        setError('No answer');
+        setCallState('ended');
+        
+        // Haptic feedback for missed call
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        
+        // Close the call UI after a brief delay
+        setTimeout(() => {
+          cleanupCall();
+          onClose();
+        }, 2000);
+      }, RING_TIMEOUT_MS);
+    }
+
+    return () => {
+      if (ringingTimeoutRef.current) {
+        clearTimeout(ringingTimeoutRef.current);
+        ringingTimeoutRef.current = null;
+      }
+    };
+  }, [callState, isOwner, cleanupCall, onClose]);
+
+  // Clear ringing timeout when call connects
+  useEffect(() => {
+    if (callState === 'connected' && ringingTimeoutRef.current) {
+      console.log('[VoiceCall] Call connected, clearing ring timeout');
+      clearTimeout(ringingTimeoutRef.current);
+      ringingTimeoutRef.current = null;
+    }
+  }, [callState]);
 
   // Initialize call
   useEffect(() => {
@@ -177,6 +319,8 @@ export function VoiceCallInterface({
         setCallState('connecting');
         setError(null);
         setCallDuration(0);
+        setIsSpeakerEnabled(false); // Reset to earpiece for new calls
+        console.log('[VoiceCall] Initializing call with earpiece default');
 
         // Get valid session token first - always try to refresh for calls
         console.log('[VoiceCall] Getting session...');
@@ -193,7 +337,7 @@ export function VoiceCallInterface({
           console.log('[VoiceCall] Session refreshed successfully');
         } else if (!accessToken) {
           // Only fail if we have no token at all
-          console.error('[VoiceCall] No valid session:', refreshError || sessionError);
+          console.warn('[VoiceCall] No valid session:', refreshError || sessionError);
           throw new Error('Please sign in to make calls.');
         } else {
           console.log('[VoiceCall] Using existing session token');
@@ -247,7 +391,7 @@ export function VoiceCallInterface({
             } catch (e) {
               errorMsg = `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`;
             }
-            console.error('[VoiceCall] Room creation failed:', errorMsg);
+            console.warn('[VoiceCall] Room creation failed:', errorMsg);
             throw new Error(errorMsg);
           }
 
@@ -257,7 +401,7 @@ export function VoiceCallInterface({
 
           // Create call signaling record
           if (calleeId) {
-            const newCallId = `${user.id}-${Date.now()}`;
+            const newCallId = uuidv4(); // Generate proper UUID
             callIdRef.current = newCallId;
 
             const { data: callerProfile } = await supabase
@@ -303,40 +447,8 @@ export function VoiceCallInterface({
 
         if (isCleanedUp) return;
 
-        // Get meeting token (accessToken was validated above)
-        const tokenResponse = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              roomName: roomUrl.split('/').pop(),
-              userName,
-              isOwner,
-            }),
-          }
-        );
-
-        if (!tokenResponse.ok) {
-          const errorData = await tokenResponse.json();
-          // Map technical errors to user-friendly messages
-          const errorMessage = errorData.error || 'Failed to get token';
-          if (errorMessage.toLowerCase().includes('not authenticated') || 
-              errorMessage.toLowerCase().includes('authentication') ||
-              errorMessage.toLowerCase().includes('unauthorized')) {
-            throw new Error('Session expired. Please sign out and sign in again.');
-          }
-          throw new Error(errorMessage);
-        }
-
-        const { token } = await tokenResponse.json();
-
-        if (isCleanedUp) return;
-
-        // Create Daily call object
+        // Create Daily call object (no token needed for non-private rooms)
+        console.log('[VoiceCall] Creating Daily call object...');
         const daily = Daily.createCallObject({
           audioSource: true,
           videoSource: false,
@@ -344,38 +456,101 @@ export function VoiceCallInterface({
 
         dailyRef.current = daily;
 
+        // Initialize InCallManager for proper audio routing (if available)
+        try {
+          if (InCallManager) {
+            // Start with earpiece (false = earpiece, true = speaker)
+            InCallManager.start({ 
+              media: 'audio', 
+              auto: false, // Don't auto-enable speaker
+              ringback: '_DEFAULT_' // Use device default ringback
+            });
+            InCallManager.setForceSpeakerphoneOn(false); // Explicitly set to earpiece
+            console.log('[VoiceCall] InCallManager started with earpiece');
+          }
+        } catch (error) {
+          console.warn('[VoiceCall] Failed to start InCallManager:', error);
+        }
+
         // Event listeners
         daily.on('joined-meeting', () => {
           console.log('[VoiceCall] Joined meeting');
-          setCallState('connected');
+          // Don't set to connected yet if we're the caller waiting for the callee
+          // Only set connected when another participant joins
+          if (!isOwner || !calleeId) {
+            // If answering a call or no callee, we're connected immediately
+            setCallState('connected');
+          } else {
+            // Caller stays in ringing until callee joins
+            console.log('[VoiceCall] Waiting for callee to join...');
+          }
           updateParticipantCount();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         });
 
         daily.on('left-meeting', () => {
           console.log('[VoiceCall] Left meeting');
           setCallState('ended');
+          try {
+            if (InCallManager) InCallManager.stop();
+          } catch (error) {
+            console.warn('[VoiceCall] Failed to stop InCallManager:', error);
+          }
         });
 
-        daily.on('participant-joined', () => {
-          console.log('[VoiceCall] Participant joined');
+        daily.on('participant-joined', (event: any) => {
+          console.log('[VoiceCall] Participant joined:', event?.participant?.user_id);
           updateParticipantCount();
+          
+          // When callee joins, switch from ringing to connected
+          if (callState === 'ringing' || isOwner) {
+            console.log('[VoiceCall] Callee joined! Switching to connected state');
+            setCallState('connected');
+            
+            // Stop ringback tone now that call is connected
+            try {
+              if (InCallManager) {
+                InCallManager.stopRingback();
+                console.log('[VoiceCall] Ringback stopped - call connected');
+              }
+            } catch (error) {
+              console.warn('[VoiceCall] Failed to stop ringback:', error);
+            }
+          }
+          
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
 
         daily.on('participant-left', () => {
           console.log('[VoiceCall] Participant left');
           updateParticipantCount();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
 
         daily.on('error', (event: any) => {
-          console.error('[VoiceCall] Error:', event);
-          setError(event?.errorMsg || 'Call error');
+          const errorMsg = event?.errorMsg || event?.error || 'Unknown error';
+          
+          // Map technical errors to user-friendly messages
+          let userFriendlyError = errorMsg;
+          if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+            userFriendlyError = 'Connection failed. Please check your internet connection.';
+          } else if (errorMsg.includes('permission') || errorMsg.includes('camera') || errorMsg.includes('microphone')) {
+            userFriendlyError = 'Microphone permission denied. Please enable it in settings.';
+          } else if (errorMsg.includes('timeout')) {
+            userFriendlyError = 'Connection timeout. Please try again.';
+          } else if (errorMsg.includes('not found') || errorMsg.includes('404')) {
+            userFriendlyError = 'Call room not found. The call may have ended.';
+          }
+          
+          setError(userFriendlyError);
           setCallState('failed');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         });
 
-        // Join the call
+        // Join the call (no token needed for rooms created with enable_knocking: false)
+        console.log('[VoiceCall] Joining room:', roomUrl);
         await daily.join({
           url: roomUrl,
-          token,
         });
 
         function updateParticipantCount() {
@@ -385,9 +560,21 @@ export function VoiceCallInterface({
           }
         }
       } catch (err) {
-        console.error('[VoiceCall] Init error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to start call');
+        const errorMsg = err instanceof Error ? err.message : 'Failed to start call';
+        
+        // Map common errors to user-friendly messages
+        let userFriendlyError = errorMsg;
+        if (errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+          userFriendlyError = 'No internet connection. Please check your network and try again.';
+        } else if (errorMsg.includes('timeout')) {
+          userFriendlyError = 'Connection timeout. The other person may be offline.';
+        } else if (errorMsg.includes('No room URL')) {
+          userFriendlyError = 'Failed to create call room. Please try again.';
+        }
+        
+        setError(userFriendlyError);
         setCallState('failed');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       }
     };
 
@@ -405,15 +592,33 @@ export function VoiceCallInterface({
     try {
       await dailyRef.current.setLocalAudio(!isAudioEnabled);
       setIsAudioEnabled(!isAudioEnabled);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (err) {
-      console.error('[VoiceCall] Toggle audio error:', err);
+      console.warn('[VoiceCall] Toggle audio error:', err);
     }
   }, [isAudioEnabled]);
 
-  // Toggle speaker (limited support on mobile)
+  // Toggle speaker (using InCallManager for proper audio routing)
   const toggleSpeaker = useCallback(() => {
-    setIsSpeakerEnabled(!isSpeakerEnabled);
-    // Note: Speaker toggle requires additional native module support
+    const newSpeakerState = !isSpeakerEnabled;
+    console.log('[VoiceCall] Toggling speaker:', { from: isSpeakerEnabled, to: newSpeakerState });
+    
+    try {
+      if (InCallManager) {
+        InCallManager.setForceSpeakerphoneOn(newSpeakerState);
+        setIsSpeakerEnabled(newSpeakerState);
+        console.log('[VoiceCall] Speaker toggled successfully to:', newSpeakerState ? 'speaker' : 'earpiece');
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      } else {
+        console.warn('[VoiceCall] InCallManager not available for speaker toggle');
+        // Still update state for UI feedback even if InCallManager unavailable
+        setIsSpeakerEnabled(newSpeakerState);
+      }
+    } catch (error) {
+      console.error('[VoiceCall] Failed to toggle speaker:', error);
+      // Revert state on error
+      setIsSpeakerEnabled(isSpeakerEnabled);
+    }
   }, [isSpeakerEnabled]);
 
   // End call
@@ -422,16 +627,37 @@ export function VoiceCallInterface({
 
     // Update call status
     if (callIdRef.current) {
-      await supabase
+      const { error } = await supabase
         .from('active_calls')
-        .update({ status: 'ended' })
+        .update({ 
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
         .eq('call_id', callIdRef.current);
+      
+      if (error) {
+        console.warn('[VoiceCall] Failed to update call status:', error);
+      }
     }
 
     cleanupCall();
     setCallState('ended');
     onClose();
   }, [cleanupCall, onClose]);
+
+  // Retry call (only shown when call failed or was not answered)
+  const handleRetryCall = useCallback(async () => {
+    console.log('[VoiceCall] Retrying call');
+    
+    // Reset state
+    setError(null);
+    setCallState('idle');
+    setParticipantCount(0);
+    setCallDuration(0);
+    
+    // Close and let parent component handle retry
+    onClose();
+  }, [onClose]);
 
   // Minimize call
   const handleMinimize = useCallback(() => {
@@ -480,17 +706,26 @@ export function VoiceCallInterface({
 
           {/* Call Info */}
           <View style={styles.callInfo}>
-            <View style={styles.avatar}>
+            <Animated.View style={[styles.avatar, { transform: [{ scale: pulseAnim }] }]}>
               <Ionicons name="person" size={48} color="#ffffff" />
-            </View>
+            </Animated.View>
             <Text style={styles.callerName}>{userName}</Text>
-            <Text style={styles.callStatus}>
-              {callState === 'connecting' && 'Connecting...'}
-              {callState === 'ringing' && 'Ringing...'}
-              {callState === 'connected' && formatDuration(callDuration)}
-              {callState === 'failed' && (error || 'Call failed')}
-              {callState === 'ended' && 'Call ended'}
-            </Text>
+            <View style={styles.statusContainer}>
+              {(callState === 'connecting' || callState === 'ringing') && (
+                <ActivityIndicator size="small" color="#10b981" style={{ marginRight: 8 }} />
+              )}
+              <Text style={[
+                styles.callStatus,
+                callState === 'failed' && styles.callStatusError,
+                callState === 'connected' && styles.callStatusConnected,
+              ]}>
+                {callState === 'connecting' && 'Connecting...'}
+                {callState === 'ringing' && 'Ringing...'}
+                {callState === 'connected' && formatDuration(callDuration)}
+                {callState === 'failed' && 'Call Failed'}
+                {callState === 'ended' && 'Call Ended'}
+              </Text>
+            </View>
           </View>
 
           {/* Error Message */}
@@ -530,21 +765,33 @@ export function VoiceCallInterface({
               onPress={toggleSpeaker}
             >
               <Ionicons
-                name={isSpeakerEnabled ? 'volume-high' : 'volume-mute'}
+                name={isSpeakerEnabled ? 'volume-high' : 'ear'}
                 size={28}
                 color="#ffffff"
               />
-              <Text style={styles.controlLabel}>Speaker</Text>
+              <Text style={styles.controlLabel}>
+                {isSpeakerEnabled ? 'Speaker' : 'Earpiece'}
+              </Text>
             </TouchableOpacity>
 
-            {/* End Call */}
-            <TouchableOpacity
-              style={[styles.controlButton, styles.endCallButton]}
-              onPress={handleEndCall}
-            >
-              <Ionicons name="call" size={28} color="#ffffff" />
-              <Text style={styles.controlLabel}>End</Text>
-            </TouchableOpacity>
+            {/* End Call or Call Again */}
+            {(callState === 'failed' || (callState === 'ended' && participantCount === 0)) ? (
+              <TouchableOpacity
+                style={[styles.controlButton, styles.retryCallButton]}
+                onPress={handleRetryCall}
+              >
+                <Ionicons name="call" size={28} color="#ffffff" />
+                <Text style={styles.controlLabel}>Call Again</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.controlButton, styles.endCallButton]}
+                onPress={handleEndCall}
+              >
+                <Ionicons name="call" size={28} color="#ffffff" />
+                <Text style={styles.controlLabel}>End</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </BlurView>
@@ -608,9 +855,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
   },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   callStatus: {
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 16,
+  },
+  callStatusConnected: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  callStatusError: {
+    color: '#ef4444',
+    fontWeight: '600',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -625,6 +885,8 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     marginLeft: 8,
     fontSize: 14,
+    flex: 1,
+    textAlign: 'center',
   },
   controls: {
     flexDirection: 'row',
@@ -646,6 +908,9 @@ const styles = StyleSheet.create({
   },
   endCallButton: {
     backgroundColor: '#ef4444',
+  },
+  retryCallButton: {
+    backgroundColor: '#10b981', // Green for retry
   },
   controlLabel: {
     color: 'rgba(255, 255, 255, 0.8)',

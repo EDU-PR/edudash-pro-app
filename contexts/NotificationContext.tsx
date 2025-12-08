@@ -127,17 +127,17 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
   const lastSeenKey = ASYNC_STORAGE_KEYS.callsLastSeen(userId);
   const lastSeen = await AsyncStorage.getItem(lastSeenKey);
 
-  // Build query for missed calls
+  // Build query for missed calls (unanswered calls to this user)
   let query = client
     .from('active_calls')
     .select('id', { count: 'exact', head: true })
-    .eq('recipient_id', userId)
-    .eq('status', 'ended')
-    .eq('answered', false);
+    .eq('callee_id', userId)
+    .in('status', ['missed', 'ended'])
+    .is('answered_at', null);
 
   // Only count calls after last seen timestamp
   if (lastSeen) {
-    query = query.gt('created_at', lastSeen);
+    query = query.gt('started_at', lastSeen);
   }
 
   const { count } = await query;
@@ -156,7 +156,7 @@ async function fetchUnreadAnnouncementsCount(userId: string): Promise<number> {
   let query = client
     .from('announcements')
     .select('id', { count: 'exact', head: true })
-    .eq('is_active', true);
+    .eq('is_published', true);
 
   // Only count announcements after last seen timestamp
   if (lastSeen) {
@@ -379,7 +379,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
           event: '*',
           schema: 'public',
           table: 'active_calls',
-          filter: `recipient_id=eq.${userId}`,
+          filter: `callee_id=eq.${userId}`,
         },
         () => {
           // Invalidate calls count when call status changes

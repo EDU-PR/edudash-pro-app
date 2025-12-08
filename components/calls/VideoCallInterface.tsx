@@ -18,6 +18,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import type { CallState, DailyParticipant } from './types';
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 
 // Note: Daily.co React Native SDK is conditionally imported
 let Daily: any = null;
@@ -248,7 +250,7 @@ export function VideoCallInterface({
 
           // Create call signaling record
           if (calleeId) {
-            const newCallId = `${user.id}-${Date.now()}`;
+            const newCallId = uuidv4(); // Generate proper UUID
             callIdRef.current = newCallId;
 
             const { data: callerProfile } = await supabase
@@ -294,33 +296,8 @@ export function VideoCallInterface({
 
         if (isCleanedUp) return;
 
-        // Get meeting token (accessToken was validated earlier)
-        const tokenResponse = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              roomName: roomUrl.split('/').pop(),
-              userName,
-              isOwner,
-            }),
-          }
-        );
-
-        if (!tokenResponse.ok) {
-          const errorData = await tokenResponse.json();
-          throw new Error(errorData.error || 'Failed to get token');
-        }
-
-        const { token } = await tokenResponse.json();
-
-        if (isCleanedUp) return;
-
-        // Create Daily call object with video
+        // Create Daily call object with video (no token needed for non-private rooms)
+        console.log('[VideoCall] Creating Daily call object...');
         const daily = Daily.createCallObject({
           audioSource: true,
           videoSource: true,
@@ -360,10 +337,10 @@ export function VideoCallInterface({
           setCallState('failed');
         });
 
-        // Join the call
+        // Join the call (no token needed for rooms created with enable_knocking: false)
+        console.log('[VideoCall] Joining room:', roomUrl);
         await daily.join({
           url: roomUrl,
-          token,
         });
       } catch (err) {
         console.error('[VideoCall] Init error:', err);

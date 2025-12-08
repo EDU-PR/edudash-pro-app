@@ -29,6 +29,7 @@ export default function DataDeletionPage() {
   const [deletionTypes, setDeletionTypes] = useState<string[]>([]);
   const [consent, setConsent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [requestData, setRequestData] = useState<RequestData | null>(null);
   const [error, setError] = useState('');
 
@@ -44,7 +45,7 @@ export default function DataDeletionPage() {
     );
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -58,6 +59,8 @@ export default function DataDeletionPage() {
       return;
     }
 
+    setSubmitting(true);
+
     const data: RequestData = {
       fullName: formData.fullName,
       email: formData.email,
@@ -69,35 +72,53 @@ export default function DataDeletionPage() {
       requestId: generateRequestId(),
     };
 
-    setRequestData(data);
+    try {
+      // Submit to API
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/submit-deletion-request`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+          },
+          body: JSON.stringify({
+            fullName: data.fullName,
+            email: data.email,
+            role: data.role,
+            organization: data.preschool,
+            deletionTypes: data.deletionTypes,
+            reason: data.reason,
+            requestId: data.requestId,
+            timestamp: data.timestamp,
+          }),
+        }
+      );
 
-    // Send via mailto
-    const subject = encodeURIComponent(`Data Deletion Request - ${data.requestId}`);
-    const body = encodeURIComponent(
-      `Data Deletion Request\n\n` +
-      `Request ID: ${data.requestId}\n` +
-      `Timestamp: ${data.timestamp}\n\n` +
-      `User Information:\n` +
-      `- Name: ${data.fullName}\n` +
-      `- Email: ${data.email}\n` +
-      `- Role: ${data.role}\n` +
-      `- Preschool: ${data.preschool}\n\n` +
-      `Deletion Requested For:\n` +
-      `${data.deletionTypes.map(type => `- ${type.replace(/_/g, ' ')}`).join('\n')}\n\n` +
-      `Reason:\n${data.reason}\n\n` +
-      `---\n` +
-      `JSON Format (for processing):\n` +
-      JSON.stringify(data, null, 2)
-    );
+      const result = await response.json();
 
-    window.location.href = `mailto:privacy@edudashpro.org.za?subject=${subject}&body=${body}`;
-    setSubmitted(true);
+      if (!response.ok) {
+        // Handle duplicate request error with better messaging
+        if (response.status === 409 && result.message) {
+          throw new Error(result.message);
+        }
+        throw new Error(result.error || 'Failed to submit request');
+      }
+
+      setRequestData(data);
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Submission error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to submit request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const copyJSON = () => {
     if (requestData) {
-      navigator.clipboard.writeText(JSON.stringify(requestData, null, 2)).then(() => {
-        alert('✅ Request details copied to clipboard!');
+      navigator.clipboard.writeText(requestData.requestId).then(() => {
+        alert('✅ Reference number copied to clipboard!');
       }).catch(() => {
         alert('❌ Failed to copy. Please select and copy manually.');
       });
@@ -106,12 +127,57 @@ export default function DataDeletionPage() {
 
   const downloadJSON = () => {
     if (requestData) {
-      const jsonText = JSON.stringify(requestData, null, 2);
-      const blob = new Blob([jsonText], { type: 'application/json' });
+      // Create a formatted receipt text
+      const receipt = `
+═══════════════════════════════════════════════════════════
+              EDUDASH PRO - DATA DELETION REQUEST RECEIPT
+═══════════════════════════════════════════════════════════
+
+Reference Number: ${requestData.requestId}
+Date Submitted:   ${new Date(requestData.timestamp).toLocaleString()}
+
+───────────────────────────────────────────────────────────
+                        REQUESTOR DETAILS
+───────────────────────────────────────────────────────────
+
+Full Name:        ${requestData.fullName}
+Email:            ${requestData.email}
+Role:             ${requestData.role}
+Organization:     ${requestData.preschool || 'N/A'}
+
+───────────────────────────────────────────────────────────
+                        DATA TO BE DELETED
+───────────────────────────────────────────────────────────
+
+${requestData.deletionTypes.map((t: string) => `• ${t.replace('_', ' ').toUpperCase()}`).join('\n')}
+
+───────────────────────────────────────────────────────────
+                        REASON PROVIDED
+───────────────────────────────────────────────────────────
+
+${requestData.reason || 'No reason provided'}
+
+═══════════════════════════════════════════════════════════
+                        WHAT HAPPENS NEXT
+═══════════════════════════════════════════════════════════
+
+1. You will receive a verification email within 72 hours
+2. Click the verification link to confirm your identity
+3. Your data will be marked for deletion (30-day grace period)
+4. Final confirmation email when deletion is complete
+
+───────────────────────────────────────────────────────────
+Questions? Contact: privacy@edudashpro.org.za
+Website: https://www.edudashpro.org.za
+
+© 2025 EduDash Pro (Pty) Ltd. All rights reserved.
+═══════════════════════════════════════════════════════════
+`;
+      const blob = new Blob([receipt], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `edudash-deletion-request-${requestData.requestId}.json`;
+      a.download = `EduDash-Deletion-Receipt-${requestData.requestId}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -149,9 +215,14 @@ export default function DataDeletionPage() {
     secondaryButton: { background: '#1a1a24', color: '#fff', padding: '14px 32px', border: '2px solid #2a2a3a', borderRadius: 8, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
     buttonGroup: { display: 'flex', gap: 16, marginTop: 32, flexWrap: 'wrap' as const },
     errorMessage: { background: 'rgba(255, 68, 68, 0.1)', border: '2px solid #ff4444', padding: 16, borderRadius: 8, marginTop: 16, color: '#ff4444' },
-    successBox: { background: 'rgba(0, 255, 136, 0.1)', border: '2px solid #00ff88', padding: 20, borderRadius: 8, marginTop: 24 },
+    successBox: { background: 'rgba(0, 255, 136, 0.1)', border: '2px solid #00ff88', padding: 24, borderRadius: 12, marginTop: 24 },
     successTitle: { color: '#00ff88', marginTop: 0 },
     jsonOutput: { background: '#0a0a0f', padding: 16, borderRadius: 8, border: '1px solid #2a2a3a', fontFamily: 'Courier New, monospace', fontSize: 14, overflowX: 'auto' as const, marginTop: 16, color: '#9CA3AF', whiteSpace: 'pre-wrap' as const },
+    detailsCard: { background: '#0a0a0f', borderRadius: 12, border: '1px solid #2a2a3a', marginTop: 16, overflow: 'hidden' },
+    detailRow: { display: 'flex', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid #1a1a24', flexWrap: 'wrap' as const, gap: 8 },
+    detailLabel: { color: '#9CA3AF', fontSize: 14, fontWeight: 500 },
+    detailValue: { color: '#fff', fontSize: 14, textAlign: 'right' as const },
+    refCode: { background: '#1a1a24', padding: '4px 10px', borderRadius: 6, color: '#00f5ff', fontSize: 13, fontFamily: 'monospace' },
     footer: { marginTop: 60, paddingTop: 24, borderTop: '1px solid #1f1f23', color: '#6B7280', textAlign: 'center' as const },
     list: { color: '#9CA3AF', lineHeight: 1.8, paddingLeft: 20, marginBottom: 16 },
     small: { color: '#6B7280', fontSize: 14, marginTop: 4 },
@@ -335,7 +406,13 @@ export default function DataDeletionPage() {
               {error && <div style={styles.errorMessage}>❌ {error}</div>}
 
               <div style={styles.buttonGroup}>
-                <button type="submit" style={styles.button}>Submit Deletion Request</button>
+                <button 
+                  type="submit" 
+                  style={{ ...styles.button, opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
+                  disabled={submitting}
+                >
+                  {submitting ? '⏳ Submitting...' : 'Submit Deletion Request'}
+                </button>
                 <Link href="/privacy" style={{ ...styles.secondaryButton, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
                   View Privacy Policy
                 </Link>
@@ -345,7 +422,7 @@ export default function DataDeletionPage() {
         ) : (
           <div style={styles.successBox}>
             <h3 style={styles.successTitle}>✅ Request Submitted Successfully!</h3>
-            <p style={styles.text}>Your data deletion request has been submitted. Here&apos;s what happens next:</p>
+            <p style={styles.text}>Your data deletion request has been submitted and saved to our system. Here&apos;s what happens next:</p>
             <ul style={styles.list}>
               <li>You will receive a verification email within 72 hours to <strong>{requestData?.email}</strong></li>
               <li>Click the link in the email to confirm your identity and authorize the deletion</li>
@@ -354,11 +431,54 @@ export default function DataDeletionPage() {
             </ul>
 
             <h3 style={styles.h3}>Your Request Details:</h3>
-            <div style={styles.jsonOutput}>{JSON.stringify(requestData, null, 2)}</div>
+            <div style={styles.detailsCard}>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Reference Number</span>
+                <span style={styles.detailValue}><code style={styles.refCode}>{requestData?.requestId}</code></span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Name</span>
+                <span style={styles.detailValue}>{requestData?.fullName}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Email</span>
+                <span style={styles.detailValue}>{requestData?.email}</span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Role</span>
+                <span style={{ ...styles.detailValue, textTransform: 'capitalize' }}>{requestData?.role}</span>
+              </div>
+              {requestData?.preschool && requestData.preschool !== 'Not provided' && (
+                <div style={styles.detailRow}>
+                  <span style={styles.detailLabel}>Organization</span>
+                  <span style={styles.detailValue}>{requestData.preschool}</span>
+                </div>
+              )}
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Data to Delete</span>
+                <span style={styles.detailValue}>
+                  {requestData?.deletionTypes?.map((type: string) => {
+                    const labels: Record<string, string> = {
+                      'full_account': '🗂️ Full Account',
+                      'voice_recordings': '🎤 Voice Recordings',
+                      'ai_conversations': '🤖 AI Conversations',
+                      'uploaded_files': '📁 Uploaded Files',
+                      'analytics_data': '📊 Analytics Data',
+                      'other': '📝 Other',
+                    };
+                    return labels[type] || type;
+                  }).join(', ')}
+                </span>
+              </div>
+              <div style={styles.detailRow}>
+                <span style={styles.detailLabel}>Submitted</span>
+                <span style={styles.detailValue}>{requestData?.timestamp ? new Date(requestData.timestamp).toLocaleString() : 'N/A'}</span>
+              </div>
+            </div>
 
             <div style={styles.buttonGroup}>
-              <button onClick={copyJSON} style={styles.button}>📋 Copy Request Details</button>
-              <button onClick={downloadJSON} style={styles.secondaryButton}>💾 Download as JSON</button>
+              <button onClick={copyJSON} style={styles.button}>📋 Copy Reference Number</button>
+              <button onClick={downloadJSON} style={styles.secondaryButton}>💾 Download Receipt</button>
             </div>
 
             <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #2a2a3a' }}>

@@ -30,6 +30,7 @@ export interface PrincipalDashboardData {
 
 export interface TeacherDashboardData {
   schoolName: string;
+  schoolTier?: 'free' | 'starter' | 'premium' | 'enterprise' | 'solo' | 'group_5' | 'group_10';
   totalStudents: number;
   totalClasses: number;
   upcomingLessons: number;

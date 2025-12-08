@@ -26,12 +26,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const FAB_SIZE = 56;
 const EDGE_PADDING = 16;
+const BOTTOM_NAV_HEIGHT = 70; // Height of bottom nav bar
 
 interface DraggableDashFABProps {
   bottomOffset?: number; // Extra offset for bottom nav
 }
 
-export function DraggableDashFAB({ bottomOffset = 0 }: DraggableDashFABProps) {
+export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: DraggableDashFABProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { showDashFAB, fabPosition, setFabPosition } = useAppPreferencesSafe();

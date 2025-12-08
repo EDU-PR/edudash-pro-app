@@ -1,0 +1,248 @@
+{
+  "app": {
+    "name": "EduDash",
+    "tagline": "Renforcer l'Éducation grâce à l'IA",
+    "version": "1.0.0"
+  },
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "account": "Compte",
+    "logout": "Se déconnecter",
+    "back": "Retour",
+    "next": "Suivant",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "add": "Ajouter",
+    "search": "Rechercher",
+    "retry": "Réessayer",
+    "close": "Fermer",
+    "switch_account": "Changer de compte"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signUp": "S'inscrire",
+    "signOut": "Se déconnecter",
+    "forgotPassword": "Mot de passe oublié",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "firstName": "Prénom",
+    "lastName": "Nom de famille",
+    "loading": "Chargement...",
+    "signingIn": "Connexion en cours...",
+    "signingUp": "Création du compte...",
+    "invalidCredentials": "E-mail ou mot de passe invalide",
+    "accountCreated": "Compte créé avec succès",
+    "passwordResetSent": "Lien de réinitialisation envoyé à votre e-mail",
+    "remember_me": "Se souvenir de moi",
+    "dont_have_account": "Vous n'avez pas de compte?",
+    "sign_in": {
+      "enter_email_password": "Veuillez entrer l'e-mail et le mot de passe",
+      "failed": "Échec de Connexion",
+      "signing_in": "Connexion en cours...",
+      "cta": "Se connecter",
+      "no_saved_credentials": "Aucune information d'identification enregistrée. Veuillez vous connecter avec votre mot de passe."
+    },
+    "biometric": {
+      "prompt": "Se connecter à EduDash Pro",
+      "use_face_id": "Utiliser Face ID",
+      "use_fingerprint": "Utiliser l'Empreinte Digitale",
+      "use_biometric": "Utiliser la Biométrie",
+      "enabled_for": "Connexion biométrique activée"
+    },
+    "biometric_not_available": {
+      "title": "Biométrie Non Disponible",
+      "desc": "Veuillez utiliser votre mot de passe pour vous connecter."
+    },
+    "biometric_failed": {
+      "title": "Échec de l'Authentification",
+      "desc": "L'authentification biométrique a échoué",
+      "unexpected": "Une erreur s'est produite lors de l'authentification biométrique"
+    },
+    "oauth": {
+      "failed_start": "Impossible de démarrer la connexion sociale",
+      "config_error": "Erreur de configuration OAuth. Veuillez contacter le support.",
+      "unavailable": "Connexion Non Disponible",
+      "error": "Erreur de Connexion"
+    },
+    "sign_up_parent": "S'inscrire en tant que Parent",
+    "sign_up_teacher": "S'inscrire en tant qu'Enseignant",
+    "school_register_q": "Vous cherchez à enregistrer une école?"
+  },
+  "roles": {
+    "parent": "Parent",
+    "teacher": "Enseignant",
+    "principal": "Directeur",
+    "admin": "Administrateur",
+    "superAdmin": "Super Administrateur"
+  },
+  "dashboard": {
+    "welcome": "Bienvenue, {{name}}!",
+    "quickActions": "Actions Rapides",
+    "recentActivity": "Activité Récente",
+    "statistics": "Statistiques",
+    "notifications": "Notifications",
+    "noActivity": "Aucune activité récente",
+    "loading": "Chargement du tableau de bord...",
+    "principal_hub": "Centre Principal",
+    "managing_school": "Gestion de {{schoolName}}",
+    "school_overview": "Aperçu de l'École",
+    "financial_management": "Gestion Financière",
+    "ai_analytics": "IA et Analyse",
+    "good_morning": "Bonjour",
+    "good_afternoon": "Bon après-midi",
+    "good_evening": "Bonsoir",
+    "loading_profile": "Loading profile...",
+    "no_school_found_redirect": "No school found. Redirecting to onboarding…",
+    "principal_hub_load_error": "Unable to Load Principal Hub",
+    "your_school": "your school",
+    "unlock_premium_subtitle": "Advanced analytics, AI insights & more • Transform your school today!",
+    "capacity_students": "{{current}} / {{capacity}} students",
+    "utilized_percentage": "{{percentage}}% utilized"
+  },
+  "ai": {
+    "homework": {
+      "title": "Assistant IA pour les Devoirs",
+      "description": "Obtenez une aide étape par étape pour vos devoirs",
+      "loading": "Réflexion...",
+      "error": "Désolé, je n'ai pas pu aider avec cette question. Veuillez réessayer."
+    },
+    "lessons": {
+      "title": "Générateur IA de Leçons",
+      "description": "Créez des leçons engageantes avec l'assistance de l'IA",
+      "loading": "Création de la leçon...",
+      "error": "Échec de la génération de la leçon. Veuillez réessayer."
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": "Paramètres du Profil",
+    "notifications": "Notifications",
+    "privacy": "Confidentialité",
+    "biometric": {
+      "title": "Authentification biométrique",
+      "not_available_desc": "L'authentification biométrique n'est pas disponible sur cet appareil. Elle nécessite un lecteur d'empreintes ou la reconnaissance faciale."
+    },
+    "privacy_security": {
+      "title": "Confidentialité et Sécurité",
+      "info": "Informations sur la protection des données"
+    },
+    "manage_alerts": "Gérer vos notifications",
+    "notifications_coming_soon_desc": "Les paramètres de notification seront disponibles dans la prochaine mise à jour.",
+    "language": {
+      "title": "Langue",
+      "comingSoon": "Bientôt Disponible",
+      "soon": "Bientôt"
+    },
+    "theme": {
+      "title": "Thème",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système",
+      "preview": "Aperçu du Thème",
+      "primary": "Primaire",
+      "secondary": "Secondaire",
+      "accent": "Accent"
+    },
+    "preferences": {
+      "title": "Préférences",
+      "autoTheme": "Thème Automatique",
+      "autoThemeDesc": "Changer le thème selon les paramètres système"
+    },
+    "about": "À Propos",
+    "support": "Support",
+    "termsOfService": "Conditions d'Utilisation",
+    "privacyPolicy": "Politique de Confidentialité"
+  },
+  "teacher": {
+    "performance": {
+      "active": "Active teacher",
+      "no_classes": "No classes assigned - requires attention",
+      "high_ratio": "High student ratio ({{ratio}}:1) - may need support",
+      "excellent": "Excellent performance - {{classes}} classes, {{ratio}}:1 ratio, {{attendance}}% attendance",
+      "strong": "Strong performance - {{classes}} classes, good attendance rates",
+      "good": "Good performance - managing {{students}} students effectively",
+      "review_needed": "Performance review needed - {{attendance}}% attendance rate in classes"
+    }
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "warning": "Avertissement",
+    "info": "Information",
+    "email": "Email",
+    "status": "Status",
+    "go_now": "Go now",
+    "not_set": "Non défini",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "not_available": "Indisponible",
+    "coming_soon": "Bientôt disponible"
+  },
+  "quick_actions": {
+    "seat_management_subtitle": "Assign or revoke teacher seats"
+  },
+  "account": {
+    "info": {
+      "title": "Informations du compte",
+      "full_name": "Nom complet",
+      "role": "Rôle",
+      "school_id": "ID de l'école"
+    },
+    "edit": {
+      "title": "Modifier le profil",
+      "personal_information": "Informations personnelles"
+    },
+    "placeholders": {
+      "first_name": "Entrez votre prénom",
+      "last_name": "Entrez votre nom"
+    }
+  },
+  "subscription": {
+    "choose_your_plan": "Choose Your Plan"
+  },
+  "curriculum": {
+    "standards": {
+      "placeholder": "{{subject}} - Standards de Niveau {{grade}}"
+    }
+  }
+  ,
+  "subscription": {
+    "choose_your_plan": "Choisissez votre offre",
+    "managePlan": "Gérer l’abonnement",
+    "tiers": {
+      "free": "Gratuit",
+      "starter": "Démarrage",
+      "basic": "Basique",
+      "premium": "Premium",
+      "pro": "Pro",
+      "enterprise": "Entreprise"
+    },
+    "tierSource": {
+      "caption": "Source : {{source}}",
+      "organization": "Offre de l’organisation",
+      "school_plan": "Abonnement de l’école",
+      "school_default": "Par défaut de l’école",
+      "user": "Paramètre utilisateur",
+      "unknown": "Inconnu"
+    }
+  },
+  "trends": {
+    "up": "en hausse",
+    "down": "en baisse",
+    "stable": "stable",
+    "good": "bon",
+    "excellent": "excellent",
+    "warning": "avertissement",
+    "attention": "attention",
+    "needs_attention": "nécessite une attention",
+    "low": "faible",
+    "high": "élevé"
+  }
+}

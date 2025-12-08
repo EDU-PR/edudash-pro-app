@@ -47,7 +47,7 @@ let useSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isLoading:
 let useMarkThreadRead: () => { mutate: (args: any) => void };
 
 // Component imports with fallbacks
-let VoiceRecorder: React.FC<any> | null = null;
+let InlineVoiceRecorder: React.FC<any> | null = null;
 let VoiceNotePlayer: React.FC<any> | null = null;
 let ChatWallpaperPicker: React.FC<any> | null = null;
 let MessageActionsMenu: React.FC<any> | null = null;
@@ -58,7 +58,12 @@ let WALLPAPER_PRESETS: any[] = [];
 
 // Try component imports
 try {
-  VoiceRecorder = require('@/components/messaging/VoiceRecorder').VoiceRecorder;
+  InlineVoiceRecorder = require('@/components/messaging/InlineVoiceRecorder').InlineVoiceRecorder;
+} catch {}
+
+let VoiceMessageBubble: React.FC<any> | null = null;
+try {
+  VoiceMessageBubble = require('@/components/messaging/VoiceMessageBubble').VoiceMessageBubble;
 } catch {}
 
 try {
@@ -83,6 +88,10 @@ try {
 try {
   EmojiPicker = require('@/components/messaging/EmojiPicker').EmojiPicker;
 } catch {}
+
+// Voice storage service
+let uploadVoiceNote: ((uri: string, duration: number, conversationId?: string) => Promise<{ publicUrl: string; storagePath: string }>) | null = null;
+try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
 
 // Call provider import
 let useCallHook: (() => { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void }) | null = null;
@@ -136,6 +145,8 @@ interface Message {
   read_by?: string[];
   delivered_to?: string[];
   isTyping?: boolean;
+  voice_url?: string;
+  voice_duration?: number;
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -282,7 +293,7 @@ const getVoiceNoteDuration = (content: string): number => {
   return match ? parseInt(match[1], 10) * 1000 : 30000;
 };
 
-// Message Bubble Component
+// Message Bubble Component - Memoized to prevent flash on new messages
 interface MessageBubbleProps {
   msg: Message;
   isOwn: boolean;
@@ -290,7 +301,7 @@ interface MessageBubbleProps {
   otherParticipantIds?: string[];
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, otherParticipantIds = [] }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ msg, isOwn, onLongPress, otherParticipantIds = [] }) => {
   const name = msg.sender 
     ? `${msg.sender.first_name || ''} ${msg.sender.last_name || ''}`.trim() || 'User'
     : 'User';
@@ -310,7 +321,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
   };
 
   const status = getMessageStatus();
-  const isVoice = isVoiceNote(msg.content);
+  const isVoice = isVoiceNote(msg.content) || msg.voice_url;
+
+  // For voice messages with actual audio URL, use the VoiceMessageBubble
+  if (isVoice && msg.voice_url && VoiceMessageBubble) {
+    return (
+      <VoiceMessageBubble
+        audioUrl={msg.voice_url}
+        duration={msg.voice_duration || getVoiceNoteDuration(msg.content)}
+        isOwnMessage={isOwn}
+        timestamp={formatTime(msg.created_at)}
+        senderName={!isOwn ? name : undefined}
+        isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
+      />
+    );
+  }
 
   return (
     <Pressable
@@ -333,11 +358,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
       >
         {isVoice ? (
           <View style={bubbleStyles.voiceContainer}>
-            {/* Voice message placeholder UI */}
+            {/* Voice message placeholder UI - shows when no voice_url available */}
             <View style={bubbleStyles.voiceRow}>
-              <View style={[bubbleStyles.playBtn, isOwn ? bubbleStyles.playBtnOwn : bubbleStyles.playBtnOther]}>
+              <TouchableOpacity 
+                style={[bubbleStyles.playBtn, isOwn ? bubbleStyles.playBtnOwn : bubbleStyles.playBtnOther]}
+                onPress={() => Alert.alert('Voice Note', 'Voice playback requires audio URL')}
+              >
                 <Ionicons name="play" size={20} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
-              </View>
+              </TouchableOpacity>
               <View style={bubbleStyles.waveformPlaceholder}>
                 {[...Array(24)].map((_, i) => (
                   <View 
@@ -345,7 +373,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
                     style={[
                       bubbleStyles.waveBar,
                       { 
-                        height: Math.random() * 16 + 6,
+                        height: 6 + (i % 5) * 3, // Consistent waveform instead of random
                         backgroundColor: isOwn ? 'rgba(255,255,255,0.5)' : 'rgba(148,163,184,0.6)',
                       }
                     ]} 
@@ -376,7 +404,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isOwn, onLongPress, 
       </LinearGradient>
     </Pressable>
   );
-};
+}, (prevProps, nextProps) => {
+  // Only re-render if these specific props change
+  return prevProps.msg.id === nextProps.msg.id &&
+         prevProps.isOwn === nextProps.isOwn &&
+         JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
+         JSON.stringify(prevProps.msg.delivered_to) === JSON.stringify(nextProps.msg.delivered_to);
+});
 
 const bubbleStyles = StyleSheet.create({
   container: { marginVertical: 3, maxWidth: '85%' },
@@ -504,6 +538,7 @@ export default function ParentMessageThreadScreen() {
   const [sending, setSending] = useState(false);
   const [optimisticMsgs, setOptimisticMsgs] = useState<Message[]>([]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
   
   // Wallpaper state
   const [currentWallpaper, setCurrentWallpaper] = useState<{ type: string; value: string } | null>(null);
@@ -554,8 +589,8 @@ export default function ParentMessageThreadScreen() {
   useEffect(() => {
     const glowLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(micGlowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(micGlowAnim, { toValue: 0.4, duration: 1200, useNativeDriver: true }),
+        Animated.timing(micGlowAnim, { toValue: 1, duration: 1200, useNativeDriver: false }),
+        Animated.timing(micGlowAnim, { toValue: 0.4, duration: 1200, useNativeDriver: false }),
       ])
     );
     glowLoop.start();
@@ -670,9 +705,11 @@ export default function ParentMessageThreadScreen() {
   // Voice recording handler
   const handleVoiceRecording = useCallback(async (uri: string, duration: number) => {
     if (!threadId) return;
+    setIsRecording(false);
     Vibration.vibrate([0, 30, 50, 30]);
     
-    const content = `🎤 Voice message (${Math.round(duration / 1000)}s)`;
+    const durationSecs = Math.round(duration / 1000);
+    const content = `🎤 Voice (${durationSecs}s)`;
     
     const tempMsg: Message = {
       id: `temp-voice-${Date.now()}`,
@@ -684,7 +721,20 @@ export default function ParentMessageThreadScreen() {
     setOptimisticMsgs(prev => [...prev, tempMsg]);
     
     try {
-      await sendMessage({ threadId, content });
+      // Upload to Supabase Storage
+      if (uploadVoiceNote) {
+        const result = await uploadVoiceNote(uri, duration, threadId);
+        await sendMessage({ 
+          threadId, 
+          content,
+          voiceUrl: result.publicUrl,
+          voiceDuration: durationSecs,
+        });
+      } else {
+        // Fallback: send as text only
+        console.warn('[Voice] uploadVoiceNote not available, sending text only');
+        await sendMessage({ threadId, content });
+      }
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
     } catch (err) {
       console.error('Voice send failed:', err);
@@ -692,6 +742,14 @@ export default function ParentMessageThreadScreen() {
       Alert.alert('Error', 'Failed to send voice message.');
     }
   }, [threadId, user?.id, sendMessage]);
+
+  const handleVoiceCancel = useCallback(() => {
+    setIsRecording(false);
+  }, []);
+
+  const handleVoiceStart = useCallback(() => {
+    setIsRecording(true);
+  }, []);
 
   // Message long press handler
   const handleMessageLongPress = useCallback((msg: Message) => {
@@ -1091,53 +1149,62 @@ export default function ParentMessageThreadScreen() {
         )}
         
         <View style={styles.composerRow}>
-          {/* Emoji button */}
-          <TouchableOpacity 
-            style={styles.composerBtn}
-            onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-          >
-            <Ionicons 
-              name={showEmojiPicker ? 'close-outline' : 'happy-outline'} 
-              size={32} 
-              color="rgba(255,255,255,0.6)" 
-              marginTop={12}
+          {isRecording && InlineVoiceRecorder ? (
+            // Inline recording UI replaces the composer
+            <InlineVoiceRecorder
+              isRecording={isRecording}
+              onRecordingComplete={handleVoiceRecording}
+              onRecordingCancel={handleVoiceCancel}
+              onRecordingStart={handleVoiceStart}
             />
-          </TouchableOpacity>
-          
-          {/* Input wrapper */}
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Message"
-              placeholderTextColor="rgba(255,255,255,0.4)"
-              value={text}
-              onChangeText={setText}
-              multiline
-              maxLength={1000}
-              editable={!sending}
-              onFocus={() => setShowEmojiPicker(false)}
-            />
-            
-            {/* Camera button (hide when typing) */}
-            {!text.trim() && (
+          ) : (
+            <>
+              {/* Emoji button */}
               <TouchableOpacity 
-                style={styles.inlineBtn}
-                onPress={() => Alert.alert('Camera', 'Coming soon')}
+                style={styles.composerBtn}
+                onPress={() => setShowEmojiPicker(!showEmojiPicker)}
               >
-                <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
+                <Ionicons 
+                  name={showEmojiPicker ? 'close-outline' : 'happy-outline'} 
+                  size={32} 
+                  color="rgba(255,255,255,0.6)" 
+                />
               </TouchableOpacity>
-            )}
-            
-            {/* Attachment button */}
-            <TouchableOpacity 
-              style={styles.inlineBtn}
-              onPress={() => Alert.alert('Attachments', 'Coming soon')}
-            >
-              <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
-            </TouchableOpacity>
-          </View>
-          
-          {/* Send or Mic button */}
+              
+              {/* Input wrapper */}
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Message"
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  value={text}
+                  onChangeText={setText}
+                  multiline
+                  maxLength={1000}
+                  editable={!sending}
+                  onFocus={() => setShowEmojiPicker(false)}
+                />
+                
+                {/* Camera button (hide when typing) */}
+                {!text.trim() && (
+                  <TouchableOpacity 
+                    style={styles.inlineBtn}
+                    onPress={() => Alert.alert('Camera', 'Coming soon')}
+                  >
+                    <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
+                  </TouchableOpacity>
+                )}
+                
+                {/* Attachment button */}
+                <TouchableOpacity 
+                  style={styles.inlineBtn}
+                  onPress={() => Alert.alert('Attachments', 'Coming soon')}
+                >
+                  <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
+                </TouchableOpacity>
+              </View>
+              
+              {/* Send or Mic button */}
           {text.trim() ? (
             <TouchableOpacity
               style={styles.actionButton}
@@ -1156,30 +1223,33 @@ export default function ParentMessageThreadScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
-          ) : VoiceRecorder ? (
+          ) : (
+            // Glowing mic button with InlineVoiceRecorder
             <View style={styles.micContainer}>
               <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
-              <View style={styles.micButtonWrapper}>
-                <LinearGradient colors={GRADIENT_DARK_SLATE} style={styles.micGradientButton}>
-                  <VoiceRecorder
-                    onRecordingComplete={handleVoiceRecording}
-                    onRecordingCancel={() => console.log('Recording cancelled')}
-                  />
-                </LinearGradient>
-              </View>
+              {InlineVoiceRecorder ? (
+                <InlineVoiceRecorder
+                  isRecording={isRecording}
+                  onRecordingComplete={handleVoiceRecording}
+                  onRecordingCancel={handleVoiceCancel}
+                  onRecordingStart={handleVoiceStart}
+                />
+              ) : (
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => Alert.alert('Voice', 'Voice recording not available')}
+                >
+                  <LinearGradient 
+                    colors={['#0776d1ff', '#043c85ff']} 
+                    style={[styles.gradientButton, styles.micButton]}
+                  >
+                    <Ionicons name="mic" size={22} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
             </View>
-          ) : (
-            <TouchableOpacity 
-              style={styles.actionButton} 
-              onPress={() => Alert.alert('Voice', 'Voice recording not available')}
-            >
-              <LinearGradient 
-                colors={['#0776d1ff', '#043c85ff']} 
-                style={[styles.gradientButton, styles.micButton]}
-              >
-                <Ionicons name="mic" size={22} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
+          )}
+            </>
           )}
         </View>
       </View>

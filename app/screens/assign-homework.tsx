@@ -8,11 +8,15 @@ import { TeacherDataService } from '@/lib/services/teacherDataService'
 import { router } from 'expo-router'
 import { WorksheetQuickWidget } from '@/components/worksheets/WorksheetQuickAction'
 import type { Assignment } from '@/lib/models/Assignment'
+import { useTeacherSchool } from '@/hooks/useTeacherSchool'
 
 export default function AssignHomeworkScreen() {
   const { profile } = require('@/contexts/AuthContext') as any
   const canAssign = !!profile?.hasCapability && profile.hasCapability('create_assignments' as any)
   const palette = { background: '#fff', text: '#111827', textSecondary: '#6B7280', outline: '#E5E7EB', surface: '#FFFFFF', primary: '#3B82F6' }
+  
+  // Get teacher's school ID
+  const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool()
 
   const [mode, setMode] = useState<'class' | 'students'>('class')
   const [classId, setClassId] = useState<string | null>(null)
@@ -26,29 +30,40 @@ export default function AssignHomeworkScreen() {
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>('30')
   const lessonId = '' // wire via navigation params later
 
+  // Fetch classes filtered by teacher's school
   const classesQuery = useQuery({
-    queryKey: ['teacher_classes'],
+    queryKey: ['teacher_classes', schoolId],
     queryFn: async () => {
+      if (!schoolId) return []
       const { data, error } = await assertSupabase()
         .from('classes')
-        .select('id,name')
+        .select('id, name, grade_level')
+        .eq('preschool_id', schoolId)
         .eq('is_active', true)
+        .order('name')
       if (error) throw error
-      return (data || []) as { id: string; name: string }[]
+      return (data || []) as { id: string; name: string; grade_level?: string }[]
     },
+    enabled: !!schoolId,
     staleTime: 60_000,
   })
 
+  // Fetch students filtered by school
   const studentsQuery = useQuery({
-    queryKey: ['students', classId],
+    queryKey: ['students', classId, schoolId],
     queryFn: async () => {
-      let q = assertSupabase().from('students').select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)').eq('is_active', true)
+      if (!schoolId) return []
+      let q = assertSupabase()
+        .from('students')
+        .select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)')
+        .eq('preschool_id', schoolId)
+        .eq('is_active', true)
       if (classId) q = q.eq('class_id', classId)
-      const { data, error } = await q
+      const { data, error } = await q.order('first_name')
       if (error) throw error
       return (data || []) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
     },
-    enabled: mode === 'students',
+    enabled: mode === 'students' && !!schoolId,
     staleTime: 60_000,
   })
 

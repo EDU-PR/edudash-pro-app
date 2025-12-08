@@ -23,55 +23,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParentDashboard } from '@/hooks/useDashboardData';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
+import { SubPageHeader } from '@/components/SubPageHeader';
 
 const { width } = Dimensions.get('window');
-
-// Custom Header Component
-interface ScreenHeaderProps {
-  title: string;
-  subtitle?: string;
-  onBack?: () => void;
-  rightAction?: {
-    icon: keyof typeof Ionicons.glyphMap;
-    onPress: () => void;
-  };
-}
-
-const ScreenHeader: React.FC<ScreenHeaderProps> = ({ title, subtitle, onBack, rightAction }) => {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  
-  return (
-    <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.surface }]}>
-      <TouchableOpacity 
-        style={styles.headerBackButton} 
-        onPress={onBack || (() => router.back())}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Ionicons name="arrow-back" size={24} color={theme.text} />
-      </TouchableOpacity>
-      
-      <View style={styles.headerTitleContainer}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>{title}</Text>
-        {subtitle && (
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
-        )}
-      </View>
-      
-      {rightAction ? (
-        <TouchableOpacity 
-          style={styles.headerRightButton} 
-          onPress={rightAction.onPress}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name={rightAction.icon} size={24} color={theme.text} />
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.headerRightButton} />
-      )}
-    </View>
-  );
-};
 
 // Homework Item Component
 interface HomeworkItemProps {
@@ -239,12 +193,13 @@ export default function HomeworkScreen() {
   
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScreenHeader 
+      <SubPageHeader 
         title={t('homework.title', { defaultValue: 'Homework' })}
         subtitle={profile?.preschool_name || ''}
         rightAction={{
           icon: 'sparkles',
           onPress: handleAIHelp,
+          label: 'AI Homework Help',
         }}
       />
       
@@ -355,38 +310,6 @@ export default function HomeworkScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  headerBackButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  headerRightButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   filterContainer: {
     paddingVertical: 12,

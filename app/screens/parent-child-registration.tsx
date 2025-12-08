@@ -456,12 +456,9 @@ export default function ParentChildRegistrationScreen() {
                   const typeMap: Record<string, string> = {
                     'preschool': '🏫 Preschool',
                     'k12_school': '🎓 K-12 School',
-                    'university': '🎓 University',
-                    'corporate': '🏢 Corporate',
-                    'sports_club': '⚽ Sports Club',
-                    'community_org': '🤝 Community Org',
                     'training_center': '📚 Training Center',
-                    'tutoring_center': '✏️ Tutoring Center'
+                    'tutoring_center': '✏️ Tutoring Center',
+                    'skills_development': '🛠️ Skills Development'
                   };
                   return typeMap[type] || `📍 ${type}`;
                 };

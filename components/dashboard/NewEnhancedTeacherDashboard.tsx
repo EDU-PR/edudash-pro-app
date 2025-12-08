@@ -39,6 +39,34 @@ const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
 const containerWidth = width - (cardPadding * 2);
 const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
 
+// Helper to get tier badge color
+const getTierColor = (tier: string, theme: any): string => {
+  switch (tier) {
+    case 'enterprise': return '#8B5CF6'; // Purple
+    case 'premium':
+    case 'group_10': return '#F59E0B'; // Amber/Gold
+    case 'starter':
+    case 'group_5': return '#3B82F6'; // Blue
+    case 'solo':
+    case 'free':
+    default: return theme.textSecondary; // Gray
+  }
+};
+
+// Helper to format tier label for display
+const getTierLabel = (tier: string): string => {
+  switch (tier) {
+    case 'enterprise': return 'Enterprise';
+    case 'premium': return 'Premium';
+    case 'group_10': return 'Group 10';
+    case 'starter': return 'Starter';
+    case 'group_5': return 'Group 5';
+    case 'solo': return 'Solo';
+    case 'free': 
+    default: return 'Free';
+  }
+};
+
 interface NewEnhancedTeacherDashboardProps {
   refreshTrigger?: number;
   preferences?: any;
@@ -102,10 +130,39 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.greeting}>{state.getGreeting()}</Text>
-          <Text style={styles.subtitle}>{t('teacher.dashboard_subtitle')}</Text>
+        {/* Enhanced Header Card */}
+        <View style={styles.headerCard}>
+          <View style={styles.headerGradient}>
+            <View style={styles.headerContent}>
+              <View style={styles.greetingRow}>
+                <Text style={styles.greetingEmoji}>👋</Text>
+                <View style={styles.greetingTextContainer}>
+                  <Text style={styles.greeting}>{state.getGreeting()}</Text>
+                  <Text style={styles.subtitle}>{t('teacher.dashboard_subtitle')}</Text>
+                </View>
+              </View>
+              
+              {/* School info with tier badge */}
+              {dashboardData?.schoolName && (
+                <View style={styles.schoolCard}>
+                  <View style={styles.schoolIconContainer}>
+                    <Text style={styles.schoolIcon}>🏫</Text>
+                  </View>
+                  <View style={styles.schoolTextContainer}>
+                    <Text style={styles.schoolLabel}>{t('teacher.your_school', { defaultValue: 'Your School' })}</Text>
+                    <Text style={styles.schoolName}>{dashboardData.schoolName}</Text>
+                  </View>
+                  {dashboardData?.schoolTier && (
+                    <View style={[styles.tierBadge, { backgroundColor: getTierColor(dashboardData.schoolTier, theme) }]}>
+                      <Text style={styles.tierBadgeText}>
+                        {getTierLabel(dashboardData.schoolTier)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
         </View>
 
         {/* Metrics Grid */}
@@ -184,18 +241,97 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     color: theme.textSecondary,
     marginTop: 16,
   },
-  header: {
-    marginBottom: 32,
+  headerCard: {
+    marginBottom: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.border,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  headerGradient: {
+    padding: isTablet ? 24 : 18,
+    backgroundColor: theme.primary + '10',
+  },
+  headerContent: {
+    gap: 16,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  greetingEmoji: {
+    fontSize: isTablet ? 40 : 32,
+    marginTop: 2,
+  },
+  greetingTextContainer: {
+    flex: 1,
   },
   greeting: {
-    fontSize: isTablet ? 32 : isSmallScreen ? 24 : 28,
-    fontWeight: 'bold',
+    fontSize: isTablet ? 28 : isSmallScreen ? 22 : 24,
+    fontWeight: '700',
     color: theme.text,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: isTablet ? 18 : isSmallScreen ? 14 : 16,
+    fontSize: isTablet ? 16 : isSmallScreen ? 13 : 14,
     color: theme.textSecondary,
+    fontWeight: '500',
+  },
+  schoolCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.background,
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  schoolIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: theme.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  schoolIcon: {
+    fontSize: 20,
+  },
+  schoolTextContainer: {
+    flex: 1,
+  },
+  schoolLabel: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  schoolName: {
+    fontSize: isTablet ? 16 : 14,
+    color: theme.text,
+    fontWeight: '600',
+  },
+  tierBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  tierBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   section: {
     marginBottom: 32,
