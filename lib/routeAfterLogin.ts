@@ -6,8 +6,14 @@ import { fetchEnhancedUserProfile, type EnhancedUserProfile, type Role } from '@
 import type { User } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
+type AsyncStorageType = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+} | null;
+
 // Optional AsyncStorage for bridging plan selection across auth (no-op on web)
-let AsyncStorage: any = null;
+let AsyncStorage: AsyncStorageType = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch (e) { /* noop */ }
 
 function normalizeRole(r?: string | null): string | null {
@@ -43,8 +49,9 @@ export async function detectRoleAndSchool(user?: User | null): Promise<{ role: s
   }
   
   const id = authUser?.id;
-  let role: string | null = normalizeRole((authUser?.user_metadata as any)?.role ?? null);
-  let school: string | null = (authUser?.user_metadata as any)?.preschool_id ?? null;
+  const metadata = authUser?.user_metadata as { role?: string; preschool_id?: string } | undefined;
+  let role: string | null = normalizeRole(metadata?.role ?? null);
+  let school: string | null = metadata?.preschool_id ?? null;
 
   // First fallback: check profiles table by id (auth.users.id)
   if (id && (!role || school === null)) {
@@ -55,8 +62,9 @@ export async function detectRoleAndSchool(user?: User | null): Promise<{ role: s
         .eq('id', id)
         .maybeSingle();
       if (!uerror && udata) {
-        role = normalizeRole((udata as any).role ?? role);
-        school = (udata as any).preschool_id ?? school;
+        const profileData = udata as { role?: string; preschool_id?: string };
+        role = normalizeRole(profileData.role ?? role);
+        school = profileData.preschool_id ?? school;
       }
     } catch (e) {
       console.debug('Fallback #1 (profiles table) lookup failed', e);

@@ -26,7 +26,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 
 export interface MessageAttachment {
   id: string;
@@ -323,8 +323,8 @@ export function MessageAttachmentBar({
       
       // Configure audio mode
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
       
       // Start recording
@@ -374,7 +374,7 @@ export function MessageAttachmentBar({
       
       // Reset audio mode
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecording: false,
       });
       
       recordingRef.current = null;
@@ -418,7 +418,7 @@ export function MessageAttachmentBar({
       
       await recordingRef.current.stopAndUnloadAsync();
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecording: false,
       });
       
       recordingRef.current = null;

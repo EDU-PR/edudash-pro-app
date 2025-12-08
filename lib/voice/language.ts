@@ -17,9 +17,12 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 // ==================== TYPES ====================
 
@@ -135,7 +138,7 @@ export function useLanguageProfile(detectedLanguage?: string) {
       try {
         // 1. Try explicit preference from database (RLS-protected)
         if (session?.user?.id) {
-          const { data: pref } = await supabase
+          const { data: pref } = await getSupabase()
             .from('voice_preferences')
             .select('language, voice_id')
             .eq('user_id', session.user.id)
@@ -212,7 +215,7 @@ export function useUpdateLanguagePreference() {
       
       const voice_id = getAzureVoice(language, gender || 'female');
       
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from('voice_preferences')
         .upsert({
           user_id: session.user.id,

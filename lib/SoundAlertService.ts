@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import * as Notifications from 'expo-notifications';
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { assertSupabase } from './supabase';

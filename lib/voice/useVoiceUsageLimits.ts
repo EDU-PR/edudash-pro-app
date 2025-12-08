@@ -6,8 +6,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 export interface VoiceUsageQuota {
   tier: 'free' | 'starter' | 'professional' | 'enterprise';
@@ -61,7 +64,7 @@ export function useVoiceUsageLimits(): VoiceUsageLimitsState {
       setError(null);
       
       // Check usage limits with minimal estimated units (just to get quota info)
-      const { data, error: rpcError } = await supabase.rpc('check_voice_usage_limit', {
+      const { data, error: rpcError } = await getSupabase().rpc('check_voice_usage_limit', {
         p_user_id: user.id,
         p_preschool_id: preschoolId,
         p_service: 'stt',
@@ -77,7 +80,7 @@ export function useVoiceUsageLimits(): VoiceUsageLimitsState {
       }
       
       // Get total limits from quotas table
-      const { data: quotaConfig, error: quotaError } = await supabase
+      const { data: quotaConfig, error: quotaError } = await getSupabase()
         .from('voice_usage_quotas')
         .select('*')
         .eq('subscription_tier', data.tier)

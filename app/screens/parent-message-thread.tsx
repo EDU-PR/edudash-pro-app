@@ -38,6 +38,7 @@ import {
   GRADIENT_DARK_SLATE,
   SHADOW_CYAN,
 } from '../../components/messaging/theme';
+import { toast } from '@/components/ui/ToastProvider';
 
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
@@ -362,7 +363,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ msg, isOwn, on
             <View style={bubbleStyles.voiceRow}>
               <TouchableOpacity 
                 style={[bubbleStyles.playBtn, isOwn ? bubbleStyles.playBtnOwn : bubbleStyles.playBtnOther]}
-                onPress={() => Alert.alert('Voice Note', 'Voice playback requires audio URL')}
+                onPress={() => toast.info('Voice playback requires audio URL', 'Voice Note')}
               >
                 <Ionicons name="play" size={20} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
               </TouchableOpacity>
@@ -696,7 +697,7 @@ export default function ParentMessageThreadScreen() {
       console.error('Send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       setText(content);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      toast.error('Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
@@ -739,7 +740,7 @@ export default function ParentMessageThreadScreen() {
     } catch (err) {
       console.error('Voice send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
-      Alert.alert('Error', 'Failed to send voice message.');
+      toast.error('Failed to send voice message.');
     }
   }, [threadId, user?.id, sendMessage]);
 
@@ -781,7 +782,7 @@ export default function ParentMessageThreadScreen() {
   }, []);
 
   const handleForward = useCallback(() => {
-    Alert.alert('Forward', 'Forwarding is not yet implemented');
+    toast.info('Forwarding is not yet implemented', 'Forward');
     setShowMessageActions(false);
     setSelectedMessage(null);
   }, []);
@@ -813,7 +814,7 @@ export default function ParentMessageThreadScreen() {
               refetch();
             } catch (err) {
               console.error('Delete failed:', err);
-              Alert.alert('Error', 'Failed to delete message');
+              toast.error('Failed to delete message');
             }
           }
         }
@@ -845,12 +846,12 @@ export default function ParentMessageThreadScreen() {
   }, []);
 
   const handleMuteNotifications = useCallback(() => {
-    Alert.alert('Notifications', 'Mute notifications feature coming soon');
+    toast.info('Mute notifications feature coming soon', 'Notifications');
     setShowOptionsMenu(false);
   }, []);
 
   const handleSearchInChat = useCallback(() => {
-    Alert.alert('Search', 'Search in chat feature coming soon');
+    toast.info('Search in chat feature coming soon', 'Search');
     setShowOptionsMenu(false);
   }, []);
 
@@ -860,20 +861,20 @@ export default function ParentMessageThreadScreen() {
       'Export chat history including media?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Without Media', onPress: () => Alert.alert('Exporting', 'Chat export started...') },
-        { text: 'Include Media', onPress: () => Alert.alert('Exporting', 'Chat export with media started...') }
+        { text: 'Without Media', onPress: () => toast.info('Chat export started...', 'Exporting') },
+        { text: 'Include Media', onPress: () => toast.info('Chat export with media started...', 'Exporting') }
       ]
     );
     setShowOptionsMenu(false);
   }, []);
 
   const handleMediaLinksAndDocs = useCallback(() => {
-    Alert.alert('Media, Links, and Docs', 'View shared media feature coming soon');
+    toast.info('View shared media feature coming soon', 'Media');
     setShowOptionsMenu(false);
   }, []);
 
   const handleStarredMessages = useCallback(() => {
-    Alert.alert('Starred Messages', 'View starred messages feature coming soon');
+    toast.info('View starred messages feature coming soon', 'Starred');
     setShowOptionsMenu(false);
   }, []);
 
@@ -895,7 +896,7 @@ export default function ParentMessageThreadScreen() {
   const handleAddShortcut = useCallback(() => {
     Alert.alert('Add Shortcut', 'Create home screen shortcut for this chat?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Add', onPress: () => Alert.alert('Success', 'Shortcut added to home screen') }
+      { text: 'Add', onPress: () => toast.success('Shortcut added to home screen') }
     ]);
     setShowOptionsMenu(false);
   }, []);
@@ -906,9 +907,9 @@ export default function ParentMessageThreadScreen() {
       'Report this conversation for:',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Spam', onPress: () => Alert.alert('Reported', 'Thank you for reporting') },
-        { text: 'Harassment', onPress: () => Alert.alert('Reported', 'Thank you for reporting') },
-        { text: 'Other', onPress: () => Alert.alert('Reported', 'Thank you for reporting') }
+        { text: 'Spam', onPress: () => toast.success('Thank you for reporting', 'Reported') },
+        { text: 'Harassment', onPress: () => toast.success('Thank you for reporting', 'Reported') },
+        { text: 'Other', onPress: () => toast.success('Thank you for reporting', 'Reported') }
       ]
     );
     setShowOptionsMenu(false);
@@ -920,14 +921,14 @@ export default function ParentMessageThreadScreen() {
       `Block ${displayName}? They won't be able to message you.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Block', style: 'destructive', onPress: () => Alert.alert('Blocked', `${displayName} has been blocked`) }
+        { text: 'Block', style: 'destructive', onPress: () => toast.warn(`${displayName} has been blocked`, 'Blocked') }
       ]
     );
     setShowOptionsMenu(false);
   }, [displayName]);
 
   const handleViewContact = useCallback(() => {
-    Alert.alert('Contact Info', `View details for ${displayName}`);
+    toast.info(`View details for ${displayName}`, 'Contact Info');
     setShowOptionsMenu(false);
   }, [displayName]);
 
@@ -950,11 +951,11 @@ export default function ParentMessageThreadScreen() {
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) {
-      Alert.alert('Voice Call', 'Voice calling is not available. Please ensure calls are enabled.');
+      toast.warn('Voice calling is not available. Please ensure calls are enabled.', 'Voice Call');
       return;
     }
     if (!recipientId) {
-      Alert.alert('Voice Call', 'Cannot identify recipient. Please try again later.');
+      toast.warn('Cannot identify recipient. Please try again later.', 'Voice Call');
       return;
     }
     callContext.startVoiceCall(recipientId, recipientName);
@@ -962,11 +963,11 @@ export default function ParentMessageThreadScreen() {
 
   const handleVideoCall = useCallback(() => {
     if (!callContext) {
-      Alert.alert('Video Call', 'Video calling is not available. Please ensure calls are enabled.');
+      toast.warn('Video calling is not available. Please ensure calls are enabled.', 'Video Call');
       return;
     }
     if (!recipientId) {
-      Alert.alert('Video Call', 'Cannot identify recipient. Please try again later.');
+      toast.warn('Cannot identify recipient. Please try again later.', 'Video Call');
       return;
     }
     callContext.startVideoCall(recipientId, recipientName);
@@ -1189,7 +1190,7 @@ export default function ParentMessageThreadScreen() {
                 {!text.trim() && (
                   <TouchableOpacity 
                     style={styles.inlineBtn}
-                    onPress={() => Alert.alert('Camera', 'Coming soon')}
+                    onPress={() => toast.info('Coming soon', 'Camera')}
                   >
                     <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
                   </TouchableOpacity>
@@ -1198,7 +1199,7 @@ export default function ParentMessageThreadScreen() {
                 {/* Attachment button */}
                 <TouchableOpacity 
                   style={styles.inlineBtn}
-                  onPress={() => Alert.alert('Attachments', 'Coming soon')}
+                  onPress={() => toast.info('Coming soon', 'Attachments')}
                 >
                   <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
@@ -1237,7 +1238,7 @@ export default function ParentMessageThreadScreen() {
               ) : (
                 <TouchableOpacity 
                   style={styles.actionButton} 
-                  onPress={() => Alert.alert('Voice', 'Voice recording not available')}
+                  onPress={() => toast.warn('Voice recording not available', 'Voice')}
                 >
                   <LinearGradient 
                     colors={['#0776d1ff', '#043c85ff']} 

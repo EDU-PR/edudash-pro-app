@@ -18,12 +18,15 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import type { CallState } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 // Conditionally import InCallManager (may not be available in some environments)
 let InCallManager: any = null;
@@ -202,7 +205,7 @@ export function VoiceCallInterface({
 
     const currentCallId = callIdRef.current;
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel(`voice-status-${currentCallId}`)
       .on(
         'postgres_changes',
@@ -225,7 +228,7 @@ export function VoiceCallInterface({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      getSupabase().removeChannel(channel);
     };
   }, [callState, onClose]);
 
@@ -266,7 +269,7 @@ export function VoiceCallInterface({
         
         // Update call status to missed
         if (callIdRef.current) {
-          await supabase
+          await getSupabase()
             .from('active_calls')
             .update({ status: 'missed' })
             .eq('call_id', callIdRef.current);
@@ -324,12 +327,12 @@ export function VoiceCallInterface({
 
         // Get valid session token first - always try to refresh for calls
         console.log('[VoiceCall] Getting session...');
-        let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        let { data: sessionData, error: sessionError } = await getSupabase().auth.getSession();
         let accessToken = sessionData.session?.access_token;
         
         // Always attempt refresh for calls to ensure fresh token
         console.log('[VoiceCall] Refreshing session to ensure valid token...');
-        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        const { data: refreshData, error: refreshError } = await getSupabase().auth.refreshSession();
         
         if (refreshData?.session?.access_token) {
           accessToken = refreshData.session.access_token;
@@ -404,7 +407,7 @@ export function VoiceCallInterface({
             const newCallId = uuidv4(); // Generate proper UUID
             callIdRef.current = newCallId;
 
-            const { data: callerProfile } = await supabase
+            const { data: callerProfile } = await getSupabase()
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', user.id)
@@ -415,7 +418,7 @@ export function VoiceCallInterface({
                 'Someone'
               : 'Someone';
 
-            await supabase.from('active_calls').insert({
+            await getSupabase().from('active_calls').insert({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
@@ -425,7 +428,7 @@ export function VoiceCallInterface({
               meeting_url: roomUrl,
             });
 
-            await supabase.from('call_signals').insert({
+            await getSupabase().from('call_signals').insert({
               call_id: newCallId,
               from_user_id: user.id,
               to_user_id: calleeId,
@@ -627,7 +630,7 @@ export function VoiceCallInterface({
 
     // Update call status
     if (callIdRef.current) {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from('active_calls')
         .update({ 
           status: 'ended',

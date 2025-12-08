@@ -26,7 +26,7 @@
  * ```
  */
 
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 import { Platform } from 'react-native';
 
 export type AudioMode = 'idle' | 'notification' | 'tts' | 'streaming';
@@ -38,11 +38,12 @@ export interface AudioModeSession {
 }
 
 interface AudioModeConfig {
-  allowsRecordingIOS: boolean;
-  playsInSilentModeIOS: boolean;
-  shouldDuckAndroid: boolean;
-  playThroughEarpieceAndroid: boolean;
-  staysActiveInBackground?: boolean;
+  allowsRecording?: boolean;
+  playsInSilentMode: boolean;
+  interruptionMode?: 'mixWithOthers' | 'doNotMix' | 'duckOthers';
+  interruptionModeAndroid?: 'doNotMix' | 'duckOthers';
+  shouldPlayInBackground?: boolean;
+  shouldRouteThroughEarpiece?: boolean;
 }
 
 /**
@@ -68,29 +69,33 @@ export class AudioModeCoordinator {
   // Audio mode configurations for each state
   private readonly modeConfigs: Record<AudioMode, AudioModeConfig> = {
     streaming: {
-      allowsRecordingIOS: true, // CRITICAL: WebRTC needs this
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: false, // Don't duck during streaming
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: true,
+      allowsRecording: true, // CRITICAL: WebRTC needs this
+      playsInSilentMode: true,
+      interruptionMode: 'doNotMix', // Don't mix during streaming
+      interruptionModeAndroid: 'doNotMix',
+      shouldPlayInBackground: true,
+      shouldRouteThroughEarpiece: false,
     },
     tts: {
-      allowsRecordingIOS: true, // Keep recording enabled for quick transitions
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: false, // TTS shouldn't be ducked
-      playThroughEarpieceAndroid: false,
+      allowsRecording: true, // Keep recording enabled for quick transitions
+      playsInSilentMode: true,
+      interruptionMode: 'doNotMix', // TTS shouldn't be mixed
+      interruptionModeAndroid: 'doNotMix',
+      shouldRouteThroughEarpiece: false,
     },
     notification: {
-      allowsRecordingIOS: true, // Keep recording enabled (safe default)
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true, // Notifications can duck other audio
-      playThroughEarpieceAndroid: false,
+      allowsRecording: true, // Keep recording enabled (safe default)
+      playsInSilentMode: true,
+      interruptionMode: 'duckOthers', // Notifications can duck other audio
+      interruptionModeAndroid: 'duckOthers',
+      shouldRouteThroughEarpiece: false,
     },
     idle: {
-      allowsRecordingIOS: true, // Always keep recording available
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+      allowsRecording: true, // Always keep recording available
+      playsInSilentMode: true,
+      interruptionMode: 'duckOthers',
+      interruptionModeAndroid: 'duckOthers',
+      shouldRouteThroughEarpiece: false,
     },
   };
 
@@ -212,7 +217,7 @@ export class AudioModeCoordinator {
     const config = this.modeConfigs[mode];
 
     try {
-      await Audio.setAudioModeAsync(config);
+      await AudioModule.setAudioModeAsync(config);
       this.currentMode = mode;
       console.log(
         `[AudioModeCoordinator] ✅ Applied mode: ${mode}`,

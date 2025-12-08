@@ -1,4 +1,7 @@
-import { supabase } from '@/lib/supabase'
+import { assertSupabase } from '@/lib/supabase'
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 /**
  * Notification Service
@@ -26,7 +29,7 @@ export interface NotificationOptions {
  */
 export async function sendNotification(options: NotificationOptions): Promise<{ success: boolean; error?: string }> {
   try {
-    const { data: session } = await supabase.auth.getSession()
+    const { data: session } = await getSupabase().auth.getSession()
     if (!session?.session?.access_token) {
       return { success: false, error: 'No active session' }
     }
@@ -41,7 +44,7 @@ export async function sendNotification(options: NotificationOptions): Promise<{ 
       send_immediately: true,
     }
 
-    const { data, error } = await supabase.functions.invoke('notifications-dispatcher', {
+    const { data, error } = await getSupabase().functions.invoke('notifications-dispatcher', {
       body: payload,
       headers: {
         Authorization: `Bearer ${session.session.access_token}`,

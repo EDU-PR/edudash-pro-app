@@ -20,7 +20,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
@@ -62,12 +62,14 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   isRead = false,
 }) => {
   const { theme } = useTheme();
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [playbackProgress, setPlaybackProgress] = useState(0);
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
   const waveformBars = useRef(generateWaveformBars(35)).current;
+  
+  // Hook-based audio player
+  const player = useAudioPlayer(audioUrl);
+  const isPlaying = player?.playing || false;
+  const playbackProgress = player?.duration ? player.currentTime / player.duration : 0;
+  const currentPosition = (player?.currentTime || 0) * 1000; // Convert to ms
   
   // Animated values for each bar
   const barAnimations = useRef(
@@ -112,66 +114,23 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
     }
   }, [isPlaying, barAnimations]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-      setPlaybackProgress(0);
-      setCurrentPosition(0);
-      soundRef.current?.setPositionAsync(0);
-    } else if (status.isPlaying && status.durationMillis) {
-      const progress = status.positionMillis / status.durationMillis;
-      setPlaybackProgress(progress);
-      setCurrentPosition(status.positionMillis);
-    }
-  }, []);
+  // No cleanup needed - useAudioPlayer handles it automatically
 
   const handlePlayPause = async () => {
+    if (!player) return;
     try {
-      if (!soundRef.current) {
-        setIsLoading(true);
-        
-        // Configure audio mode
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-        
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: audioUrl },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        
-        soundRef.current = sound;
-        setIsPlaying(true);
-        setIsLoading(false);
+      setIsLoading(true);
+      
+      if (isPlaying) {
+        player.pause();
       } else {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await soundRef.current.pauseAsync();
-            setIsPlaying(false);
-          } else {
-            await soundRef.current.playAsync();
-            setIsPlaying(true);
-          }
-        }
+        player.play();
       }
+      
+      setIsLoading(false);
     } catch (error) {
       console.error('Error playing audio:', error);
       setIsLoading(false);
-      setIsPlaying(false);
     }
   };
 
