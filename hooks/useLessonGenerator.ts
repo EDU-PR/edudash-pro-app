@@ -4,7 +4,7 @@ import { toast } from '@/components/ui/ToastProvider';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { incrementUsage, logUsageEvent } from '@/lib/ai/usage';
-import { DashAIAssistant } from '@/services/DashAIAssistant';
+import { DashAIAssistant } from '@/services/dash-ai/DashAICompat';
 
 export type LessonGenOptions = {
   topic: string;

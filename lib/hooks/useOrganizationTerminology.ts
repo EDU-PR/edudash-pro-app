@@ -107,7 +107,7 @@ export function useOrgType() {
     orgType: terminology.orgType,
     isPreschool: terminology.orgType === 'preschool',
     isK12: terminology.orgType === 'k12_school',
-    isUniversity: terminology.orgType === 'university',
+    // isUniversity removed - EduDash Pro focuses on preschool/K-12 only
     isCorporate: terminology.orgType === 'corporate',
     isSportsClub: terminology.orgType === 'sports_club',
     isCommunityOrg: terminology.orgType === 'community_org',

@@ -128,10 +128,19 @@ export function usePresence(
     return onlineUsers.get(targetUserId) || null;
   }, [onlineUsers]);
 
-  // Check if user is online
+  // Check if user is online (with 30-second threshold for accuracy)
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const presence = onlineUsers.get(targetUserId);
-    return presence?.status === 'online';
+    if (!presence || presence.status === 'offline') return false;
+    
+    // Consider online if status is 'online' AND last seen within 30 seconds
+    if (presence.status === 'online') {
+      const lastSeen = new Date(presence.last_seen_at).getTime();
+      const thirtySecondsAgo = Date.now() - 30000;
+      return lastSeen > thirtySecondsAgo;
+    }
+    
+    return false;
   }, [onlineUsers]);
 
   // Get last seen text

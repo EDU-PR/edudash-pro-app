@@ -52,6 +52,9 @@ export const useNewEnhancedTeacherState = () => {
       case 'create_lesson':
         router.push('/screens/ai-lesson-generator');
         break;
+      case 'start_live_lesson':
+        router.push('/screens/start-live-lesson');
+        break;
       case 'grade_assignments':
         router.push('/screens/assign-homework');
         break;
@@ -76,29 +79,29 @@ export const useNewEnhancedTeacherState = () => {
   const buildMetrics = (dashboardData: any) => [
     {
       title: t('teacher.students_total'),
-      value: dashboardData?.totalStudents || '24',
+      value: String(dashboardData?.totalStudents ?? 0),
       icon: 'people',
       color: theme.primary,
       trend: 'stable'
     },
     {
       title: t('teacher.classes_active'),
-      value: dashboardData?.totalClasses || '3',
+      value: String(dashboardData?.totalClasses ?? 0),
       icon: 'school',
       color: theme.secondary,
       trend: 'good'
     },
     {
       title: t('teacher.assignments_pending'),
-      value: dashboardData?.pendingGrading || '8',
+      value: String(dashboardData?.pendingGrading ?? 0),
       icon: 'document-text',
       color: theme.warning,
       trend: 'attention'
     },
     {
-      title: t('teacher.average_grade'),
-      value: dashboardData?.upcomingLessons || '0',
-      icon: 'trophy',
+      title: t('teacher.upcoming_lessons'),
+      value: String(dashboardData?.upcomingLessons ?? 0),
+      icon: 'calendar',
       color: theme.success,
       trend: 'up'
     }
@@ -111,6 +114,12 @@ export const useNewEnhancedTeacherState = () => {
       icon: 'book',
       color: theme.primary,
       onPress: () => handleQuickAction('create_lesson')
+    },
+    {
+      title: t('teacher.start_live_lesson', { defaultValue: 'Start Live Lesson' }),
+      icon: 'videocam',
+      color: '#ec4899',
+      onPress: () => handleQuickAction('start_live_lesson')
     },
     {
       title: t('teacher.grade_assignments'),

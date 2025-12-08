@@ -18,6 +18,8 @@ export interface UserProfile {
   organizationName?: string;
   is_trial?: boolean;
   trial_end_date?: string;
+  trial_plan_tier?: string;
+  subscription_tier?: string;
 }
 
 interface UseUserProfileReturn {
@@ -90,12 +92,13 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       
       let preschoolName: string | undefined;
       let preschoolSlug: string | undefined;
+      let schoolSubscriptionTier: string | undefined;
 
       // Fetch preschool details if we have an ID, otherwise use "EduDash Pro Community"
       if (preschoolId) {
         const { data: preschoolData, error: preschoolError } = await supabase
           .from('preschools')
-          .select('name')
+          .select('name, subscription_tier')
           .eq('id', preschoolId)
           .maybeSingle();
 
@@ -107,20 +110,22 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
           console.warn('⚠️ No preschool found with ID:', preschoolId);
           console.warn('⚠️ Preschool may have been deleted or ID is invalid');
         } else {
-          console.log('✅ Preschool loaded:', preschoolData.name);
+          console.log('✅ Preschool loaded:', preschoolData.name, '- Tier:', preschoolData.subscription_tier);
         }
 
         preschoolName = preschoolData?.name;
         preschoolSlug = undefined; // slug column doesn't exist in schema
+        schoolSubscriptionTier = preschoolData?.subscription_tier;
       } else {
         // Standalone user - show friendly community name
         preschoolName = 'EduDash Pro Community';
+        schoolSubscriptionTier = 'free'; // Default tier for standalone users
         console.log('🏘️ [useUserProfile] Displaying as: EduDash Pro Community (standalone user)');
       }
 
-      // Organization data (columns don't exist yet in schema)
-      const organizationId = undefined;
-      const organizationName = undefined;
+      // Organization data - use preschool as organization for principals/teachers
+      const organizationId = preschoolId; // Map preschool_id to organizationId
+      const organizationName = preschoolName;
 
       const profileObj = {
         id: userId,
@@ -134,11 +139,12 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         preschoolSlug,
         organizationId,
         organizationName,
-        preferredLanguage: profileData?.preferred_language || 'en-ZA',
+        preferredLanguage: 'en-ZA', // Default language
         is_trial: profileData?.is_trial,
         trial_end_date: profileData?.trial_ends_at, // Map to expected field name
         trial_plan_tier: profileData?.trial_plan_tier,
-        subscription_tier: profileData?.subscription_tier,
+        // Use school's tier (from preschools table) if available, fall back to user's tier
+        subscription_tier: schoolSubscriptionTier || profileData?.subscription_tier || 'starter',
       };
       
       

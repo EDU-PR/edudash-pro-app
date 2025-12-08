@@ -37,6 +37,7 @@ import { useParentDashboard } from '@/hooks/useDashboardData';
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
 import { ChildSwitcher } from './parent';
+import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -382,6 +383,21 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             ))}
           </View>
         </CollapsibleSection>
+
+        {/* Live Classes - Show if user has preschool_id */}
+        {profile?.preschool_id && (
+          <CollapsibleSection 
+            title={t('calls.live_classes', { defaultValue: 'Live Classes' })}
+            sectionId="live-classes"
+            icon="videocam"
+            defaultCollapsed={collapsedSections.has('live-classes')}
+            onToggle={toggleSection}
+          >
+            <JoinLiveLesson 
+              preschoolId={profile.preschool_id}
+            />
+          </CollapsibleSection>
+        )}
       </ScrollView>
     </View>
   );

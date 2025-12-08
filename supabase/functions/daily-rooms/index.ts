@@ -26,15 +26,20 @@ interface RoomRequest {
 }
 
 interface DailyRoomProperties {
-  name: string;
-  privacy: 'public' | 'private';
-  exp?: number;
-  max_participants?: number;
-  enable_screenshare?: boolean;
-  enable_chat?: boolean;
+  exp: number;
+  max_participants: number;
+  enable_screenshare: boolean;
+  enable_chat: boolean;
   enable_recording?: string;
-  start_audio_off?: boolean;
-  start_video_off?: boolean;
+  start_audio_off: boolean;
+  start_video_off: boolean;
+  eject_at_room_exp?: boolean;
+  enable_knocking?: boolean;
+  owner_only_broadcast?: boolean;
+  enable_prejoin_ui?: boolean;
+  enable_network_ui?: boolean;
+  enable_pip_ui?: boolean;
+  lang?: string;
 }
 
 serve(async (req) => {
@@ -57,9 +62,10 @@ serve(async (req) => {
       );
     }
 
-    // Authenticate user via Supabase
+    // Authenticate user via Supabase - use service role for server-side validation
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('[Daily Rooms] Missing authorization header');
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { 
@@ -69,29 +75,34 @@ serve(async (req) => {
       );
     }
 
-    const supabaseClient = createClient(
+    // Create Supabase admin client to verify JWT
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    // Verify user authentication
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    // Extract JWT token from Authorization header
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verify the JWT and get user
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
     if (authError || !user) {
-      console.error('Authentication failed:', authError);
+      console.error('[Daily Rooms] Authentication failed:', authError?.message || 'No user found');
+      console.error('[Daily Rooms] Token length:', token?.length || 0);
       return new Response(
-        JSON.stringify({ error: 'Not authenticated' }),
+        JSON.stringify({ 
+          error: 'Not authenticated',
+          details: authError?.message || 'User session invalid'
+        }),
         { 
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
+
+    console.log('[Daily Rooms] Authenticated user:', user.id, user.email);
 
     // Parse request body
     const { 
@@ -107,17 +118,22 @@ serve(async (req) => {
     // Calculate expiry timestamp
     const expiry = Math.floor(Date.now() / 1000) + (expiryMinutes * 60);
 
-    // Prepare Daily.co room properties
+    // Prepare Daily.co room properties (privacy and name are separate top-level fields)
     const roomProperties: DailyRoomProperties = {
-      name: roomName,
-      privacy: isPrivate ? 'private' : 'public',
       exp: expiry,
       max_participants: maxParticipants,
       enable_screenshare: true,
       enable_chat: true,
-      enable_recording: 'cloud', // Enable cloud recording if needed
+      enable_recording: 'cloud',
       start_audio_off: false,
       start_video_off: false,
+      eject_at_room_exp: true,
+      enable_knocking: isPrivate,
+      owner_only_broadcast: false,
+      enable_prejoin_ui: false,
+      enable_network_ui: true,
+      enable_pip_ui: true,
+      lang: 'en',
     };
 
     console.log('Creating Daily.co room:', {
@@ -137,16 +153,28 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: roomName,
+        // privacy: isPrivate ? 'private' : 'public', // Temporarily removed - testing minimal request
         properties: roomProperties,
       }),
     });
 
     if (!dailyResponse.ok) {
-      const errorText = await dailyResponse.text();
-      console.error('Daily.co API error:', {
+      let errorText = '';
+      let errorBody: any = null;
+      
+      try {
+        errorText = await dailyResponse.text();
+        errorBody = JSON.parse(errorText);
+      } catch {
+        errorBody = { raw: errorText };
+      }
+      
+      console.error('[Daily Rooms] Daily.co API error:', {
         status: dailyResponse.status,
         statusText: dailyResponse.statusText,
-        body: errorText,
+        error: errorBody,
+        apiKeyPresent: !!DAILY_API_KEY,
+        apiKeyLength: DAILY_API_KEY?.length || 0,
       });
 
       // If room already exists, try to get it
@@ -182,7 +210,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: 'Failed to create room',
-          details: dailyResponse.statusText,
+          details: errorBody?.error || errorBody?.info || dailyResponse.statusText,
+          dailyStatus: dailyResponse.status,
         }),
         { 
           status: dailyResponse.status,

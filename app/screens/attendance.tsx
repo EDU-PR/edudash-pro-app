@@ -8,6 +8,7 @@ import { Stack, router } from 'expo-router'
 import { track } from '@/lib/analytics'
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useTeacherSchool } from '@/hooks/useTeacherSchool'
 
 export default function AttendanceScreen() {
   const { profile } = require('@/contexts/AuthContext') as any
@@ -15,6 +16,9 @@ export default function AttendanceScreen() {
   const canManageClasses = hasActiveSeat || (!!profile?.hasCapability && profile.hasCapability('manage_classes' as any))
   const { theme } = useTheme()
   const palette = { background: theme.background, text: theme.text, textSecondary: theme.textSecondary, outline: theme.border, surface: theme.surface, primary: theme.primary }
+  
+  // Get teacher's school ID
+  const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool()
 
   const [classId, setClassId] = useState<string | null>(null)
   const [today, setToday] = useState<string>('')
@@ -40,25 +44,36 @@ export default function AttendanceScreen() {
 
   const { refreshing, onRefreshHandler } = useSimplePullToRefresh(handleRefresh, 'attendance')
 
+  // Fetch classes filtered by teacher's school
   const classesQuery = useQuery({
-    queryKey: ['teacher_classes_for_attendance'],
+    queryKey: ['teacher_classes_for_attendance', schoolId],
     queryFn: async () => {
+      if (!schoolId) return []
       const { data, error } = await assertSupabase()
         .from('classes')
-        .select('id,name')
+        .select('id, name, grade_level')
+        .eq('preschool_id', schoolId)
         .eq('is_active', true)
+        .order('name')
       if (error) throw error
-      return (data || []) as { id: string; name: string }[]
+      return (data || []) as { id: string; name: string; grade_level?: string }[]
     },
+    enabled: !!schoolId,
     staleTime: 60_000,
   })
 
+  // Fetch students filtered by class (which is already school-scoped)
   const studentsQuery = useQuery({
-    queryKey: ['students_for_attendance', classId],
+    queryKey: ['students_for_attendance', classId, schoolId],
     queryFn: async () => {
-      let q = assertSupabase().from('students').select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)')
+      if (!schoolId) return []
+      let q = assertSupabase()
+        .from('students')
+        .select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)')
+        .eq('preschool_id', schoolId)
+        .eq('is_active', true)
       if (classId) q = q.eq('class_id', classId)
-      const { data, error } = await q
+      const { data, error } = await q.order('first_name')
       if (error) throw error
       const arr = (data || []) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
       // Default all to present
@@ -67,7 +82,7 @@ export default function AttendanceScreen() {
       setPresentMap(next)
       return arr
     },
-    enabled: !!classId,
+    enabled: !!classId && !!schoolId,
   })
 
   const toggleStudent = (sid: string) => {
@@ -145,7 +160,23 @@ export default function AttendanceScreen() {
               <Text style={{ color: palette.textSecondary }}>Your seat is not active to manage attendance. Please contact your administrator.</Text>
             </View>
           )}
-          <Text style={styles.subtitle}>Date: {today}</Text>
+          
+          {schoolLoading ? (
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
+              <ActivityIndicator color={palette.primary} />
+              <Text style={{ color: palette.textSecondary, textAlign: 'center', marginTop: 8 }}>Loading school information...</Text>
+            </View>
+          ) : !schoolId ? (
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
+              <Text style={styles.cardTitle}>No School Assigned</Text>
+              <Text style={{ color: palette.textSecondary }}>You are not assigned to any school. Please contact your administrator.</Text>
+            </View>
+          ) : (
+            <>
+              {schoolName && (
+                <Text style={[styles.subtitle, { marginBottom: 4 }]}>{schoolName}</Text>
+              )}
+              <Text style={styles.subtitle}>Date: {today}</Text>
 
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
             <Text style={styles.cardTitle}>Class</Text>
@@ -197,9 +228,11 @@ export default function AttendanceScreen() {
             </View>
           )}
 
-          <TouchableOpacity onPress={onSubmit} disabled={!classId || submitting} style={[styles.submitBtn, (!classId || submitting) && styles.dim]}>
+          <TouchableOpacity onPress={onSubmit} disabled={!classId || submitting || !schoolId} style={[styles.submitBtn, (!classId || submitting || !schoolId) && styles.dim]}>
             {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Submit Attendance</Text>}
           </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>

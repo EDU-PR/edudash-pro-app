@@ -22,11 +22,13 @@ import {
   Search,
   X,
   Sparkles,
+  Bell,
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { showLocalNotification } from '@/lib/services/pushNotificationService';
 
 interface PrincipalMetrics {
   totalStudents: number;
@@ -460,7 +462,7 @@ export default function PrincipalDashboard() {
             <MessageCircle className="icon20" />
             <span>Send Announcement</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/settings')}>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/calendar')}>
             <Calendar className="icon20" />
             <span>School Calendar</span>
           </button>

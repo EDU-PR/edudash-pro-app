@@ -297,7 +297,7 @@ export default function PricingPage() {
         {/* Header */}
         <header style={{ position: "sticky", top: 0, zIndex: 1000, background: "rgba(10, 10, 15, 0.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
           <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <Link href="/" style={{ fontSize: "18px", fontWeight: 700, textDecoration: "none", color: "#fff" }}>🎓 EduDash Pro</Link>
+            <Link href="/" style={{ fontSize: "18px", fontWeight: 700, textDecoration: "none", color: "#fff" }}>🦅 Young Eagles</Link>
             {isLoggedIn ? (
               <button
                 onClick={() => router.push('/dashboard/parent')}
@@ -610,7 +610,7 @@ export default function PricingPage() {
 
           {/* Trust Badges */}
           <div style={{ marginTop: "64px", textAlign: "center", padding: "32px", background: "rgba(255, 255, 255, 0.02)", borderRadius: "16px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
-            <p style={{ fontSize: "18px", fontWeight: 700, marginBottom: "16px", color: "#fff" }}>✅ Why Choose EduDash Pro?</p>
+            <p style={{ fontSize: "18px", fontWeight: 700, marginBottom: "16px", color: "#fff" }}>✅ Why Choose Young Eagles?</p>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "32px", fontSize: "14px", color: "#9CA3AF" }}>
               <span>🔒 Multi-tenant security</span>
               <span>🇿🇦 Built for South Africa</span>
@@ -650,7 +650,7 @@ export default function PricingPage() {
         <section style={{ marginTop: "80px", padding: "80px 20px", background: "linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)", textAlign: "center" }}>
           <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, marginBottom: "16px", color: "#0a0a0f" }}>Ready to Get Started?</h2>
           <p style={{ fontSize: "18px", marginBottom: "32px", color: "rgba(10,10,15,.75)", maxWidth: "600px", margin: "0 auto 32px" }}>
-            Join hundreds of South African families and schools using EduDash Pro
+            Join hundreds of South African families and schools using Young Eagles
           </p>
           <Link href="/sign-in" style={{ display: "inline-block", padding: "16px 32px", background: "#0a0a0f", color: "#fff", borderRadius: "12px", fontSize: "16px", fontWeight: 700, textDecoration: "none" }}>
             Start Your 7-Day Free Trial →
@@ -659,7 +659,7 @@ export default function PricingPage() {
 
         {/* Footer */}
         <footer style={{ borderTop: "1px solid rgba(255, 255, 255, 0.1)", padding: "32px 20px", textAlign: "center" }}>
-          <p style={{ color: "#6B7280", fontSize: "14px" }}>© 2025 EduDash Pro. All rights reserved.</p>
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>© 2025 Young Eagles. All rights reserved.</p>
         </footer>
       </div>
     </>

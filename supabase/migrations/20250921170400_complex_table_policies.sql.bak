@@ -1,0 +1,363 @@
+-- Complex Table Policies
+-- Date: 2025-09-21  
+-- Purpose: Handle remaining 82 tables without standard tenant columns
+-- Strategy: Create policies based on user relationships, or safe defaults
+
+BEGIN;
+
+-- ====================================================================
+-- PART 1: IDENTIFY AND CATEGORIZE REMAINING TABLES
+-- ====================================================================
+
+-- Function to create user-based policies (for tables with user_id)
+CREATE OR REPLACE FUNCTION create_user_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Policy for users to access their own data
+    EXECUTE format('CREATE POLICY "%s_user_own"
+                    ON %I FOR ALL TO authenticated
+                    USING (user_id = auth.uid())
+                    WITH CHECK (user_id = auth.uid())', table_name, table_name);
+    
+    -- Policy for admins to access all data within their organization
+    EXECUTE format('CREATE POLICY "%s_admin_org"
+                    ON %I FOR ALL TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM profiles admin
+                            WHERE admin.id = auth.uid()
+                            AND admin.role IN (''admin'', ''principal'', ''superadmin'')
+                            AND (admin.role = ''superadmin'' OR 
+                                 admin.organization_id IN (
+                                     SELECT organization_id FROM profiles target
+                                     WHERE target.id = %I.user_id
+                                 ))
+                        )
+                    )', table_name, table_name, table_name);
+                    
+    RAISE NOTICE 'Created user-based policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create user policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Function to create student-based policies  
+CREATE OR REPLACE FUNCTION create_student_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Policy for students to access their own data
+    EXECUTE format('CREATE POLICY "%s_student_own"
+                    ON %I FOR ALL TO authenticated
+                    USING (student_id = auth.uid())
+                    WITH CHECK (student_id = auth.uid())', table_name, table_name);
+    
+    -- Policy for parents to access their children''s data
+    EXECUTE format('CREATE POLICY "%s_parent_child"
+                    ON %I FOR SELECT TO authenticated
+                    USING (
+                        student_id IN (
+                            SELECT student_id FROM student_parent_relationships
+                            WHERE parent_id = auth.uid()
+                        )
+                    )', table_name, table_name);
+    
+    -- Policy for school staff to access student data in their organization
+    EXECUTE format('CREATE POLICY "%s_staff_org"
+                    ON %I FOR ALL TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM profiles staff
+                            JOIN profiles student ON student.id = %I.student_id
+                            WHERE staff.id = auth.uid()
+                            AND staff.role IN (''teacher'', ''admin'', ''principal'', ''superadmin'')
+                            AND (staff.role = ''superadmin'' OR 
+                                 staff.organization_id = student.organization_id)
+                        )
+                    )', table_name, table_name, table_name);
+                    
+    RAISE NOTICE 'Created student-based policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create student policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Function to create teacher-based policies
+CREATE OR REPLACE FUNCTION create_teacher_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Policy for teachers to access their own data
+    EXECUTE format('CREATE POLICY "%s_teacher_own"
+                    ON %I FOR ALL TO authenticated
+                    USING (teacher_id = auth.uid())
+                    WITH CHECK (teacher_id = auth.uid())', table_name, table_name);
+    
+    -- Policy for admins to access teacher data in their organization
+    EXECUTE format('CREATE POLICY "%s_admin_teacher"
+                    ON %I FOR ALL TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM profiles admin
+                            JOIN profiles teacher ON teacher.id = %I.teacher_id
+                            WHERE admin.id = auth.uid()
+                            AND admin.role IN (''admin'', ''principal'', ''superadmin'')
+                            AND (admin.role = ''superadmin'' OR 
+                                 admin.organization_id = teacher.organization_id)
+                        )
+                    )', table_name, table_name, table_name);
+                    
+    RAISE NOTICE 'Created teacher-based policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create teacher policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- Function to create public/system policies (for lookup tables, etc.)
+CREATE OR REPLACE FUNCTION create_public_policies(table_name text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Allow all authenticated users to read
+    EXECUTE format('CREATE POLICY "%s_public_read"
+                    ON %I FOR SELECT TO authenticated
+                    USING (true)', table_name, table_name);
+    
+    -- Only admins can modify
+    EXECUTE format('CREATE POLICY "%s_admin_modify"
+                    ON %I FOR INSERT TO authenticated
+                    WITH CHECK (
+                        EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE id = auth.uid()
+                            AND role IN (''admin'', ''principal'', ''superadmin'')
+                        )
+                    )', table_name, table_name);
+    
+    EXECUTE format('CREATE POLICY "%s_admin_update"
+                    ON %I FOR UPDATE TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE id = auth.uid()
+                            AND role IN (''admin'', ''principal'', ''superadmin'')
+                        )
+                    )', table_name, table_name);
+    
+    EXECUTE format('CREATE POLICY "%s_admin_delete"
+                    ON %I FOR DELETE TO authenticated
+                    USING (
+                        EXISTS (
+                            SELECT 1 FROM profiles
+                            WHERE id = auth.uid()
+                            AND role IN (''admin'', ''principal'', ''superadmin'')
+                        )
+                    )', table_name, table_name);
+                    
+    RAISE NOTICE 'Created public/admin policies for table: %', table_name;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Failed to create public policies for %: %', table_name, SQLERRM;
+END;
+$$;
+
+-- ====================================================================
+-- PART 2: APPLY POLICIES TO REMAINING TABLES
+-- ====================================================================
+
+-- Apply user-based policies to tables with user_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'user_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_user_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- Apply student-based policies to tables with student_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'student_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_student_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- Apply teacher-based policies to tables with teacher_id
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        AND EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = rt.tablename 
+                   AND column_name = 'teacher_id')
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_teacher_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- Apply public/system policies to remaining tables
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        -- Exclude tables we already handled
+        AND NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                       WHERE table_schema = 'public' 
+                       AND table_name = rt.tablename 
+                       AND column_name IN ('user_id', 'student_id', 'teacher_id'))
+        ORDER BY rt.tablename
+    LOOP
+        PERFORM create_public_policies(table_record.tablename);
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 3: GRANT PERMISSIONS ON ALL REMAINING TABLES
+-- ====================================================================
+
+DO $$
+DECLARE
+    table_record record;
+BEGIN
+    FOR table_record IN 
+        WITH rls_tables AS (
+            SELECT tablename
+            FROM pg_tables pt
+            WHERE pt.schemaname = 'public'
+            AND pt.rowsecurity = true
+        ),
+        old_tables_with_policies AS (
+            SELECT DISTINCT tablename
+            FROM pg_policies
+            WHERE schemaname = 'public'
+            AND policyname NOT LIKE '%_user_own'
+            AND policyname NOT LIKE '%_admin_org'  
+            AND policyname NOT LIKE '%_student_own'
+            AND policyname NOT LIKE '%_parent_child'
+            AND policyname NOT LIKE '%_staff_org'
+            AND policyname NOT LIKE '%_teacher_own'
+            AND policyname NOT LIKE '%_admin_teacher'
+            AND policyname NOT LIKE '%_public_read'
+            AND policyname NOT LIKE '%_admin_modify'
+            AND policyname NOT LIKE '%_admin_update'
+            AND policyname NOT LIKE '%_admin_delete'
+        )
+        SELECT rt.tablename
+        FROM rls_tables rt
+        LEFT JOIN old_tables_with_policies twp ON rt.tablename = twp.tablename
+        WHERE twp.tablename IS NULL
+        ORDER BY rt.tablename
+    LOOP
+        BEGIN
+            EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', table_record.tablename);
+            RAISE NOTICE 'Granted permissions on table: %', table_record.tablename;
+        EXCEPTION
+            WHEN OTHERS THEN
+                RAISE NOTICE 'Failed to grant permissions on %: %', table_record.tablename, SQLERRM;
+        END;
+    END LOOP;
+END
+$$;
+
+-- ====================================================================
+-- PART 4: CLEANUP
+-- ====================================================================
+
+-- Clean up helper functions
+DROP FUNCTION IF EXISTS create_user_policies(text);
+DROP FUNCTION IF EXISTS create_student_policies(text);
+DROP FUNCTION IF EXISTS create_teacher_policies(text);
+DROP FUNCTION IF EXISTS create_public_policies(text);
+
+COMMIT;

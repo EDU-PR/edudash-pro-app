@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
-import { DashAIAssistant } from '@/services/DashAIAssistant';
+import { DashAIAssistant } from '@/services/dash-ai/DashAICompat';
 
 export type GraderOptions = {
   submissionText: string;

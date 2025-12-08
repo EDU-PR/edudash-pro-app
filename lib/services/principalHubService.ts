@@ -261,13 +261,15 @@ export class PrincipalHubService {
       // Normalize payload to match announcements table
       const payload: any = {
         preschool_id: preschoolId,
-        created_by: createdBy,
+        author_id: createdBy,
         title: announcementData.title ?? (announcementData.content?.slice(0, 100) || 'Announcement'),
         content: announcementData.content,
-        audience: announcementData.target_audience || [],
-        priority: announcementData.priority ?? 'normal',
-        is_active: true,
-        scheduled_for: announcementData.scheduled_for ?? null,
+        target_audience: Array.isArray(announcementData.target_audience) 
+          ? announcementData.target_audience[0] || 'all' 
+          : announcementData.target_audience || 'all',
+        priority: announcementData.priority ?? 'medium',
+        is_published: true,
+        published_at: new Date().toISOString(),
         expires_at: announcementData.expires_at ?? null,
       };
 

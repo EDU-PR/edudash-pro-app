@@ -42,6 +42,14 @@ interface RoleBasedHeaderProps {
 }
 
 /**
+ * @deprecated This component is deprecated. Use `DesktopLayout` instead which provides
+ * a unified header experience across mobile and desktop. DesktopLayout automatically
+ * renders an appropriate header based on the platform and screen width.
+ * 
+ * Migration: Replace `<RoleBasedHeader title="..." />` with wrapping your screen content
+ * in `<DesktopLayout role={userRole} title="...">...</DesktopLayout>`
+ * 
+ * Legacy description:
  * Enhanced header component that follows role-based navigation rules
  * - Hides back arrow when user is signed in (per rule)
  * - Shows contextual information based on user role and permissions

@@ -718,30 +718,205 @@ class DashPDFGeneratorImpl {
 
   /**
    * Search knowledge base for relevant content
+   * ECD-focused: searches for student milestones, activities, progress reports
    */
   async searchKnowledgeBase(queries: string[], docType: DocumentType): Promise<KnowledgeBaseItem[]> {
-    // TODO: Implement knowledge base search using Supabase storage and tables
-    // This will query:
-    // - Supabase Storage buckets for relevant files
-    // - Database tables for students, lessons, assignments, classes
-    // - Optional: pgvector similarity search if available
-    
-    console.log('[DashPDFGenerator] searchKnowledgeBase - TODO', { queries, docType });
-    return [];
+    try {
+      const supabase = assertSupabase();
+      const session = await getCurrentSession();
+      if (!session?.user?.id) {
+        console.warn('[DashPDFGenerator] No session for knowledge base search');
+        return [];
+      }
+
+      const profile = await getCurrentProfile();
+      const preschoolId = profile?.preschool_id;
+
+      if (!preschoolId) {
+        console.warn('[DashPDFGenerator] No preschool_id for knowledge base search');
+        return [];
+      }
+
+      const results: KnowledgeBaseItem[] = [];
+
+      // Search based on document type
+      if (docType === 'progress_report' || docType === 'report') {
+        // Fetch recent progress reports for reference
+        const { data: reports } = await supabase
+          .from('progress_reports')
+          .select('id, student_id, teacher_comments, strengths, areas_for_improvement, created_at')
+          .eq('preschool_id', preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (reports) {
+          reports.forEach(report => {
+            results.push({
+              id: report.id,
+              type: 'document',
+              title: `Progress Report - ${new Date(report.created_at).toLocaleDateString()}`,
+              content: `${report.teacher_comments}\n\nStrengths: ${report.strengths}\n\nAreas for improvement: ${report.areas_for_improvement}`,
+              relevance: 0.8,
+              source: 'progress_reports',
+            });
+          });
+        }
+      }
+
+      if (docType === 'lesson_plan') {
+        // Fetch recent lessons for reference
+        const { data: lessons } = await supabase
+          .from('lessons')
+          .select('id, title, description, learning_objectives, age_group')
+          .eq('preschool_id', preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (lessons) {
+          lessons.forEach(lesson => {
+            results.push({
+              id: lesson.id,
+              type: 'document',
+              title: lesson.title,
+              content: `${lesson.description}\n\nObjectives: ${lesson.learning_objectives}\n\nAge Group: ${lesson.age_group}`,
+              relevance: 0.9,
+              source: 'lessons',
+            });
+          });
+        }
+      }
+
+      // Fetch relevant students for any document type
+      const { data: students } = await supabase
+        .from('students')
+        .select('id, first_name, last_name, date_of_birth, class_id')
+        .eq('preschool_id', preschoolId)
+        .eq('is_active', true)
+        .limit(50);
+
+      if (students) {
+        students.forEach(student => {
+          const age = student.date_of_birth 
+            ? Math.floor((Date.now() - new Date(student.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            : null;
+          results.push({
+            id: student.id,
+            type: 'entity',
+            title: `${student.first_name} ${student.last_name}`,
+            content: age ? `Age: ${age} years` : 'Student',
+            relevance: 0.7,
+            source: 'students',
+          });
+        });
+      }
+
+      console.log(`[DashPDFGenerator] Found ${results.length} knowledge base items for ${docType}`);
+      return results;
+    } catch (error) {
+      console.error('[DashPDFGenerator] searchKnowledgeBase error:', error);
+      return [];
+    }
   }
 
   /**
    * Fetch entities required for document specification
+   * ECD-focused: fetches student data, milestones, teacher info, class details
    */
   async fetchEntitiesForSpec(spec: DocumentSpec): Promise<Record<string, any>> {
-    // TODO: Implement entity fetching based on spec.dataRequirements
-    // This will resolve entities like:
-    // - Student data for progress reports
-    // - Class information for newsletters
-    // - Assignment data for lesson plans
-    
-    console.log('[DashPDFGenerator] fetchEntitiesForSpec - TODO', { spec });
-    return {};
+    try {
+      const supabase = assertSupabase();
+      const session = await getCurrentSession();
+      if (!session?.user?.id) return {};
+
+      const profile = await getCurrentProfile();
+      const preschoolId = profile?.preschool_id;
+      if (!preschoolId) return {};
+
+      const entities: Record<string, any> = {
+        preschool_id: preschoolId,
+        generated_at: new Date().toISOString(),
+        generated_by: session.user.id,
+      };
+
+      // Fetch school information
+      const { data: preschool } = await supabase
+        .from('preschools')
+        .select('id, name, address, phone, email, logo_url')
+        .eq('id', preschoolId)
+        .single();
+
+      if (preschool) {
+        entities.school = preschool;
+      }
+
+      // Process data requirements from spec
+      if (spec.dataRequirements) {
+        for (const requirement of spec.dataRequirements) {
+          if (requirement === 'student' && spec.studentId) {
+            // Fetch student with parent info
+            const { data: student } = await supabase
+              .from('students')
+              .select(`
+                id, first_name, last_name, date_of_birth, class_id,
+                parent_id, guardian_id,
+                classes (name, grade_level),
+                profiles!parent_id (first_name, last_name, email, phone)
+              `)
+              .eq('id', spec.studentId)
+              .single();
+
+            if (student) {
+              entities.student = student;
+              
+              // Calculate age for ECD context
+              if (student.date_of_birth) {
+                const ageInMonths = Math.floor(
+                  (Date.now() - new Date(student.date_of_birth).getTime()) / (30.44 * 24 * 60 * 60 * 1000)
+                );
+                entities.student.age_months = ageInMonths;
+                entities.student.age_years = Math.floor(ageInMonths / 12);
+              }
+            }
+          }
+
+          if (requirement === 'class' && spec.classId) {
+            const { data: classInfo } = await supabase
+              .from('classes')
+              .select('id, name, grade_level, age_group, teacher_id, profiles!teacher_id (first_name, last_name)')
+              .eq('id', spec.classId)
+              .single();
+
+            if (classInfo) {
+              entities.class = classInfo;
+            }
+          }
+
+          if (requirement === 'teacher') {
+            entities.teacher = profile;
+          }
+
+          if (requirement === 'milestones' && spec.studentId) {
+            // Fetch developmental milestones for progress reports
+            const { data: milestones } = await supabase
+              .from('student_milestones')
+              .select('milestone_name, achieved, achieved_at, notes')
+              .eq('student_id', spec.studentId)
+              .order('achieved_at', { ascending: false })
+              .limit(20);
+
+            if (milestones) {
+              entities.milestones = milestones;
+            }
+          }
+        }
+      }
+
+      console.log(`[DashPDFGenerator] Fetched ${Object.keys(entities).length} entities for spec`);
+      return entities;
+    } catch (error) {
+      console.error('[DashPDFGenerator] fetchEntitiesForSpec error:', error);
+      return {};
+    }
   }
 
   // ====================================================================
@@ -1131,20 +1306,67 @@ class DashPDFGeneratorImpl {
 
   /**
    * Populate template with data
+   * Enhanced with ECD-specific formatting (age display, milestone badges, emoji)
    */
   private async populateTemplate(
     template: CustomTemplate,
     data: Record<string, any>,
     options?: Partial<DashPDFOptions>
   ): Promise<string> {
-    // TODO: Implement template variable substitution
     let html = template.templateHtml;
 
-    // Simple variable replacement: {{variableName}}
+    // Enhanced variable replacement with formatting
     for (const [key, value] of Object.entries(data)) {
-      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-      html = html.replace(regex, String(value));
+      let formattedValue = String(value);
+
+      // ECD-specific formatting
+      if (key === 'age_months' && typeof value === 'number') {
+        const years = Math.floor(value / 12);
+        const months = value % 12;
+        formattedValue = months > 0 ? `${years}y ${months}m` : `${years} years`;
+      }
+
+      if (key === 'achievement_level') {
+        const badges: Record<string, string> = {
+          'not_yet': '⏳ Emerging',
+          'developing': '🌱 Developing',
+          'achieved': '⭐ Achieved',
+          'exceeding': '🌟 Exceeding',
+        };
+        formattedValue = badges[value] || value;
+      }
+
+      if (key === 'date' && value instanceof Date) {
+        formattedValue = value.toLocaleDateString('en-ZA', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+      }
+
+      // Support nested object access: {{student.name}}
+      const regex = new RegExp(`{{\\s*${key.replace('.', '\\.')}\\s*}}`, 'g');
+      html = html.replace(regex, formattedValue);
     }
+
+    // Handle conditional blocks: {{#if condition}}...{{/if}}
+    html = html.replace(/{{#if\s+(\w+)}}([\s\S]*?){{\/if}}/g, (match, condition, content) => {
+      return data[condition] ? content : '';
+    });
+
+    // Handle loops: {{#each items}}...{{/each}}
+    html = html.replace(/{{#each\s+(\w+)}}([\s\S]*?){{\/each}}/g, (match, arrayKey, itemTemplate) => {
+      const array = data[arrayKey];
+      if (!Array.isArray(array)) return '';
+      
+      return array.map(item => {
+        let itemHtml = itemTemplate;
+        for (const [k, v] of Object.entries(item)) {
+          itemHtml = itemHtml.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+        }
+        return itemHtml;
+      }).join('');
+    });
 
     return html;
   }

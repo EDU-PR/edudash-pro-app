@@ -113,7 +113,7 @@ export const useParentDashboard = () => {
             first_name,
             last_name,
             grade_level,
-            student_class:classes(id, name, teacher:profiles(first_name, last_name))
+            student_class:classes(id, name, teacher:profiles!classes_teacher_id_fkey(first_name, last_name))
           `)
           .eq('parent_id', user.id);
 

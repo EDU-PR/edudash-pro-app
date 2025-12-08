@@ -940,6 +940,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       avatar_url: profile.avatar_url,
       organization_id: resolvedOrgId || orgMember?.organization_id || (profile as any)?.organization_id || (profile as any)?.preschool_id,
       organization_name: org?.name,
+      preschool_id: (profile as any)?.preschool_id,
       seat_status: orgMember?.seat_status || 'active',
       capabilities,
       created_at: profile.created_at,

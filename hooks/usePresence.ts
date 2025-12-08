@@ -90,6 +90,10 @@ export function usePresence(
       (data || []).forEach((record: PresenceRecord) => {
         presenceMap.set(record.user_id, record);
       });
+      console.log('[usePresence] Loaded presence data:', {
+        count: presenceMap.size,
+        onlineCount: Array.from(presenceMap.values()).filter(r => r.status === 'online').length
+      });
       setOnlineUsers(presenceMap);
     } catch (err) {
       console.warn('[usePresence] Error loading presence:', err);
@@ -98,16 +102,32 @@ export function usePresence(
     }
   }, []);
 
-  // Check if user is online (seen in last 2 minutes)
+  // Check if user is online (seen in last 30 seconds for accuracy)
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const record = onlineUsers.get(targetUserId);
-    if (!record) return false;
-    if (record.status === 'offline') return false;
+    if (!record) {
+      console.log('[usePresence] isUserOnline: no record for', targetUserId);
+      return false;
+    }
+    if (record.status === 'offline') {
+      console.log('[usePresence] isUserOnline: user offline', targetUserId);
+      return false;
+    }
     
-    // Consider online if last seen within 2 minutes
+    // Consider online if last seen within 30 seconds (more accurate)
     const lastSeen = new Date(record.last_seen_at).getTime();
-    const twoMinutesAgo = Date.now() - 120000;
-    return lastSeen > twoMinutesAgo && record.status === 'online';
+    const thirtySecondsAgo = Date.now() - 30000;
+    const isOnline = lastSeen > thirtySecondsAgo && record.status === 'online';
+    
+    console.log('[usePresence] isUserOnline check:', {
+      targetUserId,
+      status: record.status,
+      lastSeen: new Date(record.last_seen_at).toISOString(),
+      ageSeconds: Math.floor((Date.now() - lastSeen) / 1000),
+      isOnline
+    });
+    
+    return isOnline;
   }, [onlineUsers]);
 
   // Get presence record for a user
