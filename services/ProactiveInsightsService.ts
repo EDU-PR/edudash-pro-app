@@ -12,7 +12,10 @@
  * - Progress predictions and recommendations
  */
 
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 export interface StudentPerformanceData {
   student_id: string;
@@ -187,7 +190,7 @@ export class ProactiveInsightsService {
   ): Promise<InteractiveLesson[]> {
     try {
       // First get student grade
-      const { data: student } = await supabase
+      const { data: student } = await getSupabase()
         .from('students')
         .select('grade')
         .eq('id', studentId)
@@ -201,7 +204,7 @@ export class ProactiveInsightsService {
       const studentGrade = student.grade;
 
       // Fetch CAPS topics for the grade
-      let query = supabase
+      let query = getSupabase()
         .from('caps_documents')
         .select('topic, subject, keywords, learning_outcomes')
         .eq('grade', studentGrade)
@@ -258,7 +261,7 @@ export class ProactiveInsightsService {
       const alerts: PredictiveAlert[] = [];
 
       // Check upcoming assessments
-      const { data: assessments } = await supabase
+      const { data: assessments } = await getSupabase()
         .from('assessments')
         .select('name, due_date, subject')
         .eq('preschool_id', preschoolId)
@@ -289,7 +292,7 @@ export class ProactiveInsightsService {
       }
 
       // Check pending homework
-      const { data: homework } = await supabase
+      const { data: homework } = await getSupabase()
         .from('homework')
         .select('title, due_date, subject')
         .eq('student_id', studentId)
@@ -336,7 +339,7 @@ export class ProactiveInsightsService {
   ): Promise<StudentPerformanceData | null> {
     try {
       // Fetch student basic info
-      const { data: student } = await supabase
+      const { data: student } = await getSupabase()
         .from('students')
         .select('first_name, last_name, grade')
         .eq('id', studentId)
@@ -348,7 +351,7 @@ export class ProactiveInsightsService {
       }
 
       // Fetch recent progress reports
-      const { data: reports } = await supabase
+      const { data: reports } = await getSupabase()
         .from('progress_reports')
         .select('subjects_performance, strengths, areas_for_improvement, attendance_summary')
         .eq('student_id', studentId)
@@ -361,7 +364,7 @@ export class ProactiveInsightsService {
       const attendance_rate = latestReport?.attendance_summary?.percentage || 95;
 
       // Fetch homework completion
-      const { data: homeworkStats } = await supabase
+      const { data: homeworkStats } = await getSupabase()
         .from('homework')
         .select('status')
         .eq('student_id', studentId);

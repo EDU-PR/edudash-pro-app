@@ -14,8 +14,12 @@ import React, {
   type ReactNode,
 } from 'react';
 import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
+
 import { VoiceCallInterface } from './VoiceCallInterface';
 import { WhatsAppStyleVideoCall } from './WhatsAppStyleVideoCall';
 import { WhatsAppStyleIncomingCall } from './WhatsAppStyleIncomingCall';
@@ -91,20 +95,20 @@ export function CallProvider({ children }: CallProviderProps) {
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
   
-  // Track presence for online/offline detection
-  const { isUserOnline, getLastSeenText } = usePresence(currentUserId);
+  // Track presence for online/offline detection (only if calls enabled)
+  const { isUserOnline, getLastSeenText } = callsEnabled ? usePresence(currentUserId) : { isUserOnline: false, getLastSeenText: () => '' };
 
   // Get current user
   useEffect(() => {
     if (!callsEnabled) return;
 
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await getSupabase().auth.getUser();
       if (user) setCurrentUserId(user.id);
     };
     getUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
       (_event, session) => {
         setCurrentUserId(session?.user?.id || null);
       }
@@ -131,7 +135,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
     console.log('[CallProvider] Setting up incoming call listener for user:', currentUserId);
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel(`incoming-calls-${currentUserId}`)
       .on(
         'postgres_changes',
@@ -153,7 +157,7 @@ export function CallProvider({ children }: CallProviderProps) {
               console.log('[CallProvider] Fetching meeting_url from DB...');
               await new Promise((resolve) => setTimeout(resolve, 300));
 
-              const { data: fullCall } = await supabase
+              const { data: fullCall } = await getSupabase()
                 .from('active_calls')
                 .select('*')
                 .eq('call_id', call.call_id)
@@ -165,7 +169,7 @@ export function CallProvider({ children }: CallProviderProps) {
             }
 
             // Fetch caller name
-            const { data: profile } = await supabase
+            const { data: profile } = await getSupabase()
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', call.caller_id)
@@ -208,7 +212,7 @@ export function CallProvider({ children }: CallProviderProps) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      getSupabase().removeChannel(channel);
     };
   }, [currentUserId, incomingCall, callsEnabled]);
 
@@ -216,7 +220,7 @@ export function CallProvider({ children }: CallProviderProps) {
   useEffect(() => {
     if (!currentUserId || !callsEnabled) return;
 
-    const signalChannel = supabase
+    const signalChannel = getSupabase()
       .channel(`call-signals-${currentUserId}`)
       .on(
         'postgres_changes',
@@ -260,7 +264,7 @@ export function CallProvider({ children }: CallProviderProps) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(signalChannel);
+      getSupabase().removeChannel(signalChannel);
     };
   }, [currentUserId, callsEnabled]);
 
@@ -367,7 +371,7 @@ export function CallProvider({ children }: CallProviderProps) {
     if (!incomingCall) return;
     console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
 
-    await supabase
+    await getSupabase()
       .from('active_calls')
       .update({ status: 'rejected' })
       .eq('call_id', incomingCall.call_id);
@@ -382,7 +386,7 @@ export function CallProvider({ children }: CallProviderProps) {
     console.log('[CallProvider] Ending call:', callId);
 
     if (answeringCall?.call_id) {
-      await supabase
+      await getSupabase()
         .from('active_calls')
         .update({ status: 'ended' })
         .eq('call_id', answeringCall.call_id);

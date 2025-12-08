@@ -1,10 +1,22 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { logger } from './logger';
 import { storage } from './storage';
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+// Get environment variables from Expo Constants (works across all platforms)
+const expoConfig = Constants.expoConfig?.extra || {};
+const url = expoConfig.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const anon = expoConfig.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// Debug logging to diagnose environment variable loading
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  console.log('[Supabase Init] Environment variable sources:');
+  console.log('  - Constants.expoConfig.extra:', expoConfig);
+  console.log('  - process.env.EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL ? 'SET' : 'NOT SET');
+  console.log('  - Final URL:', url ? url.substring(0, 30) + '...' : 'MISSING');
+  console.log('  - Final Key:', anon ? 'SET (' + anon.length + ' chars)' : 'MISSING');
+}
 
 // Enhanced debugging for environment variable loading
 const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;

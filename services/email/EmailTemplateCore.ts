@@ -5,8 +5,11 @@
  * Extracted from services/EmailTemplateService.ts per WARP.md standards.
  */
 
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import type { EmailTemplate, EmailSendRequest, EmailSendResponse } from '@/types/email';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 /**
  * Get all templates for a preschool (including system templates)
@@ -15,7 +18,7 @@ export const getTemplates = async (
   preschoolId: string,
   type?: string
 ): Promise<EmailTemplate[]> => {
-  let query = supabase
+  let query = getSupabase()
     .from('email_templates')
     .select('*')
     .or(`preschool_id.eq.${preschoolId},is_system_template.eq.true`)
@@ -40,7 +43,7 @@ export const getTemplates = async (
  * Get a specific template by ID
  */
 export const getTemplate = async (templateId: string): Promise<EmailTemplate | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('email_templates')
     .select('*')
     .eq('id', templateId)
@@ -60,7 +63,7 @@ export const getTemplate = async (templateId: string): Promise<EmailTemplate | n
 export const createTemplate = async (
   template: Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at'>
 ): Promise<EmailTemplate | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('email_templates')
     .insert(template)
     .select()
@@ -81,7 +84,7 @@ export const updateTemplate = async (
   templateId: string,
   updates: Partial<Omit<EmailTemplate, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<EmailTemplate | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('email_templates')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', templateId)
@@ -100,7 +103,7 @@ export const updateTemplate = async (
  * Delete (deactivate) a template
  */
 export const deleteTemplate = async (templateId: string): Promise<boolean> => {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('email_templates')
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', templateId);
@@ -135,7 +138,7 @@ export const renderTemplate = (
  * Send email via Supabase Edge Function
  */
 export const sendEmail = async (request: EmailSendRequest): Promise<EmailSendResponse> => {
-  const { data, error } = await supabase.functions.invoke('send-email', {
+  const { data, error } = await getSupabase().functions.invoke('send-email', {
     body: {
       ...request,
       is_html: request.is_html !== false,

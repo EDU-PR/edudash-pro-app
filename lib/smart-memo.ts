@@ -13,7 +13,7 @@ import { logger } from './logger';
 /**
  * Ultra-smart memo that includes performance tracking
  */
-export function ultraMemo<P extends Record<string, any>>(
+export function ultraMemo<P extends object>(
   Component: React.ComponentType<P>,
   propsAreEqual?: (prevProps: P, nextProps: P) => boolean,
   displayName?: string
@@ -31,7 +31,7 @@ export function ultraMemo<P extends Record<string, any>>(
 /**
  * Deep comparison for objects (use sparingly)
  */
-export function deepEqual(a: any, b: any): boolean {
+export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
   if (typeof a !== 'object' || typeof b !== 'object') return a === b;
@@ -93,7 +93,7 @@ export function useSmartMemo<T>(
 /**
  * Smart useCallback with stability tracking
  */
-export function useSmartCallback<T extends (...args: any[]) => any>(
+export function useSmartCallback<T extends (...args: unknown[]) => unknown>(
   callback: T,
   deps: React.DependencyList,
   debugLabel?: string

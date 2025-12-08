@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
   Platform,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -407,18 +406,9 @@ export default function TeacherMessageListScreen() {
   }, []);
   
   const handleSettings = useCallback(() => {
-    Alert.alert(
-      t('teacher.messageSettings', { defaultValue: 'Message Settings' }),
-      t('teacher.messageSettingsDesc', { defaultValue: 'Configure your messaging preferences' }),
-      [
-        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-        { 
-          text: t('teacher.notificationSettings', { defaultValue: 'Notification Settings' }),
-          onPress: () => router.push('/screens/settings')
-        },
-      ]
-    );
-  }, [t]);
+    // Navigate directly to settings - simpler than showing alert
+    router.push('/screens/settings');
+  }, []);
   
   // Filter threads by search
   const filteredThreads = React.useMemo(() => {

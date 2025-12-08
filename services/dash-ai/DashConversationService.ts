@@ -7,8 +7,11 @@
  * CRITICAL: All operations MUST filter by preschool_id for tenant isolation.
  */
 
-import { supabase } from '@/lib/supabase';
+import { assertSupabase } from '@/lib/supabase';
 import type { DashConversation, DashMessage } from './types';
+
+// Lazy getter to avoid accessing supabase at module load time
+const getSupabase = () => assertSupabase();
 
 /**
  * Database row structure for ai_conversations table
@@ -61,7 +64,7 @@ export class DashConversationService {
     title: string
   ): Promise<DashConversation> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('ai_conversations')
         .insert({
           user_id: this.userId,
@@ -88,7 +91,7 @@ export class DashConversationService {
    */
   async getConversation(conversationId: string): Promise<DashConversation | null> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('ai_conversations')
         .select('*')
         .eq('user_id', this.userId)
@@ -116,7 +119,7 @@ export class DashConversationService {
    */
   async getAllConversations(): Promise<DashConversation[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('ai_conversations')
         .select('*')
         .eq('user_id', this.userId)
@@ -140,7 +143,7 @@ export class DashConversationService {
     messages: DashMessage[]
   ): Promise<void> {
     try {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from('ai_conversations')
         .update({ messages })
         .eq('user_id', this.userId)
@@ -196,7 +199,7 @@ export class DashConversationService {
     title: string
   ): Promise<void> {
     try {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from('ai_conversations')
         .update({ title })
         .eq('user_id', this.userId)
@@ -217,7 +220,7 @@ export class DashConversationService {
    */
   async deleteConversation(conversationId: string): Promise<void> {
     try {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from('ai_conversations')
         .delete()
         .eq('user_id', this.userId)
@@ -285,7 +288,7 @@ export class DashConversationService {
    */
   async conversationExists(conversationId: string): Promise<boolean> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('ai_conversations')
         .select('id')
         .eq('user_id', this.userId)

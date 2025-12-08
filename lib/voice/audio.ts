@@ -1,18 +1,20 @@
 /**
  * Audio Playback Manager
  * 
- * Handles audio playback for TTS using expo-av
+ * Handles audio playback for TTS using expo-audio
  * Recording removed - use streaming via useVoiceController instead
  * Now uses AudioModeCoordinator to prevent conflicts with WebRTC streaming
+ * 
+ * Updated to use expo-audio (SDK 53+) hook-based API
  */
 
-import { Audio } from 'expo-av';
+import { AudioModule, createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import type { PlaybackState } from './types';
 import AudioModeCoordinator, { AudioModeSession } from '../AudioModeCoordinator';
 
 export class AudioManager {
   private static instance: AudioManager | null = null;
-  private sound: Audio.Sound | null = null;
+  private player: AudioPlayer | null = null;
   private isInitialized: boolean = false;
   private audioSession: AudioModeSession | null = null;
   private playbackState: PlaybackState = {
@@ -69,34 +71,35 @@ export class AudioManager {
       this.audioSession = await AudioModeCoordinator.requestAudioMode('tts');
       console.log('[AudioManager] 🎵 TTS audio session started:', this.audioSession.id);
 
-      // Load and play sound
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (status) => {
-          if (!status.isLoaded) {
-            return;
-          }
-
-          this.playbackState = {
-            isPlaying: status.isPlaying,
-            duration: status.durationMillis || 0,
-            position: status.positionMillis || 0,
-            uri,
-          };
-
-          if (onUpdate) {
-            onUpdate(this.playbackState);
-          }
-
-          // Auto-cleanup when playback finishes
-          if (status.didJustFinish) {
-            this.stop();
-          }
+      // Create and play using expo-audio player
+      this.player = createAudioPlayer(uri);
+      this.player.play();
+      
+      // Set up status polling for updates (expo-audio doesn't have callbacks like expo-av)
+      const pollInterval = setInterval(() => {
+        if (!this.player) {
+          clearInterval(pollInterval);
+          return;
         }
-      );
+        
+        this.playbackState = {
+          isPlaying: this.player.playing,
+          duration: (this.player.duration || 0) * 1000, // Convert to ms
+          position: (this.player.currentTime || 0) * 1000, // Convert to ms
+          uri,
+        };
 
-      this.sound = sound;
+        if (onUpdate) {
+          onUpdate(this.playbackState);
+        }
+
+        // Auto-cleanup when playback finishes
+        if (this.player.currentTime >= this.player.duration && this.player.duration > 0) {
+          clearInterval(pollInterval);
+          this.stop();
+        }
+      }, 100);
+
     } catch (error) {
       // Release audio session on error
       if (this.audioSession) {
@@ -122,8 +125,8 @@ export class AudioManager {
    */
   async pause(): Promise<void> {
     try {
-      if (this.sound) {
-        await this.sound.pauseAsync();
+      if (this.player) {
+        this.player.pause();
         this.playbackState.isPlaying = false;
       }
     } catch (error) {
@@ -136,8 +139,8 @@ export class AudioManager {
    */
   async resume(): Promise<void> {
     try {
-      if (this.sound) {
-        await this.sound.playAsync();
+      if (this.player) {
+        this.player.play();
         this.playbackState.isPlaying = true;
       }
     } catch (error) {
@@ -151,10 +154,10 @@ export class AudioManager {
    */
   async stop(): Promise<void> {
     try {
-      if (this.sound) {
-        await this.sound.stopAsync();
-        await this.sound.unloadAsync();
-        this.sound = null;
+      if (this.player) {
+        this.player.pause();
+        this.player.release();
+        this.player = null;
       }
 
       // Release audio session

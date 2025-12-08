@@ -3,9 +3,11 @@
  * 
  * Manages preloading, playback, and caching of UI sounds for optimal performance.
  * Designed for low-latency audio feedback (<50ms) with memory efficiency.
+ * 
+ * Updated to use expo-audio (SDK 53+)
  */
 
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { Platform } from 'react-native';
 
 export type OrbSound = 
@@ -64,7 +66,7 @@ const SOUND_ASSETS: Record<OrbSound, SoundConfig> = {
 };
 
 class SoundManagerClass {
-  private sounds: Map<OrbSound, Audio.Sound> = new Map();
+  private sounds: Map<OrbSound, AudioPlayer> = new Map();
   private initialized = false;
   private loopingSounds: Set<OrbSound> = new Set();
 
@@ -77,12 +79,13 @@ class SoundManagerClass {
 
     try {
       // Configure audio mode for UI sounds (not music)
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
+      if (Platform.OS !== 'web') {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          interruptionMode: 'duckOthers',
+          interruptionModeAndroid: 'duckOthers',
+        });
+      }
 
       console.log('[SoundManager] Audio mode configured');
       this.initialized = true;
@@ -105,15 +108,12 @@ class SoundManagerClass {
 
     const loadPromises = Object.entries(SOUND_ASSETS).map(async ([key, config]) => {
       try {
-        const { sound } = await Audio.Sound.createAsync(
-          config.file,
-          { 
-            volume: config.volume,
-            shouldPlay: false,
-          }
-        );
+        // Create audio player with the asset source
+        const player = createAudioPlayer(config.file);
+        player.volume = config.volume;
+        player.loop = config.loopable || false;
         
-        this.sounds.set(key as OrbSound, sound);
+        this.sounds.set(key as OrbSound, player);
         console.log(`[SoundManager] ✅ Loaded: ${key}`);
       } catch (error) {
         console.warn(`[SoundManager] ❌ Failed to load ${key}:`, error);
@@ -138,54 +138,45 @@ class SoundManagerClass {
     }
 
     try {
-      let sound = this.sounds.get(soundType);
+      let player = this.sounds.get(soundType);
       
       // If sound not preloaded, load it on-demand
-      if (!sound) {
+      if (!player) {
         console.log(`[SoundManager] Loading ${soundType} on-demand...`);
         const config = SOUND_ASSETS[soundType];
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          config.file,
-          { volume: config.volume }
-        );
-        sound = newSound;
-        this.sounds.set(soundType, sound);
+        player = createAudioPlayer(config.file);
+        player.volume = config.volume;
+        this.sounds.set(soundType, player);
       }
 
       // Stop and reset if already playing
-      const status = await sound.getStatusAsync();
-      if (status.isLoaded && status.isPlaying) {
-        await sound.stopAsync();
+      if (player.playing) {
+        player.pause();
       }
-      await sound.setPositionAsync(0);
+      player.seekTo(0);
 
       // Configure looping
-      if (options?.loop || SOUND_ASSETS[soundType].loopable) {
-        await sound.setIsLoopingAsync(true);
+      const shouldLoop = options?.loop || SOUND_ASSETS[soundType].loopable;
+      player.loop = shouldLoop || false;
+      if (shouldLoop) {
         this.loopingSounds.add(soundType);
-      } else {
-        await sound.setIsLoopingAsync(false);
-      }
-
-      // Set up finish callback
-      if (options?.onFinish) {
-        sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-          if (status.isLoaded && status.didJustFinish) {
-            options.onFinish?.();
-          }
-        });
       }
 
       // Play sound
-      await sound.playAsync();
+      player.play();
       
-      // Auto-cleanup for non-looping sounds
-      if (!options?.loop && !SOUND_ASSETS[soundType].loopable) {
-        sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-          if (status.isLoaded && status.didJustFinish) {
-            sound.unloadAsync().catch(() => {});
+      // Set up finish polling for callback (expo-audio doesn't have callbacks)
+      if (options?.onFinish && !shouldLoop) {
+        const checkFinish = setInterval(() => {
+          if (!player) {
+            clearInterval(checkFinish);
+            return;
           }
-        });
+          if (player.duration > 0 && player.currentTime >= player.duration) {
+            clearInterval(checkFinish);
+            options.onFinish?.();
+          }
+        }, 100);
       }
     } catch (error) {
       console.warn(`[SoundManager] Failed to play ${soundType}:`, error);
@@ -197,10 +188,10 @@ class SoundManagerClass {
    */
   async stop(soundType: OrbSound): Promise<void> {
     try {
-      const sound = this.sounds.get(soundType);
-      if (sound) {
-        await sound.stopAsync();
-        await sound.setPositionAsync(0);
+      const player = this.sounds.get(soundType);
+      if (player) {
+        player.pause();
+        player.seekTo(0);
         this.loopingSounds.delete(soundType);
       }
     } catch (error) {
@@ -224,11 +215,15 @@ class SoundManagerClass {
   async cleanup(): Promise<void> {
     console.log('[SoundManager] Cleaning up...');
     
-    const unloadPromises = Array.from(this.sounds.values()).map(sound =>
-      sound.unloadAsync().catch(() => {})
-    );
+    // Release all players
+    for (const player of this.sounds.values()) {
+      try {
+        player.release();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
     
-    await Promise.all(unloadPromises);
     this.sounds.clear();
     this.loopingSounds.clear();
     this.initialized = false;

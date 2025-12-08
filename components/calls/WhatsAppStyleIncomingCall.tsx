@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { AudioModule, setAudioModeAsync, createAudioPlayer, AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import type { CallType } from './types';
 
@@ -58,7 +58,7 @@ export function WhatsAppStyleIncomingCall({
   const ring3Anim = useRef(new Animated.Value(0)).current;
   const answerButtonY = useRef(new Animated.Value(0)).current;
   const declineButtonY = useRef(new Animated.Value(0)).current;
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
   const [swipeHint, setSwipeHint] = useState('');
 
   // Ring pulse animation (WhatsApp style)
@@ -136,8 +136,8 @@ export function WhatsAppStyleIncomingCall({
   useEffect(() => {
     if (!isVisible) {
       if (soundRef.current) {
-        soundRef.current.stopAsync().catch(() => {});
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.pause();
+        soundRef.current.remove();
         soundRef.current = null;
       }
       Vibration.cancel();
@@ -152,9 +152,9 @@ export function WhatsAppStyleIncomingCall({
 
     const playRingtone = async () => {
       try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
         });
 
         let soundFile;
@@ -168,12 +168,11 @@ export function WhatsAppStyleIncomingCall({
           }
         }
         
-        const { sound } = await Audio.Sound.createAsync(
-          soundFile,
-          { isLooping: true, volume: 1.0 }
-        );
-        soundRef.current = sound;
-        await sound.playAsync();
+        const player = createAudioPlayer(soundFile);
+        player.loop = true;
+        player.volume = 1.0;
+        soundRef.current = player;
+        player.play();
       } catch (error) {
         console.warn('[IncomingCall] Failed to play ringtone:', error);
       }
@@ -183,8 +182,8 @@ export function WhatsAppStyleIncomingCall({
 
     return () => {
       if (soundRef.current) {
-        soundRef.current.stopAsync().catch(() => {});
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.pause();
+        soundRef.current.remove();
         soundRef.current = null;
       }
       Vibration.cancel();
