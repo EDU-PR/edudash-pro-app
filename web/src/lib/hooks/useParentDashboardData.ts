@@ -55,10 +55,10 @@ export function useParentDashboardData() {
   const usageType = profile?.usageType;
   const hasOrganization = !!profile?.preschoolId;
   
-  // Show "EduDash Pro Community School" for standalone users (digital learning focus), actual school name for org users
+  // Show "EduDash Pro Community" for standalone users, actual school name for org users
   const preschoolName = hasOrganization 
     ? profile?.preschoolName 
-    : 'EduDash Pro Community School';
+    : 'EduDash Pro Community';
   
   // Profile validation (no debug logs in production)
   

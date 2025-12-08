@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { ArrowLeft, Calendar, User, Mail, Phone, MapPin, Users, FileText, Clock, KeyRound, MessageSquare, TrendingUp, School, BookOpen, Activity } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Mail, Phone, MapPin, Users, FileText, Clock, KeyRound } from 'lucide-react';
 
 interface StudentDetail {
   id: string;
@@ -25,7 +25,6 @@ interface StudentDetail {
     id: string;
     name: string;
     age_group: string;
-    teacher_id: string | null;
   };
   profiles?: {
     first_name: string;
@@ -33,28 +32,6 @@ interface StudentDetail {
     email: string;
     phone: string | null;
   };
-}
-
-interface RegistrationData {
-  preferred_class?: string;
-  preferred_start_date?: string;
-  how_did_you_hear?: string;
-  special_requests?: string;
-  previous_school?: string;
-}
-
-interface AttendanceStats {
-  present: number;
-  absent: number;
-  total: number;
-  percentage: number;
-}
-
-interface RecentActivity {
-  id: string;
-  type: string;
-  title: string;
-  date: string;
 }
 
 export default function StudentDetailPage() {
@@ -65,11 +42,6 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [sendingPasswordReset, setSendingPasswordReset] = useState(false);
-  const [registrationData, setRegistrationData] = useState<RegistrationData | null>(null);
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats | null>(null);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-  const [teacherName, setTeacherName] = useState<string | null>(null);
-  const [lastContactDate, setLastContactDate] = useState<string | null>(null);
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -78,18 +50,8 @@ export default function StudentDetailPage() {
 
   const studentId = params.id as string;
 
-  // Guard: Prevent treating "enroll" as a student ID
-  useEffect(() => {
-    if (studentId === 'enroll') {
-      // This is handled by the /enroll route, not this dynamic [id] page
-      return;
-    }
-  }, [studentId]);
-
   // Auth check
   useEffect(() => {
-    if (studentId === 'enroll') return; // Skip auth check for enroll route
-    
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -99,12 +61,10 @@ export default function StudentDetailPage() {
       setUserId(session.user.id);
     };
     initAuth();
-  }, [router, supabase, studentId]);
+  }, [router, supabase]);
 
   // Load student details
   useEffect(() => {
-    if (studentId === 'enroll') return; // Skip for enroll route
-    
     if (!preschoolId || !studentId) {
       console.log('Waiting for preschoolId or studentId...', { preschoolId, studentId });
       return;
@@ -142,80 +102,7 @@ export default function StudentDetailPage() {
         console.log('[Student Page] Loaded student data:', data);
         console.log('[Student Page] Has profiles?', !!data?.profiles);
         console.log('[Student Page] Profile data:', data?.profiles);
-        
         setStudent(data);
-
-        // Load additional data in parallel
-        Promise.all([
-          // Registration data
-          supabase
-            .from('registration_requests')
-            .select('preferred_class, preferred_start_date, how_did_you_hear, special_requests, previous_school')
-            .eq('student_id', studentId)
-            .maybeSingle()
-            .then(({ data }: any) => setRegistrationData(data)),
-
-          // Teacher name
-          data.classes?.teacher_id ? supabase
-            .from('profiles')
-            .select('first_name, last_name')
-            .eq('id', data.classes.teacher_id)
-            .single()
-            .then(({ data: teacher }: any) => {
-              if (teacher) setTeacherName(`${teacher.first_name} ${teacher.last_name}`);
-            }) : Promise.resolve(),
-
-          // Attendance stats (last 30 days)
-          supabase
-            .from('attendance')
-            .select('status')
-            .eq('student_id', studentId)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-            .then(({ data: attendance }: any) => {
-              if (attendance) {
-                const present = attendance.filter((a: any) => a.status === 'present').length;
-                const absent = attendance.filter((a: any) => a.status === 'absent').length;
-                const total = attendance.length;
-                setAttendanceStats({
-                  present,
-                  absent,
-                  total,
-                  percentage: total > 0 ? Math.round((present / total) * 100) : 0
-                });
-              }
-            }),
-
-          // Recent activities
-          supabase
-            .from('homework_submissions')
-            .select('id, created_at, homework:homework_id(title)')
-            .eq('student_id', studentId)
-            .order('created_at', { ascending: false })
-            .limit(5)
-            .then(({ data: submissions }: any) => {
-              if (submissions) {
-                setRecentActivities(submissions.map((s: any) => ({
-                  id: s.id,
-                  type: 'homework',
-                  title: (s.homework as any)?.title || 'Homework Submitted',
-                  date: s.created_at
-                })));
-              }
-            }),
-
-          // Last parent contact
-          supabase
-            .from('messages')
-            .select('created_at')
-            .or(`sender_id.eq.${data.guardian_id},recipient_id.eq.${data.guardian_id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .then(({ data: messages }: any) => {
-              if (messages && messages[0]) {
-                setLastContactDate(messages[0].created_at);
-              }
-            })
-        ]).catch(err => console.error('Error loading additional data:', err));
       } catch (error) {
         console.error('Error loading student:', error);
         setStudent(null);
@@ -262,11 +149,6 @@ export default function StudentDetailPage() {
     const months = Math.floor(((today.getTime() - birth.getTime()) / (30.44 * 24 * 60 * 60 * 1000)) % 12);
     return `${years} years, ${months} months`;
   };
-
-  // Guard: Don't render if this is the enroll route
-  if (studentId === 'enroll') {
-    return null; // Let the /enroll route handle this
-  }
 
   if (loading) {
     return (
@@ -479,7 +361,7 @@ export default function StudentDetailPage() {
           {student.classes && (
             <div className="card">
               <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <School size={20} />
+                <MapPin size={20} />
                 Class Assignment
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -491,171 +373,20 @@ export default function StudentDetailPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Age Group</div>
                   <div>{student.classes.age_group}</div>
                 </div>
-                {teacherName && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Teacher</div>
-                    <div>{teacherName}</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Registration Details */}
-          {registrationData && (
-            <div className="card">
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <BookOpen size={20} />
-                Registration Details
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {registrationData.preferred_class && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Preferred Class</div>
-                    <div>{registrationData.preferred_class}</div>
-                  </div>
-                )}
-                {registrationData.preferred_start_date && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Preferred Start Date</div>
-                    <div>{new Date(registrationData.preferred_start_date).toLocaleDateString()}</div>
-                  </div>
-                )}
-                {registrationData.how_did_you_hear && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>How They Found Us</div>
-                    <div>{registrationData.how_did_you_hear}</div>
-                  </div>
-                )}
-                {registrationData.previous_school && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Previous School</div>
-                    <div>{registrationData.previous_school}</div>
-                  </div>
-                )}
-                {registrationData.special_requests && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Special Requests</div>
-                    <div style={{ 
-                      padding: 8,
-                      backgroundColor: 'var(--surface)',
-                      borderRadius: 6,
-                      fontSize: 14
-                    }}>
-                      {registrationData.special_requests}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Attendance Stats */}
-          {attendanceStats && attendanceStats.total > 0 && (
-            <div className="card">
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Activity size={20} />
-                Attendance (Last 30 Days)
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Attendance Rate</div>
-                  <div style={{ fontSize: 24, fontWeight: 600, color: attendanceStats.percentage >= 90 ? '#10b981' : attendanceStats.percentage >= 75 ? '#f59e0b' : '#ef4444' }}>
-                    {attendanceStats.percentage}%
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <div style={{ padding: 8, backgroundColor: '#10b98110', borderRadius: 6 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Present</div>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: '#10b981' }}>{attendanceStats.present}</div>
-                  </div>
-                  <div style={{ padding: 8, backgroundColor: '#ef444410', borderRadius: 6 }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Absent</div>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: '#ef4444' }}>{attendanceStats.absent}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Parent Communication */}
-          {student.profiles && (
-            <div className="card">
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <MessageSquare size={20} />
-                Parent Communication
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Last Contact</div>
-                  <div>{lastContactDate ? new Date(lastContactDate).toLocaleDateString() : 'No recent messages'}</div>
-                </div>
-                <button
-                  className="btn btnSecondary"
-                  onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id}`)}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                >
-                  <MessageSquare size={16} style={{ marginRight: 8 }} />
-                  Send Message
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Recent Activities */}
-          {recentActivities.length > 0 && (
-            <div className="card">
-              <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <TrendingUp size={20} />
-                Recent Activities
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {recentActivities.map((activity) => (
-                  <div 
-                    key={activity.id}
-                    style={{
-                      padding: 10,
-                      backgroundColor: 'var(--surface)',
-                      borderRadius: 6,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <div style={{ fontSize: 14 }}>{activity.title}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                      {new Date(activity.date).toLocaleDateString()}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* Quick Actions Bar */}
+        {/* Actions */}
         <div className="card" style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
             <button 
               className="btn btnSecondary"
               onClick={() => router.push(`/dashboard/principal/students/${student.id}/edit`)}
             >
               Edit Student
             </button>
-            <button 
-              className="btn btnSecondary"
-              onClick={() => router.push(`/dashboard/principal/reports?student=${student.id}`)}
-            >
-              View Progress Reports
-            </button>
-            <button 
-              className="btn btnSecondary"
-              onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id}`)}
-            >
-              <MessageSquare size={16} style={{ marginRight: 8 }} />
-              Message Parent
-            </button>
-            <div style={{ flex: 1 }} />
             <button 
               className="btn"
               style={{ 

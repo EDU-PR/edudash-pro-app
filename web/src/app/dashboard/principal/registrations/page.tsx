@@ -217,13 +217,7 @@ export default function PrincipalRegistrationsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      console.log('[Approve] Starting approval for registration:', registration.id);
-      
-      // Step 1: Update status to 'approved' in EduDashPro database
-      // The database trigger will automatically:
-      // - Sync back to EduSitePro (if edusite_id exists)
-      // - Create parent/student accounts
-      // - Send welcome email
+      // Step 1: Update in EduDashPro database
       const { error: updateError } = await supabase
         .from('registration_requests')
         .update({
@@ -233,34 +227,52 @@ export default function PrincipalRegistrationsPage() {
         })
         .eq('id', registration.id);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      console.log('[Approve] ✅ Status updated to approved');
-      
-      // Step 2: Create student/parent accounts and send email
-      // Wait a moment for DB trigger to complete, then explicitly call sync function
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('[Approve] Calling sync-registration-to-edudash with ID:', registration.id);
-      
-      const { data: syncData, error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
-        body: { registration_id: registration.id }, // Pass the EduDashPro registration ID
-      });
-      
-      if (syncError) {
-        console.error('[Approve] ❌ Sync error:', syncError);
-        alert(`Registration approved, but account creation failed: ${syncError.message}\n\nPlease contact admin.`);
+      // Step 2 & 3: Only sync to EduSitePro if this registration came from there
+      if (registration.edusite_id) {
+        console.log('[Approve] Syncing to EduSitePro, ID:', registration.edusite_id);
+        
+        // Sync approval back to EduSitePro
+        const { error: syncError } = await supabase.functions.invoke('sync-approval-to-edusite', {
+          body: { 
+            record: {
+              id: registration.edusite_id,
+              status: 'approved',
+              reviewed_date: new Date().toISOString(),
+            },
+            old_record: { status: 'pending' }
+          },
+        });
+        
+        if (syncError) {
+          console.error('Failed to sync approval to EduSitePro:', syncError);
+          alert('Approved locally but failed to sync to marketing site.');
+        }
+
+        // Create full student/parent account from EduSitePro data
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const { error: createError } = await supabase.functions.invoke('sync-registration-to-edudash', {
+          body: { registration_id: registration.edusite_id },
+        });
+        
+        if (createError) {
+          console.error('Failed to create student account:', createError);
+          alert('Registration approved but student account creation failed. Please create manually or contact admin.');
+        } else {
+          alert('Registration approved! Student account created and parent notified.');
+        }
       } else {
-        console.log('[Approve] ✅ Sync successful:', syncData);
-        alert('✅ Registration approved!\n\n✉️ Welcome email sent to parent\n👤 Parent account created\n👶 Student profile created');
+        // This registration was created directly in EduDashPro (no edusite_id)
+        console.log('[Approve] Local registration, skipping EduSitePro sync');
+        alert('Registration approved! This was a local registration.');
       }
 
       await fetchRegistrations();
     } catch (error) {
-      console.error('[Approve] Error:', error);
-      alert(`Failed to approve registration: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error approving registration:', error);
+      alert('Failed to approve registration. Please try again.');
     } finally {
       setProcessing(null);
     }

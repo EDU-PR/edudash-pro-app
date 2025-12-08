@@ -25,26 +25,15 @@ export function useTierUpdates(userId: string | undefined, onTierChange?: (newTi
     let channel: RealtimeChannel | null = null;
 
     const setupRealtimeSubscription = async () => {
-      // First, try to fetch from user_ai_tiers (may not exist for community users)
+      // First, try to fetch from user_ai_tiers
       const { data, error } = await supabase
         .from('user_ai_tiers')
         .select('tier')
         .eq('user_id', userId)
         .single();
 
-      // Silently ignore errors for community users (table may not exist or be accessible)
-      // Only log unexpected errors (not 400/404/406/PGRST116)
-      if (error) {
-        const isExpectedError = 
-          error.code === 'PGRST116' || // Not found
-          error.code === 'PGRST204' || // Column not found
-          error.message?.includes('relation "user_ai_tiers" does not exist') ||
-          error.message?.includes('406') || // Not acceptable
-          error.message?.includes('400');
-        
-        if (!isExpectedError) {
-          console.error('[TierUpdates] Unexpected error fetching tier:', error);
-        }
+      if (error && error.code !== 'PGRST116') {
+        console.error('[TierUpdates] Failed to fetch tier from user_ai_tiers:', error);
       }
       
       if (data && data.tier) {

@@ -29,17 +29,15 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
         const supabase = createClient();
         const allRequests: PendingRequest[] = [];
 
-        // First, get parent's internal ID, email, role, and linked students to filter out duplicates
+        // First, get parent's internal ID and linked students to filter out duplicates
         const { data: profile } = await supabase
           .from('profiles')
-          .select('id, preschool_id, email, role')
+          .select('id, preschool_id')
           .eq('id', userId)
           .maybeSingle();
 
         const parentInternalId = profile?.id;
         const preschoolId = profile?.preschool_id;
-        const userEmail = profile?.email;
-        const userRole = profile?.role;
 
         // Get already-linked students (approved children)
         const { data: linkedStudents } = await supabase
@@ -57,35 +55,27 @@ export function PendingRequestsWidget({ userId }: PendingRequestsWidgetProps) {
         );
 
         // Fetch pending child registration requests
-        // Note: registration_requests table may not exist in all EduDashPro instances
-        // Only query if we have a valid email - skip for parents to avoid 400 errors
-        let registrationRequests: any[] | null = null;
-        let regError: any = null;
-        
-        // Only fetch registration_requests if user has email (avoid undefined query)
-        if (userEmail && userRole && ['principal', 'admin', 'superadmin'].includes(userRole)) {
-          const result = await supabase
-            .from('registration_requests')
-            .select('id, student_first_name, student_last_name, created_at, organization_id, organizations(name)')
-            .eq('guardian_email', userEmail)
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false });
-          registrationRequests = result.data;
-          regError = result.error;
-        }
+        // Note: registration_requests table is in EduSitePro, not EduDashPro
+        // Once approved, requests are synced as students in EduDashPro
+        const { data: registrationRequests, error: regError } = await supabase
+          .from('registration_requests')
+          .select('id, child_first_name, child_last_name, created_at, preschool_id, preschools(name)')
+          .eq('parent_id', userId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
 
-        // Silently handle expected errors (table doesn't exist, RLS denial, etc.)
+        // Silently ignore errors (table doesn't exist in EduDashPro)
         if (!regError && registrationRequests) {
           registrationRequests.forEach((req: any) => {
-            const requestName = `${req.student_first_name} ${req.student_last_name}`.toLowerCase().trim();
+            const requestName = `${req.child_first_name} ${req.child_last_name}`.toLowerCase().trim();
             
             // Only show if child is NOT already linked
             if (!linkedStudentNames.has(requestName)) {
               allRequests.push({
                 id: req.id,
                 type: 'registration',
-                childName: `${req.student_first_name} ${req.student_last_name}`,
-                schoolName: req.organizations?.name,
+                childName: `${req.child_first_name} ${req.child_last_name}`,
+                schoolName: req.preschools?.name,
                 requestedDate: new Date(req.created_at).toLocaleDateString('en-ZA', {
                   day: '2-digit',
                   month: 'short',

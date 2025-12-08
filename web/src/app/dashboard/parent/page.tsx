@@ -13,13 +13,9 @@ import { EmptyChildrenState } from '@/components/dashboard/parent/EmptyChildrenS
 import { QuickActionsGrid } from '@/components/dashboard/parent/QuickActionsGrid';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
-import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
-import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
-import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity } from 'lucide-react';
-import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
+import { Users, BarChart3, BookOpen, Lightbulb } from 'lucide-react';
 
 export default function ParentDashboard() {
   const router = useRouter();
@@ -59,9 +55,6 @@ export default function ParentDashboard() {
   const [aiLanguage, setAILanguage] = useState('en-ZA');
   const [aiInteractive, setAIInteractive] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>('children'); // Auto-open My Children by default
-
-  // Get pending homework count for badge
-  const { count: homeworkCount } = usePendingHomework(userId || undefined);
 
   // Set greeting based on time of day
   useEffect(() => {
@@ -134,26 +127,12 @@ export default function ParentDashboard() {
     const age = Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
     return age;
   };
-
-  // Extract grade number from grade string (e.g., "Grade 4" -> 4)
-  const getGradeNumber = (gradeString?: string): number => {
-    if (!gradeString) return 0;
-    const match = gradeString.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 0;
-  };
   
   const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
-  const activeChildGrade = activeChild ? getGradeNumber(activeChild.grade) : 0;
   
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
   const hasSchoolAgeChildren = childrenCards.some(child => getChildAge(child.dateOfBirth) >= 6);
-  
-  // Grade 4+ gets exam features (with daily quota)
-  const isExamEligible = activeChildGrade >= 4;
-  
-  // All children get access to general features (Dash Chat, Robotics, etc) with quotas
-  const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
 
   return (
     <ParentShell
@@ -164,32 +143,15 @@ export default function ParentDashboard() {
       unreadCount={unreadCount}
       hasOrganization={hasOrganization}
     >
-      <div className="container parent-dashboard-main">
-        {/* Search Bar */}
-        <div style={{ marginTop: 0, marginBottom: '20px' }}>
-          <div style={{ position: 'relative' }}>
-            <Search className="searchIcon icon16" />
-            <input
-              className="searchInput"
-              placeholder="Search homework, messages, children..."
-              onKeyDown={(e) => {
-                const t = e.target as HTMLInputElement;
-                if (e.key === 'Enter' && t.value.trim()) {
-                  router.push(`/dashboard/parent/search?q=${encodeURIComponent(t.value.trim())}`);
-                }
-              }}
-            />
-          </div>
-        </div>
-
+      <div className="container">
         {/* Header */}
         <DashboardHeader userName={userName} greeting={greeting} />
 
         {/* Trial Banner */}
         <TrialBanner trialStatus={trialStatus} />
 
-        {/* AI Usage Quota Card - Only show if children exist and have age */}
-        {userId && childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
+        {/* AI Usage Quota Card - Shows remaining AI credits */}
+        {userId && (
           <QuotaCard userId={userId} />
         )}
 
@@ -201,9 +163,13 @@ export default function ParentDashboard() {
           <EmptyChildrenState
             usageType={usageType}
             onAddChild={() => {
-              // Community School parents always use register-child (auto-approved)
-              // Organization-linked parents use claim-child (needs approval)
-              router.push('/dashboard/parent/register-child');
+              // If parent has organization, they should claim/link children
+              // If independent parent, they should register children
+              if (hasOrganization) {
+                router.push('/dashboard/parent/claim-child');
+              } else {
+                router.push('/dashboard/parent/register-child');
+              }
             }}
           />
         )}
@@ -221,10 +187,9 @@ export default function ParentDashboard() {
                   key={child.id}
                   className="card card-interactive"
                   style={{
-                    border: activeChildId === child.id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                    border: activeChildId === child.id ? '2px solid var(--primary)' : undefined,
                     minWidth: '280px',
-                    flexShrink: 0,
-                    padding: '16px'
+                    flexShrink: 0
                   }}
                   onClick={() => setActiveChildId(child.id)}
                 >
@@ -257,52 +222,8 @@ export default function ParentDashboard() {
           </CollapsibleSection>
         )}
 
-        {/* Quick Actions Grid - Show if children exist with age */}
-        {hasAnyChild && (
-          <QuickActionsGrid 
-            usageType={usageType} 
-            hasOrganization={hasOrganization}
-            activeChildGrade={activeChildGrade}
-            isExamEligible={isExamEligible}
-            unreadCount={unreadCount}
-            homeworkCount={homeworkCount}
-            userId={userId}
-            preschoolId={profile?.preschoolId}
-          />
-        )}
-
-        {/* Recent Activity Feed */}
-        {hasAnyChild && userId && (
-          <CollapsibleSection 
-            title="Recent Activity" 
-            icon={Activity} 
-            isOpen={openSection === 'activity'}
-            onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
-          >
-            <ActivityFeed 
-              userId={userId} 
-              activeChildId={activeChildId || undefined}
-              limit={8}
-            />
-          </CollapsibleSection>
-        )}
-
-        {/* Homework Card - Show if organization-linked */}
-        {hasOrganization && userId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <HomeworkCard userId={userId} />
-          </div>
-        )}
-
-        {/* Live Lessons Section - Show if organization-linked with active child */}
-        {hasOrganization && activeChild && profile?.preschoolId && (
-          <div className="section" style={{ marginTop: 'var(--space-4)' }}>
-            <JoinLiveLessonWithToggle 
-              preschoolId={profile.preschoolId} 
-              classId={activeChild.classId}
-            />
-          </div>
-        )}
+        {/* Quick Actions Grid */}
+        <QuickActionsGrid usageType={usageType} hasOrganization={hasOrganization} />
 
         {/* Early Learning Activities - ONLY for preschoolers */}
         {allChildrenArePreschoolers && activeChild && (

@@ -3,21 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: NextRequest) {
   try {
-    // Create Supabase clients for both databases
+    // Create Supabase client with service role for server-side operations
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false,
-        },
-      }
-    );
-
-    // EduSitePro client for cross-database cleanup
-    const edusiteSupabase = createClient(
-      process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co',
-      process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwcHV6aWJqbHhnZndydWp6ZnN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3NDM3MzAsImV4cCI6MjA2OTMxOTczMH0.cDnWjHPTqVWpJZSMSCgJTojQJuuaW3VaI4U5Mzq0E8o',
       {
         auth: {
           persistSession: false,
@@ -50,55 +39,21 @@ export async function POST(req: NextRequest) {
 
     const studentName = `${student.first_name} ${student.last_name}`;
 
-    // Get parent/guardian info from student_parent_relationships table
+    // Get parent/guardian info from student_guardians table
     const { data: guardianRelation, error: guardianError } = await supabase
-      .from('student_parent_relationships')
-      .select('parent_id, profiles!inner(email, first_name, last_name)')
+      .from('student_guardians')
+      .select('guardian_id, profiles!inner(email, full_name)')
       .eq('student_id', studentId)
-      .maybeSingle();
+      .eq('primary_contact', true)
+      .single();
 
-    const parentUserId = guardianRelation?.parent_id;
-    const parentEmail = Array.isArray(guardianRelation?.profiles) 
-      ? guardianRelation?.profiles[0]?.email 
-      : (guardianRelation?.profiles as any)?.email;
-    
-    // Construct full name from first_name and last_name
-    const profileData = Array.isArray(guardianRelation?.profiles)
-      ? guardianRelation?.profiles[0]
-      : guardianRelation?.profiles;
-    const parentName = profileData 
-      ? `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || 'Parent'
-      : 'Parent';
+    const parentUserId = guardianRelation?.guardian_id;
+    const parentEmail = guardianRelation?.profiles?.email;
+    const parentName = guardianRelation?.profiles?.full_name;
 
     console.log('[Delete Student] Student:', studentName, '| Parent:', parentEmail);
 
-    // Step 1: Delete from EduSitePro registration_requests table
-    console.log('[Delete Student] Deleting from EduSitePro registration_requests...');
-    const { error: edusiteDeleteError } = await edusiteSupabase
-      .from('registration_requests')
-      .delete()
-      .eq('edudash_student_id', studentId);
-
-    if (edusiteDeleteError) {
-      console.error('⚠️  Error deleting from EduSitePro (non-critical):', edusiteDeleteError);
-    } else {
-      console.log('✅ Deleted from EduSitePro registration_requests');
-    }
-
-    // Step 2: Delete from EduDashPro registration_requests table
-    console.log('[Delete Student] Deleting from EduDashPro registration_requests...');
-    const { error: edudashRegError } = await supabase
-      .from('registration_requests')
-      .delete()
-      .eq('id', studentId);
-
-    if (edudashRegError) {
-      console.error('⚠️  Error deleting from EduDashPro registration_requests (non-critical):', edudashRegError);
-    } else {
-      console.log('✅ Deleted from EduDashPro registration_requests');
-    }
-
-    // Step 3: Delete student record from EduDashPro
+    // Step 1: Delete student record
     const { error: deleteStudentError } = await supabase
       .from('students')
       .delete()
@@ -111,11 +66,11 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ Student record deleted');
 
-    // Step 4: Check if parent has other students in this preschool
+    // Step 2: Check if parent has other students in this preschool
     const { data: otherStudents, error: checkError } = await supabase
-      .from('student_parent_relationships')
+      .from('student_guardians')
       .select('student_id, students!inner(id, preschool_id)')
-      .eq('parent_id', parentUserId)
+      .eq('guardian_id', parentUserId)
       .eq('students.preschool_id', student.preschool_id);
 
     if (checkError) {

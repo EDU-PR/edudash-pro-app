@@ -18,9 +18,9 @@ interface TierLimits {
 // Tier limits from database configuration (aligned with tier_name_aligned enum)
 const TIER_LIMITS: Record<string, TierLimits> = {
   free: {
-    exams_per_month: 70, // 10 per week × 7 days/week × 4 weeks ≈ 70/month
-    explanations_per_month: 1500, // 50 per day × 30 days
-    chat_messages_per_day: 100,
+    exams_per_month: 3,
+    explanations_per_month: 5,
+    chat_messages_per_day: 10,
   },
   trial: {
     exams_per_month: 10,
@@ -101,10 +101,10 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   }, [userId, supabase]);
 
   useEffect(() => {
-    // Default to 'free' tier if no tier is detected
-    const tier = usage?.current_tier?.toLowerCase() || 'free';
-    const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
-    setLimits(tierLimits);
+    if (usage?.current_tier) {
+      const tierLimits = TIER_LIMITS[usage.current_tier.toLowerCase()] || TIER_LIMITS.free;
+      setLimits(tierLimits);
+    }
   }, [usage?.current_tier]);
 
   if (loading) {
@@ -115,77 +115,32 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     );
   }
 
-  // If no usage data exists yet, default to free tier
+  // If no usage data exists yet, create default empty state
   if (!usage) {
-    const freeLimits = TIER_LIMITS.free;
     return (
-      <div className="card" style={{ marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <TrendingUp size={20} style={{ color: 'var(--primary)' }} />
+      <div className="card" style={{ padding: 'var(--space-4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+            <TrendingUp size={20} style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)' }} />
             AI Usage
           </h3>
           <span 
-            className="badge" 
+            className="badge badge-primary" 
             style={{ 
               textTransform: 'capitalize',
               fontSize: 12,
-              backgroundColor: '#6b7280',
-              color: 'white',
-              padding: '4px 12px',
-              borderRadius: 12
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white'
             }}
           >
-            Free Plan
+            Premium Trial
           </span>
         </div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', fontSize: 14, color: 'var(--text-muted)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <FileText size={16} style={{ color: '#3b82f6' }} />
-            <span>{freeLimits.exams_per_month} exams/month (10/week) • ad-supported</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <HelpCircle size={16} style={{ color: '#8b5cf6' }} />
-            <span>{freeLimits.explanations_per_month} explanations/month (50/day) • ad-supported</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <MessageSquare size={16} style={{ color: '#10b981' }} />
-            <span>{freeLimits.chat_messages_per_day} chat messages per day</span>
-          </div>
-        </div>
-        
-        <div 
-          style={{
-            marginTop: 'var(--space-4)',
-            padding: 'var(--space-3)',
-            backgroundColor: 'var(--bg-secondary)',
-            borderRadius: 8,
-            fontSize: 13,
-          }}
-        >
-          <p style={{ margin: '0 0 var(--space-2) 0', color: 'var(--text-muted)' }}>
-            💡 Start using AI features and upgrade anytime for higher limits.
-          </p>
-          <a 
-            href="/dashboard/parent/subscription" 
-            className="btn btn-primary"
-            style={{
-              fontSize: 12,
-              padding: '8px 16px',
-              width: '100%',
-              textAlign: 'center',
-              textDecoration: 'none',
-              display: 'block',
-              cursor: 'pointer',
-              backgroundColor: 'var(--accent)',
-              color: 'white',
-              borderRadius: 6,
-              fontWeight: 500,
-            }}
-          >
-            View Plans
-          </a>
+        <div style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+          <MessageSquare size={48} style={{ margin: '0 auto var(--space-3)', opacity: 0.5 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>Start using AI features to see your usage stats</p>
+          <p style={{ margin: 'var(--space-2) 0 0', fontSize: 12 }}>Unlimited access during your 7-day trial</p>
         </div>
       </div>
     );
@@ -199,8 +154,8 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     );
   }
 
-  const isUnlimited = usage?.current_tier && ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
-  const isHighestTier = usage?.current_tier && ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isUnlimited = ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isHighestTier = ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
 
   const quotaItems = [
     {
@@ -241,21 +196,17 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   };
 
   return (
-    <div className="card" style={{ marginBottom: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <TrendingUp size={20} style={{ color: 'var(--primary)' }} />
+    <div className="card" style={{ padding: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+          <TrendingUp size={20} style={{ verticalAlign: 'middle', marginRight: 'var(--space-2)' }} />
           AI Usage
         </h3>
         <span 
-          className="badge" 
+          className="badge badge-primary" 
           style={{ 
             textTransform: 'capitalize',
             fontSize: 12,
-            background: 'var(--primary)',
-            color: 'white',
-            padding: '4px 12px',
-            borderRadius: '12px'
           }}
         >
           {usage.current_tier} Plan
