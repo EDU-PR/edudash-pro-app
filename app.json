@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "edudashpro",
     "owner": "k1ng-devops",
-    "version": "1.0.4",
-    "runtimeVersion": "1.0.4",
+    "version": "1.0.5",
+    "runtimeVersion": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -56,7 +56,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 5,
+      "versionCode": 6,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -164,15 +164,14 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "81051af4-2468-4efa-a1f1-03d00f5c5688"
+        "projectId": "ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
       },
       "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",
-      "EXPO_PUBLIC_API_BASE": "https://lvvvjywrmpcqrpvuptdi.supabase.co/functions/v1",
-      "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
+      "EXPO_PUBLIC_API_BASE": "https://lvvvjywrmpcqrpvuptdi.supabase.co/functions/v1"
     },
     "updates": {
-      "url": "https://u.expo.dev/81051af4-2468-4efa-a1f1-03d00f5c5688"
+      "url": "https://u.expo.dev/ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
     }
   }
 }
