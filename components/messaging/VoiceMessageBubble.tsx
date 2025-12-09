@@ -1,6 +1,8 @@
 /**
  * VoiceMessageBubble Component - Enhanced
  * WhatsApp-style voice message player with animated waveform
+ * Uses expo-av Audio.Sound API for stable playback
+ * 
  * Features:
  * - Play/pause button with gradient
  * - Animated waveform visualization that moves during playback
@@ -9,7 +11,7 @@
  * - Seek by tapping on waveform
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,18 +22,13 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
-import {
-  PURPLE_LIGHT,
-  PURPLE_INDIGO,
-  SUCCESS_GREEN,
-  GRADIENT_PURPLE_INDIGO,
-} from './theme';
+import { PURPLE_LIGHT, SUCCESS_GREEN } from './theme';
 
 // Generate random waveform bars (normalized 0-1)
-const generateWaveformBars = (count: number = 40): number[] => {
+const generateWaveformBars = (count: number = 25): number[] => {
   const bars: number[] = [];
   for (let i = 0; i < count; i++) {
     // Create a somewhat natural looking waveform
@@ -63,13 +60,13 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
 }) => {
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
-  const waveformBars = useRef(generateWaveformBars(35)).current;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPosition, setCurrentPosition] = useState(0);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
   
-  // Hook-based audio player
-  const player = useAudioPlayer(audioUrl);
-  const isPlaying = player?.playing || false;
-  const playbackProgress = player?.duration ? player.currentTime / player.duration : 0;
-  const currentPosition = (player?.currentTime || 0) * 1000; // Convert to ms
+  const waveformBars = useRef(generateWaveformBars(25)).current;
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const audioDurationRef = useRef<number>(duration);
   
   // Animated values for each bar
   const barAnimations = useRef(
@@ -84,6 +81,15 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
   // Animate bars when playing
   useEffect(() => {
     if (isPlaying) {
@@ -93,12 +99,12 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
             Animated.timing(anim, {
               toValue: 1,
               duration: 200 + Math.random() * 300,
-              useNativeDriver: true,
+              useNativeDriver: false, // height animation requires JS driver
             }),
             Animated.timing(anim, {
               toValue: 0,
               duration: 200 + Math.random() * 300,
-              useNativeDriver: true,
+              useNativeDriver: false,
             }),
           ])
         );
@@ -114,131 +120,57 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
     }
   }, [isPlaying, barAnimations]);
 
-  // No cleanup needed - useAudioPlayer handles it automatically
+  // Audio status callback
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (status.isLoaded) {
+      setCurrentPosition(status.positionMillis || 0);
+      if (status.durationMillis) {
+        audioDurationRef.current = status.durationMillis;
+        setPlaybackProgress(status.positionMillis / status.durationMillis);
+      }
+      setIsPlaying(status.isPlaying);
+      
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setCurrentPosition(0);
+        setPlaybackProgress(0);
+      }
+    }
+  };
 
   const handlePlayPause = async () => {
-    if (!player) return;
     try {
       setIsLoading(true);
       
-      if (isPlaying) {
-        player.pause();
+      if (isPlaying && soundRef.current) {
+        await soundRef.current.pauseAsync();
+        setIsPlaying(false);
       } else {
-        player.play();
+        // Create sound if not exists
+        if (!soundRef.current) {
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true },
+            onPlaybackStatusUpdate
+          );
+          soundRef.current = sound;
+        } else {
+          // Check if finished, restart from beginning
+          const status = await soundRef.current.getStatusAsync();
+          if (status.isLoaded && status.positionMillis >= (status.durationMillis || 0) - 100) {
+            await soundRef.current.setPositionAsync(0);
+          }
+          await soundRef.current.playAsync();
+        }
+        setIsPlaying(true);
       }
       
       setIsLoading(false);
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('[VoiceMessageBubble] Error playing audio:', error);
       setIsLoading(false);
     }
   };
-
-  const displayTime = isPlaying || currentPosition > 0 
-    ? formatTime(currentPosition) 
-    : formatTime(duration);
-
-  const styles = StyleSheet.create({
-    container: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      maxWidth: '85%',
-      alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
-      marginVertical: 2,
-      marginHorizontal: 8,
-    },
-    avatarContainer: {
-      marginRight: 8,
-    },
-    avatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-    },
-    avatarPlaceholder: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: theme.primary + '30',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    bubble: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: isOwnMessage ? theme.primary : theme.surface,
-      borderRadius: 20,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      minWidth: 200,
-    },
-    playButton: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: isOwnMessage ? 'rgba(255,255,255,0.2)' : theme.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
-    },
-    playButtonGradient: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-      shadowColor: PURPLE_LIGHT,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.4,
-      shadowRadius: 4,
-      elevation: 4,
-    },
-    waveformContainer: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      height: 32,
-      marginRight: 8,
-    },
-    waveformBar: {
-      width: 3,
-      marginHorizontal: 1,
-      borderRadius: 1.5,
-      backgroundColor: isOwnMessage 
-        ? 'rgba(255,255,255,0.5)' 
-        : theme.textSecondary + '60',
-    },
-    waveformBarPlayed: {
-      backgroundColor: isOwnMessage 
-        ? theme.onPrimary 
-        : theme.primary,
-    },
-    infoContainer: {
-      alignItems: 'flex-end',
-      minWidth: 45,
-    },
-    duration: {
-      fontSize: 11,
-      color: isOwnMessage ? theme.onPrimary + '90' : theme.textSecondary,
-      marginBottom: 2,
-    },
-    timestamp: {
-      fontSize: 10,
-      color: isOwnMessage ? theme.onPrimary + '70' : theme.textSecondary,
-    },
-    readReceipt: {
-      fontSize: 10,
-      color: isRead ? SUCCESS_GREEN : (isOwnMessage ? theme.onPrimary + '70' : theme.textSecondary),
-      marginLeft: 2,
-    },
-    micIcon: {
-      position: 'absolute',
-      right: -4,
-      bottom: -4,
-    },
-  });
-
-  const playedBars = Math.floor(playbackProgress * waveformBars.length);
 
   // Handle seeking by tapping on waveform
   const handleSeek = async (index: number) => {
@@ -253,9 +185,141 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
         setPlaybackProgress(index / waveformBars.length);
       }
     } catch (error) {
-      console.error('Error seeking:', error);
+      console.error('[VoiceMessageBubble] Error seeking:', error);
     }
   };
+
+  const displayTime = isPlaying || currentPosition > 0 
+    ? formatTime(currentPosition) 
+    : formatTime(duration);
+
+  // Teal gradient for own messages, purple for received
+  const ownMessageGradient = ['#14b8a6', '#0d9488'] as const;
+  const receivedMessageGradient = ['#8b5cf6', '#7c3aed'] as const;
+
+  const styles = StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      maxWidth: '88%',
+      alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
+      marginVertical: 4,
+      marginHorizontal: 12,
+    },
+    avatarContainer: {
+      marginRight: 10,
+    },
+    avatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: 2,
+      borderColor: theme.primary + '30',
+    },
+    avatarPlaceholder: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: theme.primary + '30',
+    },
+    bubble: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isOwnMessage ? '#0d9488' : theme.surface,
+      borderRadius: 24,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      minWidth: 240,
+      maxWidth: '100%',
+      // Shadow for depth
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+      // Bubble tail effect via border
+      borderWidth: isOwnMessage ? 0 : 1,
+      borderColor: theme.border + '30',
+    },
+    playButtonWrapper: {
+      marginRight: 12,
+    },
+    playButtonGradient: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      // Enhanced shadow
+      shadowColor: isOwnMessage ? '#14b8a6' : PURPLE_LIGHT,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.4,
+      shadowRadius: 6,
+      elevation: 5,
+    },
+    waveformContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 40,
+      marginRight: 10,
+      paddingVertical: 4,
+      overflow: 'hidden',
+    },
+    waveformBar: {
+      width: 3.5,
+      marginHorizontal: 1,
+      borderRadius: 2,
+      backgroundColor: isOwnMessage 
+        ? 'rgba(255,255,255,0.4)' 
+        : theme.textSecondary + '40',
+    },
+    waveformBarPlayed: {
+      backgroundColor: isOwnMessage 
+        ? '#ffffff' 
+        : theme.primary,
+    },
+    infoContainer: {
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      minWidth: 50,
+      paddingLeft: 4,
+    },
+    duration: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: isOwnMessage ? '#ffffff' : theme.text,
+      marginBottom: 3,
+    },
+    timestampRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    timestamp: {
+      fontSize: 11,
+      color: isOwnMessage ? 'rgba(255,255,255,0.75)' : theme.textSecondary,
+    },
+    readReceipt: {
+      fontSize: 11,
+      color: isRead ? SUCCESS_GREEN : (isOwnMessage ? 'rgba(255,255,255,0.6)' : theme.textSecondary),
+      marginLeft: 3,
+      fontWeight: '600',
+    },
+    micBadge: {
+      position: 'absolute',
+      right: 8,
+      top: 8,
+      backgroundColor: theme.primary + '20',
+      borderRadius: 10,
+      padding: 4,
+    },
+  });
+
+  const playedBars = Math.floor(playbackProgress * waveformBars.length);
 
   return (
     <View style={styles.container}>
@@ -277,11 +341,12 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
         <TouchableOpacity 
           onPress={handlePlayPause}
           disabled={isLoading}
-          activeOpacity={0.8}
-          style={{ marginRight: 10 }}
+          activeOpacity={0.7}
+          style={styles.playButtonWrapper}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <LinearGradient
-            colors={GRADIENT_PURPLE_INDIGO}
+            colors={isOwnMessage ? ownMessageGradient : receivedMessageGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.playButtonGradient}
@@ -289,15 +354,15 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
             {isLoading ? (
               <Ionicons 
                 name="hourglass-outline" 
-                size={20} 
+                size={24} 
                 color="#fff" 
               />
             ) : (
               <Ionicons 
                 name={isPlaying ? 'pause' : 'play'} 
-                size={20} 
+                size={24} 
                 color="#fff"
-                style={!isPlaying ? { marginLeft: 2 } : undefined}
+                style={!isPlaying ? { marginLeft: 3 } : undefined}
               />
             )}
           </LinearGradient>
@@ -309,14 +374,15 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
             const isPlayed = index < playedBars;
             const animatedHeight = barAnimations[index].interpolate({
               inputRange: [0, 1],
-              outputRange: [height * 22, height * 32],
+              outputRange: [height * 24, height * 36],
             });
             
             return (
               <Pressable
                 key={index}
                 onPress={() => handleSeek(index)}
-                style={{ paddingVertical: 4 }}
+                style={{ paddingVertical: 6, paddingHorizontal: 0.5 }}
+                hitSlop={{ top: 4, bottom: 4 }}
               >
                 <Animated.View
                   style={[
@@ -325,7 +391,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
                     {
                       height: isPlaying 
                         ? animatedHeight 
-                        : height * 22,
+                        : height * 24,
                     },
                   ]}
                 />
@@ -337,7 +403,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
         {/* Duration and timestamp */}
         <View style={styles.infoContainer}>
           <Text style={styles.duration}>{displayTime}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.timestampRow}>
             <Text style={styles.timestamp}>{timestamp}</Text>
             {isOwnMessage && (
               <Text style={styles.readReceipt}>
@@ -346,17 +412,10 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
             )}
           </View>
         </View>
-        
-        {/* Mic icon indicator */}
-        {!isOwnMessage && (
-          <View style={styles.micIcon}>
-            <Ionicons name="mic" size={14} color={theme.primary} />
-          </View>
-        )}
       </View>
       
-      {/* Avatar placeholder for own messages to maintain layout */}
-      {isOwnMessage && <View style={{ width: 8 }} />}
+      {/* Spacer for own messages */}
+      {isOwnMessage && <View style={{ width: 4 }} />}
     </View>
   );
 };

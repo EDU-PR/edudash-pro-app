@@ -63,3 +63,7 @@ edudashpro-dev/
 tmp/
 temp/
 *.tmp
+
+# Keystore - NEVER COMMIT
+*.jks
+credentials.json
