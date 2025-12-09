@@ -43,13 +43,21 @@ interface RateLimitRecord {
  */
 class MemoryRateLimitStore {
   private store = new Map<string, RateLimitRecord>();
-  private cleanupInterval: any | null = null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    // Clean up expired records every 5 minutes
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 5 * 60 * 1000);
+    // Don't start cleanup interval in test environment to avoid open handles
+    if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+      // Clean up expired records every 5 minutes
+      this.cleanupInterval = setInterval(() => {
+        this.cleanup();
+      }, 5 * 60 * 1000);
+      
+      // Ensure interval doesn't prevent process exit
+      if (this.cleanupInterval.unref) {
+        this.cleanupInterval.unref();
+      }
+    }
   }
 
   private cleanup(): void {
