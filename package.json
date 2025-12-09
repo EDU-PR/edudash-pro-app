@@ -43,6 +43,11 @@
   },
   "scripts": {
     "docs:policy:check": "node ./scripts/docs-policy-check.js",
+    "eas:project": "./scripts/switch-eas-project.sh",
+    "eas:old": "./scripts/switch-eas-project.sh old",
+    "eas:new": "./scripts/switch-eas-project.sh new",
+    "ota:mark1": "./scripts/switch-eas-project.sh old && eas update --channel production",
+    "ota:release8": "./scripts/switch-eas-project.sh new && eas update --channel production",
     "start": "npx expo start --dev-client --host localhost",
     "start:clear": "npx expo start --dev-client --host localhost --clear",
     "open:android": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:8083 tcp:8083 && adb shell am start -n com.edudashpro/expo.modules.devlauncher.launcher.DevLauncherActivity -a android.intent.action.VIEW -d \"exp://expo-development-client/?url=http://127.0.0.1:8081\"",
