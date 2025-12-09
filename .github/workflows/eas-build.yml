@@ -1,0 +1,32 @@
+name: EAS Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Android & iOS
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: 🏗 Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Build on EAS
+        run: eas build --platform all --non-interactive --clear-cache

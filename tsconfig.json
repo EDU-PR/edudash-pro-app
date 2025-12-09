@@ -68,6 +68,7 @@
     "components/ai/**/*",
     "components/ui/HolographicOrb.tsx",
     "lib/voice/**/*",
-    "services/dash-ai/**/*"
+    "services/dash-ai/**/*",
+    "services/caps/**/*"
   ]
 }
