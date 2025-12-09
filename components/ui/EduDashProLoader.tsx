@@ -42,30 +42,7 @@ export function EduDashProLoader({
   variant = 'default',
   ...props
 }: EduDashProLoaderProps) {
-  // Fallback theme for use outside ThemeProvider (e.g., splash screen)
-  const defaultTheme = {
-    background: '#1A1A2E',
-    surface: '#16213E',
-    primary: '#0F3460',
-    accent: '#E94560',
-    text: '#FFFFFF',
-    textSecondary: '#A0A0A0',
-    border: '#2A2A3E',
-    success: '#4CAF50',
-    warning: '#FFC107',
-    error: '#F44336',
-    isDark: true,
-  };
-
-  // Try to use theme from context, fallback to default if not available
-  let themeContext;
-  try {
-    themeContext = useTheme();
-  } catch (error) {
-    themeContext = { theme: defaultTheme };
-  }
-  
-  const theme = themeContext?.theme || defaultTheme;
+  const { theme } = useTheme();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;

@@ -34,7 +34,7 @@ import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
 import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
 import { BottomTabBar } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
-import { CallProvider, useCall } from '../components/calls/CallProvider';
+import { CallProvider, useCallSafe } from '../components/calls/CallProvider';
 import { IncomingCallOverlay } from '../components/calls/IncomingCallOverlay';
 import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
 import { VideoCallInterface } from '../components/calls/VideoCallInterface';
@@ -92,13 +92,8 @@ function LayoutContent() {
     }
   }, [authLoading, isAuthRoute]);
   
-  // Get call context for rendering call interfaces (wrapped in try-catch for safety)
-  let callContext: ReturnType<typeof useCall> | null = null;
-  try {
-    callContext = useCall();
-  } catch {
-    // CallProvider may not be available yet
-  }
+  // Get call context for rendering call interfaces (safe even if CallProvider isn't mounted)
+  const callContext = useCallSafe();
   
   // Determine if FAB should be visible (user pref + route logic)
   const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB;
