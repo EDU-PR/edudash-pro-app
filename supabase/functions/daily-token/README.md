@@ -44,7 +44,7 @@ supabase functions serve daily-token
 
 # In another terminal, test with curl:
 curl -i --location --request POST 'http://localhost:54321/functions/v1/daily-token' \
-  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8' \
+  --header 'Authorization: Bearer YOUR_SUPABASE_ANON_KEY_OR_USER_JWT' \
   --header 'Content-Type: application/json' \
   --data '{"roomName":"test-room","userName":"Test User","isOwner":true}'
 ```

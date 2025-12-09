@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
 // Setup minimal test data for seat management testing
+// Usage: SUPABASE_URL=... SUPABASE_ANON_KEY=... node tests/unit/setup-test-data.js
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = 'https://lvvvjywrmpcqrpvuptdi.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8';
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing required environment variables: SUPABASE_URL and SUPABASE_ANON_KEY');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 

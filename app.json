@@ -2,9 +2,9 @@
   "expo": {
     "name": "EduDashPro",
     "slug": "edudashpro",
-    "owner": "dashpro",
-    "version": "1.0.2",
-    "runtimeVersion": "1.0.2",
+    "owner": "k1ng-devops",
+    "version": "1.0.3",
+    "runtimeVersion": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -38,7 +38,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.edudashpro",
+      "package": "com.edudashpro.app",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -56,7 +56,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 3,
+      "versionCode": 4,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -162,11 +162,11 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ab7c9230-2f47-4bfa-b4f4-4ae516a334bc"
+        "projectId": "81051af4-2468-4efa-a1f1-03d00f5c5688"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/ab7c9230-2f47-4bfa-b4f4-4ae516a334bc"
+      "url": "https://u.expo.dev/81051af4-2468-4efa-a1f1-03d00f5c5688"
     }
   }
 }
