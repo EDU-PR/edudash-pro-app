@@ -82,10 +82,10 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         setIsDragging(true);
         
-        // Scale up slightly when grabbed
+        // Scale up slightly when grabbed - use JS driver to match position animations
         Animated.spring(scale, {
           toValue: 1.1,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start();
         
         // Extract current position
@@ -102,10 +102,10 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
       onPanResponderRelease: (_, gestureState) => {
         setIsDragging(false);
         
-        // Scale back to normal
+        // Scale back to normal - use JS driver to match position animations
         Animated.spring(scale, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start();
         
         // If it was just a tap (no significant movement), navigate

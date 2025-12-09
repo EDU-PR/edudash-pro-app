@@ -731,29 +731,23 @@ export default function TeacherMessageThreadScreen() {
           {replyTo && <ReplyPreview message={replyTo} onClose={() => setReplyTo(null)} />}
           
           <View style={styles.composerRow}>
-            {isRecording && InlineVoiceRecorder ? (
-              // Inline recording UI replaces the composer
-              <InlineVoiceRecorder
-                isRecording={isRecording}
-                onRecordingComplete={handleVoice}
-                onRecordingCancel={handleVoiceCancel}
-                onRecordingStart={handleVoiceStart}
-              />
-            ) : (
+            {/* Emoji Button - hide when recording */}
+            {!isRecording && (
+              <TouchableOpacity 
+                style={styles.composerBtn}
+                onPress={() => setShowEmoji(!showEmoji)}
+              >
+                <Ionicons 
+                  name={showEmoji ? 'close-outline' : 'happy-outline'} 
+                  size={28} 
+                  color="rgba(255,255,255,0.6)" 
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Input Container - hide when recording */}
+            {!isRecording && (
               <>
-                {/* Emoji Button */}
-                <TouchableOpacity 
-                  style={styles.composerBtn}
-                  onPress={() => setShowEmoji(!showEmoji)}
-                >
-                  <Ionicons 
-                    name={showEmoji ? 'close-outline' : 'happy-outline'} 
-                    size={28} 
-                    color="rgba(255,255,255,0.6)" 
-                  />
-                </TouchableOpacity>
-                
-                {/* Input Container */}
                 <View style={[
                   styles.inputContainer,
                   bgSource && styles.inputContainerWithBg,
@@ -785,8 +779,8 @@ export default function TeacherMessageThreadScreen() {
                   </TouchableOpacity>
                 </View>
                 
-                {/* Send or Mic Button */}
-                {text.trim() ? (
+                {/* Send Button - only when there's text */}
+                {text.trim() && (
                   <TouchableOpacity onPress={handleSend} disabled={sending} activeOpacity={0.8}>
                     <LinearGradient colors={['#3b82f6', '#2563eb']} style={styles.sendBtn}>
                       {sending ? (
@@ -796,27 +790,34 @@ export default function TeacherMessageThreadScreen() {
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
-                ) : (
-                  // Glowing mic button with InlineVoiceRecorder
-                  <View style={styles.micContainer}>
-                    <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
-                    {InlineVoiceRecorder ? (
-                      <InlineVoiceRecorder
-                        isRecording={isRecording}
-                        onRecordingComplete={handleVoice}
-                        onRecordingCancel={handleVoiceCancel}
-                        onRecordingStart={handleVoiceStart}
-                      />
-                    ) : (
-                      <TouchableOpacity onPress={() => toast.warn('Voice not available')}>
-                        <LinearGradient colors={[CYAN_PRIMARY, '#0891b2']} style={styles.micBtnGradient}>
-                          <Ionicons name="mic" size={22} color="#fff" />
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
                 )}
               </>
+            )}
+            
+            {/* Voice Recorder - ALWAYS mounted, expands when recording */}
+            {/* Hidden when there's text to type, shown otherwise */}
+            {(!text.trim() || isRecording) && InlineVoiceRecorder && (
+              <View style={isRecording ? styles.recordingArea : styles.micContainer}>
+                {!isRecording && <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />}
+                <InlineVoiceRecorder
+                  isRecording={isRecording}
+                  onRecordingComplete={handleVoice}
+                  onRecordingCancel={handleVoiceCancel}
+                  onRecordingStart={handleVoiceStart}
+                />
+              </View>
+            )}
+            
+            {/* Fallback mic button if InlineVoiceRecorder not available */}
+            {!text.trim() && !isRecording && !InlineVoiceRecorder && (
+              <View style={styles.micContainer}>
+                <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
+                <TouchableOpacity onPress={() => toast.warn('Voice not available')}>
+                  <LinearGradient colors={[CYAN_PRIMARY, '#0891b2']} style={styles.micBtnGradient}>
+                    <Ionicons name="mic" size={22} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>
@@ -1069,5 +1070,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+  },
+  recordingArea: {
+    flex: 1,
   },
 });
