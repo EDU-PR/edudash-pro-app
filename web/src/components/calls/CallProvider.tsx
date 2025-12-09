@@ -144,7 +144,7 @@ export function CallProvider({ children }: CallProviderProps) {
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
   
   // Track presence for online/offline detection
-  const { isUserOnline, getLastSeenText } = usePresence(currentUserId);
+  const { isUserOnline, getLastSeenText } = usePresence(currentUserId ?? undefined);
 
   // Get current user
   useEffect(() => {
