@@ -39,6 +39,8 @@ import {
   CYAN_BORDER,
   GRADIENT_DARK_SLATE,
 } from '../../components/messaging/theme';
+import { usePresence } from '@/hooks/usePresence';
+import { useCallSafe } from '@/components/calls/CallProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -48,7 +50,7 @@ let useAuth: () => { user: any; profile: any };
 let useTeacherThreadMessages: (id: string | null) => { data: any[]; isLoading: boolean; error: any; refetch: () => void };
 let useTeacherSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isPending: boolean };
 let useTeacherMarkThreadRead: () => { mutate: (threadId: string) => void };
-let usePresence: ((userId: string | undefined) => { isUserOnline: (userId: string) => boolean; getLastSeenText: (userId: string) => string }) | null = null;
+
 
 // Component imports
 let InlineVoiceRecorder: React.FC<any> | null = null;
@@ -75,11 +77,7 @@ try { MessageActionsMenu = require('@/components/messaging/MessageActionsMenu').
 try { ThreadOptionsMenu = require('@/components/messaging/ThreadOptionsMenu').ThreadOptionsMenu; } catch {}
 try { EmojiPicker = require('@/components/messaging/EmojiPicker').EmojiPicker; } catch {}
 
-// Call provider import with fallback
-let useCallHook: (() => { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void }) | null = null;
-try {
-  useCallHook = require('@/components/calls/CallProvider').useCall;
-} catch {}
+// Call provider is accessed via the CallProvider context using useCallSafe
 
 const defaultTheme = {
   background: '#0f172a',
@@ -93,7 +91,6 @@ const defaultTheme = {
 
 try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
-try { usePresence = require('@/hooks/usePresence').usePresence; } catch { usePresence = null; }
 let useTeacherMessagesRealtime: (id: string | null) => void = () => {};
 try {
   const h = require('@/hooks/useTeacherMessaging');
@@ -366,10 +363,10 @@ export default function TeacherMessageThreadScreen() {
   const displayName = params.title || params.parentName || 'Parent';
   const parentId = params.parentId || params.parentid;
   
-  // Get actual presence status using usePresence hook
-  const presence = usePresence && user?.id ? usePresence(user.id) : null;
-  const isOnline = presence && parentId ? presence.isUserOnline(parentId) : false;
-  const lastSeenText = presence && parentId ? presence.getLastSeenText(parentId) : 'Offline';
+  // Get actual presence status using usePresence hook (always called to satisfy rules-of-hooks)
+  const presence = usePresence(user?.id);
+  const isOnline = parentId ? presence.isUserOnline(parentId) : false;
+  const lastSeenText = parentId ? presence.getLastSeenText(parentId) : 'Offline';
   
   // State
   const [text, setText] = useState('');
@@ -521,16 +518,8 @@ export default function TeacherMessageThreadScreen() {
     setShowEmoji(false);
   }, []);
   
-  // Voice/Video call handlers
-  let callContext: { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void } | null = null;
-  try {
-    if (useCallHook) {
-      callContext = useCallHook();
-    }
-  } catch (error) {
-    // CallProvider not available, calls will be disabled
-    console.log('CallProvider not available');
-  }
+  // Voice/Video call handlers via CallProvider context
+  const callContext = useCallSafe();
   
   // Get recipient info for calls
   const recipientId = parentId || null;

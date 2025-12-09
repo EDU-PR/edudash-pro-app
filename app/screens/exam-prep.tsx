@@ -49,7 +49,7 @@ function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'seni
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
   const flags = getFeatureFlagsSync();
-
+ 
   // State
   const [selectedGrade, setSelectedGrade] = useState<string>('grade_4');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
@@ -57,31 +57,7 @@ export default function ExamPrepScreen() {
   const [selectedLanguage, setSelectedLanguage] = useState<SouthAfricanLanguage>('en-ZA');
   const [generating, setGenerating] = useState(false);
   const [step, setStep] = useState<'grade' | 'subject' | 'type'>('grade');
-
-  // Feature flag check
-  if (!flags.exam_prep_enabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'Exam Prep' }} />
-        <View style={styles.disabledContainer}>
-          <Ionicons name="school-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            Exam Prep is not available
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Please upgrade your subscription to access this feature.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
+ 
   // Get subjects for current grade
   const phase = getPhaseFromGrade(selectedGrade);
   const subjects = SUBJECTS_BY_PHASE[phase] || [];
@@ -397,9 +373,33 @@ export default function ExamPrepScreen() {
       </TouchableOpacity>
     </View>
   );
-
+ 
+  // Feature flag check (after hooks are initialized to satisfy rules-of-hooks)
+  if (!flags.exam_prep_enabled) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ title: 'Exam Prep' }} />
+        <View style={styles.disabledContainer}>
+          <Ionicons name="school-outline" size={64} color={theme.muted} />
+          <Text style={[styles.disabledText, { color: theme.text }]}>
+            Exam Prep is not available
+          </Text>
+          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
+            Please upgrade your subscription to access this feature.
+          </Text>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+ 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}> 
       <Stack.Screen
         options={{
           title: 'Exam Prep',

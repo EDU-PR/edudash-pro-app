@@ -39,6 +39,7 @@ import {
   SHADOW_CYAN,
 } from '../../components/messaging/theme';
 import { toast } from '@/components/ui/ToastProvider';
+import { useCallSafe } from '@/components/calls/CallProvider';
 
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
@@ -94,11 +95,7 @@ try {
 let uploadVoiceNote: ((uri: string, duration: number, conversationId?: string) => Promise<{ publicUrl: string; storagePath: string }>) | null = null;
 try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
 
-// Call provider import
-let useCallHook: (() => { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void }) | null = null;
-try {
-  useCallHook = require('@/components/calls/CallProvider').useCall;
-} catch {}
+// Call provider is accessed via the CallProvider context using useCallSafe
 
 // Default theme matching PWA dark mode
 const defaultTheme = {
@@ -932,16 +929,8 @@ export default function ParentMessageThreadScreen() {
     setShowOptionsMenu(false);
   }, [displayName]);
 
-  // Voice/Video call handlers (fully implemented)
-  let callContext: { startVoiceCall: (id: string, name?: string) => void; startVideoCall: (id: string, name?: string) => void } | null = null;
-  try {
-    if (useCallHook) {
-      callContext = useCallHook();
-    }
-  } catch (error) {
-    // CallProvider not available, calls will be disabled
-    console.log('CallProvider not available');
-  }
+  // Voice/Video call handlers (fully implemented via CallProvider context)
+  const callContext = useCallSafe();
   
   // Get other participant info
   const otherParticipant = useMemo(() => messages.find(m => m.sender_id !== user?.id), [messages, user?.id]);

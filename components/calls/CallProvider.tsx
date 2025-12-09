@@ -95,8 +95,12 @@ export function CallProvider({ children }: CallProviderProps) {
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
   
-  // Track presence for online/offline detection (only if calls enabled)
-  const { isUserOnline, getLastSeenText } = callsEnabled ? usePresence(currentUserId) : { isUserOnline: false, getLastSeenText: () => '' };
+  // Track presence for online/offline detection.
+  // The hook itself is always called (to satisfy React's rules-of-hooks),
+  // but we only use the presence data when the calls feature is enabled.
+  const presence = usePresence(currentUserId);
+  const isUserOnline = callsEnabled ? presence.isUserOnline : () => false;
+  const getLastSeenText = callsEnabled ? presence.getLastSeenText : () => '';
 
   // Get current user
   useEffect(() => {

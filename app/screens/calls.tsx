@@ -23,7 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
-import { useCall } from '@/components/calls/CallProvider';
+import { useCallSafe } from '@/components/calls/CallProvider';
 import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
 
 // Custom Header Component
@@ -372,13 +372,8 @@ export default function CallsScreen() {
     markCallsSeen();
   }, [markCallsSeen]);
   
-  // Get call context for making calls
-  let callContext: ReturnType<typeof useCall> | null = null;
-  try {
-    callContext = useCall();
-  } catch {
-    // Call provider not available
-  }
+  // Get call context for making calls (safe even if CallProvider isn't mounted)
+  const callContext = useCallSafe();
   
   // Helper to check if a call is considered "missed" (never answered)
   const isMissedCall = useCallback((call: any, userId: string) => {

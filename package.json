@@ -81,7 +81,7 @@
     "i18n:export": "node scripts/export-for-translation.js",
     "i18n:verify": "node scripts/verify-translations.js",
     "build:android:apk": "npx eas build --platform android --profile production-apk --local",
-    "build:android:aab": "npx eas build --platform android --profile production --clear-cache --non-interactive",
+    "build:android:aab": "node scripts/bump-android-version.mjs && npx eas build --platform android --profile production --clear-cache --non-interactive",
     "build:android:preview": "npx eas build --platform android --profile preview --local",
     "eas-build-pre-install": "echo 'EAS Build: Pre-install hook running'",
     "eas-build-post-install": "echo 'Typecheck temporarily disabled for build - will fix TS errors in separate PR'",
