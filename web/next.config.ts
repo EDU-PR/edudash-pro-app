@@ -4,12 +4,15 @@ const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
   
-  // Skip ESLint during build (already linted in dev)
-  eslint: {
-    ignoreDuringBuilds: true,
+  // Turbopack configuration (Next.js 16+ default bundler)
+  // Using empty config to acknowledge Turbopack while webpack config exists for fallback
+  turbopack: {
+    resolveAlias: {
+      // Add any module aliases here if needed
+    },
   },
   
-  // Webpack configuration to reduce file watchers
+  // Webpack configuration (fallback for non-Turbopack builds)
   webpack: (config, { isServer }) => {
     // Reduce file watching overhead
     config.watchOptions = {

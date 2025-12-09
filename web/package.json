@@ -41,7 +41,8 @@
     "recharts": "3.3.0",
     "remark-gfm": "4.0.1",
     "resend": "^6.5.2",
-    "router": "^2.2.0"
+    "router": "^2.2.0",
+    "vercel": "^49.1.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.16",

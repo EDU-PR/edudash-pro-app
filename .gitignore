@@ -67,3 +67,5 @@ temp/
 # Keystore - NEVER COMMIT
 *.jks
 credentials.json
+.vercel
+.env*.local
