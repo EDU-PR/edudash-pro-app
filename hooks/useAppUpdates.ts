@@ -9,6 +9,11 @@ export function useAppUpdates() {
 
   const check = useCallback(async (interactive = false) => {
     if (Platform.OS === 'web') return { isAvailable: false };
+    // Skip in development builds - Updates API not supported
+    if (__DEV__) {
+      setAvailable(false);
+      return { isAvailable: false };
+    }
     try {
       setChecking(true);
       setError(null);

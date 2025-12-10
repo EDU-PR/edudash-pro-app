@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { signOut } from '@/lib/sessionManager';
 import { Platform } from 'react-native';
-import { deactivateCurrentUserTokens } from './NotificationRouter';
+import { deactivateCurrentUserTokens } from './pushTokenUtils';
 
 // Prevent duplicate sign-out calls
 let isSigningOut = false;

@@ -69,6 +69,12 @@ export function UpdateDebugPanel() {
       Alert.alert('Updates Disabled', 'Updates are disabled in this build.');
       return;
     }
+    
+    // Skip in development builds - Updates API not supported
+    if (__DEV__) {
+      Alert.alert('Development Build', 'Update checks are not supported in development builds.');
+      return;
+    }
 
     try {
       setChecking(true);

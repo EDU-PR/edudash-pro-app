@@ -47,6 +47,12 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       return false;
     }
     
+    // Skip in development builds - Updates API not supported
+    if (__DEV__) {
+      logger.info('[Updates] Skipping check in development build');
+      return false;
+    }
+    
     logger.info('[Updates] Manual update check initiated');
 
     try {
@@ -132,6 +138,12 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
   const backgroundCheck = useCallback(async () => {
     if (!Updates.isEnabled) {
       logger.info('[Updates] Updates disabled - skipping background check');
+      return;
+    }
+    
+    // Skip in development builds - Updates API not supported
+    if (__DEV__) {
+      logger.info('[Updates] Skipping background check in development build');
       return;
     }
 
