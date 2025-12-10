@@ -1055,55 +1055,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Developer Tools - Only in DEV mode */}
-        {__DEV__ && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: '#f97316' }]}>🧪 Developer Tools</Text>
-            <View style={styles.settingsCard}>
-              <TouchableOpacity
-                style={[styles.settingItem]}
-                onPress={() => router.push('/screens/dev-notification-tester' as any)}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="notifications"
-                    size={24}
-                    color="#f97316"
-                    style={styles.settingIcon}
-                  />
-                  <View style={styles.settingContent}>
-                    <Text style={styles.settingTitle}>Notification Tester</Text>
-                    <Text style={styles.settingSubtitle}>Test push notifications, badges, and alerts</Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.settingItem, styles.lastSettingItem]}
-                onPress={() => {
-                  // Import and show a toast
-                  const { toast } = require('@/components/ui/ToastProvider');
-                  toast.success('This is a styled toast notification');
-                }}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons
-                    name="chatbox"
-                    size={24}
-                    color="#f97316"
-                    style={styles.settingIcon}
-                  />
-                  <View style={styles.settingContent}>
-                    <Text style={styles.settingTitle}>Test Toast Notification</Text>
-                    <Text style={styles.settingSubtitle}>Show a sample styled toast</Text>
-                  </View>
-                </View>
-                <Ionicons name="flask" size={20} color="#f97316" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </ScrollView>
       </View>
     </DesktopLayout>
