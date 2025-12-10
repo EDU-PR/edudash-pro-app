@@ -20,11 +20,14 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { useCallSafe } from '@/components/calls/CallProvider';
 import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
+import { useCallHistory, filterCalls, getCallCounts, CallFilter } from '@/hooks/useCallHistory';
+import { CallItem } from '@/components/calls/CallItem';
+import { CallFilterChip } from '@/components/calls/CallFilterChip';
 
 // Custom Header Component
 interface ScreenHeaderProps {
@@ -73,293 +76,13 @@ const ScreenHeader: React.FC<ScreenHeaderProps> = ({ title, subtitle, onBack, ri
   );
 };
 
-// Call Item Component
-interface CallItemProps {
-  call: {
-    id: string;
-    call_type: 'voice' | 'video';
-    status: 'ringing' | 'connected' | 'ended' | 'rejected' | 'missed' | 'busy';
-    caller_id: string;
-    callee_id: string;
-    caller_name?: string;
-    callee_name?: string;
-    started_at: string;
-    ended_at?: string;
-    duration_seconds?: number;
-  };
-  currentUserId: string;
-  onCall: (userId: string, userName: string, callType: 'voice' | 'video') => void;
-}
-
-const CallItem: React.FC<CallItemProps> = ({ call, currentUserId, onCall }) => {
-  const { theme } = useTheme();
-  const { t } = useTranslation();
-  
-  const isIncoming = call.callee_id === currentUserId;
-  const otherUserId = isIncoming ? call.caller_id : call.callee_id;
-  const otherUserName = isIncoming ? (call.caller_name || 'Unknown') : (call.callee_name || 'Unknown');
-  
-  // Helper to determine if call was actually answered
-  const wasCallAnswered = (call.duration_seconds ?? 0) > 0;
-  
-  const getStatusConfig = () => {
-    switch (call.status) {
-      case 'missed':
-        return { 
-          icon: 'call-outline' as const, 
-          color: theme.error, 
-          label: t('calls.missed', { defaultValue: 'Missed' }),
-          iconRotation: isIncoming ? 135 : -45,
-        };
-      case 'rejected':
-        return { 
-          icon: 'close-circle-outline' as const, 
-          color: theme.error, 
-          label: t('calls.declined', { defaultValue: 'Declined' }),
-          iconRotation: 0,
-        };
-      case 'ended':
-        // If incoming call ended but was never answered (no duration), it's a missed call
-        if (isIncoming && !wasCallAnswered) {
-          return { 
-            icon: 'call-outline' as const, 
-            color: theme.error, 
-            label: t('calls.missed', { defaultValue: 'Missed' }),
-            iconRotation: 135,
-          };
-        }
-        // If outgoing call ended but was never answered, show as "No Answer"
-        if (!isIncoming && !wasCallAnswered) {
-          return { 
-            icon: 'call-outline' as const, 
-            color: theme.warning, 
-            label: t('calls.no_answer', { defaultValue: 'No Answer' }),
-            iconRotation: -45,
-          };
-        }
-        // Call was connected and ended normally
-        return { 
-          icon: isIncoming ? 'call-outline' : 'call-outline', 
-          color: isIncoming ? theme.success : theme.info, 
-          label: isIncoming ? t('calls.received', { defaultValue: 'Received' }) : t('calls.outgoing', { defaultValue: 'Outgoing' }),
-          iconRotation: isIncoming ? 135 : -45,
-        };
-      case 'busy':
-        return { 
-          icon: 'close-outline' as const, 
-          color: theme.warning, 
-          label: t('calls.busy', { defaultValue: 'Busy' }),
-          iconRotation: 0,
-        };
-      default:
-        return { 
-          icon: 'call-outline' as const, 
-          color: theme.textSecondary, 
-          label: call.status,
-          iconRotation: 0,
-        };
-    }
-  };
-  
-  const statusConfig = getStatusConfig();
-  
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-  
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffHours < 168) {
-      return date.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-  
-  return (
-    <View style={[callStyles.container, { backgroundColor: theme.surface }]}>
-      <View style={callStyles.left}>
-        <View style={[callStyles.avatar, { backgroundColor: statusConfig.color + '20' }]}>
-          <Ionicons 
-            name={call.call_type === 'video' ? 'videocam' : 'call'} 
-            size={20} 
-            color={statusConfig.color}
-            style={{ transform: [{ rotate: `${statusConfig.iconRotation}deg` }] }}
-          />
-        </View>
-        
-        <View style={callStyles.info}>
-          <Text style={[callStyles.name, { color: theme.text }]}>{otherUserName}</Text>
-          <View style={callStyles.detailRow}>
-            <Text style={[callStyles.status, { color: statusConfig.color }]}>
-              {statusConfig.label}
-            </Text>
-            <Text style={[callStyles.separator, { color: theme.textSecondary }]}>•</Text>
-            <Text style={[callStyles.time, { color: theme.textSecondary }]}>
-              {formatTime(call.started_at)}
-            </Text>
-            {call.duration_seconds ? (
-              <>
-                <Text style={[callStyles.separator, { color: theme.textSecondary }]}>•</Text>
-                <Text style={[callStyles.duration, { color: theme.textSecondary }]}>
-                  {formatDuration(call.duration_seconds)}
-                </Text>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </View>
-      
-      <View style={callStyles.actions}>
-        <TouchableOpacity 
-          style={[callStyles.actionButton, { backgroundColor: theme.success + '20' }]}
-          onPress={() => onCall(otherUserId, otherUserName, 'voice')}
-        >
-          <Ionicons name="call" size={18} color={theme.success} />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[callStyles.actionButton, { backgroundColor: theme.info + '20' }]}
-          onPress={() => onCall(otherUserId, otherUserName, 'video')}
-        >
-          <Ionicons name="videocam" size={18} color={theme.info} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
-// Filter Chip Component
-interface FilterChipProps {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  count?: number;
-}
-
-const FilterChip: React.FC<FilterChipProps> = ({ label, active, onPress, count }) => {
-  const { theme } = useTheme();
-  
-  return (
-    <TouchableOpacity 
-      style={[
-        filterStyles.chip,
-        { backgroundColor: active ? theme.primary : theme.surface },
-        { borderColor: active ? theme.primary : theme.border }
-      ]}
-      onPress={onPress}
-    >
-      <Text style={[filterStyles.chipText, { color: active ? theme.onPrimary : theme.text }]}>
-        {label}
-      </Text>
-      {count !== undefined && count > 0 && (
-        <View style={[filterStyles.chipBadge, { backgroundColor: active ? theme.onPrimary : theme.primary }]}>
-          <Text style={[filterStyles.chipBadgeText, { color: active ? theme.primary : theme.onPrimary }]}>
-            {count}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-};
-
-// Types for call history
-interface CallRecord {
-  id: string;
-  call_id: string;
-  caller_id: string;
-  callee_id: string;
-  call_type: 'voice' | 'video';
-  status: 'ringing' | 'connected' | 'ended' | 'rejected' | 'missed' | 'busy';
-  caller_name?: string;
-  started_at: string;
-  answered_at?: string;
-  ended_at?: string;
-  duration_seconds?: number;
-  meeting_url?: string;
-}
-
-interface ProfileRecord {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-}
-
-interface EnrichedCallRecord extends CallRecord {
-  caller_name: string;
-  callee_name: string;
-}
-
-// Hook to fetch call history (optimized with single query)
-const useCallHistory = () => {
-  const { user } = useAuth();
-  
-  return useQuery({
-    queryKey: ['call-history', user?.id],
-    queryFn: async (): Promise<EnrichedCallRecord[]> => {
-      if (!user?.id) return [];
-      
-      const client = assertSupabase();
-      
-      // Optimized: Single query with joins using PostgreSQL views or RPC
-      // For now, we'll use the two-query approach but with proper types
-      const { data, error } = await client
-        .from('active_calls')
-        .select('*')
-        .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
-        .order('started_at', { ascending: false })
-        .limit(50);
-      
-      if (error) {
-        console.error('[useCallHistory] Error:', error);
-        return [];
-      }
-      
-      if (!data || data.length === 0) return [];
-      
-      // Fetch user names for the calls
-      const userIds = new Set<string>();
-      data.forEach((call: CallRecord) => {
-        userIds.add(call.caller_id);
-        userIds.add(call.callee_id);
-      });
-      
-      const { data: profiles } = await client
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .in('id', Array.from(userIds));
-      
-      const profileMap = new Map(
-        (profiles as ProfileRecord[])?.map((p: ProfileRecord) => [
-          p.id, 
-          `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown User'
-        ]) || []
-      );
-      
-      return data.map((call: CallRecord): EnrichedCallRecord => ({
-        ...call,
-        caller_name: profileMap.get(call.caller_id) || 'Unknown',
-        callee_name: profileMap.get(call.callee_id) || 'Unknown',
-      }));
-    },
-    enabled: !!user?.id,
-    staleTime: 1000 * 60, // 1 minute
-  });
-};
-
 export default function CallsScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<'all' | 'missed' | 'incoming' | 'outgoing'>('all');
+  const [filterType, setFilterType] = useState<CallFilter>('all');
   
   const { data: calls = [], isLoading, refetch } = useCallHistory();
   const [refreshing, setRefreshing] = useState(false);
@@ -374,38 +97,18 @@ export default function CallsScreen() {
   
   // Get call context for making calls (safe even if CallProvider isn't mounted)
   const callContext = useCallSafe();
-  
-  // Helper to check if a call is considered "missed" (never answered)
-  const isMissedCall = useCallback((call: any, userId: string) => {
-    const isIncoming = call.callee_id === userId;
-    const wasAnswered = (call.duration_seconds ?? 0) > 0;
-    return isIncoming && (call.status === 'missed' || (call.status === 'ended' && !wasAnswered));
-  }, []);
 
-  // Filter calls
+  // Filter calls using extracted function
   const filteredCalls = useMemo(() => {
     if (!user?.id) return [];
-    
-    return calls.filter((call: any) => {
-      if (filter === 'all') return true;
-      if (filter === 'missed') return isMissedCall(call, user.id);
-      if (filter === 'incoming') return call.callee_id === user.id;
-      if (filter === 'outgoing') return call.caller_id === user.id;
-      return true;
-    });
-  }, [calls, filter, user?.id, isMissedCall]);
+    return filterCalls(calls, filterType, user.id);
+  }, [calls, filterType, user?.id]);
   
-  // Counts
+  // Counts using extracted function
   const counts = useMemo(() => {
     if (!user?.id) return { all: 0, missed: 0, incoming: 0, outgoing: 0 };
-    
-    return {
-      all: calls.length,
-      missed: calls.filter((c: any) => isMissedCall(c, user.id)).length,
-      incoming: calls.filter((c: any) => c.callee_id === user.id).length,
-      outgoing: calls.filter((c: any) => c.caller_id === user.id).length,
-    };
-  }, [calls, user?.id, isMissedCall]);
+    return getCallCounts(calls, user.id);
+  }, [calls, user?.id]);
   
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -502,28 +205,28 @@ export default function CallsScreen() {
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          <FilterChip 
+          <CallFilterChip 
             label={t('calls.all', { defaultValue: 'All' })} 
-            active={filter === 'all'} 
-            onPress={() => setFilter('all')}
+            active={filterType === 'all'} 
+            onPress={() => setFilterType('all')}
             count={counts.all}
           />
-          <FilterChip 
+          <CallFilterChip 
             label={t('calls.missed', { defaultValue: 'Missed' })} 
-            active={filter === 'missed'} 
-            onPress={() => setFilter('missed')}
+            active={filterType === 'missed'} 
+            onPress={() => setFilterType('missed')}
             count={counts.missed}
           />
-          <FilterChip 
+          <CallFilterChip 
             label={t('calls.incoming', { defaultValue: 'Incoming' })} 
-            active={filter === 'incoming'} 
-            onPress={() => setFilter('incoming')}
+            active={filterType === 'incoming'} 
+            onPress={() => setFilterType('incoming')}
             count={counts.incoming}
           />
-          <FilterChip 
+          <CallFilterChip 
             label={t('calls.outgoing', { defaultValue: 'Outgoing' })} 
-            active={filter === 'outgoing'} 
-            onPress={() => setFilter('outgoing')}
+            active={filterType === 'outgoing'} 
+            onPress={() => setFilterType('outgoing')}
             count={counts.outgoing}
           />
         </ScrollView>
