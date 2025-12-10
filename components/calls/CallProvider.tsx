@@ -488,6 +488,7 @@ export function CallProvider({ children }: CallProviderProps) {
           userName={answeringCall.caller_name}
           isOwner={false}
           callId={answeringCall.call_id}
+          meetingUrl={answeringCall.meeting_url}
         />
       )}
 

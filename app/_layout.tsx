@@ -34,10 +34,7 @@ import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
 import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
 import { BottomTabBar } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
-import { CallProvider, useCallSafe } from '../components/calls/CallProvider';
-import { IncomingCallOverlay } from '../components/calls/IncomingCallOverlay';
-import { VoiceCallInterface } from '../components/calls/VoiceCallInterface';
-import { VideoCallInterface } from '../components/calls/VideoCallInterface';
+import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
@@ -92,9 +89,6 @@ function LayoutContent() {
     }
   }, [authLoading, isAuthRoute]);
   
-  // Get call context for rendering call interfaces (safe even if CallProvider isn't mounted)
-  const callContext = useCallSafe();
-  
   // Determine if FAB should be visible (user pref + route logic)
   const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB;
   
@@ -133,36 +127,7 @@ function LayoutContent() {
       {/* Persistent Bottom Navigation - positioned at bottom */}
       <BottomTabBar />
       
-      {/* Call Interfaces */}
-      {Platform.OS !== 'web' && callContext && (
-        <>
-          <IncomingCallOverlay
-            callerName={callContext.incomingCall?.caller_name || 'Unknown'}
-            callType={callContext.incomingCall?.call_type || 'voice'}
-            onAnswer={callContext.answerCall}
-            onReject={callContext.rejectCall}
-            isVisible={!!callContext.incomingCall}
-          />
-          <VoiceCallInterface
-            isOpen={callContext.isCallInterfaceOpen && (callContext.outgoingCall?.callType === 'voice' || callContext.incomingCall?.call_type === 'voice')}
-            onClose={callContext.endCall}
-            userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
-            callId={callContext.incomingCall?.call_id}
-            meetingUrl={callContext.incomingCall?.meeting_url}
-            calleeId={callContext.outgoingCall?.userId}
-            isOwner={!!callContext.outgoingCall}
-          />
-          <VideoCallInterface
-            isOpen={callContext.isCallInterfaceOpen && (callContext.outgoingCall?.callType === 'video' || callContext.incomingCall?.call_type === 'video')}
-            onClose={callContext.endCall}
-            userName={callContext.outgoingCall?.userName || callContext.incomingCall?.caller_name}
-            callId={callContext.incomingCall?.call_id}
-            meetingUrl={callContext.incomingCall?.meeting_url}
-            calleeId={callContext.outgoingCall?.userId}
-            isOwner={!!callContext.outgoingCall}
-          />
-        </>
-      )}
+      {/* Call Interfaces are rendered by CallProvider - no duplicates needed here */}
     </View>
   );
 }

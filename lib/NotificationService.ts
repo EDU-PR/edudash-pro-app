@@ -224,6 +224,20 @@ class NotificationService {
       enableVibrate: true,
     });
 
+    // Incoming calls - highest priority for full-screen intent
+    await Notifications.setNotificationChannelAsync('calls', {
+      name: 'Incoming Calls',
+      description: 'Voice and video call notifications',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 200, 500, 200, 500],
+      lightColor: '#00f5ff',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    });
+
     console.log('Android notification channels configured');
   }
 
@@ -265,6 +279,27 @@ class NotificationService {
         options: {
           opensAppToForeground: false,
           isAuthenticationRequired: false,
+        },
+      },
+    ]);
+
+    // Incoming call category with answer/decline actions
+    await Notifications.setNotificationCategoryAsync('INCOMING_CALL', [
+      {
+        identifier: 'ANSWER',
+        buttonTitle: 'Answer',
+        options: {
+          opensAppToForeground: true,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: 'DECLINE',
+        buttonTitle: 'Decline',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+          isDestructive: true,
         },
       },
     ]);
