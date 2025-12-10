@@ -67,7 +67,12 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.BLUETOOTH"
+        "android.permission.BLUETOOTH",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.CALL_PHONE",
+        "android.permission.ANSWER_PHONE_CALLS",
+        "android.permission.FOREGROUND_SERVICE_PHONE_CALL"
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -132,6 +137,12 @@
         {
           "cameraPermission": "EduDash Pro needs camera access for video calls with teachers and parents",
           "microphonePermission": "EduDash Pro needs microphone access for voice and video calls"
+        }
+      ],
+      [
+        "@config-plugins/react-native-callkeep",
+        {
+          "appName": "EduDash Pro"
         }
       ],
       "./plugins/withAndroidManifestFix.js"
