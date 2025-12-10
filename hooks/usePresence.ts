@@ -102,7 +102,7 @@ export function usePresence(
     }
   }, []);
 
-  // Check if user is online (seen in last 30 seconds for accuracy)
+  // Check if user is online (seen within 60 seconds - 2x heartbeat interval for accuracy)
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const record = onlineUsers.get(targetUserId);
     if (!record) {
@@ -114,10 +114,10 @@ export function usePresence(
       return false;
     }
     
-    // Consider online if last seen within 30 seconds (more accurate)
+    // Consider online if last seen within 60 seconds (2x heartbeat to account for timing)
     const lastSeen = new Date(record.last_seen_at).getTime();
-    const thirtySecondsAgo = Date.now() - 30000;
-    const isOnline = lastSeen > thirtySecondsAgo && record.status === 'online';
+    const sixtySecondsAgo = Date.now() - 60000;
+    const isOnline = lastSeen > sixtySecondsAgo && record.status === 'online';
     
     console.log('[usePresence] isUserOnline check:', {
       targetUserId,

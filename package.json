@@ -25,7 +25,8 @@
           "react-native-pdf",
           "react-native-blob-util",
           "expo-av",
-          "react-native-background-timer"
+          "react-native-background-timer",
+          "react-native-incall-manager"
         ],
         "listUnknownPackages": false
       }
@@ -124,6 +125,7 @@
     "exceljs": "^4.4.0",
     "expo": "^54.0.0",
     "expo-application": "~7.0.8",
+    "expo-asset": "~12.0.11",
     "expo-audio": "~1.0.16",
     "expo-auth-session": "^7.0.9",
     "expo-av": "~16.0.8",

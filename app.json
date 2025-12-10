@@ -102,6 +102,7 @@
     "plugins": [
       "expo-router",
       "expo-updates",
+      "expo-web-browser",
       "sentry-expo",
       "expo-audio",
       "@react-native-voice/voice",

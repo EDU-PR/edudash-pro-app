@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { createOrganization } from '@/services/OrganizationService';
@@ -93,13 +94,29 @@ export default function OrgOnboardingScreen() {
       
     } catch (e: any) {
       console.error('Create account failed', e);
-      let errorMessage = 'Failed to create account';
-      if (e.message?.includes('already registered')) {
-        errorMessage = 'This email is already registered. Please sign in instead.';
-      } else if (e.message) {
-        errorMessage = e.message;
+      const isEmailAlreadyRegistered = e.message?.includes('already registered');
+      
+      if (isEmailAlreadyRegistered) {
+        // Provide option to sign in instead
+        Alert.alert(
+          'Email Already Registered',
+          'This email is already registered. Would you like to sign in with your existing account?',
+          [
+            { text: 'Use Different Email', style: 'cancel' },
+            { 
+              text: 'Sign In', 
+              style: 'default',
+              onPress: () => router.replace('/(auth)/sign-in')
+            }
+          ]
+        );
+      } else {
+        let errorMessage = 'Failed to create account';
+        if (e.message) {
+          errorMessage = e.message;
+        }
+        Alert.alert('Error', errorMessage);
       }
-      Alert.alert('Error', errorMessage);
     } finally {
       setCreatingAccount(false);
     }
@@ -146,8 +163,8 @@ export default function OrgOnboardingScreen() {
   }, [canCreate, creating, orgName, orgKind, phone, refreshProfile]);
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Organization Onboarding' }} />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <Stack.Screen options={{ title: 'Organization Onboarding', headerShown: true }} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.heading}>
           {step === 'account_creation' ? 'Create Your Account' : `Welcome, ${adminName || profile?.first_name || 'Admin'}`}
@@ -284,8 +301,19 @@ export default function OrgOnboardingScreen() {
             <TouchableOpacity onPress={() => setStep('type_selection')} style={styles.linkBtn}><Text style={styles.linkText}>Back</Text></TouchableOpacity>
           </View>
         )}
+        
+        {/* Always show sign-in option for users who already have accounts */}
+        <View style={{ marginTop: 32, alignItems: 'center', paddingBottom: 20 }}>
+          <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Already have an account?</Text>
+          <TouchableOpacity 
+            onPress={() => router.replace('/(auth)/sign-in')} 
+            style={{ marginTop: 8 }}
+          >
+            <Text style={{ color: '#00f5ff', fontSize: 16, fontWeight: '600' }}>Sign In Instead</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

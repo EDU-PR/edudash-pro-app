@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { TenantService } from '@/lib/services/tenant';
@@ -151,17 +152,33 @@ export default function PrincipalOnboardingScreen() {
     } catch (e: any) {
       console.error('Create school failed', e);
       
-      // Enhanced error messages
+      // Enhanced error messages with navigation options
       let errorMessage = 'Failed to create school';
+      const isEmailAlreadyRegistered = e.message?.includes('email already registered') || e.message?.includes('already registered');
+      
       if (e.message?.includes('already exists')) {
         errorMessage = 'A school with this name already exists. Please choose a different name.';
-      } else if (e.message?.includes('email already registered')) {
-        errorMessage = 'This email is already registered. Please use a different email address.';
+        Alert.alert('Error', errorMessage);
+      } else if (isEmailAlreadyRegistered) {
+        // Provide option to sign in instead
+        Alert.alert(
+          'Email Already Registered',
+          'This email is already registered. Would you like to sign in with your existing account?',
+          [
+            { text: 'Use Different Email', style: 'cancel' },
+            { 
+              text: 'Sign In', 
+              style: 'default',
+              onPress: () => router.replace('/(auth)/sign-in')
+            }
+          ]
+        );
       } else if (e.message) {
         errorMessage = e.message;
+        Alert.alert('Error', errorMessage);
+      } else {
+        Alert.alert('Error', errorMessage);
       }
-      
-      Alert.alert('Error', errorMessage);
       
       track('school_creation_failed_principal_onboarding', {
         error: e.message,
@@ -274,8 +291,8 @@ export default function PrincipalOnboardingScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Principal Onboarding' }} />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <Stack.Screen options={{ title: 'Principal Onboarding', headerShown: true }} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.heading}>Welcome, {adminName || profile?.first_name || 'Principal'}</Text>
         <Text style={styles.subheading}>
@@ -517,8 +534,19 @@ export default function PrincipalOnboardingScreen() {
             }} style={styles.linkBtn}><Text style={styles.linkText}>Back</Text></TouchableOpacity>
           </View>
         )}
+        
+        {/* Always show sign-in option for users who already have accounts */}
+        <View style={{ marginTop: 32, alignItems: 'center', paddingBottom: 20 }}>
+          <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Already have an account?</Text>
+          <TouchableOpacity 
+            onPress={() => router.replace('/(auth)/sign-in')} 
+            style={{ marginTop: 8 }}
+          >
+            <Text style={{ color: '#00f5ff', fontSize: 16, fontWeight: '600' }}>Sign In Instead</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -64,8 +64,23 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
         router.replace(targetRoute);
       }
     } else {
-      // Mobile: use router.replace
-      router.replace(targetRoute);
+      // Mobile: Add a small delay to ensure auth state is fully cleared
+      // before navigation, as the router may still see the old auth state
+      setTimeout(() => {
+        try {
+          router.replace(targetRoute as any);
+          console.log('[authActions] Mobile navigation executed');
+        } catch (navErr) {
+          console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
+          // Fallback: try dismissing all screens first
+          try {
+            router.dismissAll();
+            router.replace('/(auth)/sign-in' as any);
+          } catch (fallbackErr) {
+            console.error('[authActions] Fallback navigation also failed:', fallbackErr);
+          }
+        }
+      }, 100);
     }
   } catch (error) {
     console.error('[authActions] Sign-out failed:', error);

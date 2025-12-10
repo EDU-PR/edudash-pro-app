@@ -200,21 +200,25 @@ export function WhatsAppStyleIncomingCall({
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       },
       onPanResponderMove: (_, gestureState) => {
+        // Clamp the swipe to prevent button going off screen (max -200px)
         if (gestureState.dy < 0) {
-          slideAnim.setValue(gestureState.dy);
+          const clampedDy = Math.max(gestureState.dy, -200);
+          slideAnim.setValue(clampedDy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
         setSwipeHint('');
         if (gestureState.dy < -SWIPE_THRESHOLD) {
-          // Answered
+          // Answered - quick animation to hide
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Animated.timing(slideAnim, {
-            toValue: -SCREEN_HEIGHT,
-            duration: 200,
+            toValue: -200, // Keep within bounds during animation
+            duration: 150,
             useNativeDriver: true,
           }).start(() => {
             onAnswer();
+            // Reset after callback
+            slideAnim.setValue(0);
           });
         } else {
           // Reset
