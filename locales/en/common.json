@@ -103,7 +103,12 @@
     "search": "Search",
     "retry": "Retry",
     "close": "Close",
-    "switch_account": "Switch account"
+    "switch_account": "Switch account",
+    "home": "Home",
+    "students": "Students",
+    "children": "Children",
+    "messages": "Messages",
+    "calendar": "Calendar"
   },
   "auth": {
     "resend_confirmation": "Resend confirmation email",
@@ -836,6 +841,11 @@
     "homework_pending": "Homework Pending",
     "attendance_rate": "Attendance Rate",
     "total_children": "Total Children",
+    "missed_calls": "Missed Calls",
+    "calls": "Calls",
+    "ask_dash": "Ask Dash AI",
+    "aiAssistantSubtitle": "✨ AI Assistant for lesson planning & grading",
+    "aiAssistantDesc": "Hi! I'm Dash, your AI teaching assistant. I can help you with lesson planning, grading, student insights, and more. Just ask!",
     "approvedPayments": "Approved Payments",
     "pendingPayments": "Pending Payments",
     "selectChild": "Select Child",
@@ -1288,6 +1298,9 @@
     "parent_communication": "Parent communication",
     "student_reports": "Student reports",
     "ai_assistant": "AI assistant",
+    "upcoming_lessons": "Upcoming Lessons",
+    "start_live_lesson": "Start Live Lesson",
+    "your_school": "Your School",
     "performance": {
       "active": "Active teacher",
       "no_classes": "No classes assigned - requires attention",
@@ -1390,6 +1403,7 @@
   },
   "subscription": {
     "plus_feature": "Plus",
+    "free": "Free",
     "currentPlan": "Current Plan",
     "changePlanFor": "Change Plan - {{name}}",
     "selectNewPlan": "Select New Plan ({{count}} available)",
@@ -1410,6 +1424,9 @@
     "paymentRequiredNotice": "Payment required - The school principal will be notified via email and push notification to complete payment via PayFast.",
     "notifySchoolToPay": "Notify School to Pay",
     "confirmChange": "Confirm Change"
+  },
+  "calls": {
+    "live_classes": "Live Classes"
   },
   "lessons_create": {
     "title": "Create Lesson",
