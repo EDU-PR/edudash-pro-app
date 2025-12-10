@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "comedudashproapp",
     "owner": "dash-ts-organization",
-    "version": "1.0.7",
-    "runtimeVersion": "1.0.7",
+    "version": "1.0.8",
+    "runtimeVersion": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -75,7 +75,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 8,
+      "versionCode": 9,
       "intentFilters": [
         {
           "action": "VIEW",
