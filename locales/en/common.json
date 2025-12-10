@@ -1253,6 +1253,15 @@
     "feedback_test_alert": {
       "title": "Feedback",
       "message": "Haptics and sound feedback are temporarily disabled."
+    },
+    "requestDataDeletion": "Request Data Deletion",
+    "requestDataDeletionSubtitle": "GDPR/POPIA compliant data removal",
+    "app_preferences": {
+      "title": "App Preferences",
+      "dash_fab_title": "Show Dash AI Button",
+      "dash_fab_subtitle": "Floating button to chat with Dash AI",
+      "replay_tutorial_title": "Replay App Tutorial",
+      "replay_tutorial_completed": "View the app introduction again"
     }
   },
   "trends": {
