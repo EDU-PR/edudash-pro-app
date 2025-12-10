@@ -120,7 +120,10 @@ export function CallProvider({ children }: CallProviderProps) {
       if (success) {
         console.log('[CallProvider] CallKeep initialized successfully');
       } else {
-        console.warn('[CallProvider] CallKeep initialization failed');
+        // CallKeep not available in development/Expo Go - this is expected
+        if (typeof __DEV__ === 'undefined' || !__DEV__) {
+          console.warn('[CallProvider] CallKeep initialization failed - calls may not work on locked screen');
+        }
       }
     };
     

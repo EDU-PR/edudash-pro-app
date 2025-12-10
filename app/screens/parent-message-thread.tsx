@@ -745,10 +745,6 @@ export default function ParentMessageThreadScreen() {
     setIsRecording(false);
   }, []);
 
-  const handleVoiceStart = useCallback(() => {
-    setIsRecording(true);
-  }, []);
-
   // Message long press handler
   const handleMessageLongPress = useCallback((msg: Message) => {
     if (Platform.OS !== 'web') {
@@ -1211,13 +1207,14 @@ export default function ParentMessageThreadScreen() {
             </>
           )}
           
-          {/* Voice Recorder - WhatsApp-style hold & slide */}
+          {/* Voice Recorder - ChatGPT-style inline (takes full width when recording/previewing) */}
           {!text.trim() && VoiceRecorder && (
-            <View style={styles.micContainer}>
+            <View style={isRecording ? styles.recordingWrapper : undefined}>
               <VoiceRecorder
                 onRecordingComplete={handleVoiceRecording}
                 onRecordingCancel={handleVoiceCancel}
                 disabled={sending}
+                onRecordingStateChange={setIsRecording}
               />
             </View>
           )}
@@ -1572,6 +1569,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     bottom: -12,
+  },
+  recordingWrapper: {
+    flex: 1,
   },
   micButtonWrapper: {
     width: 48,

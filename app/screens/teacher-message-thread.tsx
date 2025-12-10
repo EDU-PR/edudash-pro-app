@@ -494,10 +494,6 @@ export default function TeacherMessageThreadScreen() {
   const handleVoiceCancel = useCallback(() => {
     setIsRecording(false);
   }, []);
-
-  const handleVoiceStart = useCallback(() => {
-    setIsRecording(true);
-  }, []);
   
   const handleLongPress = useCallback((msg: Message) => {
     setSelectedMsg(msg);
@@ -783,13 +779,14 @@ export default function TeacherMessageThreadScreen() {
               </>
             )}
             
-            {/* Voice Recorder - WhatsApp-style hold & slide */}
+            {/* Voice Recorder - ChatGPT-style inline (takes full width when recording/previewing) */}
             {!text.trim() && VoiceRecorder && (
-              <View style={styles.micContainer}>
+              <View style={isRecording ? styles.recordingWrapper : undefined}>
                 <VoiceRecorder
                   onRecordingComplete={handleVoice}
                   onRecordingCancel={handleVoiceCancel}
                   disabled={sending}
+                  onRecordingStateChange={setIsRecording}
                 />
               </View>
             )}
@@ -1037,6 +1034,9 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  recordingWrapper: {
+    flex: 1,
   },
   micGlow: {
     position: 'absolute',

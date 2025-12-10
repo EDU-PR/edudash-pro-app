@@ -1,16 +1,14 @@
 /**
- * VoiceRecorder Component - Enhanced
- * WhatsApp-style hold-to-record voice message with real-time waveform
+ * VoiceRecorder Component - ChatGPT-style inline recording
  * 
  * Features:
- * - Hold button to record
- * - Slide left to cancel
- * - Release to send
- * - Real-time audio waveform visualization
- * - Lock to continue recording hands-free
- * - Playback preview before sending
+ * - Inline recording in input area (no modal)
+ * - Tap to start/stop recording
+ * - Real-time waveform visualization
+ * - Preview with play/stop/send buttons
+ * - Compact, ChatGPT-inspired design
  * 
- * Uses expo-av Audio.Recording API (stable, no shared object issues)
+ * Uses expo-av Audio.Recording API
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -20,51 +18,43 @@ import {
   TouchableOpacity,
   Text,
   Animated,
-  PanResponder,
   Vibration,
   Platform,
-  Modal,
   Dimensions,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CYAN_PRIMARY,
   PURPLE_PRIMARY,
-  PURPLE_INDIGO,
   WAVEFORM_PLAYED,
   WAVEFORM_UNPLAYED,
   ERROR_RED,
   GRADIENT_PURPLE_INDIGO,
 } from './theme';
 
-const CANCEL_THRESHOLD = -80;
-const LOCK_THRESHOLD = -60;
 const MIN_RECORDING_DURATION = 500;
-const WAVEFORM_BAR_COUNT = 45;
+const WAVEFORM_BAR_COUNT = 35;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VoiceRecorderProps {
   onRecordingComplete: (uri: string, duration: number) => void;
   onRecordingCancel?: () => void;
   disabled?: boolean;
+  onRecordingStateChange?: (isRecording: boolean) => void; // Callback to notify parent
 }
 
 export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   onRecordingComplete,
   onRecordingCancel,
   disabled = false,
+  onRecordingStateChange,
 }) => {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  
   const [isRecording, setIsRecording] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [waveformData, setWaveformData] = useState<number[]>(new Array(WAVEFORM_BAR_COUNT).fill(0.15));
+  const [waveformData, setWaveformData] = useState<number[]>(new Array(WAVEFORM_BAR_COUNT).fill(0.2));
   const [showPreview, setShowPreview] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewDuration, setPreviewDuration] = useState(0);
@@ -77,31 +67,33 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const recordingStartTime = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRecordingRef = useRef(false);
-  const isLockedRef = useRef(false);
   const waveformDataRef = useRef<number[]>([]);
+  const hasPermissionsRef = useRef(false);
+  const pressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressActiveRef = useRef(false);
   
   // Animations
-  const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const slideUpAnim = useRef(new Animated.Value(0)).current;
-  const cancelOpacity = useRef(new Animated.Value(0)).current;
-  const lockOpacity = useRef(new Animated.Value(0)).current;
   
   // Waveform bar animations
   const waveformAnims = useMemo(
-    () => new Array(WAVEFORM_BAR_COUNT).fill(0).map(() => new Animated.Value(0.15)),
+    () => new Array(WAVEFORM_BAR_COUNT).fill(0).map(() => new Animated.Value(0.2)),
     []
   );
   
   // Sync refs
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
-  useEffect(() => { isLockedRef.current = isLocked; }, [isLocked]);
+  
+  // Notify parent of recording state
+  useEffect(() => {
+    onRecordingStateChange?.(isRecording);
+  }, [isRecording, onRecordingStateChange]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+      if (pressTimeoutRef.current) clearTimeout(pressTimeoutRef.current);
       if (recordingRef.current) {
         recordingRef.current.stopAndUnloadAsync().catch(() => {});
       }
@@ -111,14 +103,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     };
   }, []);
 
-  // Pulse animation for active recording - use JS driver since we also use setValue()
+  // Pulse animation for active recording
   useEffect(() => {
     let pulse: Animated.CompositeAnimation | null = null;
     if (isRecording) {
       pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: false }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: false }),
+          Animated.timing(pulseAnim, { toValue: 1.1, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
         ])
       );
       pulse.start();
@@ -137,16 +129,41 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Request permissions early
+  useEffect(() => {
+    const requestPermissions = async () => {
+      if (!hasPermissionsRef.current) {
+        try {
+          const permission = await Audio.requestPermissionsAsync();
+          if (permission.status === 'granted') {
+            hasPermissionsRef.current = true;
+            await Audio.setAudioModeAsync({
+              allowsRecordingIOS: true,
+              playsInSilentModeIOS: true,
+            });
+          }
+        } catch (error) {
+          console.warn('[VoiceRecorder] Permission check failed:', error);
+        }
+      }
+    };
+    requestPermissions();
+  }, []);
+
   const startRecording = async () => {
-    if (isRecordingRef.current || recordingRef.current) return;
+    if (isRecordingRef.current || recordingRef.current || disabled) return;
     
     isRecordingRef.current = true;
     
     try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        isRecordingRef.current = false;
-        return;
+      // Check permissions
+      if (!hasPermissionsRef.current) {
+        const permission = await Audio.requestPermissionsAsync();
+        if (permission.status !== 'granted') {
+          isRecordingRef.current = false;
+          return;
+        }
+        hasPermissionsRef.current = true;
       }
       
       await Audio.setAudioModeAsync({
@@ -154,13 +171,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         playsInSilentModeIOS: true,
       });
       
-      // Create recording with metering
+      // Start recording immediately
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
         (status) => {
           if (status.isRecording && status.metering !== undefined) {
             const normalized = Math.max(0, Math.min(1, (status.metering + 60) / 60));
-            const value = 0.15 + normalized * 0.7 + Math.random() * 0.1;
+            const value = 0.2 + normalized * 0.6;
             
             waveformDataRef.current.push(value);
             
@@ -173,7 +190,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             });
           }
         },
-        100
+        50
       );
       
       recordingRef.current = recording;
@@ -181,20 +198,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       waveformDataRef.current = [];
       setIsRecording(true);
       setRecordingDuration(0);
-      setWaveformData(new Array(WAVEFORM_BAR_COUNT).fill(0.15));
+      setWaveformData(new Array(WAVEFORM_BAR_COUNT).fill(0.2));
       
       Vibration.vibrate(50);
       
       durationIntervalRef.current = setInterval(() => {
         setRecordingDuration(Date.now() - recordingStartTime.current);
       }, 100);
-      
-      // Animate UI
-      Animated.spring(scaleAnim, { toValue: 1.3, useNativeDriver: true, tension: 100, friction: 8 }).start();
-      Animated.parallel([
-        Animated.timing(cancelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.timing(lockOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]).start();
       
     } catch (error) {
       console.error('[VoiceRecorder] Start error:', error);
@@ -204,7 +214,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
   };
 
-  const stopRecording = async (cancelled: boolean = false) => {
+  const stopRecording = async () => {
     if (!isRecordingRef.current || !recordingRef.current) return;
     
     isRecordingRef.current = false;
@@ -225,25 +235,26 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
       
-      if (!uri || cancelled || duration < MIN_RECORDING_DURATION) {
+      if (!uri || duration < MIN_RECORDING_DURATION) {
         Vibration.vibrate(30);
         onRecordingCancel?.();
         resetState();
       } else {
-        if (isLockedRef.current) {
-          // Show preview
-          const savedWaveform = waveformDataRef.current.length > 0 
-            ? waveformDataRef.current 
-            : new Array(30).fill(0).map(() => 0.3 + Math.random() * 0.5);
+        // If released from press-and-hold, send immediately
+        // Otherwise show preview (for manual stop button)
+        if (longPressActiveRef.current) {
+          longPressActiveRef.current = false;
+          // Send immediately without preview
+          Vibration.vibrate([0, 30, 50, 30]);
+          onRecordingComplete(uri, duration);
+          resetState();
+        } else {
+          // Show preview for manual stop
           setPreviewUri(uri);
           setPreviewDuration(duration);
           setShowPreview(true);
           setIsRecording(false);
-          setIsLocked(false);
-        } else {
           Vibration.vibrate([0, 30, 50, 30]);
-          onRecordingComplete(uri, duration);
-          resetState();
         }
       }
     } catch (error) {
@@ -255,23 +266,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
   const resetState = () => {
     setIsRecording(false);
-    setIsLocked(false);
     setRecordingDuration(0);
     setShowPreview(false);
     setPreviewUri(null);
     setPreviewDuration(0);
     setPreviewProgress(0);
     setIsPlayingPreview(false);
-    
-    Animated.parallel([
-      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-      Animated.timing(slideUpAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-      Animated.timing(cancelOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
-      Animated.timing(lockOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
-    ]).start();
-    
-    waveformAnims.forEach(anim => anim.setValue(0.15));
+    waveformAnims.forEach(anim => anim.setValue(0.2));
   };
 
   // Preview handlers
@@ -336,456 +337,315 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     resetState();
   };
 
-  // PanResponder for gesture detection (slide left to cancel, slide up to lock)
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => isRecording,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return isRecording && (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10);
-      },
-      onPanResponderGrant: () => {
-        // Reset animations
-        slideAnim.setValue(0);
-        slideUpAnim.setValue(0);
-        cancelOpacity.setValue(0);
-        lockOpacity.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const { dx, dy } = gestureState;
-        
-        // Slide left to cancel
-        if (dx < -30 && Math.abs(dy) < Math.abs(dx) * 0.5) {
-          const slideProgress = Math.min(1, Math.abs(dx) / Math.abs(CANCEL_THRESHOLD));
-          slideAnim.setValue(dx);
-          cancelOpacity.setValue(slideProgress);
-          
-          if (slideProgress > 0.7 && !isLocked) {
-            Vibration.vibrate(10, false);
-          }
-        } 
-        // Slide up to lock
-        else if (dy < -30 && Math.abs(dx) < Math.abs(dy) * 0.5) {
-          const lockProgress = Math.min(1, Math.abs(dy) / Math.abs(LOCK_THRESHOLD));
-          slideUpAnim.setValue(dy);
-          lockOpacity.setValue(lockProgress);
-          
-          if (lockProgress > 0.7 && !isLocked) {
-            Vibration.vibrate(50);
-            setIsLocked(true);
-            isLockedRef.current = true;
-            
-            // Show controls immediately when locked
-            Animated.parallel([
-              Animated.timing(cancelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-              Animated.timing(lockOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-            ]).start();
-          }
-        }
-        // Reset if moving away from gesture zones
-        else {
-          slideAnim.setValue(0);
-          slideUpAnim.setValue(0);
-          if (!isLocked) {
-            cancelOpacity.setValue(0);
-            lockOpacity.setValue(0);
-          }
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const { dx, dy } = gestureState;
-        
-        // Cancel if slid left enough
-        if (dx < CANCEL_THRESHOLD && !isLocked) {
-          Vibration.vibrate(100);
-          stopRecording(true);
-          return;
-        }
-        
-        // Lock if slid up enough
-        if (dy < LOCK_THRESHOLD && !isLocked) {
-          setIsLocked(true);
-          isLockedRef.current = true;
-          Animated.parallel([
-            Animated.spring(slideUpAnim, { toValue: 0, useNativeDriver: true }),
-            Animated.timing(lockOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-          ]).start();
-          return;
-        }
-        
-        // Release normally (send if not locked, do nothing if locked)
-        if (!isLocked) {
-          stopRecording(false);
-        }
-        
-        // Reset animations
-        Animated.parallel([
-          Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
-          Animated.spring(slideUpAnim, { toValue: 0, useNativeDriver: true }),
-        ]).start();
-      },
-    })
-  ).current;
-
-  // Touch handlers for button press
-  const handlePressIn = () => {
-    if (!disabled && !isRecording && !showPreview) startRecording();
-  };
-
-  const handlePressOut = () => {
-    // Only handle release if not using gestures
-    if (isRecording && !isLocked) {
-      stopRecording(false);
-    }
-  };
-
-  // Preview waveform (generate from recording)
+  // Preview waveform
   const previewWaveformBars = useMemo(() => {
     if (waveformDataRef.current.length > 0) {
-      const step = Math.max(1, Math.floor(waveformDataRef.current.length / 30));
-      return waveformDataRef.current.filter((_, i) => i % step === 0).slice(0, 30);
+      const step = Math.max(1, Math.floor(waveformDataRef.current.length / 25));
+      return waveformDataRef.current.filter((_, i) => i % step === 0).slice(0, 25);
     }
-    return new Array(30).fill(0).map(() => 0.3 + Math.random() * 0.4);
+    return new Array(25).fill(0).map(() => 0.3 + Math.random() * 0.4);
   }, [showPreview]);
 
   const playedBars = Math.floor(previewWaveformBars.length * previewProgress);
 
-  return (
-    <>
-      {/* Recording Modal */}
-      <Modal visible={isRecording} transparent animationType="fade">
-        <View style={styles.modalOverlay} {...panResponder.panHandlers}>
-          <Animated.View 
-            style={[
-              styles.recordingContainer, 
-              { 
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: slideAnim },
-                  { translateY: slideUpAnim },
-                ],
-              },
-            ]}
-          >
-            {/* Gesture hints (only show when not locked) */}
-            {!isLocked && (
-              <>
-                {/* Cancel hint - left side */}
-                <Animated.View 
-                  style={[
-                    styles.cancelZone, 
-                    { 
-                      opacity: cancelOpacity.interpolate({
-                        inputRange: [0, 0.3, 1],
-                        outputRange: [0.3, 0.8, 1],
-                      }),
-                    },
-                  ]}
-                >
-                  <View style={styles.cancelContent}>
-                    <Ionicons name="arrow-back" size={20} color={ERROR_RED} />
-                    <Ionicons name="trash-outline" size={24} color={ERROR_RED} />
-                    <Text style={styles.cancelText}>Slide to cancel</Text>
-                  </View>
-                </Animated.View>
-                
-                {/* Lock hint - top */}
-                <Animated.View 
-                  style={[
-                    styles.lockZone, 
-                    { 
-                      opacity: lockOpacity.interpolate({
-                        inputRange: [0, 0.3, 1],
-                        outputRange: [0.3, 0.8, 1],
-                      }),
-                    },
-                  ]}
-                >
-                  <View style={styles.lockContent}>
-                    <Ionicons name="arrow-up" size={20} color={CYAN_PRIMARY} />
-                    <Ionicons name="lock-open-outline" size={24} color={CYAN_PRIMARY} />
-                    <Text style={[styles.lockText, { color: CYAN_PRIMARY }]}>Slide up to lock</Text>
-                  </View>
-                </Animated.View>
-              </>
-            )}
-            
-            {/* Locked indicator */}
-            {isLocked && (
-              <Animated.View style={[styles.lockZone, { opacity: lockOpacity }]}>
-                <View style={styles.lockContent}>
-                  <Ionicons name="lock-closed" size={24} color={CYAN_PRIMARY} />
-                  <Text style={[styles.lockText, { color: CYAN_PRIMARY }]}>Locked</Text>
-                </View>
-              </Animated.View>
-            )}
-            
-            {/* Main recording UI */}
-            <View style={styles.recordingContent}>
-              <Animated.View style={[styles.micCircle, { transform: [{ scale: pulseAnim }] }]}>
-                <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micGradient}>
-                  <Ionicons name="mic" size={40} color="#fff" />
-                </LinearGradient>
-              </Animated.View>
-              
-              <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-              
-              {/* Waveform */}
-              <View style={styles.waveformContainer}>
-                {waveformAnims.map((anim, index) => (
-                  <Animated.View
-                    key={index}
-                    style={[
-                      styles.waveformBar,
-                      {
-                        height: anim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [4, 40],
-                        }),
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-              
-              {/* Locked controls */}
-              {isLocked && (
-                <View style={styles.lockedControls}>
-                  <TouchableOpacity 
-                    style={styles.cancelButton} 
-                    onPress={() => stopRecording(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="trash-outline" size={28} color={ERROR_RED} />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    onPress={() => stopRecording(false)}
-                    activeOpacity={0.7}
-                  >
-                    <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonLocked}>
-                      <Ionicons name="send" size={28} color="#fff" />
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              )}
-              
-              {/* Instruction hint (only show briefly at start) */}
-              {!isLocked && recordingDuration < 2000 && (
-                <Text style={styles.instructionText}>
-                  Release to send
-                </Text>
-              )}
-            </View>
+  // Handle manual stop (shows preview instead of sending)
+  const handleManualStop = () => {
+    longPressActiveRef.current = false; // Disable auto-send, show preview instead
+    stopRecording();
+  };
+
+  // If recording, show inline recording UI
+  if (isRecording) {
+    return (
+      <View style={styles.inlineRecordingContainer}>
+        <TouchableOpacity 
+          onPress={handleManualStop}
+          style={styles.stopButton}
+          activeOpacity={0.8}
+        >
+          <Animated.View style={[styles.stopButtonInner, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={styles.stopIcon} />
           </Animated.View>
+        </TouchableOpacity>
+        
+        <View style={styles.waveformContainer}>
+          {waveformAnims.map((anim, index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.waveformBar,
+                {
+                  height: anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [3, 26],
+                  }),
+                },
+              ]}
+            />
+          ))}
         </View>
-      </Modal>
-      
-      {/* Preview Modal */}
-      <Modal visible={showPreview} transparent animationType="slide" onRequestClose={handleDiscardPreview}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.previewContainer}>
-            <View style={styles.previewHeader}>
-              <Text style={styles.previewTitle}>Voice Message</Text>
-              <TouchableOpacity onPress={handleDiscardPreview}>
-                <Ionicons name="close" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.previewWaveform}>
-              <TouchableOpacity onPress={handlePreviewPlayPause}>
-                <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.playButton}>
-                  <Ionicons name={isPlayingPreview ? 'pause' : 'play'} size={24} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-              <View style={styles.previewBars}>
-                {previewWaveformBars.map((height, index) => (
-                  <View key={index} style={[styles.previewBar, { height: height * 35, backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED }]} />
-                ))}
-              </View>
-              <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
-            </View>
-            <View style={styles.previewActions}>
-              <TouchableOpacity style={styles.discardButton} onPress={handleDiscardPreview}>
-                <Ionicons name="trash-outline" size={22} color={ERROR_RED} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSendPreview}>
-                <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={[styles.sendButton, { width: 56, height: 56, borderRadius: 28 }]}>
-                  <Ionicons name="send" size={24} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
+        
+        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+      </View>
+    );
+  }
+
+  // If preview, show inline preview UI
+  if (showPreview) {
+    return (
+      <View style={styles.inlinePreviewContainer}>
+        <TouchableOpacity 
+          onPress={handlePreviewPlayPause}
+          style={styles.playButton}
+          activeOpacity={0.8}
+        >
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.playButtonInner}>
+            <Ionicons 
+              name={isPlayingPreview ? 'pause' : 'play'} 
+              size={16} 
+              color="#fff" 
+            />
+          </LinearGradient>
+        </TouchableOpacity>
+        
+        <View style={styles.previewWaveformContainer}>
+          {previewWaveformBars.map((height, index) => (
+            <View 
+              key={index} 
+              style={[
+                styles.previewBar, 
+                { 
+                  height: height * 24, 
+                  backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED,
+                },
+              ]} 
+            />
+          ))}
         </View>
-      </Modal>
-      
-      <TouchableOpacity onPressIn={handlePressIn} onPressOut={handlePressOut} disabled={disabled || showPreview} activeOpacity={1} style={styles.container}>
-        <Ionicons name="mic" size={24} color={CYAN_PRIMARY} />
-      </TouchableOpacity>
-    </>
+        
+        <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
+        
+        <TouchableOpacity 
+          onPress={handleDiscardPreview}
+          style={styles.discardButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={18} color={ERROR_RED} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={handleSendPreview}
+          style={styles.sendButton}
+          activeOpacity={0.8}
+        >
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonInner}>
+            <Ionicons name="send" size={18} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Handle press and hold
+  const handlePressIn = () => {
+    if (disabled || isRecording || showPreview) return;
+    
+    // Start recording after a very short delay (50ms) for instant feel
+    pressTimeoutRef.current = setTimeout(() => {
+      longPressActiveRef.current = true;
+      startRecording();
+    }, 50);
+  };
+
+  const handlePressOut = () => {
+    // Clear timeout if press was too short
+    if (pressTimeoutRef.current) {
+      clearTimeout(pressTimeoutRef.current);
+      pressTimeoutRef.current = null;
+      return;
+    }
+
+    // If recording, stop and send
+    if (isRecordingRef.current && recordingRef.current) {
+      longPressActiveRef.current = false;
+      stopRecording();
+    }
+  };
+
+  const handlePressCancel = () => {
+    // Cancel if recording hasn't started
+    if (pressTimeoutRef.current) {
+      clearTimeout(pressTimeoutRef.current);
+      pressTimeoutRef.current = null;
+    }
+    
+    // If already recording, cancel it
+    if (isRecordingRef.current && recordingRef.current) {
+      longPressActiveRef.current = false;
+      stopRecording();
+      onRecordingCancel?.();
+    }
+  };
+
+  // Default: show mic button with press-and-hold
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onLongPress={undefined} // We handle this manually
+      disabled={disabled || isRecording || showPreview}
+      style={({ pressed }) => [
+        styles.container,
+        pressed && styles.containerPressed,
+      ]}
+    >
+      <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
+        <Ionicons name="mic" size={20} color="#fff" />
+      </LinearGradient>
+    </Pressable>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recordingContainer: {
-    width: SCREEN_WIDTH - 48,
-    backgroundColor: '#1F2937',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-  },
-  cancelZone: {
-    position: 'absolute',
-    left: -80,
-    top: '50%',
-    transform: [{ translateY: -30 }],
-  },
-  cancelContent: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  cancelText: {
-    color: ERROR_RED,
-    fontSize: 12,
-  },
-  lockZone: {
-    position: 'absolute',
-    top: -70,
-    alignSelf: 'center',
-  },
-  lockContent: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  lockText: {
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
-  recordingContent: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  micCircle: {
-    marginBottom: 16,
-  },
-  micGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: PURPLE_PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  durationText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 16,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  waveformContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 50,
-    gap: 2,
-    marginBottom: 16,
-  },
-  waveformBar: {
-    width: 3,
-    backgroundColor: PURPLE_PRIMARY,
-    borderRadius: 1.5,
-  },
-  lockedControls: {
-    flexDirection: 'row',
-    gap: 24,
-    marginTop: 8,
-  },
-  cancelButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonLocked: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewContainer: {
-    width: SCREEN_WIDTH - 48,
-    backgroundColor: '#1F2937',
-    borderRadius: 24,
-    padding: 24,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  previewWaveform: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
-  },
-  playButton: {
+  micButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  previewBars: {
+  containerPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.95 }],
+  },
+  // Inline recording UI (replaces input)
+  inlineRecordingContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 40,
-    gap: 2,
+    backgroundColor: 'rgba(139, 92, 246, 0.15)', // Purple tint when recording
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 50,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139, 92, 246, 0.4)', // Purple border
+    gap: 10,
+  },
+  stopButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopButtonInner: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: ERROR_RED,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopIcon: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: '#fff',
+  },
+  waveformContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 30,
+    gap: 2.5,
+    paddingHorizontal: 4,
+  },
+  waveformBar: {
+    width: 2.5,
+    backgroundColor: PURPLE_PRIMARY,
+    borderRadius: 1.25,
+    minHeight: 3,
+  },
+  durationText: {
+    fontSize: 13,
+    color: '#fff',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    minWidth: 42,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  // Inline preview UI
+  inlinePreviewContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    gap: 8,
+  },
+  playButton: {
+    width: 28,
+    height: 28,
+  },
+  playButtonInner: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewWaveformContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 26,
+    gap: 2.5,
+    paddingHorizontal: 4,
   },
   previewBar: {
-    width: 3,
-    borderRadius: 1.5,
+    width: 2.5,
+    borderRadius: 1.25,
+    minHeight: 3,
   },
   previewDuration: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#9CA3AF',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  previewActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
+    minWidth: 40,
+    textAlign: 'center',
   },
   discardButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButton: {
+    width: 32,
+    height: 32,
+  },
+  sendButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
