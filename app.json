@@ -2,7 +2,7 @@
   "expo": {
     "name": "EduDashPro",
     "slug": "comedudashproapp",
-    "owner": "dash-ts-organization",
+    "owner": "dashpro",
     "version": "1.0.8",
     "runtimeVersion": "1.0.8",
     "orientation": "portrait",
