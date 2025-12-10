@@ -6,6 +6,12 @@ import MarketingLanding from '@/components/marketing/MarketingLanding';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { useTheme } from '@/contexts/ThemeContext';
 
+// Default theme fallback (used before ThemeProvider mounts)
+const defaultTheme = {
+  background: '#ffffff',
+  primary: '#007AFF',
+};
+
 /**
  * Root index route - handles different flows based on platform:
  * - Native app (installed): Skip landing, go directly to sign-in or dashboard
@@ -14,7 +20,14 @@ import { useTheme } from '@/contexts/ThemeContext';
  */
 export default function Index() {
   const { session, user, profile, loading } = useAuth();
-  const { theme } = useTheme();
+  // Safe theme access with fallback
+  let theme = defaultTheme;
+  try {
+    const themeContext = useTheme();
+    theme = themeContext.theme;
+  } catch (err) {
+    // ThemeProvider not yet mounted, use default
+  }
   const hasNavigatedRef = useRef(false);
   const isNative = Platform.OS !== 'web';
 
