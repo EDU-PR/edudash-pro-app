@@ -336,12 +336,103 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     resetState();
   };
 
-  // Touch handlers for non-PanResponder usage
+  // PanResponder for gesture detection (slide left to cancel, slide up to lock)
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => isRecording,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return isRecording && (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10);
+      },
+      onPanResponderGrant: () => {
+        // Reset animations
+        slideAnim.setValue(0);
+        slideUpAnim.setValue(0);
+        cancelOpacity.setValue(0);
+        lockOpacity.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { dx, dy } = gestureState;
+        
+        // Slide left to cancel
+        if (dx < -30 && Math.abs(dy) < Math.abs(dx) * 0.5) {
+          const slideProgress = Math.min(1, Math.abs(dx) / Math.abs(CANCEL_THRESHOLD));
+          slideAnim.setValue(dx);
+          cancelOpacity.setValue(slideProgress);
+          
+          if (slideProgress > 0.7 && !isLocked) {
+            Vibration.vibrate(10, false);
+          }
+        } 
+        // Slide up to lock
+        else if (dy < -30 && Math.abs(dx) < Math.abs(dy) * 0.5) {
+          const lockProgress = Math.min(1, Math.abs(dy) / Math.abs(LOCK_THRESHOLD));
+          slideUpAnim.setValue(dy);
+          lockOpacity.setValue(lockProgress);
+          
+          if (lockProgress > 0.7 && !isLocked) {
+            Vibration.vibrate(50);
+            setIsLocked(true);
+            isLockedRef.current = true;
+            
+            // Show controls immediately when locked
+            Animated.parallel([
+              Animated.timing(cancelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+              Animated.timing(lockOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+            ]).start();
+          }
+        }
+        // Reset if moving away from gesture zones
+        else {
+          slideAnim.setValue(0);
+          slideUpAnim.setValue(0);
+          if (!isLocked) {
+            cancelOpacity.setValue(0);
+            lockOpacity.setValue(0);
+          }
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const { dx, dy } = gestureState;
+        
+        // Cancel if slid left enough
+        if (dx < CANCEL_THRESHOLD && !isLocked) {
+          Vibration.vibrate(100);
+          stopRecording(true);
+          return;
+        }
+        
+        // Lock if slid up enough
+        if (dy < LOCK_THRESHOLD && !isLocked) {
+          setIsLocked(true);
+          isLockedRef.current = true;
+          Animated.parallel([
+            Animated.spring(slideUpAnim, { toValue: 0, useNativeDriver: true }),
+            Animated.timing(lockOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+          ]).start();
+          return;
+        }
+        
+        // Release normally (send if not locked, do nothing if locked)
+        if (!isLocked) {
+          stopRecording(false);
+        }
+        
+        // Reset animations
+        Animated.parallel([
+          Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }),
+          Animated.spring(slideUpAnim, { toValue: 0, useNativeDriver: true }),
+        ]).start();
+      },
+    })
+  ).current;
+
+  // Touch handlers for button press
   const handlePressIn = () => {
     if (!disabled && !isRecording && !showPreview) startRecording();
   };
 
   const handlePressOut = () => {
+    // Only handle release if not using gestures
     if (isRecording && !isLocked) {
       stopRecording(false);
     }
@@ -362,23 +453,71 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     <>
       {/* Recording Modal */}
       <Modal visible={isRecording} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <Animated.View style={[styles.recordingContainer, { transform: [{ scale: scaleAnim }] }]}>
-            {/* Cancel zone */}
-            <Animated.View style={[styles.cancelZone, { opacity: cancelOpacity }]}>
-              <View style={styles.cancelContent}>
-                <Ionicons name="trash-outline" size={24} color={ERROR_RED} />
-                <Text style={styles.cancelText}>Cancel</Text>
-              </View>
-            </Animated.View>
+        <View style={styles.modalOverlay} {...panResponder.panHandlers}>
+          <Animated.View 
+            style={[
+              styles.recordingContainer, 
+              { 
+                transform: [
+                  { scale: scaleAnim },
+                  { translateX: slideAnim },
+                  { translateY: slideUpAnim },
+                ],
+              },
+            ]}
+          >
+            {/* Gesture hints (only show when not locked) */}
+            {!isLocked && (
+              <>
+                {/* Cancel hint - left side */}
+                <Animated.View 
+                  style={[
+                    styles.cancelZone, 
+                    { 
+                      opacity: cancelOpacity.interpolate({
+                        inputRange: [0, 0.3, 1],
+                        outputRange: [0.3, 0.8, 1],
+                      }),
+                    },
+                  ]}
+                >
+                  <View style={styles.cancelContent}>
+                    <Ionicons name="arrow-back" size={20} color={ERROR_RED} />
+                    <Ionicons name="trash-outline" size={24} color={ERROR_RED} />
+                    <Text style={styles.cancelText}>Slide to cancel</Text>
+                  </View>
+                </Animated.View>
+                
+                {/* Lock hint - top */}
+                <Animated.View 
+                  style={[
+                    styles.lockZone, 
+                    { 
+                      opacity: lockOpacity.interpolate({
+                        inputRange: [0, 0.3, 1],
+                        outputRange: [0.3, 0.8, 1],
+                      }),
+                    },
+                  ]}
+                >
+                  <View style={styles.lockContent}>
+                    <Ionicons name="arrow-up" size={20} color={CYAN_PRIMARY} />
+                    <Ionicons name="lock-open-outline" size={24} color={CYAN_PRIMARY} />
+                    <Text style={[styles.lockText, { color: CYAN_PRIMARY }]}>Slide up to lock</Text>
+                  </View>
+                </Animated.View>
+              </>
+            )}
             
-            {/* Lock zone */}
-            <Animated.View style={[styles.lockZone, { opacity: lockOpacity }]}>
-              <View style={styles.lockContent}>
-                <Ionicons name={isLocked ? 'lock-closed' : 'lock-open-outline'} size={24} color={isLocked ? CYAN_PRIMARY : '#9CA3AF'} />
-                <Text style={[styles.lockText, isLocked && { color: CYAN_PRIMARY }]}>{isLocked ? 'Locked' : 'Lock'}</Text>
-              </View>
-            </Animated.View>
+            {/* Locked indicator */}
+            {isLocked && (
+              <Animated.View style={[styles.lockZone, { opacity: lockOpacity }]}>
+                <View style={styles.lockContent}>
+                  <Ionicons name="lock-closed" size={24} color={CYAN_PRIMARY} />
+                  <Text style={[styles.lockText, { color: CYAN_PRIMARY }]}>Locked</Text>
+                </View>
+              </Animated.View>
+            )}
             
             {/* Main recording UI */}
             <View style={styles.recordingContent}>
@@ -408,17 +547,32 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 ))}
               </View>
               
+              {/* Locked controls */}
               {isLocked && (
                 <View style={styles.lockedControls}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={() => stopRecording(true)}>
+                  <TouchableOpacity 
+                    style={styles.cancelButton} 
+                    onPress={() => stopRecording(true)}
+                    activeOpacity={0.7}
+                  >
                     <Ionicons name="trash-outline" size={28} color={ERROR_RED} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => stopRecording(false)}>
+                  <TouchableOpacity 
+                    onPress={() => stopRecording(false)}
+                    activeOpacity={0.7}
+                  >
                     <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonLocked}>
                       <Ionicons name="send" size={28} color="#fff" />
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
+              )}
+              
+              {/* Instruction hint (only show briefly at start) */}
+              {!isLocked && recordingDuration < 2000 && (
+                <Text style={styles.instructionText}>
+                  Release to send
+                </Text>
               )}
             </View>
           </Animated.View>
