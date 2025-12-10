@@ -90,7 +90,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         <View style={styles.headerLeft}>
           {icon && (
             // Check if icon is an Ionicons name (lowercase start) or emoji/text
-            icon.match(/^[a-z]/) ? (
+            typeof icon === 'string' && icon.length > 0 && /^[a-z]/.test(icon) ? (
               <Ionicons name={icon as any} size={18} color={theme.primary} style={{ marginRight: 4 }} />
             ) : (
               <Text style={styles.headerIcon}>{icon}</Text>
