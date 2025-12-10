@@ -49,7 +49,7 @@ let useSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isLoading:
 let useMarkThreadRead: () => { mutate: (args: any) => void };
 
 // Component imports with fallbacks
-let InlineVoiceRecorder: React.FC<any> | null = null;
+let VoiceRecorder: React.FC<any> | null = null;
 let VoiceNotePlayer: React.FC<any> | null = null;
 let ChatWallpaperPicker: React.FC<any> | null = null;
 let MessageActionsMenu: React.FC<any> | null = null;
@@ -60,7 +60,7 @@ let WALLPAPER_PRESETS: any[] = [];
 
 // Try component imports
 try {
-  InlineVoiceRecorder = require('@/components/messaging/InlineVoiceRecorder').InlineVoiceRecorder;
+  VoiceRecorder = require('@/components/messaging/VoiceRecorder').VoiceRecorder;
 } catch {}
 
 let VoiceMessageBubble: React.FC<any> | null = null;
@@ -1211,21 +1211,19 @@ export default function ParentMessageThreadScreen() {
             </>
           )}
           
-          {/* Voice Recorder - ALWAYS mounted, expands when recording */}
-          {(!text.trim() || isRecording) && InlineVoiceRecorder && (
-            <View style={isRecording ? styles.recordingArea : styles.micContainer}>
-              {!isRecording && <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />}
-              <InlineVoiceRecorder
-                isRecording={isRecording}
+          {/* Voice Recorder - WhatsApp-style hold & slide */}
+          {!text.trim() && VoiceRecorder && (
+            <View style={styles.micContainer}>
+              <VoiceRecorder
                 onRecordingComplete={handleVoiceRecording}
                 onRecordingCancel={handleVoiceCancel}
-                onRecordingStart={handleVoiceStart}
+                disabled={sending}
               />
             </View>
           )}
           
-          {/* Fallback mic button if InlineVoiceRecorder not available */}
-          {!text.trim() && !isRecording && !InlineVoiceRecorder && (
+          {/* Fallback mic button if VoiceRecorder not available */}
+          {!text.trim() && !VoiceRecorder && (
             <View style={styles.micContainer}>
               <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
               <TouchableOpacity 

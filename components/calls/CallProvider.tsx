@@ -16,6 +16,7 @@ import React, {
 import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { callKeepManager } from '@/lib/calls/callkeep-manager';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -101,10 +102,29 @@ export function CallProvider({ children }: CallProviderProps) {
   const presence = usePresence(currentUserId);
   const isUserOnline = callsEnabled ? presence.isUserOnline : () => false;
   const getLastSeenText = callsEnabled ? presence.getLastSeenText : () => '';
+  const refreshPresence = callsEnabled ? presence.refreshPresence : async () => {};
 
-  // Get current user
+  // Setup CallKeep and get current user
   useEffect(() => {
     if (!callsEnabled) return;
+
+    // Initialize CallKeep for native call UI (lock screen support)
+    const setupCallKeep = async () => {
+      const success = await callKeepManager.setup({
+        appName: 'EduDash Pro',
+        supportsVideo: true,
+        imageName: 'AppIcon',
+        ringtoneSound: 'ringtone.mp3',
+      });
+      
+      if (success) {
+        console.log('[CallProvider] CallKeep initialized successfully');
+      } else {
+        console.warn('[CallProvider] CallKeep initialization failed');
+      }
+    };
+    
+    setupCallKeep();
 
     const getUser = async () => {
       const { data: { user } } = await getSupabase().auth.getUser();
@@ -118,7 +138,10 @@ export function CallProvider({ children }: CallProviderProps) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      callKeepManager.cleanup();
+    };
   }, [callsEnabled]);
 
   // Track app state for background handling
@@ -150,7 +173,7 @@ export function CallProvider({ children }: CallProviderProps) {
           filter: `callee_id=eq.${currentUserId}`,
         },
         async (payload: { new: ActiveCall }) => {
-          console.log('[CallProvider] Incoming call received:', payload.new);
+          console.log('[CallProvider] ✅ Incoming call INSERT detected:', payload.new);
           const call = payload.new;
 
           if (call.status === 'ringing') {
@@ -183,6 +206,19 @@ export function CallProvider({ children }: CallProviderProps) {
               ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
               : 'Unknown';
 
+            console.log('[CallProvider] Setting incoming call state:', {
+              callId: call.call_id,
+              callerName,
+              meetingUrl: meetingUrl ? 'present' : 'missing',
+            });
+
+            // Display on native call screen (works when device is locked)
+            await callKeepManager.displayIncomingCall(
+              call.call_id,
+              callerName,
+              call.call_type === 'video'
+            );
+
             setIncomingCall({
               ...call,
               meeting_url: meetingUrl,
@@ -200,6 +236,7 @@ export function CallProvider({ children }: CallProviderProps) {
           filter: `callee_id=eq.${currentUserId}`,
         },
         (payload: { new: ActiveCall }) => {
+          console.log('[CallProvider] ✅ Incoming call UPDATE detected:', payload.new);
           const call = payload.new;
           if (
             call.status === 'ended' ||
@@ -213,7 +250,9 @@ export function CallProvider({ children }: CallProviderProps) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[CallProvider] Realtime subscription status:', status);
+      });
 
     return () => {
       getSupabase().removeChannel(channel);
@@ -274,12 +313,16 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Start voice call
   const startVoiceCall = useCallback(
-    (userId: string, userName?: string) => {
+    async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
+      
+      // Refresh presence data to get latest status
+      console.log('[CallProvider] Refreshing presence before call check...');
+      await refreshPresence();
       
       // Check if user is online before starting call
       const userOnline = isUserOnline(userId);
@@ -313,17 +356,21 @@ export function CallProvider({ children }: CallProviderProps) {
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
-    [currentUserId, callsEnabled, isUserOnline, getLastSeenText]
+    [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
 
   // Start video call
   const startVideoCall = useCallback(
-    (userId: string, userName?: string) => {
+    async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
         console.warn('[CallProvider] Cannot start call - user not logged in or calls disabled');
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
+      
+      // Refresh presence data to get latest status
+      console.log('[CallProvider] Refreshing presence before video call check...');
+      await refreshPresence();
       
       // Check if user is online before starting call
       const userOnline = isUserOnline(userId);
@@ -357,13 +404,21 @@ export function CallProvider({ children }: CallProviderProps) {
       setIsCallInterfaceOpen(true);
       setCallState('connecting');
     },
-    [currentUserId, callsEnabled, isUserOnline, getLastSeenText]
+    [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
 
   // Answer incoming call
-  const answerCall = useCallback(() => {
+  const answerCall = useCallback(async () => {
     if (!incomingCall) return;
-    console.log('[CallProvider] Answering call:', incomingCall.call_id);
+    console.log('[CallProvider] ✅ Answering call:', {
+      callId: incomingCall.call_id,
+      meetingUrl: incomingCall.meeting_url,
+      callerName: incomingCall.caller_name,
+    });
+    
+    // Report to CallKeep that call is being answered
+    await callKeepManager.reportConnected(incomingCall.call_id);
+    
     setAnsweringCall(incomingCall);
     setIsCallInterfaceOpen(true);
     setIncomingCall(null);
@@ -374,6 +429,9 @@ export function CallProvider({ children }: CallProviderProps) {
   const rejectCall = useCallback(async () => {
     if (!incomingCall) return;
     console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
+
+    // End call in CallKeep
+    await callKeepManager.endCall(incomingCall.call_id);
 
     await getSupabase()
       .from('active_calls')
@@ -388,6 +446,11 @@ export function CallProvider({ children }: CallProviderProps) {
   const endCall = useCallback(async () => {
     const callId = answeringCall?.call_id || outgoingCall?.userId;
     console.log('[CallProvider] Ending call:', callId);
+
+    // End call in CallKeep
+    if (callId) {
+      await callKeepManager.endCall(callId);
+    }
 
     if (answeringCall?.call_id) {
       await getSupabase()
@@ -452,6 +515,7 @@ export function CallProvider({ children }: CallProviderProps) {
         callType={incomingCall?.call_type || 'voice'}
         onAnswer={answerCall}
         onReject={rejectCall}
+        isConnecting={callState === 'connecting' || callState === 'connected'}
       />
 
       {/* Voice call interface for outgoing calls */}
@@ -490,6 +554,13 @@ export function CallProvider({ children }: CallProviderProps) {
           callId={answeringCall.call_id}
           meetingUrl={answeringCall.meeting_url}
         />
+      )}
+      
+      {answeringCall && !answeringCall.meeting_url && (
+        (() => {
+          console.error('[CallProvider] ❌ Answering call but NO meeting_url!', answeringCall);
+          return null;
+        })()
       )}
 
       {/* WhatsApp-Style Video call interface for answering calls */}

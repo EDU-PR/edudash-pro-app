@@ -1,0 +1,559 @@
+# EduDash Pro - Project Rules & Guidelines
+
+## Project Overview
+Multi-tenant educational platform built with React Native/Expo (mobile), Next.js (web), TypeScript, and Supabase backend. Features strict RBAC, AI integration (GPT-4, Gemini, Claude), video calling (Daily.co), and payment processing (PayFast).
+
+## Core Principles
+1. **Security First**: Always validate permissions and implement RBAC checks
+2. **Type Safety**: Use TypeScript strictly, avoid `any` types
+3. **Multi-tenant Isolation**: Ensure data isolation between organizations
+4. **Cross-platform Compatibility**: Code must work on both mobile and web when shared
+5. **Performance**: Optimize for mobile devices and slow connections
+6. **Fix All Errors**: When encountering any linter, TypeScript, or runtime errors - whether from your changes or pre-existing - fix them immediately. Don't leave broken code behind.
+
+## Tech Stack
+- **Mobile**: React Native 0.81.1, Expo 54
+- **Web**: Next.js 16, React 19.1.0
+- **Language**: TypeScript 5.9.2
+- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions)
+- **State Management**: @tanstack/react-query 5.87.4
+- **Navigation**: expo-router 6
+- **AI**: Anthropic Claude, OpenAI, Google Gemini
+- **Video**: Daily.co WebRTC
+- **Payments**: PayFast (South African gateway)
+
+## Code Style & Conventions
+
+### TypeScript
+- **Strict mode disabled** in base config but prefer strict patterns
+- Always define explicit types for function parameters and return values
+- Use `interface` for object shapes, `type` for unions/intersections
+- Avoid `any` - use `unknown` if type is truly unknown
+- Use Zod schemas for runtime validation
+- Example:
+  ```typescript
+  interface User {
+    id: string;
+    email: string;
+    role: UserRole;
+  }
+  
+  function getUser(userId: string): Promise<User | null> {
+    // implementation
+  }
+  ```
+
+### React/React Native
+- **Functional components only** with hooks
+- Use `React.memo()` for expensive components
+- Prefer named exports over default exports
+- Component file structure:
+  ```typescript
+  // 1. Imports
+  import { View, Text } from 'react-native';
+  
+  // 2. Types/Interfaces
+  interface MyComponentProps {
+    title: string;
+  }
+  
+  // 3. Component
+  export function MyComponent({ title }: MyComponentProps) {
+    // hooks first
+    const [state, setState] = useState();
+    
+    // then functions
+    const handlePress = () => {};
+    
+    // then render
+    return <View><Text>{title}</Text></View>;
+  }
+  ```
+
+### Import Paths
+- Use `@/` alias for absolute imports from project root
+- Example: `import { supabase } from '@/lib/supabase/client'`
+- Group imports: external → internal → relative
+- Order: React → React Native → third-party → local
+
+### File Naming
+- Components: PascalCase (`UserProfile.tsx`)
+- Utilities/Services: camelCase (`authService.ts`)
+- Hooks: camelCase starting with `use` (`useAuth.ts`)
+- Types: PascalCase in `types/` folder
+- Tests: `*.test.ts` or `*.test.tsx`
+
+## Architecture Patterns
+
+### RBAC (Role-Based Access Control)
+- **Always check permissions** before rendering UI or executing operations
+- Roles: `super_admin`, `admin`, `teacher`, `parent`, `student`
+- Use `usePermissions()` hook or `checkPermission()` utility
+- Example:
+  ```typescript
+  const { hasPermission } = usePermissions();
+  
+  if (!hasPermission('manage_users')) {
+    return <AccessDenied />;
+  }
+  ```
+
+### Multi-tenant Isolation
+- **Always filter by `organization_id`** in queries
+- Use RLS (Row Level Security) policies in Supabase
+- Never trust client-side organization filtering
+- Verify organization membership in Edge Functions
+
+### Data Fetching
+- Use **React Query** for all async data operations
+- Pattern:
+  ```typescript
+  export function useUsers() {
+    return useQuery({
+      queryKey: ['users', organizationId],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('organization_id', organizationId);
+        
+        if (error) throw error;
+        return data;
+      },
+    });
+  }
+  ```
+- Use mutations for writes:
+  ```typescript
+  const mutation = useMutation({
+    mutationFn: async (userData) => {
+      return await createUser(userData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['users']);
+    },
+  });
+  ```
+
+### Error Handling
+- Always handle errors gracefully
+- Show user-friendly messages
+- Log errors appropriately (use Sentry in production)
+- Example:
+  ```typescript
+  try {
+    const result = await riskyOperation();
+    return result;
+  } catch (error) {
+    console.error('Operation failed:', error);
+    showToast('Something went wrong. Please try again.');
+    throw error; // Re-throw if needed
+  }
+  ```
+
+### State Management
+- **Local state**: `useState` for component-specific state
+- **Server state**: React Query for API data
+- **Global state**: Context API for auth, theme, preferences
+- **Avoid prop drilling**: Use context or composition
+
+## Component Patterns
+
+### UI Components (`components/ui/`)
+- Reusable, presentational components
+- Accept all styling props
+- Use design system constants from `constants/DesignSystem.ts`
+- Example: `Button`, `Input`, `Card`, `Modal`
+
+### Feature Components
+- Business logic components
+- Organized by feature: `components/auth/`, `components/dashboard/`
+- Can use hooks and context
+
+### Screens (`app/` with expo-router)
+- Use file-based routing
+- Keep screens thin - delegate to components
+- Handle loading and error states
+- Example structure:
+  ```typescript
+  export default function UserProfileScreen() {
+    const { data: user, isLoading, error } = useUser();
+    
+    if (isLoading) return <LoadingSpinner />;
+    if (error) return <ErrorMessage error={error} />;
+    if (!user) return <NotFound />;
+    
+    return <UserProfile user={user} />;
+  }
+  ```
+
+## Platform-Specific Code
+
+### Cross-Platform
+- Use React Native primitives: `View`, `Text`, `TouchableOpacity`
+- Use `Platform.OS` for platform-specific logic
+- Use `.native.tsx` and `.web.tsx` suffixes for platform files
+
+### Mobile-Specific
+- Consider offline functionality
+- Optimize images with `expo-image`
+- Use `react-native-reanimated` for animations
+- Handle keyboard avoiding views
+
+### Web-Specific  
+- Use semantic HTML when possible
+- Ensure accessibility (ARIA labels)
+- Optimize for SEO (meta tags in Next.js)
+
+## Database & Supabase
+
+### Queries
+- Use TypeScript types from Supabase schema
+- Always handle errors from Supabase
+- Use RLS policies for security
+- Example:
+  ```typescript
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  ```
+
+### Real-time Subscriptions
+- Clean up subscriptions in useEffect cleanup
+- Example:
+  ```typescript
+  useEffect(() => {
+    const subscription = supabase
+      .channel('messages')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+      }, handleNewMessage)
+      .subscribe();
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  ```
+
+### Edge Functions
+- Keep functions focused and small
+- Validate input with Zod
+- Use service role key carefully
+- Return proper HTTP status codes
+
+## AI Integration
+
+### AI Services
+- Abstract AI providers behind service interfaces
+- Support multiple providers (OpenAI, Claude, Gemini)
+- Implement streaming for better UX
+- Handle rate limits and errors gracefully
+- Example:
+  ```typescript
+  interface AIService {
+    generateResponse(prompt: string): Promise<string>;
+    streamResponse(prompt: string): AsyncIterable<string>;
+  }
+  ```
+
+### Prompt Engineering
+- Store prompts in separate files (`lib/ai/prompts/`)
+- Use template literals for dynamic content
+- Include context and constraints
+- Version prompts for reproducibility
+
+## Video & Voice Calling (Daily.co)
+
+### Architecture
+- **Provider**: `CallProvider.tsx` wraps the app and manages call state
+- **Hook**: Use `useCall()` or `useCallSafe()` to access call functions
+- **Signaling**: Supabase Realtime via `active_calls` and `call_signals` tables
+
+### Components (Native - `components/calls/`)
+| Scenario | Component |
+|----------|-----------|
+| Incoming calls (voice & video) | `WhatsAppStyleIncomingCall.tsx` |
+| Outgoing/answering voice calls | `VoiceCallInterface.tsx` |
+| Outgoing/answering video calls | `WhatsAppStyleVideoCall.tsx` |
+
+### Audio Management
+- Use `react-native-incall-manager` for audio routing
+- Caller gets ringback tone via `InCallManager.start({ media: 'audio', ringback: '_DEFAULT_' })`
+- Callee gets plain audio via `InCallManager.start({ media: 'audio' })`
+- Default to earpiece: `InCallManager.setForceSpeakerphoneOn(false)`
+- Always call `InCallManager.stop()` on cleanup
+
+### Call Flow
+1. Caller creates room via Edge Function (`daily-rooms`)
+2. Caller inserts `active_calls` record with status `ringing`
+3. Callee receives call via Supabase Realtime subscription
+4. Callee answers → both join Daily.co room
+5. On disconnect, update `active_calls` status to `ended`
+
+## Security Guidelines
+
+### Authentication
+- Use Supabase Auth for all auth operations
+- Never store passwords or tokens in plain text
+- Implement biometric auth where supported
+- Handle session expiry gracefully
+
+### Authorization
+- Check permissions at multiple layers:
+  1. UI (hide unauthorized features)
+  2. API (enforce in queries/mutations)
+  3. Database (RLS policies)
+
+### Data Validation
+- Validate all user input with Zod schemas
+- Sanitize data before display
+- Use parameterized queries (Supabase handles this)
+
+### API Keys
+- Never commit API keys to git
+- Use environment variables
+- Rotate keys regularly
+- Use different keys for dev/staging/prod
+
+## Testing
+
+### Unit Tests
+- Test utilities and pure functions
+- Use Jest with `ts-jest`
+- Run: `npm test`
+- Example:
+  ```typescript
+  describe('calculateGrade', () => {
+    it('should return A for 90%', () => {
+      expect(calculateGrade(90)).toBe('A');
+    });
+  });
+  ```
+
+### Integration Tests
+- Test hooks with React Query
+- Mock Supabase client
+- Test user flows
+
+### Manual Testing
+- Test on both iOS and Android
+- Test different screen sizes
+- Test offline scenarios
+- Test with different user roles
+
+## Performance
+
+### Optimization Strategies
+- Use `React.memo()` for expensive renders
+- Implement pagination for large lists
+- Use `@shopify/flash-list` instead of FlatList
+- Lazy load screens and heavy components
+- Optimize images (compress, use appropriate formats)
+- Cache API responses with React Query
+
+### Bundle Size
+- Monitor with `npm run check:file-sizes`
+- Code split large dependencies
+- Remove unused dependencies
+- Use tree-shakable imports
+
+## Internationalization (i18n)
+
+### Translation Files
+- Located in `locales/`
+- Support English (`en`) and Afrikaans (`af`)
+- Use `react-i18next` for translations
+- Example:
+  ```typescript
+  import { useTranslation } from 'react-i18next';
+  
+  function MyComponent() {
+    const { t } = useTranslation();
+    return <Text>{t('welcome.message')}</Text>;
+  }
+  ```
+
+### Adding Translations
+- Update JSON files in `locales/`
+- Use keys with namespaces: `namespace.key`
+- Run `npm run i18n:verify` to check completeness
+
+## Git Workflow
+
+### Commits
+- Write clear, descriptive commit messages
+- Use conventional commits format:
+  - `feat: Add user profile page`
+  - `fix: Resolve login redirect issue`
+  - `refactor: Simplify auth logic`
+  - `docs: Update README`
+  - `test: Add tests for user service`
+
+### Branches
+- `main` - production code
+- Feature branches: `feature/description`
+- Bug fixes: `fix/description`
+- Merge via pull requests with review
+
+## Code Quality
+
+### Linting
+- Run `npm run lint` before committing
+- Fix with `npm run lint:fix`
+- ESLint configured with TypeScript rules
+- Max warnings: 200 (goal: reduce to 0)
+
+### Type Checking
+- Run `npm run typecheck` before committing
+- Run `npm run typecheck:strict` for stricter checks
+- Fix type errors, don't use `@ts-ignore` without comments
+
+### Formatting
+- Prettier configured
+- Run `npm run format` to format all files
+- Runs on save in most editors
+
+### Code Review Checklist
+- [ ] TypeScript types are correct
+- [ ] RBAC permissions are checked
+- [ ] Multi-tenant isolation is maintained
+- [ ] Errors are handled gracefully
+- [ ] Code follows style guidelines
+- [ ] Tests pass
+- [ ] No console.logs in production code
+- [ ] Performance is acceptable
+- [ ] Accessibility is considered
+- [ ] Documentation is updated
+
+## Common Patterns
+
+### Loading States
+```typescript
+if (isLoading) {
+  return <LoadingSpinner />;
+}
+```
+
+### Error States
+```typescript
+if (error) {
+  return <ErrorMessage message={error.message} onRetry={refetch} />;
+}
+```
+
+### Empty States
+```typescript
+if (!data?.length) {
+  return <EmptyState message="No items found" />;
+}
+```
+
+### Forms
+- Use controlled components
+- Validate with Zod
+- Show inline errors
+- Disable submit during processing
+- Example:
+  ```typescript
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({});
+  
+  const handleSubmit = async () => {
+    const result = loginSchema.safeParse(form);
+    if (!result.success) {
+      setErrors(result.error.flatten());
+      return;
+    }
+    await login(result.data);
+  };
+  ```
+
+## Debugging
+
+### Tools
+- React Native Debugger
+- Flipper for network inspection
+- Chrome DevTools for web
+- Reactotron (optional)
+
+### Logging
+- Use `console.log` in development only
+- Remove before committing (check with `npm run check:console`)
+- Use proper logging service in production (Sentry)
+
+### Common Issues
+- **Metro bundler cache**: Run `npm run start:clear`
+- **Module resolution**: Check `babel.config.js` aliases
+- **Android build**: Clean with `cd android && ./gradlew clean`
+- **iOS build**: Clean with `cd ios && rm -rf Pods && pod install`
+
+## Deployment
+
+### Mobile (EAS Build)
+- Production: `npm run build:android:aab`
+- Preview: `npm run build:android:preview`
+- OTA Updates: `npm run ota:release8`
+
+### Web (Vercel)
+- Build: `npm run vercel-build`
+- Auto-deploys on push to main
+- Preview deploys for PRs
+
+### Environment Variables
+- Set in `.env` for local
+- Set in EAS secrets for mobile builds
+- Set in Vercel dashboard for web
+
+## Documentation
+
+### Code Comments
+- Document complex logic
+- Explain "why" not "what"
+- Use JSDoc for exported functions
+- Example:
+  ```typescript
+  /**
+   * Calculates the final grade based on assignments and exams.
+   * 
+   * @param assignments - Array of assignment scores (0-100)
+   * @param exams - Array of exam scores (0-100)
+   * @returns Final grade as percentage (0-100)
+   */
+  export function calculateFinalGrade(
+    assignments: number[],
+    exams: number[]
+  ): number {
+    // Implementation
+  }
+  ```
+
+### README Updates
+- Update when adding major features
+- Document new environment variables
+- Update setup instructions if changed
+
+## Resources
+
+### Project Documentation
+- Main docs: [edudash-pro-docs](https://github.com/EDP-APP/edudash-pro-docs)
+- Call notifications: `docs/CALL_NOTIFICATION_CHECKLIST.md`
+
+### External Documentation
+- [Expo Docs](https://docs.expo.dev/)
+- [React Native Docs](https://reactnative.dev/)
+- [Supabase Docs](https://supabase.com/docs)
+- [React Query Docs](https://tanstack.com/query/latest)
+- [Next.js Docs](https://nextjs.org/docs)
+
+## Contact & Support
+- Issues: GitHub Issues
+- Team: Check CODEOWNERS file
+
+---
+
+**Remember**: Security, type safety, and multi-tenant isolation are non-negotiable. Always validate permissions and data access.
+

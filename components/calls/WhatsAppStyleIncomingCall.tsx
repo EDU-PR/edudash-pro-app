@@ -9,11 +9,10 @@
  * - Animated ring effect
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
-  PanResponder,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -29,7 +28,6 @@ import * as Haptics from 'expo-haptics';
 import type { CallType } from './types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SWIPE_THRESHOLD = 100;
 
 interface WhatsAppStyleIncomingCallProps {
   callerName: string;
@@ -51,15 +49,10 @@ export function WhatsAppStyleIncomingCall({
   isConnecting = false,
 }: WhatsAppStyleIncomingCallProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const ring1Anim = useRef(new Animated.Value(0)).current;
   const ring2Anim = useRef(new Animated.Value(0)).current;
   const ring3Anim = useRef(new Animated.Value(0)).current;
-  const answerButtonY = useRef(new Animated.Value(0)).current;
-  const declineButtonY = useRef(new Animated.Value(0)).current;
   const soundRef = useRef<AudioPlayer | null>(null);
-  const [swipeHint, setSwipeHint] = useState('');
 
   // Ring pulse animation (WhatsApp style)
   useEffect(() => {
@@ -109,32 +102,22 @@ export function WhatsAppStyleIncomingCall({
     }).start();
   }, [isVisible, fadeAnim]);
 
-  // Answer button swipe indicator animation
+  // Stop sound and vibration when connecting
   useEffect(() => {
-    if (!isVisible || isConnecting) return;
-
-    const bounce = Animated.loop(
-      Animated.sequence([
-        Animated.timing(answerButtonY, {
-          toValue: -15,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(answerButtonY, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    bounce.start();
-    return () => bounce.stop();
-  }, [isVisible, isConnecting, answerButtonY]);
+    if (isConnecting) {
+      console.log('[IncomingCall] Connecting - stopping ringtone and vibration');
+      if (soundRef.current) {
+        soundRef.current.pause();
+        soundRef.current.remove();
+        soundRef.current = null;
+      }
+      Vibration.cancel();
+    }
+  }, [isConnecting]);
 
   // Vibration and ringtone
   useEffect(() => {
-    if (!isVisible) {
+    if (!isVisible || isConnecting) {
       if (soundRef.current) {
         soundRef.current.pause();
         soundRef.current.remove();
@@ -188,91 +171,9 @@ export function WhatsAppStyleIncomingCall({
       }
       Vibration.cancel();
     };
-  }, [isVisible]);
+  }, [isVisible, isConnecting]);
 
-  // Answer button pan responder (swipe up to answer)
-  const answerPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        setSwipeHint('Swipe up to answer');
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        // Clamp the swipe to prevent button going off screen (max -200px)
-        if (gestureState.dy < 0) {
-          const clampedDy = Math.max(gestureState.dy, -200);
-          slideAnim.setValue(clampedDy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        setSwipeHint('');
-        if (gestureState.dy < -SWIPE_THRESHOLD) {
-          // Answered - quick animation to hide
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Animated.timing(slideAnim, {
-            toValue: -200, // Keep within bounds during animation
-            duration: 150,
-            useNativeDriver: true,
-          }).start(() => {
-            onAnswer();
-            // Reset after callback
-            slideAnim.setValue(0);
-          });
-        } else {
-          // Reset
-          Animated.spring(slideAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 10,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  // Decline button pan responder (swipe down to decline)
-  const declinePanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        setSwipeHint('Swipe down to decline');
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          declineButtonY.setValue(gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        setSwipeHint('');
-        if (gestureState.dy > SWIPE_THRESHOLD) {
-          // Declined
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          Animated.timing(declineButtonY, {
-            toValue: SCREEN_HEIGHT,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            onReject();
-          });
-        } else {
-          // Reset
-          Animated.spring(declineButtonY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 10,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  // Quick tap handlers
+  // Tap handlers - simple and reliable
   const handleQuickAnswer = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onAnswer();
@@ -395,24 +296,11 @@ export function WhatsAppStyleIncomingCall({
           </Text>
         </View>
 
-        {/* Swipe Hint */}
-        {swipeHint ? (
-          <View style={styles.swipeHintContainer}>
-            <Text style={styles.swipeHintText}>{swipeHint}</Text>
-          </View>
-        ) : null}
-
         {/* Bottom Section - Action Buttons */}
         {!isConnecting && (
           <View style={styles.bottomSection}>
             {/* Decline Button */}
-            <Animated.View
-              style={[
-                styles.buttonWrapper,
-                { transform: [{ translateY: declineButtonY }] },
-              ]}
-              {...declinePanResponder.panHandlers}
-            >
+            <View style={styles.buttonWrapper}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.declineButton]}
                 onPress={handleQuickDecline}
@@ -421,32 +309,10 @@ export function WhatsAppStyleIncomingCall({
                 <Ionicons name="close" size={30} color="#fff" />
               </TouchableOpacity>
               <Text style={styles.buttonLabel}>Decline</Text>
-              <Ionicons 
-                name="chevron-down" 
-                size={16} 
-                color="rgba(255,255,255,0.5)" 
-                style={styles.swipeIcon}
-              />
-            </Animated.View>
+            </View>
 
             {/* Answer Button */}
-            <Animated.View
-              style={[
-                styles.buttonWrapper,
-                { 
-                  transform: [
-                    { translateY: Animated.add(slideAnim, answerButtonY) },
-                  ] 
-                },
-              ]}
-              {...answerPanResponder.panHandlers}
-            >
-              <Ionicons 
-                name="chevron-up" 
-                size={16} 
-                color="rgba(255,255,255,0.5)" 
-                style={styles.swipeIconUp}
-              />
+            <View style={styles.buttonWrapper}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.answerButton]}
                 onPress={handleQuickAnswer}
@@ -461,7 +327,7 @@ export function WhatsAppStyleIncomingCall({
               <Text style={styles.buttonLabel}>
                 {callType === 'video' ? 'Accept' : 'Answer'}
               </Text>
-            </Animated.View>
+            </View>
           </View>
         )}
 
@@ -576,22 +442,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 8,
   },
-  swipeHintContainer: {
-    position: 'absolute',
-    top: '50%',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  swipeHintText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
   bottomSection: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -625,12 +475,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     fontWeight: '500',
-  },
-  swipeIcon: {
-    marginTop: 4,
-  },
-  swipeIconUp: {
-    marginBottom: 4,
   },
   connectingContainer: {
     alignItems: 'center',

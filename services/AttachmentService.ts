@@ -329,7 +329,7 @@ export async function uploadAttachment(
       // For mobile, read as base64 and convert to Uint8Array
       const base64Data = await FileSystem.readAsStringAsync(
         attachment.previewUri || '',
-        { encoding: FileSystem.EncodingType.Base64 }
+        { encoding: 'base64' }
       );
       
       const uint8Array = base64ToUint8Array(base64Data);

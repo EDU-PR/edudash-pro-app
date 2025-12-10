@@ -857,7 +857,7 @@ class EducationalPDFServiceImpl {
     if (filename) {
       try {
         const finalFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-        const documentDirectory = FileSystem.documentDirectory;
+        const documentDirectory = (FileSystem as any).documentDirectory || '';
         const finalUri = `${documentDirectory}${finalFilename}`;
         
         // Copy the temporary file to document directory

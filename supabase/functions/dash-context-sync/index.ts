@@ -38,21 +38,23 @@ serve(async (req) => {
       })
     }
 
-    // Resolve preschool_id from profiles
+    // Resolve organization_id from profiles
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('preschool_id')
+      .select('organization_id')
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profileErr || !profile?.preschool_id) {
-      return new Response(JSON.stringify({ error: 'Profile or preschool not found' }), {
-        status: 400,
+    if (profileErr) {
+      console.error('[dash-context-sync] Profile fetch error:', profileErr)
+      return new Response(JSON.stringify({ error: 'Failed to fetch profile' }), {
+        status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       })
     }
 
-    const preschool_id = profile.preschool_id
+    // Allow users without organization_id (graceful degradation for users not yet assigned to orgs)
+    const preschool_id = profile?.organization_id || null
 
     // Upsert dash_user_contexts
     const { error: upsertErr } = await supabase.from('dash_user_contexts').upsert(
@@ -70,8 +72,8 @@ serve(async (req) => {
       throw upsertErr
     }
 
-    // Optional: track instance heartbeat
-    if (session_id) {
+    // Optional: track instance heartbeat (only if user has organization)
+    if (session_id && preschool_id) {
       await supabase.from('dash_agent_instances').insert({
         user_id: user.id,
         preschool_id,

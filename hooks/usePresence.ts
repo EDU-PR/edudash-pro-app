@@ -28,6 +28,7 @@ interface UsePresenceReturn {
   setStatus: (status: PresenceStatus) => Promise<void>;
   isUserOnline: (userId: string) => boolean;
   getLastSeenText: (userId: string) => string;
+  refreshPresence: () => Promise<void>;
   loading: boolean;
 }
 
@@ -163,11 +164,14 @@ export function usePresence(
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         // App came to foreground - go online
+        console.log('[usePresence] App active - setting online');
         setStatus('online');
         lastActivityRef.current = Date.now();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // App went to background - stay online to receive calls
-        // The heartbeat will handle setting 'away' after prolonged inactivity
+        // App went to background - set to away (still available for calls/notifications)
+        // This ensures users don't appear completely offline when app is backgrounded
+        console.log('[usePresence] App backgrounded - setting away (still available)');
+        setStatus('away');
         lastActivityRef.current = Date.now();
       }
     };
@@ -264,6 +268,7 @@ export function usePresence(
     setStatus,
     isUserOnline,
     getLastSeenText,
+    refreshPresence: loadPresence,
     loading,
   };
 }

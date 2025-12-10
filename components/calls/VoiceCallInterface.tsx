@@ -3,6 +3,11 @@
  * 
  * Audio-only call interface using Daily.co React Native SDK.
  * Provides controls for mute, speaker, and end call.
+ * 
+ * Audio Flow:
+ * - Caller: InCallManager starts with ringback when connecting
+ * - Callee: InCallManager starts without ringback when answering
+ * - Connected: Ringback stops, audio routes to earpiece by default
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,9 +23,9 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { AudioModule } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '@/lib/supabase';
+import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import type { CallState } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,7 +33,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
 
-// Conditionally import InCallManager (may not be available in some environments)
+// Conditionally import InCallManager for audio routing
 let InCallManager: any = null;
 try {
   InCallManager = require('react-native-incall-manager').default;
@@ -36,8 +41,7 @@ try {
   console.warn('[VoiceCall] InCallManager not available:', error);
 }
 
-// Note: Daily.co React Native SDK is conditionally imported
-// This allows the app to build even without the native module
+// Daily.co React Native SDK - conditionally imported
 let Daily: any = null;
 try {
   Daily = require('@daily-co/react-native-daily-js').default;
@@ -133,42 +137,53 @@ export function VoiceCallInterface({
     }
   }, [callState, pulseAnim]);
 
-  // Device ringback tone via InCallManager
+  // Audio management via InCallManager
+  // - Caller: ringback while waiting for answer
+  // - Callee: just setup audio routing (no ringback)
+  // - Connected: stop ringback, route to earpiece
+  const audioInitializedRef = useRef(false);
+  
   useEffect(() => {
-    if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+    if (!InCallManager) return;
+    
+    const setupAudio = () => {
+      if (audioInitializedRef.current) return;
+      
       try {
-        console.log('[VoiceCall] Starting device ringback via InCallManager');
-        if (InCallManager) {
-          // '_DTMF_' or '_DEFAULT_' uses system default ringback
+        if (isOwner && (callState === 'connecting' || callState === 'ringing')) {
+          // Caller: start with ringback
+          console.log('[VoiceCall] Caller: Starting InCallManager with ringback');
           InCallManager.start({ media: 'audio', ringback: '_DEFAULT_' });
           InCallManager.setForceSpeakerphoneOn(false);
-          console.log('[VoiceCall] Device ringback started');
+          audioInitializedRef.current = true;
+        } else if (!isOwner && callState === 'connecting') {
+          // Callee: start audio without ringback  
+          console.log('[VoiceCall] Callee: Starting InCallManager for audio');
+          InCallManager.start({ media: 'audio' });
+          InCallManager.setForceSpeakerphoneOn(false);
+          audioInitializedRef.current = true;
         }
       } catch (error) {
-        console.error('[VoiceCall] Failed to start device ringback:', error);
+        console.error('[VoiceCall] Failed to start InCallManager:', error);
       }
-    } else {
-      // Stop ringback when connected or ended
+    };
+    
+    const stopRingback = () => {
       try {
-        console.log('[VoiceCall] Stopping device ringback');
-        if (InCallManager) {
+        if (callState === 'connected') {
+          console.log('[VoiceCall] Connected: Stopping ringback');
           InCallManager.stopRingback();
         }
-        console.log('[VoiceCall] Device ringback stopped');
       } catch (error) {
         console.warn('[VoiceCall] Failed to stop ringback:', error);
       }
     };
-
+    
+    setupAudio();
+    stopRingback();
+    
     return () => {
-      // Cleanup ringback on unmount
-      try {
-        if (InCallManager) {
-          InCallManager.stopRingback();
-        }
-      } catch (error) {
-        console.warn('[VoiceCall] Failed to cleanup ringback:', error);
-      }
+      // Cleanup on unmount only
     };
   }, [callState, isOwner]);
 
@@ -248,15 +263,18 @@ export function VoiceCallInterface({
     }
     
     // Stop InCallManager and reset audio routing
-    try {
-      if (InCallManager) {
-        InCallManager.stopRingback(); // Stop any ringback
-        InCallManager.stop(); // Stop InCallManager
+    if (InCallManager) {
+      try {
+        InCallManager.stopRingback();
+        InCallManager.stop();
         console.log('[VoiceCall] InCallManager stopped');
+      } catch (err) {
+        console.warn('[VoiceCall] InCallManager stop error:', err);
       }
-    } catch (err) {
-      console.warn('[VoiceCall] InCallManager stop error:', err);
     }
+    
+    // Reset audio initialized flag
+    audioInitializedRef.current = false;
   }, []);
 
   // Ringing timeout - end call if not answered within 30 seconds
@@ -418,7 +436,14 @@ export function VoiceCallInterface({
                 'Someone'
               : 'Someone';
 
-            await getSupabase().from('active_calls').insert({
+            console.log('[VoiceCall] Inserting active_call:', {
+              call_id: newCallId,
+              caller_id: user.id,
+              callee_id: calleeId,
+              status: 'ringing',
+            });
+
+            const { data: callData, error: callError } = await getSupabase().from('active_calls').insert({
               call_id: newCallId,
               caller_id: user.id,
               callee_id: calleeId,
@@ -426,9 +451,27 @@ export function VoiceCallInterface({
               status: 'ringing',
               caller_name: callerName,
               meeting_url: roomUrl,
+            }).select();
+
+            if (callError) {
+              console.error('[VoiceCall] Failed to insert active_call:', callError);
+              throw callError;
+            }
+            
+            console.log('[VoiceCall] Active call inserted successfully:', callData);
+
+            // Register with CallKeep for native call UI
+            await callKeepManager.startCall(
+              newCallId,
+              userName || 'Unknown',
+              false // voice call
+            ).catch((err) => {
+              console.warn('[VoiceCall] Failed to start CallKeep call:', err);
             });
 
-            await getSupabase().from('call_signals').insert({
+            console.log('[VoiceCall] Inserting call_signal for callee:', calleeId);
+            
+            const { error: signalError } = await getSupabase().from('call_signals').insert({
               call_id: newCallId,
               from_user_id: user.id,
               to_user_id: calleeId,
@@ -440,6 +483,12 @@ export function VoiceCallInterface({
               },
             });
 
+            if (signalError) {
+              console.error('[VoiceCall] Failed to insert call_signal:', signalError);
+            } else {
+              console.log('[VoiceCall] Call signal sent successfully');
+            }
+
             setCallState('ringing');
           }
         }
@@ -450,7 +499,7 @@ export function VoiceCallInterface({
 
         if (isCleanedUp) return;
 
-        // Create Daily call object (no token needed for non-private rooms)
+        // Create Daily call object
         console.log('[VoiceCall] Creating Daily call object...');
         const daily = Daily.createCallObject({
           audioSource: true,
@@ -458,22 +507,9 @@ export function VoiceCallInterface({
         });
 
         dailyRef.current = daily;
-
-        // Initialize InCallManager for proper audio routing (if available)
-        try {
-          if (InCallManager) {
-            // Start with earpiece (false = earpiece, true = speaker)
-            InCallManager.start({ 
-              media: 'audio', 
-              auto: false, // Don't auto-enable speaker
-              ringback: '_DEFAULT_' // Use device default ringback
-            });
-            InCallManager.setForceSpeakerphoneOn(false); // Explicitly set to earpiece
-            console.log('[VoiceCall] InCallManager started with earpiece');
-          }
-        } catch (error) {
-          console.warn('[VoiceCall] Failed to start InCallManager:', error);
-        }
+        
+        // Note: InCallManager is initialized via the useEffect hook above
+        // to ensure proper audio routing and ringback
 
         // Event listeners
         daily.on('joined-meeting', () => {
@@ -502,24 +538,31 @@ export function VoiceCallInterface({
         });
 
         daily.on('participant-joined', (event: any) => {
-          console.log('[VoiceCall] Participant joined:', event?.participant?.user_id);
+          const participant = event?.participant;
+          const isLocalParticipant = participant?.local === true;
+          console.log('[VoiceCall] Participant joined:', {
+            userId: participant?.user_id,
+            isLocal: isLocalParticipant,
+          });
+
           updateParticipantCount();
-          
-          // When callee joins, switch from ringing to connected
-          if (callState === 'ringing' || isOwner) {
-            console.log('[VoiceCall] Callee joined! Switching to connected state');
-            setCallState('connected');
-            
-            // Stop ringback tone now that call is connected
-            try {
-              if (InCallManager) {
-                InCallManager.stopRingback();
-                console.log('[VoiceCall] Ringback stopped - call connected');
-              }
-            } catch (error) {
-              console.warn('[VoiceCall] Failed to stop ringback:', error);
-            }
+
+          // Only treat remote participant joins as call connected
+          if (isLocalParticipant) {
+            return;
           }
+
+          console.log('[VoiceCall] Remote participant joined - switching to connected state');
+          setCallState('connected');
+          
+          // Report to CallKeep that call is now connected
+          if (callIdRef.current) {
+            callKeepManager.reportConnected(callIdRef.current).catch((err) => {
+              console.warn('[VoiceCall] Failed to report connected to CallKeep:', err);
+            });
+          }
+          
+          // Note: Ringback is stopped via the useEffect when callState changes to 'connected'
           
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });

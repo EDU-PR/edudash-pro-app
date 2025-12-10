@@ -51,7 +51,7 @@ async function compressIfNeeded(uri: string): Promise<string> {
  */
 async function toBase64(uri: string): Promise<string> {
   return FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: 'base64',
   });
 }
 

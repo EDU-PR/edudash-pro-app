@@ -455,7 +455,7 @@ export async function uploadAudioFile(
     
     const uploadResult = await FileSystem.uploadAsync(uploadUrl, uri, {
       httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      uploadType: 0, // BINARY_CONTENT
     });
     
     const { duration } = measure('audio_upload');

@@ -1470,7 +1470,7 @@ class DashPDFGeneratorImpl {
       }
 
       const fileData = await FileSystem.readAsStringAsync(localUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
 
       const blob = this.base64ToBlob(fileData, 'application/pdf');

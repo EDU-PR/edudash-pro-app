@@ -101,7 +101,6 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       data={messages}
       keyExtractor={(item: any, index: number) => item.id || `msg-${index}`}
       renderItem={({ item, index }) => renderMessage(item, index)}
-      estimatedItemSize={84}
       contentContainerStyle={styles.messagesContent}
       showsVerticalScrollIndicator={false}
       removeClippedSubviews={Platform.OS === 'android'}

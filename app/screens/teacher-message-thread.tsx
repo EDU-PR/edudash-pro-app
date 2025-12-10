@@ -53,7 +53,7 @@ let useTeacherMarkThreadRead: () => { mutate: (threadId: string) => void };
 
 
 // Component imports
-let InlineVoiceRecorder: React.FC<any> | null = null;
+let VoiceRecorder: React.FC<any> | null = null;
 let ChatWallpaperPicker: React.FC<any> | null = null;
 let MessageActionsMenu: React.FC<any> | null = null;
 let ThreadOptionsMenu: React.FC<any> | null = null;
@@ -61,7 +61,7 @@ let EmojiPicker: React.FC<any> | null = null;
 let getStoredWallpaper: (() => Promise<any>) | null = null;
 let VoiceMessageBubble: React.FC<any> | null = null;
 
-try { InlineVoiceRecorder = require('@/components/messaging/InlineVoiceRecorder').InlineVoiceRecorder; } catch (e) { console.warn('InlineVoiceRecorder load failed:', e); }
+try { VoiceRecorder = require('@/components/messaging/VoiceRecorder').VoiceRecorder; } catch (e) { console.warn('VoiceRecorder load failed:', e); }
 try { VoiceMessageBubble = require('@/components/messaging/VoiceMessageBubble').VoiceMessageBubble; } catch (e) { console.warn('VoiceMessageBubble load failed:', e); }
 
 // Voice storage service
@@ -783,22 +783,19 @@ export default function TeacherMessageThreadScreen() {
               </>
             )}
             
-            {/* Voice Recorder - ALWAYS mounted, expands when recording */}
-            {/* Hidden when there's text to type, shown otherwise */}
-            {(!text.trim() || isRecording) && InlineVoiceRecorder && (
-              <View style={isRecording ? styles.recordingArea : styles.micContainer}>
-                {!isRecording && <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />}
-                <InlineVoiceRecorder
-                  isRecording={isRecording}
+            {/* Voice Recorder - WhatsApp-style hold & slide */}
+            {!text.trim() && VoiceRecorder && (
+              <View style={styles.micContainer}>
+                <VoiceRecorder
                   onRecordingComplete={handleVoice}
                   onRecordingCancel={handleVoiceCancel}
-                  onRecordingStart={handleVoiceStart}
+                  disabled={sending}
                 />
               </View>
             )}
             
-            {/* Fallback mic button if InlineVoiceRecorder not available */}
-            {!text.trim() && !isRecording && !InlineVoiceRecorder && (
+            {/* Fallback mic button if VoiceRecorder not available */}
+            {!text.trim() && !VoiceRecorder && (
               <View style={styles.micContainer}>
                 <Animated.View style={[styles.micGlow, { opacity: micGlowAnim }]} />
                 <TouchableOpacity onPress={() => toast.warn('Voice not available')}>

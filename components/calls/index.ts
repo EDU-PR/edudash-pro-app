@@ -7,7 +7,6 @@
  * Usage:
  * 1. Wrap your app with CallProvider
  * 2. Use useCall() hook to start/answer calls
- * 3. Render IncomingCallOverlay at the root level
  * 
  * Required environment variables:
  * - EXPO_PUBLIC_ENABLE_VIDEO_CALLS=true
@@ -22,9 +21,6 @@ export { CallProvider, useCall, useCallSafe } from './CallProvider';
 // Call Interfaces
 export { VoiceCallInterface } from './VoiceCallInterface';
 export { VideoCallInterface } from './VideoCallInterface';
-export { IncomingCallOverlay } from './IncomingCallOverlay';
-
-// WhatsApp-Style Components (Enhanced UI)
 export { WhatsAppStyleIncomingCall } from './WhatsAppStyleIncomingCall';
 export { WhatsAppStyleVideoCall } from './WhatsAppStyleVideoCall';
 

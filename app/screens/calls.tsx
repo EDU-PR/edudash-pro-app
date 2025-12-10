@@ -40,7 +40,7 @@ interface ScreenHeaderProps {
   };
 }
 
-const ScreenHeader: React.FC<ScreenHeaderProps> = ({ title, subtitle, onBack, rightAction }) => {
+const ScreenHeader = ({ title, subtitle, onBack, rightAction }: ScreenHeaderProps) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   

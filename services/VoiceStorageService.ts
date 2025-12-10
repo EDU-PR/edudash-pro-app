@@ -5,7 +5,7 @@
  * for playback. Supports compression and metadata tracking.
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 
@@ -140,12 +140,17 @@ export async function uploadVoiceNote(
   // Report complete progress
   onProgress?.({ loaded: fileSize, total: fileSize, percentage: 100 });
 
-  // Get public URL
-  const { data: urlData } = supabase.storage
+  // Get signed URL (valid for 1 hour) - bucket is private, not public
+  const { data: urlData, error: urlError } = await supabase.storage
     .from(VOICE_BUCKET)
-    .getPublicUrl(storagePath);
+    .createSignedUrl(storagePath, 3600); // 1 hour expiry
 
-  const publicUrl = urlData.publicUrl;
+  if (urlError || !urlData?.signedUrl) {
+    console.error('[VoiceStorage] Failed to generate signed URL:', urlError);
+    throw new Error('Failed to generate playback URL');
+  }
+
+  const publicUrl = urlData.signedUrl;
 
   console.log('[VoiceStorage] Upload complete:', {
     storagePath,

@@ -367,7 +367,7 @@ export class DashVoiceService {
         // React Native: read file as base64 and upload as Uint8Array
         try {
           const base64Data = await FileSystem.readAsStringAsync(audioUri, {
-            encoding: FileSystem.EncodingType.Base64
+            encoding: 'base64'
           });
           
           // Convert base64 to Uint8Array for upload
