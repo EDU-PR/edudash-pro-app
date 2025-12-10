@@ -166,8 +166,8 @@
     "microsoft-cognitiveservices-speech-sdk": "^1.46.0",
     "next": "^16.0.1",
     "posthog-react-native": "^4.3.2",
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-i18next": "^15.7.3",
     "react-katex": "^3.1.0",
     "react-native": "0.81.1",
@@ -196,8 +196,8 @@
     "zod": "^3.23.8"
   },
   "overrides": {
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.1",
     "zod": "^3.23.8",
     "metro": "^0.82.0",
@@ -206,8 +206,8 @@
     "react-native-webrtc": "npm:@daily-co/react-native-webrtc@^124.0.6-daily.1"
   },
   "resolutions": {
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.1",
     "zod": "^3.23.8",
     "metro": "^0.82.0",
