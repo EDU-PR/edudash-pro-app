@@ -45,7 +45,10 @@ class CallKeepManager {
    */
   async setup(config: CallKeepConfig): Promise<boolean> {
     if (!RNCallKeep) {
-      console.warn('[CallKeepManager] CallKeep not available');
+      // Only log warning in production - expected in development/Expo Go
+      if (typeof __DEV__ === 'undefined' || !__DEV__) {
+        console.warn('[CallKeepManager] CallKeep not available');
+      }
       return false;
     }
     

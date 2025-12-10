@@ -512,8 +512,18 @@ export function VoiceCallInterface({
         // to ensure proper audio routing and ringback
 
         // Event listeners
-        daily.on('joined-meeting', () => {
+        daily.on('joined-meeting', async () => {
           console.log('[VoiceCall] Joined meeting');
+          
+          // Ensure microphone is enabled after joining (no startCamera needed for audio-only)
+          try {
+            await daily.setLocalAudio(true);
+            setIsAudioEnabled(true);
+            console.log('[VoiceCall] Microphone enabled on join');
+          } catch (micError) {
+            console.warn('[VoiceCall] Failed to enable microphone on join:', micError);
+          }
+          
           // Don't set to connected yet if we're the caller waiting for the callee
           // Only set connected when another participant joins
           if (!isOwner || !calleeId) {
@@ -598,6 +608,16 @@ export function VoiceCallInterface({
         await daily.join({
           url: roomUrl,
         });
+
+        // Explicitly enable microphone after joining (audio-only)
+        try {
+          await daily.setLocalAudio(true);
+          setIsAudioEnabled(true);
+          console.log('[VoiceCall] Microphone enabled');
+        } catch (micError) {
+          console.warn('[VoiceCall] Failed to enable microphone:', micError);
+          // Don't fail the call if mic enable fails - user can enable manually
+        }
 
         function updateParticipantCount() {
           if (dailyRef.current) {
