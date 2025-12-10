@@ -114,10 +114,10 @@ export function usePresence(
       return false;
     }
     
-    // Consider online if last seen within 60 seconds (2x heartbeat to account for timing)
+    // Consider online if last seen within 5 minutes (to account for background/locked states)
     const lastSeen = new Date(record.last_seen_at).getTime();
-    const sixtySecondsAgo = Date.now() - 60000;
-    const isOnline = lastSeen > sixtySecondsAgo && record.status === 'online';
+    const fiveMinutesAgo = Date.now() - 300000;
+    const isOnline = lastSeen > fiveMinutesAgo && (record.status === 'online' || record.status === 'away');
     
     console.log('[usePresence] isUserOnline check:', {
       targetUserId,
@@ -166,8 +166,9 @@ export function usePresence(
         setStatus('online');
         lastActivityRef.current = Date.now();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // App went to background - go away/offline
-        setStatus('away');
+        // App went to background - stay online to receive calls
+        // The heartbeat will handle setting 'away' after prolonged inactivity
+        lastActivityRef.current = Date.now();
       }
     };
 
