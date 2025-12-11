@@ -26,7 +26,8 @@
           "react-native-blob-util",
           "expo-av",
           "react-native-background-timer",
-          "react-native-incall-manager"
+          "react-native-incall-manager",
+          "react-native-callkeep"
         ],
         "listUnknownPackages": false
       }
