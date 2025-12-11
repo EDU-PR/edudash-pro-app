@@ -39,7 +39,7 @@ import {
   CYAN_BORDER,
   GRADIENT_DARK_SLATE,
 } from '../../components/messaging/theme';
-import { useCall } from '@/components/calls/CallProvider';
+import { useCallSafe } from '@/components/calls/CallProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -362,10 +362,10 @@ export default function TeacherMessageThreadScreen() {
   const displayName = params.title || params.parentName || 'Parent';
   const parentId = params.parentId || params.parentid;
   
-  // Get presence status from CallProvider (unified single source - no duplicate subscriptions!)
-  const callContext = useCall();
-  const isOnline = parentId ? callContext.isUserOnline(parentId) : false;
-  const lastSeenText = parentId ? callContext.getLastSeenText(parentId) : 'Offline';
+  // Get CallProvider context (unified presence + calls - no duplicate subscriptions!)
+  const callContext = useCallSafe();
+  const isOnline = parentId && callContext ? callContext.isUserOnline(parentId) : false;
+  const lastSeenText = parentId && callContext ? callContext.getLastSeenText(parentId) : 'Offline';
   
   // State
   const [text, setText] = useState('');
@@ -513,10 +513,7 @@ export default function TeacherMessageThreadScreen() {
     setShowEmoji(false);
   }, []);
   
-  // Voice/Video call handlers via CallProvider context
-  const callContext = useCallSafe();
-  
-  // Get recipient info for calls
+  // Get recipient info for calls (callContext already declared above)
   const recipientId = parentId || null;
   const recipientName = displayName;
 
