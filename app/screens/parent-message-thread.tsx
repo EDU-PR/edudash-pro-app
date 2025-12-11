@@ -925,7 +925,7 @@ export default function ParentMessageThreadScreen() {
     setShowOptionsMenu(false);
   }, [displayName]);
 
-  // Voice/Video call handlers (fully implemented via CallProvider context)
+  // CallProvider context for calls + presence (unified single source)
   const callContext = useCallSafe();
   
   // Get other participant info
@@ -933,6 +933,10 @@ export default function ParentMessageThreadScreen() {
   const recipientId = otherParticipant?.sender_id;
   const recipientName = otherParticipant?.sender?.first_name || displayName;
   const recipientRole = otherParticipant?.sender?.role || null;
+  
+  // Presence tracking (unified from CallProvider - no duplicate subscriptions!)
+  const isOnline = recipientId && callContext ? callContext.isUserOnline(recipientId) : false;
+  const lastSeenText = recipientId && callContext ? callContext.getLastSeenText(recipientId) : 'Offline';
 
   const handleVoiceCall = useCallback(() => {
     if (!callContext) {
