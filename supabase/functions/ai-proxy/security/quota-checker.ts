@@ -103,47 +103,31 @@ export async function checkQuota(
       }
     }
 
-    // Get subscription tier (use provided tier or fetch from user)
+    // Get subscription tier (use provided tier or fetch from user using unified function)
     let tier = effectiveTier || 'free'
     
     // Only fetch if tier not provided
     if (!effectiveTier) {
-      // PRIORITY 1: Check user_ai_usage.current_tier (most accurate, updated by payment webhook)
-      const { data: usageTierData } = await supabaseAdmin
-        .from('user_ai_usage')
-        .select('current_tier')
-        .eq('user_id', userId)
-        .maybeSingle()
+      // Use unified tier lookup function (handles all priority logic in database)
+      // Priority: user_ai_usage.current_tier > user_ai_tiers.tier > organization.subscription_tier > default(free)
+      const { data: tierData, error: tierError } = await supabaseAdmin
+        .rpc('get_user_subscription_tier', { user_id: userId })
       
-      if (usageTierData?.current_tier) {
-        tier = usageTierData.current_tier
-        console.log('[Quota] Tier from user_ai_usage.current_tier:', tier)
-      }
-      // PRIORITY 2: Check user_ai_tiers.tier (fallback)
-      else {
-        const { data: userTierData } = await supabaseAdmin
-          .from('user_ai_tiers')
-          .select('tier')
+      if (tierError) {
+        console.error('[Quota] Error fetching tier via RPC:', tierError)
+        // Fallback to manual lookup if RPC fails
+        const { data: usageTierData } = await supabaseAdmin
+          .from('user_ai_usage')
+          .select('current_tier')
           .eq('user_id', userId)
           .maybeSingle()
         
-        if (userTierData?.tier) {
-          tier = userTierData.tier
-          console.log('[Quota] Tier from user_ai_tiers.tier:', tier)
+        if (usageTierData?.current_tier) {
+          tier = usageTierData.current_tier
         }
-        // PRIORITY 3: Check organization tier (last resort)
-        else if (organizationId) {
-          const { data: orgData } = await supabaseAdmin
-            .from('preschools')
-            .select('subscription_tier')
-            .eq('id', organizationId)
-            .maybeSingle()
-
-          if (orgData?.subscription_tier) {
-            tier = orgData.subscription_tier
-            console.log('[Quota] Tier from preschools.subscription_tier:', tier)
-          }
-        }
+      } else if (tierData) {
+        tier = tierData
+        console.log('[Quota] Tier from unified lookup:', tier)
       }
     }
     

@@ -181,7 +181,7 @@ export function VoiceCallInterface({
     
     setupAudio();
     stopRingback();
-    
+
     return () => {
       // Cleanup on unmount only
     };
@@ -263,14 +263,14 @@ export function VoiceCallInterface({
     }
     
     // Stop InCallManager and reset audio routing
-    if (InCallManager) {
+      if (InCallManager) {
       try {
         InCallManager.stopRingback();
         InCallManager.stop();
         console.log('[VoiceCall] InCallManager stopped');
-      } catch (err) {
-        console.warn('[VoiceCall] InCallManager stop error:', err);
-      }
+    } catch (err) {
+      console.warn('[VoiceCall] InCallManager stop error:', err);
+    }
     }
     
     // Reset audio initialized flag
@@ -507,7 +507,7 @@ export function VoiceCallInterface({
         });
 
         dailyRef.current = daily;
-        
+
         // Note: InCallManager is initialized via the useEffect hook above
         // to ensure proper audio routing and ringback
 
@@ -515,11 +515,18 @@ export function VoiceCallInterface({
         daily.on('joined-meeting', async () => {
           console.log('[VoiceCall] Joined meeting');
           
-          // Ensure microphone is enabled after joining (no startCamera needed for audio-only)
+          // Ensure microphone is enabled after joining - use updateSendSettings for reliable publishing
           try {
-            await daily.setLocalAudio(true);
+            // Force audio track publication with updateSendSettings
+            await daily.updateSendSettings({
+              audio: { isEnabled: true }
+            });
             setIsAudioEnabled(true);
-            console.log('[VoiceCall] Microphone enabled on join');
+            console.log('[VoiceCall] Microphone enabled on join via updateSendSettings');
+            
+            // Verify audio track state
+            const trackState = await daily.getLocalAudioTrack();
+            console.log('[VoiceCall] Audio track state:', trackState?.state, trackState);
           } catch (micError) {
             console.warn('[VoiceCall] Failed to enable microphone on join:', micError);
           }
@@ -564,7 +571,7 @@ export function VoiceCallInterface({
 
           console.log('[VoiceCall] Remote participant joined - switching to connected state');
           setCallState('connected');
-          
+
           // Report to CallKeep that call is now connected
           if (callIdRef.current) {
             callKeepManager.reportConnected(callIdRef.current).catch((err) => {
@@ -573,7 +580,7 @@ export function VoiceCallInterface({
           }
           
           // Note: Ringback is stopped via the useEffect when callState changes to 'connected'
-          
+
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
 
@@ -603,17 +610,52 @@ export function VoiceCallInterface({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         });
 
+        // Request audio permissions explicitly for Android
+        if (Platform.OS === 'android') {
+          try {
+            const { PermissionsAndroid } = require('react-native');
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+              {
+                title: 'Microphone Permission',
+                message: 'This app needs access to your microphone for voice calls.',
+                buttonPositive: 'OK',
+              }
+            );
+            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+              throw new Error('Microphone permission denied');
+            }
+            console.log('[VoiceCall] Android audio permission granted');
+          } catch (permError) {
+            console.error('[VoiceCall] Permission error:', permError);
+            throw new Error('Microphone permission denied. Please enable it in settings.');
+          }
+        }
+
         // Join the call (no token needed for rooms created with enable_knocking: false)
         console.log('[VoiceCall] Joining room:', roomUrl);
         await daily.join({
           url: roomUrl,
         });
 
-        // Explicitly enable microphone after joining (audio-only)
+        // Explicitly enable microphone after joining - use updateSendSettings for reliable publishing
         try {
-          await daily.setLocalAudio(true);
+          // Set input devices first
+          await daily.setInputDevicesAsync({
+            audioSource: true,
+          });
+          console.log('[VoiceCall] Audio input device set');
+          
+          // Force audio track publication with updateSendSettings
+          await daily.updateSendSettings({
+            audio: { isEnabled: true }
+          });
           setIsAudioEnabled(true);
-          console.log('[VoiceCall] Microphone enabled');
+          console.log('[VoiceCall] Microphone enabled via updateSendSettings');
+          
+          // Verify audio track state
+          const trackState = await daily.getLocalAudioTrack();
+          console.log('[VoiceCall] Audio track state:', trackState?.state, trackState);
         } catch (micError) {
           console.warn('[VoiceCall] Failed to enable microphone:', micError);
           // Don't fail the call if mic enable fails - user can enable manually
@@ -656,8 +698,13 @@ export function VoiceCallInterface({
   const toggleAudio = useCallback(async () => {
     if (!dailyRef.current) return;
     try {
-      await dailyRef.current.setLocalAudio(!isAudioEnabled);
-      setIsAudioEnabled(!isAudioEnabled);
+      const newState = !isAudioEnabled;
+      // Use updateSendSettings for reliable audio track control
+      await dailyRef.current.updateSendSettings({
+        audio: { isEnabled: newState }
+      });
+      setIsAudioEnabled(newState);
+      console.log('[VoiceCall] Audio toggled:', newState);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (err) {
       console.warn('[VoiceCall] Toggle audio error:', err);

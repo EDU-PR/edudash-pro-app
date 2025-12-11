@@ -376,16 +376,20 @@ serve(async (req: Request) => {
             .insert(subscriptionData);
         }
 
-        // Update preschool subscription tier (legacy)
+        // Update preschool subscription tier (legacy compatibility)
         await supabase
           .from('preschools')
           .update({ subscription_tier: plan.tier })
           .eq('id', existingTx.school_id);
         
-        // CRITICAL: Also update organizations.plan_tier for new RBAC system
+        // CRITICAL: Update organizations.subscription_tier (canonical field)
+        // Also update plan_tier for backward compatibility during migration period
         await supabase
           .from('organizations')
-          .update({ plan_tier: plan.tier })
+          .update({ 
+            subscription_tier: plan.tier,  // Canonical field
+            plan_tier: plan.tier             // Legacy field for compatibility
+          })
           .eq('id', existingTx.school_id);
         
         // CRITICAL: Update user_ai_tiers for all school users
@@ -584,16 +588,20 @@ serve(async (req: Request) => {
           }
         }
         
-        // Update preschool subscription tier (legacy)
+        // Update preschool subscription tier (legacy compatibility)
         await supabase
           .from('preschools')
           .update({ subscription_tier: plan.tier })
           .eq('id', userSchoolId);
         
-        // CRITICAL: Also update organizations.plan_tier for new RBAC system
+        // CRITICAL: Update organizations.subscription_tier (canonical field)
+        // Also update plan_tier for backward compatibility during migration period
         await supabase
           .from('organizations')
-          .update({ plan_tier: plan.tier })
+          .update({ 
+            subscription_tier: plan.tier,  // Canonical field
+            plan_tier: plan.tier             // Legacy field for compatibility
+          })
           .eq('id', userSchoolId);
         
         // CRITICAL: Update user_ai_tiers for the owner user

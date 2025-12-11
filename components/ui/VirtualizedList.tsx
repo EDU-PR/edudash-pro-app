@@ -16,7 +16,6 @@ interface VirtualizedListProps<T> {
   data: T[];
   renderItem: ListRenderItem<T>;
   keyExtractor: (item: T, index: number) => string;
-  estimatedItemSize?: number;
   refreshing?: boolean;
   onRefresh?: () => void;
   onEndReached?: () => void;
@@ -47,7 +46,6 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
     data,
     renderItem,
     keyExtractor,
-    estimatedItemSize = 60,
     refreshing = false,
     onRefresh,
     onEndReached,
@@ -130,7 +128,6 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
       data={data}
       renderItem={memoizedRenderItem}
       keyExtractor={stableKeyExtractor}
-      estimatedItemSize={estimatedItemSize}
       refreshControl={refreshControl}
       onEndReached={handleEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
@@ -149,7 +146,6 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
       // removeClippedSubviews not supported by FlashList
       // FlashList specific optimizations
       estimatedFirstItemOffset={0}
-      drawDistance={windowSize * estimatedItemSize}
       overrideItemLayout={(layout, item, index) => {
         // Override for known fixed heights to improve performance
         if (typeof item === 'object' && item && 'height' in item) {
@@ -165,7 +161,7 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
  * Chat list component optimized for Dash conversations
  */
 export const DashChatList = memo(<T extends { id: string | number; timestamp?: number }>(
-  props: Omit<VirtualizedListProps<T>, 'estimatedItemSize'> & { 
+  props: VirtualizedListProps<T> & { 
     inverted?: boolean;
     maintainVisibleContentPosition?: boolean;
   }
@@ -175,7 +171,6 @@ export const DashChatList = memo(<T extends { id: string | number; timestamp?: n
   return (
     <UltraFastList
       {...restProps}
-      estimatedItemSize={80} // Optimized for chat messages
       style={[{ transform: inverted ? [{ scaleY: -1 }] : [] }, restProps.style]}
       // Chat-specific optimizations
       windowSize={15}
@@ -185,7 +180,7 @@ export const DashChatList = memo(<T extends { id: string | number; timestamp?: n
     />
   );
 }) as <T extends { id: string | number; timestamp?: number }>(
-  props: Omit<VirtualizedListProps<T>, 'estimatedItemSize'> & { 
+  props: VirtualizedListProps<T> & { 
     inverted?: boolean;
     maintainVisibleContentPosition?: boolean;
   }
@@ -196,20 +191,19 @@ export const DashChatList = memo(<T extends { id: string | number; timestamp?: n
  * Lesson grid for Dash's educational content
  */
 export const DashLessonGrid = memo(<T extends { id: string | number }>(
-  props: Omit<VirtualizedListProps<T>, 'estimatedItemSize' | 'numColumns'>
+  props: Omit<VirtualizedListProps<T>, 'numColumns'>
 ) => {
   return (
     <UltraFastList
       {...props}
       numColumns={2}
-      estimatedItemSize={160} // Optimized for lesson cards
       windowSize={8}
       maxToRenderPerBatch={4}
       contentContainerStyle={[{ padding: 16 }, props.contentContainerStyle]}
     />
   );
 }) as <T extends { id: string | number }>(
-  props: Omit<VirtualizedListProps<T>, 'estimatedItemSize' | 'numColumns'>
+  props: Omit<VirtualizedListProps<T>, 'numColumns'>
 ) => React.ReactElement;
 ;(DashLessonGrid as any).displayName = 'DashLessonGrid';
 

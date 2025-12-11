@@ -39,8 +39,7 @@ import {
   CYAN_BORDER,
   GRADIENT_DARK_SLATE,
 } from '../../components/messaging/theme';
-import { usePresence } from '@/hooks/usePresence';
-import { useCallSafe } from '@/components/calls/CallProvider';
+import { useCall } from '@/components/calls/CallProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -363,10 +362,10 @@ export default function TeacherMessageThreadScreen() {
   const displayName = params.title || params.parentName || 'Parent';
   const parentId = params.parentId || params.parentid;
   
-  // Get actual presence status using usePresence hook (always called to satisfy rules-of-hooks)
-  const presence = usePresence(user?.id);
-  const isOnline = parentId ? presence.isUserOnline(parentId) : false;
-  const lastSeenText = parentId ? presence.getLastSeenText(parentId) : 'Offline';
+  // Get presence status from CallProvider (unified single source - no duplicate subscriptions!)
+  const callContext = useCall();
+  const isOnline = parentId ? callContext.isUserOnline(parentId) : false;
+  const lastSeenText = parentId ? callContext.getLastSeenText(parentId) : 'Offline';
   
   // State
   const [text, setText] = useState('');

@@ -33,6 +33,7 @@ import type {
   CallState,
   OutgoingCallParams,
 } from './types';
+import type { PresenceStatus } from '@/hooks/usePresence';
 
 // Feature flag check
 const isCallsEnabled = () => {
@@ -78,6 +79,10 @@ const DISABLED_CONTEXT: CallContextType = {
   isInActiveCall: false,
   callState: 'idle',
   returnToCall: () => {},
+  // Presence - always return offline when calls are disabled
+  isUserOnline: () => false,
+  getLastSeenText: () => 'Offline',
+  refreshPresence: async () => {},
 };
 
 interface CallProviderProps {
@@ -494,6 +499,10 @@ export function CallProvider({ children }: CallProviderProps) {
     isInActiveCall,
     callState,
     returnToCall,
+    // Presence methods - unified single source to prevent duplicate subscriptions
+    isUserOnline,
+    getLastSeenText,
+    refreshPresence,
   };
 
   // If calls are disabled, provide disabled context with no-op functions

@@ -56,6 +56,23 @@ serve(async (req) => {
     // Allow users without organization_id (graceful degradation for users not yet assigned to orgs)
     const preschool_id = profile?.organization_id || null
 
+    // If user has no org and no existing context, return success without inserting
+    if (!preschool_id) {
+      const { data: existingContext } = await supabase
+        .from('dash_user_contexts')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      
+      if (!existingContext) {
+        console.log('[dash-context-sync] User has no org yet, skipping upsert')
+        return new Response(JSON.stringify({ success: true, message: 'No organization assigned yet' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        })
+      }
+    }
+
     // Upsert dash_user_contexts
     const { error: upsertErr } = await supabase.from('dash_user_contexts').upsert(
       {
@@ -69,10 +86,11 @@ serve(async (req) => {
     )
 
     if (upsertErr) {
+      console.error('[dash-context-sync] Upsert error:', upsertErr)
       throw upsertErr
     }
 
-    // Optional: track instance heartbeat (only if user has organization)
+    // Optional: track instance heartbeat (only if user has organization and session_id)
     if (session_id && preschool_id) {
       await supabase.from('dash_agent_instances').insert({
         user_id: user.id,
@@ -80,7 +98,10 @@ serve(async (req) => {
         session_id,
         settings: {},
         last_active: new Date().toISOString(),
-      }).select().single().catch(() => null)
+      }).select().single().catch((err) => {
+        console.warn('[dash-context-sync] Instance insert failed:', err)
+        return null
+      })
     }
 
     return new Response(JSON.stringify({ success: true }), {

@@ -113,7 +113,6 @@ export function DashboardRouter({
             </View>
           );
         }}
-        estimatedItemSize={200}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
       />

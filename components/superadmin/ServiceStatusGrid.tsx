@@ -88,7 +88,6 @@ export function ServiceStatusGrid({
       <FlashList
         data={services}
         renderItem={renderServiceCard}
-        estimatedItemSize={140}
         numColumns={3}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}

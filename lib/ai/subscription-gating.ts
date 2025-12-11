@@ -71,33 +71,30 @@ export async function getUserSubscriptionContext(
 }
 
 /**
- * Get organization's subscription tier from database
+ * Get organization's subscription tier from database using unified lookup
  */
 async function getOrganizationTier(
   supabase: SupabaseClient, 
   organizationId: string
 ): Promise<SubscriptionTier> {
   try {
-    // Check subscriptions table first (new schema)
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select(`
-        status,
-        subscription_plans!inner(tier)
-      `)
-      .eq('school_id', organizationId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
+    // Use organizations.subscription_tier (canonical field)
+    const { data: orgData } = await supabase
+      .from('organizations')
+      .select('subscription_tier, plan_tier')
+      .eq('id', organizationId)
       .maybeSingle()
 
-    const planObj = (subscription as any)?.subscription_plans;
-    const planTier = Array.isArray(planObj) ? planObj[0]?.tier : planObj?.tier;
-    if (planTier) {
-      return planTier as SubscriptionTier
+    if (orgData?.subscription_tier) {
+      return orgData.subscription_tier as SubscriptionTier
     }
 
-    // Fallback to legacy fields
+    // Fallback to plan_tier for backward compatibility
+    if (orgData?.plan_tier) {
+      return orgData.plan_tier as SubscriptionTier
+    }
+
+    // Final fallback to legacy preschools table
     const { data: org } = await supabase
       .from('organizations')
       .select('plan_tier')

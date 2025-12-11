@@ -43,9 +43,10 @@ export interface ReportApprovalCardProps {
  *       onPress={() => navigateToReview(item.id)}
  *     />
  *   )}
- *   estimatedItemSize={120}
  * />
  * ```
+ * 
+ * Note: estimatedItemSize has been removed as FlashList 2.0 auto-calculates item sizes.
  */
 export const ReportApprovalCard = ({ report, onPress }: ReportApprovalCardProps) => {
   const { theme, colorScheme } = useTheme();

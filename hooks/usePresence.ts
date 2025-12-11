@@ -1,12 +1,21 @@
 /**
  * usePresence Hook - React Native
  * Real-time presence tracking for online/offline status
+ * Uses background tasks to maintain presence when app is backgrounded
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+
+// Try to import background fetch (optional, may not be available)
+let BackgroundFetch: any = null;
+try {
+  BackgroundFetch = require('react-native-background-fetch').default;
+} catch {
+  console.log('[usePresence] Background fetch not available');
+}
 
 export type PresenceStatus = 'online' | 'away' | 'offline';
 
@@ -103,7 +112,10 @@ export function usePresence(
     }
   }, []);
 
-  // Check if user is online (seen within 60 seconds - 2x heartbeat interval for accuracy)
+  // Check if user is online
+  // Users are considered online if:
+  // 1. Status is 'online' or 'away' (away means backgrounded but still available)
+  // 2. Last seen within 10 minutes (generous grace period for backgrounded apps)
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const record = onlineUsers.get(targetUserId);
     if (!record) {
@@ -115,17 +127,19 @@ export function usePresence(
       return false;
     }
     
-    // Consider online if last seen within 5 minutes (to account for background/locked states)
+    // Consider online if last seen within 10 minutes (generous grace period for backgrounded apps)
+    // This accounts for iOS/Android background execution restrictions
     const lastSeen = new Date(record.last_seen_at).getTime();
-    const fiveMinutesAgo = Date.now() - 300000;
-    const isOnline = lastSeen > fiveMinutesAgo && (record.status === 'online' || record.status === 'away');
+    const tenMinutesAgo = Date.now() - 600000; // 10 minutes
+    const isOnline = lastSeen > tenMinutesAgo && (record.status === 'online' || record.status === 'away');
     
     console.log('[usePresence] isUserOnline check:', {
       targetUserId,
       status: record.status,
       lastSeen: new Date(record.last_seen_at).toISOString(),
       ageSeconds: Math.floor((Date.now() - lastSeen) / 1000),
-      isOnline
+      isOnline,
+      threshold: '10min'
     });
     
     return isOnline;
@@ -161,17 +175,39 @@ export function usePresence(
   useEffect(() => {
     if (!userId) return;
 
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      console.log('[usePresence] App state changed to:', nextAppState);
+      
       if (nextAppState === 'active') {
-        // App came to foreground - go online
+        // App came to foreground - go online immediately
         console.log('[usePresence] App active - setting online');
-        setStatus('online');
+        setMyStatus('online');
+        await upsertPresence('online');
         lastActivityRef.current = Date.now();
+        
+        // Refresh presence data
+        loadPresence();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // App went to background - set to away (still available for calls/notifications)
-        // This ensures users don't appear completely offline when app is backgrounded
+        // App went to background - set to away and send immediate update
         console.log('[usePresence] App backgrounded - setting away (still available)');
-        setStatus('away');
+        setMyStatus('away');
+        
+        // CRITICAL: Send presence update IMMEDIATELY before app is fully suspended
+        // Use Promise.all to ensure it goes through quickly
+        const supabase = assertSupabase();
+        try {
+          await Promise.race([
+            supabase.rpc('upsert_user_presence', {
+              p_user_id: userId,
+              p_status: 'away',
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+          ]);
+          console.log('[usePresence] Background presence update sent successfully');
+        } catch (err) {
+          console.warn('[usePresence] Failed to send background presence:', err);
+        }
+        
         lastActivityRef.current = Date.now();
       }
     };
@@ -181,7 +217,7 @@ export function usePresence(
     return () => {
       subscription.remove();
     };
-  }, [userId, setStatus]);
+  }, [userId, upsertPresence, loadPresence]);
 
   // Setup heartbeat and real-time subscription
   useEffect(() => {
@@ -200,19 +236,32 @@ export function usePresence(
     upsertPresence('online');
 
     // Heartbeat to maintain presence
+    // Note: This runs in foreground only. For background, we rely on the 'away' status
+    // set during app state change and the 5-minute grace period
     heartbeatRef.current = setInterval(() => {
+      // Only send heartbeat if app is in foreground
+      const appState = AppState.currentState;
+      if (appState !== 'active') {
+        console.log('[usePresence] Skipping heartbeat - app not active:', appState);
+        return;
+      }
+      
       const now = Date.now();
       const timeSinceActivity = now - lastActivityRef.current;
+      
+      console.log('[usePresence] Heartbeat - app state:', appState, 'time since activity:', Math.floor(timeSinceActivity / 1000), 's');
       
       if (timeSinceActivity > awayTimeout) {
         // User has been inactive - mark as away
         if (myStatus !== 'away') {
+          console.log('[usePresence] User inactive, marking as away');
           setMyStatus('away');
           upsertPresence('away');
         }
       } else {
         // User is active - maintain online status
-        upsertPresence('online');
+        console.log('[usePresence] User active, maintaining online status');
+        upsertPresence(myStatus === 'away' ? 'away' : 'online');
       }
     }, heartbeatInterval);
 

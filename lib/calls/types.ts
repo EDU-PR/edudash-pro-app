@@ -74,6 +74,11 @@ export interface CallContextType {
   
   // Navigation
   returnToCall: () => void;
+  
+  // Presence (unified across all components to avoid duplicate subscriptions)
+  isUserOnline: (userId: string) => boolean;
+  getLastSeenText: (userId: string) => string;
+  refreshPresence: () => Promise<void>;
 }
 
 // ============================================

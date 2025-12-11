@@ -254,9 +254,14 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   console.log('[ROUTE DEBUG] ==> Determining route for user');
   console.log('[ROUTE DEBUG] Original role:', profile.role, '-> normalized:', role);
   console.log('[ROUTE DEBUG] Profile organization_id:', profile.organization_id);
+  console.log('[ROUTE DEBUG] Profile preschool_id:', (profile as any).preschool_id);
   console.log('[ROUTE DEBUG] Profile seat_status:', profile.seat_status);
   console.log('[ROUTE DEBUG] Profile capabilities:', profile.capabilities);
   console.log('[ROUTE DEBUG] Profile hasCapability(access_mobile_app):', profile.hasCapability('access_mobile_app'));
+  
+  // Check for organization membership (null means independent user)
+  const hasOrganization = !!(profile.organization_id || (profile as any).preschool_id);
+  const isIndependentUser = !hasOrganization;
   
   // Tenant kind detection (best-effort)
   const orgKind = (profile as any)?.organization_membership?.organization_kind
@@ -266,12 +271,9 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const isSkillsLike = ['skills', 'tertiary', 'org'].includes(String(orgKind).toLowerCase());
   
   if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-    console.log('[ROUTE DEBUG] ==> Determining route for user');
-    console.log('[ROUTE DEBUG] Original role:', profile.role, '-> normalized:', role);
-    console.log('[ROUTE DEBUG] Profile organization_id:', profile.organization_id);
-    console.log('[ROUTE DEBUG] Profile seat_status:', profile.seat_status);
-    console.log('[ROUTE DEBUG] Profile capabilities:', profile.capabilities);
-    console.log('[ROUTE DEBUG] Profile hasCapability(access_mobile_app):', profile.hasCapability('access_mobile_app'));
+    console.log('[ROUTE DEBUG] Has organization:', hasOrganization);
+    console.log('[ROUTE DEBUG] Is independent user:', isIndependentUser);
+    console.log('[ROUTE DEBUG] Organization kind:', orgKind);
   }
   
   // Safeguard: If role is null/undefined, route to sign-in/profile setup
@@ -289,7 +291,33 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     console.log('[ROUTE DEBUG] Allowing dashboard access despite capability check');
   }
 
-  // Route based on role and tenant kind
+  // For independent users (no organization), route to standalone dashboards
+  // These users can still access basic features but may see upgrade prompts
+  if (isIndependentUser) {
+    console.log('[ROUTE DEBUG] Independent user detected (no organization) - routing to standalone dashboard');
+    
+    switch (role) {
+      case 'super_admin':
+        return { path: '/screens/super-admin-dashboard' };
+      
+      case 'principal_admin':
+        // Independent principals should see onboarding to create/join organization
+        return { path: '/screens/principal-dashboard', params: { standalone: 'true' } };
+
+      case 'teacher':
+        // Independent teachers can access basic features with upgrade prompts
+        return { path: '/screens/teacher-dashboard', params: { standalone: 'true' } };
+
+      case 'parent':
+        // Independent parents can track their own children
+        return { path: '/screens/parent-dashboard', params: { standalone: 'true' } };
+
+      case 'student':
+        return { path: '/screens/student-dashboard', params: { standalone: 'true' } };
+    }
+  }
+
+  // Route based on role and tenant kind for organization members
   switch (role) {
     case 'super_admin':
       return { path: '/screens/super-admin-dashboard' };

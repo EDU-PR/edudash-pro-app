@@ -22,6 +22,7 @@ import {
   Platform,
   Dimensions,
   Pressable,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -37,6 +38,7 @@ import {
 
 const MIN_RECORDING_DURATION = 500;
 const WAVEFORM_BAR_COUNT = 35;
+const CANCEL_THRESHOLD = 80; // Slide up 80px to cancel
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VoiceRecorderProps {
@@ -60,6 +62,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const [previewDuration, setPreviewDuration] = useState(0);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const [previewProgress, setPreviewProgress] = useState(0);
+  const [inCancelZone, setInCancelZone] = useState(false);
   
   // Refs
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -69,11 +72,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const isRecordingRef = useRef(false);
   const waveformDataRef = useRef<number[]>([]);
   const hasPermissionsRef = useRef(false);
-  const pressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressActiveRef = useRef(false);
+  const initialTouchY = useRef<number>(0);
   
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const slideY = useRef(new Animated.Value(0)).current;
   
   // Waveform bar animations
   const waveformAnims = useMemo(
@@ -93,7 +96,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   useEffect(() => {
     return () => {
       if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
-      if (pressTimeoutRef.current) clearTimeout(pressTimeoutRef.current);
       if (recordingRef.current) {
         recordingRef.current.stopAndUnloadAsync().catch(() => {});
       }
@@ -158,10 +160,10 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     try {
       // Check permissions
       if (!hasPermissionsRef.current) {
-        const permission = await Audio.requestPermissionsAsync();
-        if (permission.status !== 'granted') {
-          isRecordingRef.current = false;
-          return;
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        isRecordingRef.current = false;
+        return;
         }
         hasPermissionsRef.current = true;
       }
@@ -214,7 +216,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
   };
 
-  const stopRecording = async () => {
+  const stopRecording = async (shouldSend: boolean = true) => {
     if (!isRecordingRef.current || !recordingRef.current) return;
     
     isRecordingRef.current = false;
@@ -239,23 +241,16 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         Vibration.vibrate(30);
         onRecordingCancel?.();
         resetState();
+      } else if (!shouldSend) {
+        // Cancelled - discard recording
+        Vibration.vibrate([0, 50, 100]);
+        onRecordingCancel?.();
+        resetState();
       } else {
-        // If released from press-and-hold, send immediately
-        // Otherwise show preview (for manual stop button)
-        if (longPressActiveRef.current) {
-          longPressActiveRef.current = false;
-          // Send immediately without preview
-          Vibration.vibrate([0, 30, 50, 30]);
-          onRecordingComplete(uri, duration);
-          resetState();
-        } else {
-          // Show preview for manual stop
-          setPreviewUri(uri);
-          setPreviewDuration(duration);
-          setShowPreview(true);
-          setIsRecording(false);
-          Vibration.vibrate([0, 30, 50, 30]);
-        }
+        // Send immediately
+        Vibration.vibrate([0, 30, 50, 30]);
+        onRecordingComplete(uri, duration);
+        resetState();
       }
     } catch (error) {
       console.error('[VoiceRecorder] Stop error:', error);
@@ -272,6 +267,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     setPreviewDuration(0);
     setPreviewProgress(0);
     setIsPlayingPreview(false);
+    setInCancelZone(false);
+    slideY.setValue(0);
     waveformAnims.forEach(anim => anim.setValue(0.2));
   };
 
@@ -348,25 +345,74 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
   const playedBars = Math.floor(previewWaveformBars.length * previewProgress);
 
-  // Handle manual stop (shows preview instead of sending)
-  const handleManualStop = () => {
-    longPressActiveRef.current = false; // Disable auto-send, show preview instead
-    stopRecording();
-  };
+  // PanResponder for slide-to-cancel gesture
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled && !showPreview,
+        onMoveShouldSetPanResponder: () => isRecording,
+        
+        onPanResponderGrant: (_, gestureState) => {
+          if (disabled || isRecording || showPreview) return;
+          
+          // Start recording immediately on press
+          initialTouchY.current = gestureState.y0;
+          Vibration.vibrate(30);
+          startRecording();
+        },
+        
+        onPanResponderMove: (_, gestureState) => {
+          if (!isRecording) return;
+          
+          const deltaY = gestureState.dy;
+          
+          // Update slide animation
+          if (deltaY < 0) {
+            slideY.setValue(deltaY);
+          }
+          
+          // Check if in cancel zone (slid up more than threshold)
+          const nowInCancelZone = deltaY < -CANCEL_THRESHOLD;
+          if (nowInCancelZone !== inCancelZone) {
+            setInCancelZone(nowInCancelZone);
+            if (nowInCancelZone) {
+              Vibration.vibrate(40);
+            }
+          }
+        },
+        
+        onPanResponderRelease: () => {
+          if (!isRecording) return;
+          
+          // Stop recording and send or cancel based on position
+          const shouldSend = !inCancelZone;
+          stopRecording(shouldSend);
+        },
+        
+        onPanResponderTerminate: () => {
+          // Handle if gesture is interrupted
+          if (isRecording) {
+            stopRecording(false); // Cancel on interrupt
+          }
+        },
+      }),
+    [disabled, isRecording, showPreview, inCancelZone]
+  );
 
-  // If recording, show inline recording UI
+  // If recording, show inline recording UI with slide-to-cancel
   if (isRecording) {
     return (
-      <View style={styles.inlineRecordingContainer}>
-        <TouchableOpacity 
-          onPress={handleManualStop}
-          style={styles.stopButton}
-          activeOpacity={0.8}
-        >
-          <Animated.View style={[styles.stopButtonInner, { transform: [{ scale: pulseAnim }] }]}>
-            <View style={styles.stopIcon} />
-          </Animated.View>
-        </TouchableOpacity>
+      <Animated.View 
+        style={[
+          styles.inlineRecordingContainer,
+          inCancelZone && styles.cancelZoneActive,
+          { transform: [{ translateY: slideY }] }
+        ]}
+        {...panResponder.panHandlers}
+      >
+        <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
+          <View style={styles.recordingDot} />
+        </Animated.View>
         
         <View style={styles.waveformContainer}>
           {waveformAnims.map((anim, index) => (
@@ -379,6 +425,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                     inputRange: [0, 1],
                     outputRange: [3, 26],
                   }),
+                  backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
                 },
               ]}
             />
@@ -386,7 +433,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         </View>
         
         <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-      </View>
+        
+        {inCancelZone && (
+          <Text style={styles.cancelHintText}>Release to cancel</Text>
+        )}
+        {!inCancelZone && (
+          <Text style={styles.releaseHintText}>↑ Slide to cancel</Text>
+        )}
+      </Animated.View>
     );
   }
 
@@ -405,11 +459,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               size={16} 
               color="#fff" 
             />
-          </LinearGradient>
-        </TouchableOpacity>
+                </LinearGradient>
+              </TouchableOpacity>
         
         <View style={styles.previewWaveformContainer}>
-          {previewWaveformBars.map((height, index) => (
+                {previewWaveformBars.map((height, index) => (
             <View 
               key={index} 
               style={[
@@ -420,10 +474,10 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 },
               ]} 
             />
-          ))}
-        </View>
+                ))}
+              </View>
         
-        <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
+              <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
         
         <TouchableOpacity 
           onPress={handleDiscardPreview}
@@ -431,7 +485,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           activeOpacity={0.7}
         >
           <Ionicons name="close" size={18} color={ERROR_RED} />
-        </TouchableOpacity>
+              </TouchableOpacity>
         
         <TouchableOpacity 
           onPress={handleSendPreview}
@@ -440,69 +494,19 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         >
           <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonInner}>
             <Ionicons name="send" size={18} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
     );
   }
 
-  // Handle press and hold
-  const handlePressIn = () => {
-    if (disabled || isRecording || showPreview) return;
-    
-    // Start recording after a very short delay (50ms) for instant feel
-    pressTimeoutRef.current = setTimeout(() => {
-      longPressActiveRef.current = true;
-      startRecording();
-    }, 50);
-  };
-
-  const handlePressOut = () => {
-    // Clear timeout if press was too short
-    if (pressTimeoutRef.current) {
-      clearTimeout(pressTimeoutRef.current);
-      pressTimeoutRef.current = null;
-      return;
-    }
-
-    // If recording, stop and send
-    if (isRecordingRef.current && recordingRef.current) {
-      longPressActiveRef.current = false;
-      stopRecording();
-    }
-  };
-
-  const handlePressCancel = () => {
-    // Cancel if recording hasn't started
-    if (pressTimeoutRef.current) {
-      clearTimeout(pressTimeoutRef.current);
-      pressTimeoutRef.current = null;
-    }
-    
-    // If already recording, cancel it
-    if (isRecordingRef.current && recordingRef.current) {
-      longPressActiveRef.current = false;
-      stopRecording();
-      onRecordingCancel?.();
-    }
-  };
-
   // Default: show mic button with press-and-hold
   return (
-    <Pressable
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      onLongPress={undefined} // We handle this manually
-      disabled={disabled || isRecording || showPreview}
-      style={({ pressed }) => [
-        styles.container,
-        pressed && styles.containerPressed,
-      ]}
-    >
+    <View style={styles.container} {...panResponder.panHandlers}>
       <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
         <Ionicons name="mic" size={20} color="#fff" />
       </LinearGradient>
-    </Pressable>
+    </View>
   );
 };
 
@@ -541,27 +545,35 @@ const styles = StyleSheet.create({
     minHeight: 50,
     borderWidth: 1.5,
     borderColor: 'rgba(139, 92, 246, 0.4)', // Purple border
-    gap: 10,
+    gap: 8,
   },
-  stopButton: {
+  cancelZoneActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)', // Red tint when in cancel zone
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+  },
+  recordingIndicator: {
     width: 28,
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stopButtonInner: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  recordingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: ERROR_RED,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  stopIcon: {
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    backgroundColor: '#fff',
+  releaseHintText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  cancelHintText: {
+    fontSize: 11,
+    color: ERROR_RED,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   waveformContainer: {
     flex: 1,
