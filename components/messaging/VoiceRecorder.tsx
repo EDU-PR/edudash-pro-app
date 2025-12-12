@@ -23,6 +23,8 @@ import {
   Dimensions,
   Pressable,
   PanResponder,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -222,7 +224,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     }
   };
 
-  const stopRecording = async (shouldSend: boolean = true) => {
+  const stopRecording = async (shouldSend: boolean = true, showPreviewMode: boolean = false) => {
     if (!isRecordingRef.current || !recordingRef.current) return;
     
     isRecordingRef.current = false;
@@ -252,6 +254,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         Vibration.vibrate([0, 50, 100]);
         onRecordingCancel?.();
         resetState();
+      } else if (showPreviewMode) {
+        // Show preview instead of sending immediately
+        Vibration.vibrate([0, 30, 50]);
+        setPreviewUri(uri);
+        setPreviewDuration(duration);
+        setShowPreview(true);
+        setIsRecording(false);
       } else {
         // Send immediately
         Vibration.vibrate([0, 30, 50, 30]);
@@ -399,9 +408,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         onPanResponderRelease: () => {
           if (!isRecording) return;
           
-          // Stop recording and send or cancel based on position
+          // Stop recording: if in cancel zone, cancel; otherwise show preview
           const shouldSend = !inCancelZone;
-          stopRecording(shouldSend);
+          stopRecording(shouldSend, shouldSend); // Show preview if not cancelling
         },
         
         onPanResponderTerminate: () => {
@@ -417,109 +426,184 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   // If recording, show enhanced recording modal UI with slide-to-cancel
   if (isRecording) {
     return (
-      <View style={styles.recordingModalOverlay}>
-        <Animated.View 
-          style={[
-            styles.recordingModal,
-            inCancelZone && styles.recordingModalCancel,
-            { transform: [{ translateY: slideY }] }
-          ]}
-          {...panResponder.panHandlers}
+      <>
+        {/* Hidden mic button placeholder to maintain layout */}
+        <View style={styles.container} pointerEvents="none">
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
+            <Ionicons name="mic" size={20} color="#fff" />
+          </LinearGradient>
+        </View>
+        {/* Modal overlay */}
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => stopRecording(false)}
         >
-          {/* Header */}
-          <View style={styles.recordingModalHeader}>
-            <Animated.View style={[styles.recordingIndicatorLarge, { transform: [{ scale: pulseAnim }] }]}>
-              <View style={styles.recordingDotLarge} />
-            </Animated.View>
-            <Text style={styles.recordingModalTitle}>
-              {inCancelZone ? 'Release to Cancel' : 'Recording'}
-            </Text>
-          </View>
-          
-          {/* Waveform */}
-          <View style={styles.waveformContainerLarge}>
-            {waveformAnims.map((anim, index) => (
-              <Animated.View
-                key={index}
+          <View style={styles.recordingModalOverlay} {...panResponder.panHandlers}>
+            <View style={styles.recordingModalOverlayContent}>
+              <Animated.View 
                 style={[
-                  styles.waveformBarLarge,
-                  {
-                    height: anim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [8, 60],
-                    }),
-                    backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
-                  },
+                  styles.recordingModal,
+                  inCancelZone && styles.recordingModalCancel,
+                  { transform: [{ translateY: slideY }] }
                 ]}
-              />
-            ))}
+              >
+                {/* Header */}
+                <View style={styles.recordingModalHeader}>
+                  <Animated.View style={[styles.recordingIndicatorLarge, { transform: [{ scale: pulseAnim }] }]}>
+                    <View style={styles.recordingDotLarge} />
+                  </Animated.View>
+                  <Text style={styles.recordingModalTitle}>
+                    {inCancelZone ? 'Release to Cancel' : 'Recording'}
+                  </Text>
+                </View>
+                
+                {/* Waveform */}
+                <View style={styles.waveformContainerLarge}>
+                  {waveformAnims.map((anim, index) => (
+                    <Animated.View
+                      key={index}
+                      style={[
+                        styles.waveformBarLarge,
+                        {
+                          height: anim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [8, 60],
+                          }),
+                          backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+                
+                {/* Duration */}
+                <Text style={styles.durationTextLarge}>{formatDuration(recordingDuration)}</Text>
+                
+                {/* Action Buttons */}
+                <View style={styles.recordingModalActions}>
+                  <TouchableOpacity
+                    onPress={() => stopRecording(false)}
+                    style={styles.recordingCancelButton}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close-circle" size={32} color={ERROR_RED} />
+                    <Text style={styles.recordingCancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={() => stopRecording(true, true)}
+                    style={styles.recordingStopButton}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.recordingStopButtonInner}>
+                      <Ionicons name="stop" size={24} color="#fff" />
+                    </View>
+                    <Text style={styles.recordingStopButtonText}>Stop</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Hint */}
+                <Text style={[styles.hintText, inCancelZone && styles.hintTextCancel]}>
+                  {inCancelZone ? '👆 Release to cancel recording' : '⬆️ Or slide up to cancel'}
+                </Text>
+              </Animated.View>
+            </View>
           </View>
-          
-          {/* Duration */}
-          <Text style={styles.durationTextLarge}>{formatDuration(recordingDuration)}</Text>
-          
-          {/* Hint */}
-          <Text style={[styles.hintText, inCancelZone && styles.hintTextCancel]}>
-            {inCancelZone ? '👆 Release to cancel recording' : '⬆️ Slide up to cancel'}
-          </Text>
-        </Animated.View>
-      </View>
+        </Modal>
+      </>
     );
   }
 
-  // If preview, show inline preview UI
+  // If preview, show modal preview UI
   if (showPreview) {
     return (
-      <View style={styles.inlinePreviewContainer}>
-        <TouchableOpacity 
-          onPress={handlePreviewPlayPause}
-          style={styles.playButton}
-          activeOpacity={0.8}
+      <>
+        {/* Hidden mic button placeholder to maintain layout */}
+        <View style={styles.container} pointerEvents="none">
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
+            <Ionicons name="mic" size={20} color="#fff" />
+          </LinearGradient>
+        </View>
+        {/* Preview Modal */}
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={handleDiscardPreview}
         >
-          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.playButtonInner}>
-            <Ionicons 
-              name={isPlayingPreview ? 'pause' : 'play'} 
-              size={16} 
-              color="#fff" 
-            />
-                </LinearGradient>
-              </TouchableOpacity>
-        
-        <View style={styles.previewWaveformContainer}>
-                {previewWaveformBars.map((height, index) => (
-            <View 
-              key={index} 
-              style={[
-                styles.previewBar, 
-                { 
-                  height: height * 24, 
-                  backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED,
-                },
-              ]} 
-            />
-                ))}
+          <View style={styles.recordingModalOverlay}>
+            <View style={styles.recordingModalOverlayContent}>
+              <View style={styles.previewModal}>
+                {/* Header */}
+                <Text style={styles.previewModalTitle}>Voice Preview</Text>
+                
+                {/* Waveform */}
+                <View style={styles.previewWaveformContainerLarge}>
+                  {previewWaveformBars.map((height, index) => (
+                    <View 
+                      key={index} 
+                      style={[
+                        styles.previewBarLarge, 
+                        { 
+                          height: height * 60,
+                          backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED,
+                        },
+                      ]} 
+                    />
+                  ))}
+                </View>
+                
+                {/* Duration */}
+                <Text style={styles.previewDurationLarge}>{formatDuration(previewDuration)}</Text>
+                
+                {/* Action Buttons */}
+                <View style={styles.previewModalActions}>
+                  <TouchableOpacity
+                    onPress={handleDiscardPreview}
+                    style={styles.previewActionButton}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close-circle" size={32} color={ERROR_RED} />
+                    <Text style={styles.previewActionButtonText}>Discard</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={handlePreviewPlayPause}
+                    style={styles.previewActionButton}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.previewPlayButtonInner}>
+                      <Ionicons 
+                        name={isPlayingPreview ? 'pause' : 'play'} 
+                        size={24} 
+                        color="#fff" 
+                      />
+                    </LinearGradient>
+                    <Text style={styles.previewActionButtonText}>
+                      {isPlayingPreview ? 'Pause' : 'Play'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={handleSendPreview}
+                    style={styles.previewActionButton}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.previewSendButtonInner}>
+                      <Ionicons name="send" size={24} color="#fff" />
+                    </LinearGradient>
+                    <Text style={styles.previewActionButtonText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-        
-              <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
-        
-        <TouchableOpacity 
-          onPress={handleDiscardPreview}
-          style={styles.discardButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close" size={18} color={ERROR_RED} />
-              </TouchableOpacity>
-        
-        <TouchableOpacity 
-          onPress={handleSendPreview}
-          style={styles.sendButton}
-          activeOpacity={0.8}
-        >
-          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonInner}>
-            <Ionicons name="send" size={18} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
             </View>
+          </View>
+        </Modal>
+      </>
     );
   }
 
@@ -623,15 +707,17 @@ const styles = StyleSheet.create({
   },
   // Enhanced recording modal styles
   recordingModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingModalOverlayContent: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   recordingModal: {
     backgroundColor: '#1e293b',
@@ -702,6 +788,122 @@ const styles = StyleSheet.create({
   hintTextCancel: {
     color: ERROR_RED,
     fontWeight: '600',
+  },
+  recordingModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 32,
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  recordingCancelButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  recordingCancelButtonText: {
+    fontSize: 12,
+    color: ERROR_RED,
+    fontWeight: '600',
+  },
+  recordingStopButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  recordingStopButtonInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: ERROR_RED,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: ERROR_RED,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  recordingStopButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  previewModal: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 320,
+    maxWidth: 360,
+    borderWidth: 2,
+    borderColor: PURPLE_PRIMARY,
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  previewModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 24,
+  },
+  previewWaveformContainerLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 80,
+    gap: 4,
+    paddingHorizontal: 8,
+    marginBottom: 20,
+  },
+  previewBarLarge: {
+    width: 4,
+    borderRadius: 2,
+    minHeight: 8,
+  },
+  previewDurationLarge: {
+    fontSize: 32,
+    color: '#fff',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  previewModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    width: '100%',
+  },
+  previewActionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  previewActionButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  previewPlayButtonInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewSendButtonInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Inline preview UI
   inlinePreviewContainer: {

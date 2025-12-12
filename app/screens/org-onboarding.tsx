@@ -163,9 +163,21 @@ export default function OrgOnboardingScreen() {
   }, [canCreate, creating, orgName, orgKind, phone, refreshProfile]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <Stack.Screen options={{ title: 'Organization Onboarding', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <Stack.Screen 
+        options={{ 
+          title: 'Organization Onboarding', 
+          headerShown: true,
+          headerStyle: { backgroundColor: '#0b1220' },
+          headerTitleStyle: { color: '#fff' },
+          headerTintColor: '#00f5ff',
+          headerBackTitleVisible: false,
+        }} 
+      />
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.heading}>
           {step === 'account_creation' ? 'Create Your Account' : `Welcome, ${adminName || profile?.first_name || 'Admin'}`}
         </Text>

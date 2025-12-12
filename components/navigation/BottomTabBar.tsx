@@ -179,6 +179,10 @@ export function BottomTabBar() {
     pathname.includes('/register') ||
     pathname.includes('/landing') ||
     pathname.includes('/onboarding') ||
+    pathname.includes('org-onboarding') ||
+    pathname.includes('principal-onboarding') ||
+    pathname.includes('school-registration') ||
+    pathname.includes('parent-child-registration') ||
     pathname.includes('/auth-callback') ||
     pathname.includes('/invite/') ||
     pathname.includes('/parent-message-thread') ||
