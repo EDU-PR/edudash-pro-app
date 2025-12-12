@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 
@@ -216,7 +216,7 @@ export default function ParentChildrenScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <RoleBasedHeader title="My Children" showBackButton={true} onBackPress={handleBackPress} />
+        <ScreenHeader title="My Children" showBackButton={true} onBackPress={handleBackPress} />
         <View style={[styles.section, { justifyContent: 'center', flex: 1 }]}>
           <Text style={{ color: theme.text, textAlign: 'center' }}>Loading...</Text>
         </View>
@@ -226,7 +226,7 @@ export default function ParentChildrenScreen() {
 
   return (
     <View style={styles.container}>
-      <RoleBasedHeader title="My Children" showBackButton={true} onBackPress={handleBackPress} />
+      <ScreenHeader title="My Children" showBackButton={true} onBackPress={handleBackPress} />
       
       <ScrollView
         style={styles.content}

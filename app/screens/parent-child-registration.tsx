@@ -156,6 +156,20 @@ export default function ParentChildRegistrationScreen() {
 
   const onSubmit = async () => {
     if (!validate()) return;
+    
+    // Validate profile exists
+    if (!profile?.id) {
+      Alert.alert('Profile Missing', 'We could not determine your user profile. Please try logging out and back in.');
+      return;
+    }
+    
+    // Validate organization selected
+    if (!selectedOrganizationId) {
+      Alert.alert('School Required', 'Please select a school for registration.');
+      setErrors(prev => ({ ...prev, organization: 'Please select an organization' }));
+      return;
+    }
+    
     setLoading(true);
     try {
       const relationshipNote = emergencyRelation ? `[EmergencyRelationship: ${emergencyRelation.trim()}]` : '';
@@ -172,25 +186,125 @@ export default function ParentChildRegistrationScreen() {
         emergency_contact_name: emergencyName || null,
         emergency_contact_phone: emergencyPhone ? formatPhoneNumber(emergencyPhone) : null,
         notes: combinedNotes || null,
-        parent_id: profile?.id,
-        preschool_id: selectedOrganizationId!,
+        parent_id: profile.id,
+        preschool_id: selectedOrganizationId,
         status: 'pending',
-      } as const;
+      };
+      
+      console.log('[Child Registration] Submitting payload:', {
+        ...payload,
+        parent_id: profile.id,
+        preschool_id: selectedOrganizationId,
+      });
 
-      const { error } = await assertSupabase().from('child_registration_requests').insert(payload as any);
-      if (error) {
+      const response = await assertSupabase().from('child_registration_requests').insert(payload as any).select();
+      
+      // Log full response for debugging
+      console.log('[Child Registration] Full response:', {
+        hasData: !!response.data,
+        dataLength: response.data?.length,
+        hasError: !!response.error,
+        error: response.error,
+        errorType: typeof response.error,
+        errorKeys: response.error ? Object.keys(response.error) : [],
+        status: (response.error as any)?.status || (response.error as any)?.statusCode,
+      });
+      
+      // Check if we got data (successful insert)
+      if (response.data && response.data.length > 0) {
+        console.log('[Child Registration] Insert successful:', response.data);
+        // Success - show alert and reset form (continues below)
+      } else if (response.error) {
+        // Handle error
+        const error = response.error;
+        const errorKeys = Object.keys(error || {});
+        const statusCode = (error as any)?.status || (error as any)?.statusCode || (error as any)?.code;
+        
+        // Check for 404 - table doesn't exist or not exposed via API
+        if (statusCode === 404 || statusCode === 'PGRST116' || errorKeys.length === 0) {
+          console.error('[Child Registration] 404 error - table not found or not exposed via API');
+          Alert.alert(
+            'System Error',
+            `The registration system is currently unavailable. The required database table is not accessible.\n\nThis is a technical issue. Please:\n1. Try again in a few moments\n2. Contact support if the problem persists\n\nError: Table 'child_registration_requests' not found (404)`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // If error object is empty or has no useful properties, it's likely an RLS violation
+        if (errorKeys.length === 0 || (!error.code && !error.message)) {
+          console.error('[Child Registration] Empty error object - likely RLS policy violation');
+          Alert.alert(
+            'Permission Denied',
+            `You don't have permission to register a child at this school. This could be because:\n\n1. Your account isn't properly linked to this school\n2. The selected school is not active\n3. There's a permission issue with your account\n\nPlease try selecting a different school or contact support if this persists.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // Extract error properties
+        const errorCode = (error as any)?.code || (error as any)?.error?.code || (error as any)?.statusCode;
+        const errorMessage = (error as any)?.message || (error as any)?.error?.message || (error as any)?.msg || String(error);
+        const errorDetails = (error as any)?.details || (error as any)?.error?.details;
+        const errorHint = (error as any)?.hint || (error as any)?.error?.hint;
+        
+        console.error('[Child Registration] Insert error:', {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+          hint: errorHint,
+          payload: payload,
+        });
+        
         // Check for duplicate/conflict error (409 Conflict or unique constraint violation)
-        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique') || error.message?.includes('409')) {
+        if (errorCode === '23505' || errorMessage?.includes('duplicate') || errorMessage?.includes('unique') || errorMessage?.includes('409')) {
           Alert.alert(
             'Duplicate Registration',
             `You have already submitted a registration request for ${firstName} ${lastName} at this school.\n\nPlease wait for the school to review your existing request, or contact the school if you need to update the information.`,
             [{ text: 'OK' }]
           );
-          return; // Don't throw, just return
+          return;
         }
-        throw error;
+        
+        // Check for RLS policy violation
+        if (errorCode === '42501' || errorMessage?.toLowerCase().includes('permission denied') || errorMessage?.toLowerCase().includes('policy') || errorMessage?.toLowerCase().includes('row-level security')) {
+          Alert.alert(
+            'Permission Denied',
+            `You don't have permission to register a child at this school. Please ensure you're logged in correctly and the school selection is valid.\n\nError: ${errorMessage}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // Check for foreign key violation (invalid preschool_id)
+        if (errorCode === '23503' || errorMessage?.toLowerCase().includes('foreign key')) {
+          Alert.alert(
+            'Invalid School',
+            `The selected school is not valid. Please select a different school or contact support.\n\nError: ${errorMessage}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // Generic error
+        Alert.alert(
+          'Submission Failed',
+          errorMessage || errorDetails || errorHint || 'Unable to submit registration. Please try again or contact support.',
+          [{ text: 'OK' }]
+        );
+        return;
+      } else {
+        // No data and no error - this shouldn't happen
+        console.error('[Child Registration] No data and no error - unexpected response');
+        Alert.alert(
+          'Submission Failed',
+          'The registration request could not be submitted. Please try again or contact support.',
+          [{ text: 'OK' }]
+        );
+        return;
       }
-
+      
+      // Success - show alert and reset form (only reaches here if data exists)
       Alert.alert(
         'Submitted Successfully',
         'Your registration request has been sent to the school. You will be notified once it is reviewed.',
@@ -215,7 +329,9 @@ export default function ParentChildRegistrationScreen() {
       setSelectedOrganizationId(null);
       setErrors({});
     } catch (e: any) {
-      Alert.alert('Submission failed', e?.message || 'Please try again');
+      console.error('[Child Registration] Submission error:', e);
+      const errorMessage = e?.message || e?.toString() || 'Please try again';
+      Alert.alert('Submission failed', errorMessage);
     } finally {
       setLoading(false);
     }
