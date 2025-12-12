@@ -5,9 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 
 // RevenueCat Configuration
 export const REVENUECAT_CONFIG = {
-  // Replace these with your actual RevenueCat API keys
-  API_KEY_IOS: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS || '',
-  API_KEY_ANDROID: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID || '',
+  // RevenueCat Public SDK Keys (safe to expose client-side)
+  // Get from RevenueCat Dashboard → Project Settings → API Keys
+  API_KEY_IOS: process.env.EXPO_PUBLIC_REVENUECAT_IOS_SDK_KEY || '',
+  API_KEY_ANDROID: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_SDK_KEY || '',
   
   // Product IDs - these should match your App Store/Play Store product IDs
   PRODUCT_IDS: {
