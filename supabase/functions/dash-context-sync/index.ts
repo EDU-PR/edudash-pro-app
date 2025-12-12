@@ -15,6 +15,8 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Always return 200 OK (best-effort operation) - errors are logged server-side only
+  // This prevents client-side warning spam for expected failures
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
@@ -32,8 +34,10 @@ serve(async (req) => {
       error: authError,
     } = await supabase.auth.getUser()
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
+      // Log server-side but return 200 (best-effort)
+      console.warn('[dash-context-sync] Unauthorized access attempt')
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized', silent: true }), {
+        status: 200, // Always 200 for best-effort operations
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       })
     }
@@ -46,9 +50,10 @@ serve(async (req) => {
       .maybeSingle()
 
     if (profileErr) {
+      // Log server-side but return 200 (best-effort)
       console.error('[dash-context-sync] Profile fetch error:', profileErr)
-      return new Response(JSON.stringify({ error: 'Failed to fetch profile' }), {
-        status: 500,
+      return new Response(JSON.stringify({ success: false, error: 'Failed to fetch profile', silent: true }), {
+        status: 200, // Always 200 for best-effort operations
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       })
     }
@@ -86,8 +91,12 @@ serve(async (req) => {
     )
 
     if (upsertErr) {
+      // Log server-side but return 200 (best-effort) - don't throw
       console.error('[dash-context-sync] Upsert error:', upsertErr)
-      throw upsertErr
+      return new Response(JSON.stringify({ success: false, error: 'Failed to sync context', silent: true }), {
+        status: 200, // Always 200 for best-effort operations
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      })
     }
 
     // Optional: track instance heartbeat (only if user has organization and session_id)
@@ -109,9 +118,11 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     })
   } catch (e) {
-    console.error('dash-context-sync error:', e)
-    return new Response(JSON.stringify({ error: 'Server error' }), {
-      status: 500,
+    // Log server-side but always return 200 (best-effort operation)
+    // This prevents client-side warning spam for transient errors
+    console.error('[dash-context-sync] Unexpected error:', e)
+    return new Response(JSON.stringify({ success: false, error: 'Server error', silent: true }), {
+      status: 200, // Always 200 for best-effort operations
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     })
   }

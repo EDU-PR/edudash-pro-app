@@ -68,6 +68,14 @@ const nextConfig: NextConfig = {
       { source: '/manifest.json', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
       { source: '/sw.js', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
       { source: '/api/manifest', headers: [{ key: 'X-Robots-Tag', value: 'none' }] },
+      // Digital Asset Links for Android App Links verification
+      {
+        source: '/.well-known/assetlinks.json',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+        ],
+      },
       // Static assets cache - only cache truly static files for 1 year
       {
         source: '/_next/static/:path*',
