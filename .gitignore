@@ -53,6 +53,7 @@ edudashpro-dev/
 *.md
 !README.md
 !supabase/README.md
+!PAYMENT_INTEGRATIONS_CHECKLIST.md
 
 # Build artifacts
 *.apk

@@ -1,7 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": false,
+    "strict": true,
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -68,6 +68,11 @@
     "components/ai/**/*",
     "components/ui/HolographicOrb.tsx",
     "lib/voice/**/*",
-    "services/dash-ai/**/*"
+    "services/**/*",
+    "lib/**/*",
+    "hooks/**/*",
+    "contexts/**/*",
+    "utils/**/*",
+    "app/**/*"
   ]
 }

@@ -3,6 +3,10 @@
  * Required for Daily.co SDK which uses Promise.any
  */
 
+// Get global object (works in React Native, Node, and browsers)
+declare const global: any;
+const globalThis_ = typeof globalThis !== 'undefined' ? globalThis : typeof global !== 'undefined' ? global : typeof window !== 'undefined' ? window : ({} as any);
+
 // Polyfill Promise.any if not available
 if (!Promise.any) {
   (Promise as any).any = function (promises: Promise<any>[]) {
@@ -11,7 +15,7 @@ if (!Promise.any) {
       let remaining = promises.length;
 
       if (remaining === 0) {
-        const AggregateError = (global as any).AggregateError || Error;
+        const AggregateError = (globalThis_ as any).AggregateError || Error;
         reject(new AggregateError([], 'All promises were rejected'));
         return;
       }
@@ -23,7 +27,7 @@ if (!Promise.any) {
             errors[index] = error;
             remaining--;
             if (remaining === 0) {
-              const AggregateError = (global as any).AggregateError || Error;
+              const AggregateError = (globalThis_ as any).AggregateError || Error;
               reject(new AggregateError(errors, 'All promises were rejected'));
             }
           }
@@ -31,12 +35,12 @@ if (!Promise.any) {
       });
     });
   };
-  console.log('[Polyfill] Promise.any added');
+  if (__DEV__) console.log('[Polyfill] Promise.any added');
 }
 
 // Polyfill AggregateError if not available
-if (typeof (global as any).AggregateError === 'undefined') {
-  (global as any).AggregateError = class AggregateError extends Error {
+if (typeof (globalThis_ as any).AggregateError === 'undefined') {
+  (globalThis_ as any).AggregateError = class AggregateError extends Error {
     errors: any[];
     constructor(errors: any[], message: string) {
       super(message);
@@ -44,7 +48,7 @@ if (typeof (global as any).AggregateError === 'undefined') {
       this.errors = errors;
     }
   };
-  console.log('[Polyfill] AggregateError added');
+  if (__DEV__) console.log('[Polyfill] AggregateError added');
 }
 
 // Polyfill Promise.allSettled if not available
@@ -59,5 +63,5 @@ if (!Promise.allSettled) {
       )
     );
   };
-  console.log('[Polyfill] Promise.allSettled added');
+  if (__DEV__) console.log('[Polyfill] Promise.allSettled added');
 }
