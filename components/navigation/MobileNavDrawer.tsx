@@ -72,6 +72,19 @@ const getDefaultNavItems = (role: string): NavItem[] => {
         { id: 'reports', label: 'Reports', icon: 'analytics', route: '/screens/teacher-reports' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
       ];
+    case 'admin':
+      return [
+        { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/org-admin-dashboard' },
+        { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/org-admin/programs' },
+        { id: 'cohorts', label: 'Cohorts', icon: 'people', route: '/screens/org-admin/cohorts' },
+        { id: 'instructors', label: 'Team', icon: 'briefcase', route: '/screens/org-admin/instructors' },
+        { id: 'enrollments', label: 'Enrollments', icon: 'list', route: '/screens/org-admin/enrollments' },
+        { id: 'certifications', label: 'Certifications', icon: 'ribbon', route: '/screens/org-admin/certifications' },
+        { id: 'placements', label: 'Placements', icon: 'business', route: '/screens/org-admin/placements' },
+        { id: 'invoices', label: 'Invoices', icon: 'document-text', route: '/screens/org-admin/invoices' },
+        { id: 'data-import', label: 'Data Import', icon: 'cloud-upload', route: '/screens/org-admin/data-import' },
+        { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/org-admin/settings' },
+      ];
     default:
       return [
         { id: 'home', label: 'Home', icon: 'home', route: '/' },

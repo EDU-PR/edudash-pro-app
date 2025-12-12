@@ -122,6 +122,7 @@ export default function OrgAdminDashboard() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Stack.Screen 
         options={{ 
+          headerShown: true,
           title: t('org_admin.title', { defaultValue: 'Organization Admin' }),
           headerStyle: { backgroundColor: theme.background },
           headerTitleStyle: { color: theme.text },

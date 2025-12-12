@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,10 +41,21 @@ export default function ProgramsScreen() {
       />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Training Programs</Text>
-          <Text style={styles.subtitle}>
-            Manage programs, learnerships, and courses
-          </Text>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.title}>Training Programs</Text>
+              <Text style={styles.subtitle}>
+                Manage programs, learnerships, and courses
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.createButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.push('/screens/org-admin/create-program' as any)}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.createButtonText}>Create</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {isLoading ? (
@@ -190,6 +201,25 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   header: {
     marginBottom: 8,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   title: {
     color: theme.text,
