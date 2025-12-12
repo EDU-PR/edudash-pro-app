@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,19 +31,36 @@ export default function EnrollmentsScreen() {
           </Text>
         </View>
 
-        <View style={styles.actionCard}>
-          <Ionicons name="mail-outline" size={32} color={theme.primary} />
-          <Text style={styles.cardTitle}>Invite Learners</Text>
-          <Text style={styles.cardText}>
-            Send enrollment invitations to students/learners. They'll receive an email with instructions to join a specific program or learnership.
-          </Text>
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: theme.primary }]}
-            onPress={() => setInviteModalVisible(true)}
-          >
-            <Ionicons name="person-add" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.buttonText}>Send Enrollment Invites</Text>
-          </TouchableOpacity>
+        <View style={styles.actionsRow}>
+          <View style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="person-add-outline" size={32} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Manual Enrollment</Text>
+            <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+              Manually enroll a student by entering their details directly
+            </Text>
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => router.push('/screens/org-admin/manual-enrollment' as any)}
+            >
+              <Ionicons name="create-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.buttonText}>Enroll Manually</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="mail-outline" size={32} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Invite Learners</Text>
+            <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+              Send enrollment invitations via email. Learners will register themselves.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => setInviteModalVisible(true)}
+            >
+              <Ionicons name="mail" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.buttonText}>Send Invites</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.infoCard}>
@@ -92,12 +109,13 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     fontSize: 14,
   },
+  actionsRow: {
+    gap: 16,
+  },
   actionCard: {
-    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: theme.border,
     gap: 12,
     alignItems: 'center',
   },

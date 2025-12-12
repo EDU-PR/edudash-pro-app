@@ -146,7 +146,12 @@ export function EnrollmentInviteModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content}>
+          <ScrollView 
+            style={styles.content}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.text }]}>
                 Select Program / Learnership
@@ -252,7 +257,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    maxHeight: '90%',
+    maxHeight: '85%',
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',

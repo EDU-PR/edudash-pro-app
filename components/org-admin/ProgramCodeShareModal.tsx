@@ -52,11 +52,15 @@ export function ProgramCodeShareModal({
       const code = program.course_code || generateProgramCode(program.id);
       setProgramCode(code);
 
-      // Create registration link
+      // Create registration link with all program details encoded
       const appUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
       const orgSlug = organization?.slug || organization?.id;
-      const link = `${appUrl}/register?org=${orgSlug}&code=${code}&program=${program.id}`;
+      
+      // Include program info in the link for pre-filling registration
+      const link = `${appUrl}/register?org=${orgSlug}&code=${code}&program=${program.id}&name=${encodeURIComponent(program.title)}`;
       setRegisterLink(link);
+      
+      // QR code contains the full registration link
       setQrCodeValue(link);
     }
   }, [visible, program, organization]);
@@ -134,7 +138,12 @@ export function ProgramCodeShareModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.content} 
+            contentContainerStyle={{ paddingBottom: 20 }}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
             {/* Program Code */}
             <View style={[styles.section, { backgroundColor: theme.background }]}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -346,9 +355,32 @@ const styles = StyleSheet.create({
   },
   qrContainer: {
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     backgroundColor: 'white',
     borderRadius: 12,
+    gap: 16,
+  },
+  qrInfoBox: {
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    width: '100%',
+  },
+  qrProgramName: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  qrProgramCode: {
+    fontSize: 13,
+    fontFamily: 'monospace',
+    marginTop: 4,
+  },
+  qrOrgName: {
+    fontSize: 12,
+    marginTop: 2,
   },
   button: {
     flexDirection: 'row',

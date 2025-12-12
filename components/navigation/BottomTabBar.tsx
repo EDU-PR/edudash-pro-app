@@ -135,9 +135,9 @@ const TAB_ITEMS: TabItem[] = [
   },
   { 
     id: 'org-admin-enrollments', 
-    label: 'Enrollments',
-    icon: 'list-outline', 
-    activeIcon: 'list', 
+    label: 'Enroll',
+    icon: 'person-add-outline', 
+    activeIcon: 'person-add', 
     route: '/screens/org-admin/enrollments', 
     roles: ['admin'] 
   },

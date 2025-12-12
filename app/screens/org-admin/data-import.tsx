@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -217,6 +217,21 @@ learner2@example.com,program-uuid-here,2025-01-01,active`,
         )}
 
         <View style={styles.section}>
+          <View style={[styles.importCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Ionicons name="document-text-outline" size={32} color={theme.primary} />
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Bulk CV Import</Text>
+            <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+              Process hundreds of CVs/applications at once. Perfect for large recruitment drives.
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => router.push('/screens/org-admin/bulk-cv-import' as any)}
+            >
+              <Ionicons name="document" size={20} color="#fff" />
+              <Text style={styles.buttonText}>Import CVs</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={[styles.importCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Ionicons name="people-outline" size={32} color={theme.primary} />
             <Text style={[styles.cardTitle, { color: theme.text }]}>Import Learners</Text>
