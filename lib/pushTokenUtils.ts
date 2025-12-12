@@ -13,14 +13,14 @@ import { assertSupabase } from './supabase';
  */
 export async function deactivateCurrentUserTokens(userId: string): Promise<void> {
   try {
-    console.log('[PushTokenUtils] Deactivating tokens for user:', userId);
+    if (__DEV__) console.log('[PushTokenUtils] Deactivating tokens for user:', userId);
     
     // Get device installation ID
     const Constants = require('expo-constants').default;
     const installationId = Constants.deviceId || Constants.sessionId;
     
     if (!installationId) {
-      console.warn('[PushTokenUtils] No installation ID, skipping token deactivation');
+      if (__DEV__) console.warn('[PushTokenUtils] No installation ID, skipping token deactivation');
       return;
     }
     
@@ -37,7 +37,7 @@ export async function deactivateCurrentUserTokens(userId: string): Promise<void>
     if (error) {
       console.error('[PushTokenUtils] Failed to deactivate tokens:', error);
     } else {
-      console.log('[PushTokenUtils] Tokens deactivated successfully');
+      if (__DEV__) console.log('[PushTokenUtils] Tokens deactivated successfully');
     }
   } catch (error) {
     console.error('[PushTokenUtils] Error deactivating tokens:', error);
@@ -50,14 +50,14 @@ export async function deactivateCurrentUserTokens(userId: string): Promise<void>
  */
 export async function reactivateUserTokens(userId: string): Promise<void> {
   try {
-    console.log('[PushTokenUtils] Reactivating tokens for user:', userId);
+    if (__DEV__) console.log('[PushTokenUtils] Reactivating tokens for user:', userId);
     
     // Get device installation ID
     const Constants = require('expo-constants').default;
     const installationId = Constants.deviceId || Constants.sessionId;
     
     if (!installationId) {
-      console.warn('[PushTokenUtils] No installation ID, skipping token reactivation');
+      if (__DEV__) console.warn('[PushTokenUtils] No installation ID, skipping token reactivation');
       return;
     }
     
@@ -82,7 +82,7 @@ export async function reactivateUserTokens(userId: string): Promise<void> {
     if (error) {
       console.error('[PushTokenUtils] Failed to reactivate tokens:', error);
     } else {
-      console.log('[PushTokenUtils] Tokens reactivated successfully');
+      if (__DEV__) console.log('[PushTokenUtils] Tokens reactivated successfully');
     }
   } catch (error) {
     console.error('[PushTokenUtils] Error reactivating tokens:', error);
