@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "EduDashPro",
-    "slug": "mark-1",
-    "owner": "dashpro",
+    "slug": "comedudashproapp",
+    "owner": "dash-ts-organization",
     "version": "1.0.11",
     "runtimeVersion": "1.0.11",
     "orientation": "portrait",
@@ -195,7 +195,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "c6933bb8-6f4d-4440-b223-0fb7e450d915"
+        "projectId": "ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
       },
       "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",
@@ -203,7 +203,7 @@
       "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
     },
     "updates": {
-      "url": "https://u.expo.dev/c6933bb8-6f4d-4440-b223-0fb7e450d915"
+      "url": "https://u.expo.dev/ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
     }
   }
 }

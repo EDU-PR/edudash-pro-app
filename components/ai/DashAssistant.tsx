@@ -211,8 +211,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <KeyboardAvoidingView 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        enabled={true}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         

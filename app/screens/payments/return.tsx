@@ -118,17 +118,22 @@ export default function PaymentReturnScreen() {
 
   const handleContinue = () => {
     if (paymentStatus === 'success') {
-      // Navigate to appropriate screen based on subscription scope
-      if (profile?.organization_id && subscription) {
+      // Navigate to appropriate screen based on user role and subscription scope
+      const isParent = profile?.role === 'parent';
+      
+      if (isParent) {
+        // Parent subscription - always go to parent dashboard
+        router.push('/dashboard/parent' as any);
+      } else if (profile?.organization_id && subscription) {
         // School subscription - go to seat management
         router.push('/screens/principal-seat-management');
       } else {
-        // User subscription - go to dashboard or benefits screen
+        // User subscription - go to dashboard
         router.push('/');
       }
     } else {
       // Go back to pricing
-      router.push('/marketing/pricing');
+      router.push('/marketing/pricing' as any);
     }
   };
 

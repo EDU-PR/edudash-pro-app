@@ -326,7 +326,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ msg, isOwn, on
     return (
       <VoiceMessageBubble
         audioUrl={msg.voice_url}
-        duration={msg.voice_duration || getVoiceNoteDuration(msg.content)}
+        duration={
+          msg.voice_duration 
+            ? (msg.voice_duration < 1000 ? msg.voice_duration * 1000 : msg.voice_duration) // Convert seconds to ms if needed
+            : getVoiceNoteDuration(msg.content)
+        }
         isOwnMessage={isOwn}
         timestamp={formatTime(msg.created_at)}
         senderName={!isOwn ? name : undefined}

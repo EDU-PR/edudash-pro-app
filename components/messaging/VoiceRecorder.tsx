@@ -145,7 +145,9 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             });
           }
         } catch (error) {
-          console.warn('[VoiceRecorder] Permission check failed:', error);
+          if (__DEV__) {
+            console.warn('[VoiceRecorder] Permission check failed:', error);
+          }
         }
       }
     };
@@ -209,10 +211,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       }, 100);
       
     } catch (error) {
-      console.error('[VoiceRecorder] Start error:', error);
+      if (__DEV__) {
+        console.error('[VoiceRecorder] Start error:', error);
+      }
       isRecordingRef.current = false;
       recordingRef.current = null;
       setIsRecording(false);
+      // Reset state on error
+      resetState();
     }
   };
 
@@ -253,9 +259,13 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         resetState();
       }
     } catch (error) {
-      console.error('[VoiceRecorder] Stop error:', error);
+      if (__DEV__) {
+        console.error('[VoiceRecorder] Stop error:', error);
+      }
       recordingRef.current = null;
       resetState();
+      // Notify cancellation on error
+      onRecordingCancel?.();
     }
   };
 
@@ -309,7 +319,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         setIsPlayingPreview(true);
       }
     } catch (error) {
-      console.error('[VoiceRecorder] Playback error:', error);
+      if (__DEV__) {
+        console.error('[VoiceRecorder] Playback error:', error);
+      }
+      // Reset playback state on error
+      setIsPlayingPreview(false);
+      setPreviewProgress(0);
     }
   };
 
@@ -399,48 +414,56 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     [disabled, isRecording, showPreview, inCancelZone]
   );
 
-  // If recording, show inline recording UI with slide-to-cancel
+  // If recording, show enhanced recording modal UI with slide-to-cancel
   if (isRecording) {
     return (
-      <Animated.View 
-        style={[
-          styles.inlineRecordingContainer,
-          inCancelZone && styles.cancelZoneActive,
-          { transform: [{ translateY: slideY }] }
-        ]}
-        {...panResponder.panHandlers}
-      >
-        <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
-          <View style={styles.recordingDot} />
+      <View style={styles.recordingModalOverlay}>
+        <Animated.View 
+          style={[
+            styles.recordingModal,
+            inCancelZone && styles.recordingModalCancel,
+            { transform: [{ translateY: slideY }] }
+          ]}
+          {...panResponder.panHandlers}
+        >
+          {/* Header */}
+          <View style={styles.recordingModalHeader}>
+            <Animated.View style={[styles.recordingIndicatorLarge, { transform: [{ scale: pulseAnim }] }]}>
+              <View style={styles.recordingDotLarge} />
+            </Animated.View>
+            <Text style={styles.recordingModalTitle}>
+              {inCancelZone ? 'Release to Cancel' : 'Recording'}
+            </Text>
+          </View>
+          
+          {/* Waveform */}
+          <View style={styles.waveformContainerLarge}>
+            {waveformAnims.map((anim, index) => (
+              <Animated.View
+                key={index}
+                style={[
+                  styles.waveformBarLarge,
+                  {
+                    height: anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [8, 60],
+                    }),
+                    backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          
+          {/* Duration */}
+          <Text style={styles.durationTextLarge}>{formatDuration(recordingDuration)}</Text>
+          
+          {/* Hint */}
+          <Text style={[styles.hintText, inCancelZone && styles.hintTextCancel]}>
+            {inCancelZone ? '👆 Release to cancel recording' : '⬆️ Slide up to cancel'}
+          </Text>
         </Animated.View>
-        
-        <View style={styles.waveformContainer}>
-          {waveformAnims.map((anim, index) => (
-            <Animated.View
-              key={index}
-              style={[
-                styles.waveformBar,
-                {
-                  height: anim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [3, 26],
-                  }),
-                  backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
-                },
-              ]}
-            />
-          ))}
-        </View>
-        
-        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-        
-        {inCancelZone && (
-          <Text style={styles.cancelHintText}>Release to cancel</Text>
-        )}
-        {!inCancelZone && (
-          <Text style={styles.releaseHintText}>↑ Slide to cancel</Text>
-        )}
-      </Animated.View>
+      </View>
     );
   }
 
@@ -597,6 +620,88 @@ const styles = StyleSheet.create({
     minWidth: 42,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  // Enhanced recording modal styles
+  recordingModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  recordingModal: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 280,
+    maxWidth: 320,
+    borderWidth: 2,
+    borderColor: PURPLE_PRIMARY,
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  recordingModalCancel: {
+    borderColor: ERROR_RED,
+    shadowColor: ERROR_RED,
+  },
+  recordingModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  recordingIndicatorLarge: {
+    marginBottom: 16,
+  },
+  recordingDotLarge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: ERROR_RED,
+  },
+  recordingModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  waveformContainerLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 80,
+    gap: 4,
+    paddingHorizontal: 8,
+    marginBottom: 20,
+  },
+  waveformBarLarge: {
+    width: 4,
+    borderRadius: 2,
+    minHeight: 8,
+  },
+  durationTextLarge: {
+    fontSize: 32,
+    color: '#fff',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  hintText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  hintTextCancel: {
+    color: ERROR_RED,
+    fontWeight: '600',
   },
   // Inline preview UI
   inlinePreviewContainer: {

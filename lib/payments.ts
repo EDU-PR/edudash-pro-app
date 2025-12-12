@@ -12,6 +12,7 @@ export type CheckoutInput = {
   seats?: number
   return_url?: string
   cancel_url?: string
+  email_address?: string
 }
 
 /**

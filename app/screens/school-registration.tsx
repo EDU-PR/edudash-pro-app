@@ -100,7 +100,7 @@ export default function SchoolRegistrationScreen() {
           }
         }
       } catch (e) {
-        console.debug('Failed to load saved registration data', e);
+        if (__DEV__) console.debug('Failed to load saved registration data', e);
       }
     };
     loadSavedData();
@@ -115,7 +115,7 @@ export default function SchoolRegistrationScreen() {
         await AsyncStorage.setItem('school_registration_data', JSON.stringify(updatedData));
       }
     } catch (e) {
-      console.debug('Failed to save registration data', e);
+      if (__DEV__) console.debug('Failed to save registration data', e);
     }
   };
 
@@ -255,16 +255,48 @@ export default function SchoolRegistrationScreen() {
       );
 
     } catch (error: any) {
-      console.error('Registration failed:', error);
+      if (__DEV__) {
+        console.error('Registration failed:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+      }
+      
+      // Extract error details for better user feedback
+      const errorCode = error.code;
+      const errorMessage = error.message || 'Failed to register school. Please try again.';
+      const errorDetails = error.details;
+      const errorHint = error.hint;
+      
+      let userMessage = errorMessage;
+      
+      // Handle specific error cases
+      if (errorCode === '23505' || errorMessage?.includes('duplicate') || errorMessage?.includes('already exists')) {
+        userMessage = 'A school with this name or email already exists. Please use a different name or contact support if you believe this is an error.';
+      } else if (errorCode === '42501' || errorMessage?.includes('permission denied') || errorMessage?.includes('row-level security')) {
+        userMessage = 'Permission denied. Please ensure you are logged in and have the necessary permissions to register a school.';
+      } else if (errorCode === '23503' || errorMessage?.includes('foreign key')) {
+        userMessage = 'Invalid data provided. Please check your information and try again.';
+      } else if (errorCode === 'PGRST116' || errorMessage?.includes('relation') && errorMessage?.includes('does not exist')) {
+        userMessage = 'System error: Registration service is unavailable. Please contact support.';
+      } else if (errorDetails) {
+        userMessage = `${errorMessage}\n\nDetails: ${errorDetails}`;
+      } else if (errorHint) {
+        userMessage = `${errorMessage}\n\nHint: ${errorHint}`;
+      }
       
       Alert.alert(
         'Registration Failed',
-        error.message || 'Failed to register school. Please try again.',
+        userMessage,
         [{ text: 'OK' }]
       );
       
       track('school_registration_failed', {
-        error: error.message,
+        error: errorMessage,
+        error_code: errorCode,
         school_type: formData.schoolType
       });
     } finally {

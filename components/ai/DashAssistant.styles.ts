@@ -165,7 +165,8 @@ export const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 2,
+    marginRight: 6, // Space between avatar and speak button
+    flexShrink: 0,
   },
   voiceNoteIndicator: {
     flexDirection: 'row',

@@ -235,7 +235,11 @@ const MessageBubble: React.FC<{
     return (
       <VoiceMessageBubble
         audioUrl={msg.voice_url}
-        duration={msg.voice_duration || 30000}
+        duration={
+          msg.voice_duration 
+            ? (msg.voice_duration < 1000 ? msg.voice_duration * 1000 : msg.voice_duration) // Convert seconds to ms if needed
+            : 30000
+        }
         isOwnMessage={isOwn}
         timestamp={formatTime(msg.created_at)}
         senderName={!isOwn ? (msg.sender?.first_name || 'Parent') : undefined}

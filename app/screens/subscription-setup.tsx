@@ -71,8 +71,21 @@ export default function SubscriptionSetupScreen() {
   const [existingSubscription, setExistingSubscription] = useState<any>(null);
   const autoStartedRef = React.useRef(false);
 
+  // Determine if this is a parent subscription
+  const isParent = profile?.role === 'parent';
+  
+  // Check if a plan tier is a parent plan
+  const isParentPlan = (tier: string): boolean => {
+    const tierLower = tier.toLowerCase();
+    return tierLower.startsWith('parent-') || tierLower === 'parent_starter' || tierLower === 'parent_plus';
+  };
+
   // Resolve the active school (preschool) id from profile with robust fallbacks
+  // Only for non-parent roles or school subscriptions
   const getSchoolId = async (): Promise<string | null> => {
+    // For parent subscriptions, always return null to use user scope
+    if (isParent) return null;
+    
     const direct = (profile as any)?.organization_id || (profile as any)?.preschool_id;
     if (direct) return direct;
     try {
@@ -90,15 +103,26 @@ export default function SubscriptionSetupScreen() {
 
   useEffect(() => {
     loadPlans();
-    loadSchoolInfo();
-    checkExistingSubscription();
-  }, [profile]);
+    if (!isParent) {
+      loadSchoolInfo();
+      checkExistingSubscription();
+    }
+  }, [profile, isParent]);
   
   // Handle preselected plan from route params
   useEffect(() => {
     if (params.planId && plans.length > 0) {
-      // Find and preselect the plan
-      const matchingPlan = plans.find(p => p.id === params.planId || p.tier === params.planId);
+      // Normalize planId - handle both hyphen and underscore formats
+      const normalizedPlanId = params.planId.replace(/-/g, '_');
+      
+      // Find and preselect the plan (match by id or tier, supporting both formats)
+      const matchingPlan = plans.find(p => 
+        p.id === params.planId || 
+        p.tier === params.planId || 
+        p.id === normalizedPlanId || 
+        p.tier === normalizedPlanId
+      );
+      
       if (matchingPlan) {
         setSelectedPlan(matchingPlan.id);
         
@@ -159,36 +183,55 @@ export default function SubscriptionSetupScreen() {
         setSchoolInfo(data);
       }
     } catch (error) {
-      console.error('Error loading school info:', error);
+      if (__DEV__) {
+        console.error('Error loading school info:', error);
+      }
     }
   }
 
-  // Filter plans based on school type
+  // Filter plans based on user type (parent vs school)
   useEffect(() => {
     if (allPlans.length > 0) {
-      const schoolType = params.schoolType || schoolInfo?.school_type || 'preschool';
+      let filteredPlans: SubscriptionPlan[];
       
-      const filteredPlans = allPlans.filter(plan => {
-        // If plan doesn't have school_types specified, show to all
-        if (!plan.school_types || plan.school_types.length === 0) {
-          return true;
-        }
-        // Check if plan supports this school type or 'hybrid' (which supports all)
-        return plan.school_types.includes(schoolType) || plan.school_types.includes('hybrid');
-      });
+      if (isParent) {
+        // For parents, only show parent plans and free plan
+        filteredPlans = allPlans.filter(plan => {
+          const tier = (plan.tier || '').toLowerCase();
+          return isParentPlan(tier) || tier === 'free';
+        });
+      } else {
+        // For schools/principals, filter by school type
+        const schoolType = params.schoolType || schoolInfo?.school_type || 'preschool';
+        filteredPlans = allPlans.filter(plan => {
+          // If plan doesn't have school_types specified, show to all
+          if (!plan.school_types || plan.school_types.length === 0) {
+            return true;
+          }
+          // Check if plan supports this school type or 'hybrid' (which supports all)
+          return plan.school_types.includes(schoolType) || plan.school_types.includes('hybrid');
+        });
+      }
       
       setPlans(filteredPlans);
       
       // Track the filtering
       track('subscription_plans_filtered', {
-        school_type: schoolType,
+        user_type: isParent ? 'parent' : 'school',
+        school_type: isParent ? null : (params.schoolType || schoolInfo?.school_type || 'preschool'),
         total_plans: allPlans.length,
         filtered_plans: filteredPlans.length
       });
     }
-  }, [allPlans, schoolInfo, params.schoolType]);
+  }, [allPlans, schoolInfo, params.schoolType, isParent]);
 
   async function checkExistingSubscription() {
+    // Only check for school subscriptions if user is not a parent
+    if (isParent) {
+      setExistingSubscription(null);
+      return;
+    }
+    
     try {
       const schoolId = await getSchoolId();
       if (!schoolId) return;
@@ -203,7 +246,9 @@ export default function SubscriptionSetupScreen() {
       if (error && error.code !== 'PGRST116') throw error;
       setExistingSubscription(data);
     } catch (error) {
-      console.error('Error checking existing subscription:', error);
+      if (__DEV__) {
+        console.error('Error checking existing subscription:', error);
+      }
     }
   }
 
@@ -245,7 +290,18 @@ export default function SubscriptionSetupScreen() {
       }
       
       if (isFree) {
-        // Free plan - ensure a free subscription exists for the school
+        // Free plan handling
+        if (isParent) {
+          // For parents, free plan just redirects to dashboard
+          Alert.alert(
+            'Free Plan',
+            'You\'re already on the free plan. Enjoy basic features!',
+            [{ text: 'OK', onPress: () => router.push('/') }]
+          );
+          return;
+        }
+        
+        // For schools, ensure a free subscription exists
         const schoolId = await getSchoolId();
         if (!schoolId) {
           Alert.alert('Error', 'School information not found for free plan setup');
@@ -322,23 +378,33 @@ export default function SubscriptionSetupScreen() {
       }
       
       // Paid plans - use checkout flow
-      const schoolId = await getSchoolId();
+      // Determine scope: parent plans are always user-scoped, school plans are school-scoped
+      const isPlanForParent = isParentPlan(plan.tier);
+      const schoolId = isPlanForParent ? null : await getSchoolId();
+      const scope: 'user' | 'school' = isPlanForParent || !schoolId ? 'user' : 'school';
+      
       track('checkout_started', {
         plan_tier: plan.tier,
         plan_name: plan.name,
         billing: annual ? 'annual' : 'monthly',
         price: price,
         user_role: profile?.role,
-        school_id: schoolId,
+        scope: scope,
+        school_id: schoolId || null,
+        user_id: profile?.id || null,
       });
       
+      // Get user email for PayFast
+      const userEmail = profile?.email || (await assertSupabase().auth.getUser()).data.user?.email;
+      
       const checkoutInput = {
-        scope: schoolId ? 'school' as const : 'user' as const,
-        schoolId: schoolId || undefined,
-        userId: profile?.id,
+        scope: scope,
+        schoolId: scope === 'school' ? schoolId : undefined,
+        userId: scope === 'user' ? profile?.id : undefined,
         planTier: plan.tier,
         billing: (annual ? 'annual' : 'monthly') as 'annual' | 'monthly',
-        seats: plan.max_teachers,
+        seats: plan.max_teachers || 1,
+        email_address: userEmail || undefined,
         // PayFast requires http(s) URLs. Use HTTPS bridge pages managed server-side.
         return_url: getReturnUrl(),
         cancel_url: getCancelUrl(),
@@ -407,7 +473,8 @@ export default function SubscriptionSetupScreen() {
     );
   }
 
-  if (existingSubscription) {
+  // Only show existing subscription card for school subscriptions (not parents)
+  if (existingSubscription && !isParent) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <Stack.Screen options={{ 
@@ -461,7 +528,9 @@ export default function SubscriptionSetupScreen() {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <Text style={styles.title}>Choose Your Subscription Plan</Text>
           <Text style={styles.subtitle}>
-            {schoolInfo ? (
+            {isParent ? (
+              'Choose a subscription plan to unlock premium features for your child\'s education'
+            ) : schoolInfo ? (
               `Select a plan for ${schoolInfo.name} (${getSchoolTypeLabel(schoolInfo.school_type)})`
             ) : (
               'Select a plan to enable teacher seat management for your school'
@@ -541,10 +610,35 @@ interface PlanCardProps {
 }
 
 function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, schoolType }: PlanCardProps) {
-  const price = annual ? plan.price_annual : plan.price_monthly;
-  const priceInRands = price / 100; // Convert cents to rands
-  const savings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) / 100 : 0;
-  const isFree = price === 0;
+  // Check if this is a parent plan
+  const tierLower = (plan.tier || '').toLowerCase();
+  const isParentTier = tierLower.startsWith('parent-') || tierLower === 'parent_starter' || tierLower === 'parent_plus';
+  
+  // Handle prices: subscription_plans stores prices in cents
+  // If price is > 1000, it's definitely in cents (R10+ = 1000+ cents)
+  // If price is 0, it's free
+  // Otherwise, check if it looks like cents (integer >= 100) vs rands (decimal < 100)
+  const rawPrice = annual ? plan.price_annual : plan.price_monthly;
+  let priceInRands: number;
+  
+  if (rawPrice === 0) {
+    priceInRands = 0;
+  } else if (rawPrice >= 1000) {
+    // Definitely in cents (R10.00+)
+    priceInRands = rawPrice / 100;
+  } else if (rawPrice >= 100 && Number.isInteger(rawPrice)) {
+    // Likely in cents (R1.00+)
+    priceInRands = rawPrice / 100;
+  } else {
+    // Likely already in rands (e.g., 99.50)
+    priceInRands = rawPrice;
+  }
+  
+  // Ensure we never show less than 0.01
+  priceInRands = Math.max(0.01, priceInRands);
+  const rawYearlySavings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) : 0;
+  const savings = rawYearlySavings > 100 ? rawYearlySavings / 100 : rawYearlySavings;
+  const isFree = rawPrice === 0;
   const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
   
   // Check if this plan is specifically optimized for the school type
@@ -611,16 +705,34 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
 
         {/* Plan Details */}
         <View style={styles.planDetailsSection}>
-          <View style={styles.limitsContainer}>
-            <View style={styles.limitRow}>
-              <Text style={styles.limitIcon}>👥</Text>
-              <Text style={styles.limitItem}>Up to {plan.max_teachers} teachers</Text>
+          {/* Only show limits for school plans, not parent plans */}
+          {plan.tier && !isParentTier && (
+            <View style={styles.limitsContainer}>
+              {plan.max_teachers > 0 && (
+                <View style={styles.limitRow}>
+                  <Text style={styles.limitIcon}>👥</Text>
+                  <Text style={styles.limitItem}>Up to {plan.max_teachers} teachers</Text>
+                </View>
+              )}
+              {plan.max_students > 0 && (
+                <View style={styles.limitRow}>
+                  <Text style={styles.limitIcon}>🎓</Text>
+                  <Text style={styles.limitItem}>Up to {plan.max_students} students</Text>
+                </View>
+              )}
             </View>
-            <View style={styles.limitRow}>
-              <Text style={styles.limitIcon}>🎓</Text>
-              <Text style={styles.limitItem}>Up to {plan.max_students} students</Text>
+          )}
+          {/* For parent plans, show children limit if applicable */}
+          {plan.tier && isParentTier && plan.max_students > 0 && (
+            <View style={styles.limitsContainer}>
+              <View style={styles.limitRow}>
+                <Text style={styles.limitIcon}>👨‍👩‍👧</Text>
+                <Text style={styles.limitItem}>
+                  {plan.max_students === 1 ? '1 child' : `Up to ${plan.max_students} children`}
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
 
           {plan.features && plan.features.length > 0 && (
             <View style={styles.featuresContainer}>

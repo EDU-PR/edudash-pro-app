@@ -22,7 +22,9 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
@@ -55,7 +57,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const { tier } = useSubscription();
+  const { tier, ready: subscriptionReady } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
@@ -331,6 +333,54 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           onChildChange={setActiveChildId}
         />
 
+        {/* Upgrade CTA for Free Tier */}
+        {(() => {
+          // Check if user is on free tier (handle various possible tier values)
+          const tierLower = (tier || '').toLowerCase();
+          const isFreeTier = !tier || tierLower === 'free' || tierLower === '';
+          // Show banner if free tier, even if subscriptionReady is false (tier can still be detected)
+          const shouldShowBanner = isFreeTier;
+          
+          // Debug logging
+          if (__DEV__) {
+            console.log('[ParentDashboard] Upgrade banner check:', {
+              tier,
+              tierLower,
+              isFreeTier,
+              subscriptionReady,
+              shouldShowBanner
+            });
+          }
+          
+          return shouldShowBanner ? (
+            <View style={styles.upgradeBanner}>
+              <View style={styles.upgradeBannerContent}>
+                <Ionicons name="diamond" size={20} color="#FFD700" />
+                <View style={styles.upgradeBannerText}>
+                  <Text style={styles.upgradeBannerTitle}>
+                    {t('dashboard.unlock_features', { defaultValue: 'Unlock Premium Features' })}
+                  </Text>
+                  <Text style={styles.upgradeBannerSubtitle}>
+                    {t('dashboard.upgrade_subtitle', { defaultValue: 'Get AI homework help, advanced insights, and priority support' })}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.upgradeBannerButton}
+                onPress={() => {
+                  track('parent.dashboard.upgrade_cta_clicked', { source: 'free_tier_banner', tier });
+                  router.push('/pricing');
+                }}
+              >
+                <Text style={styles.upgradeBannerButtonText}>
+                  {t('common.upgrade', { defaultValue: 'Upgrade' })}
+                </Text>
+                <Ionicons name="arrow-forward" size={14} color={theme.primary} />
+              </TouchableOpacity>
+            </View>
+          ) : null;
+        })()}
+
         {/* Metrics Grid */}
         <CollapsibleSection 
           title={t('dashboard.overview', { defaultValue: 'Overview' })}
@@ -477,6 +527,54 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) => Styl
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -cardGap / 2,
+  },
+  upgradeBanner: {
+    backgroundColor: theme.cardBackground,
+    borderRadius: isSmallScreen ? 12 : 16,
+    padding: isSmallScreen ? 14 : 16,
+    marginBottom: cardGap,
+    borderWidth: 1,
+    borderColor: theme.primary + '30',
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  upgradeBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  upgradeBannerText: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  upgradeBannerTitle: {
+    fontSize: isSmallScreen ? 14 : 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  upgradeBannerSubtitle: {
+    fontSize: isSmallScreen ? 12 : 13,
+    color: theme.textSecondary,
+    lineHeight: 18,
+  },
+  upgradeBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.primary,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    borderRadius: isSmallScreen ? 8 : 10,
+    gap: 6,
+  },
+  upgradeBannerButtonText: {
+    fontSize: isSmallScreen ? 14 : 15,
+    fontWeight: '700',
+    color: theme.onPrimary,
   },
 });
 

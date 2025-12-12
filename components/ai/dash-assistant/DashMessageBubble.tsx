@@ -77,13 +77,6 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
         isUser ? styles.userMessage : styles.assistantMessage,
       ]}
     >
-      {/* Avatar for assistant messages */}
-      {!isUser && (
-        <View style={[styles.avatarContainer, { backgroundColor: theme.primary }]}>
-          <Ionicons name="sparkles" size={16} color={theme.onPrimary} />
-        </View>
-      )}
-      
       <View
         style={[
           styles.messageBubble,
@@ -241,26 +234,32 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </View>
         )}
 
-        {/* Bottom row with speak button and timestamp */}
+        {/* Bottom row with avatar, speak button and timestamp */}
         <View style={styles.messageBubbleFooter}>
           {!isUser && (
-            <TouchableOpacity
-              style={[
-                styles.inlineSpeakButton, 
-                { 
-                  backgroundColor: speakingMessageId === message.id ? theme.error : theme.accent,
-                }
-              ]}
-              onPress={() => onSpeak(message)}
-              activeOpacity={0.7}
-              accessibilityLabel={speakingMessageId === message.id ? "Stop speaking" : "Speak message"}
-            >
-              <Ionicons 
-                name={speakingMessageId === message.id ? "stop" : "volume-high"} 
-                size={12} 
-                color={speakingMessageId === message.id ? theme.onError || theme.background : theme.onAccent} 
-              />
-            </TouchableOpacity>
+            <>
+              {/* Avatar inside bubble next to speaker icon */}
+              <View style={[styles.inlineAvatar, { backgroundColor: theme.primary }]}>
+                <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.inlineSpeakButton, 
+                  { 
+                    backgroundColor: speakingMessageId === message.id ? theme.error : theme.accent,
+                  }
+                ]}
+                onPress={() => onSpeak(message)}
+                activeOpacity={0.7}
+                accessibilityLabel={speakingMessageId === message.id ? "Stop speaking" : "Speak message"}
+              >
+                <Ionicons 
+                  name={speakingMessageId === message.id ? "stop" : "volume-high"} 
+                  size={12} 
+                  color={speakingMessageId === message.id ? theme.onError || theme.background : theme.onAccent} 
+                />
+              </TouchableOpacity>
+            </>
           )}
           <View style={{ flex: 1 }} />
           <Text

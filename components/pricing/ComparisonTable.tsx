@@ -45,13 +45,17 @@ export function ComparisonTable({
       case 'free':
         return annual ? 'R0 / year' : 'R0 / month'
       case 'parent-starter':
-        return annual ? `R${Math.round(49.99 * 12 * 0.9)} / year` : 'R49.99 / month'
+        // Monthly: R49.50 (promo), Annual: R475 (promo) - matching pricing.tsx
+        return annual ? 'R475 / year' : 'R49.50 / month'
       case 'parent-plus':
-        return annual ? `R${Math.round(149.99 * 12 * 0.9)} / year` : 'R149.99 / month'
+        // Monthly: R99.50 (promo), Annual: R955 (promo) - matching pricing.tsx
+        return annual ? 'R955 / year' : 'R99.50 / month'
       case 'private-teacher':
-        return annual ? `R${Math.round(299 * 12 * 0.9)} / year` : 'R299 / month'
+        // School Starter: Monthly R299, Annual: R2,990 (matching pricing.tsx)
+        return annual ? 'R2,990 / year' : 'R299 / month'
       case 'pro':
-        return annual ? `R${Math.round(599 * 12 * 0.9)} / year` : 'R599 / month'
+        // School Premium: Monthly R599, Annual: R5,990 (matching pricing.tsx)
+        return annual ? 'R5,990 / year' : 'R599 / month'
       case 'preschool-pro':
         return annual ? 'Custom (annual)' : 'Custom'
       case 'enterprise':
@@ -187,11 +191,13 @@ export function ComparisonTable({
   }
   
   const toggleCategory = (category: string) => {
-    setExpandedCategories(prev => 
-      prev.includes(category) 
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    )
+    setExpandedCategories(prev => {
+      if (prev.includes(category)) {
+        return prev.filter(c => c !== category);
+      } else {
+        return [...prev, category];
+      }
+    });
   }
 
 

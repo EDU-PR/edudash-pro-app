@@ -371,6 +371,9 @@ export default function SubscriptionUpgradePostScreen() {
         reason: reasonKey,
       });
 
+      // Get user email for PayFast
+      const userEmail = profile.email || (await assertSupabase().auth.getUser()).data.user?.email;
+      
       const checkoutInput = {
         scope: 'school' as const,
         schoolId: profile.organization_id,
@@ -378,6 +381,7 @@ export default function SubscriptionUpgradePostScreen() {
         planTier: plan.tier,
         billing: (annual ? 'annual' : 'monthly') as 'annual' | 'monthly',
         seats: plan.max_teachers,
+        email_address: userEmail || undefined,
         // PayFast requires http(s) URLs. Use HTTPS bridge pages managed server-side.
         return_url: getReturnUrl(),
         cancel_url: getCancelUrl(),
@@ -625,11 +629,13 @@ export default function SubscriptionUpgradePostScreen() {
             
             <View style={styles.plansGrid}>
               {plans.map((plan) => {
-                const price = annual ? plan.price_annual : plan.price_monthly;
-                const priceInRands = price / 100; // Convert cents to rands
-                const monthlyPrice = annual ? Math.round(plan.price_annual / 12) : plan.price_monthly;
-                const monthlyPriceInRands = monthlyPrice / 100; // Convert cents to rands
-                const savings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) / 100 : 0;
+                // Handle prices: if > 100, assume stored in cents; otherwise assume rands
+                const rawPrice = annual ? plan.price_annual : plan.price_monthly;
+                const priceInRands = rawPrice > 100 ? rawPrice / 100 : rawPrice;
+                const rawMonthlyPrice = annual ? Math.round(plan.price_annual / 12) : plan.price_monthly;
+                const monthlyPriceInRands = rawMonthlyPrice > 100 ? rawMonthlyPrice / 100 : rawMonthlyPrice;
+                const rawYearlySavings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) : 0;
+                const savings = rawYearlySavings > 100 ? rawYearlySavings / 100 : rawYearlySavings;
                 const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
                 const isSelected = selectedPlan === plan.id;
                 const planColor = getPlanColor(plan.tier);
