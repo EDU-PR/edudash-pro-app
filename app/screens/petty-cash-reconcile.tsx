@@ -9,7 +9,7 @@
  * - Reconciliation approval
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,10 @@ import {
   Alert,
   TextInput,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,11 +60,20 @@ const CASH_DENOMINATIONS = [
 ];
 
 export default function PettyCashReconcileScreen() {
-  const { user } = useAuth();
-  const router = useRouter();
+  const { user, profile, profileLoading, loading: authLoading } = useAuth();
+  const routerInstance = useRouter();
   const { theme } = useTheme();
   const { t } = useTranslation('common');
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,23 +96,52 @@ export default function PettyCashReconcileScreen() {
   const [notes, setNotes] = useState('');
   const [isReconciling, setIsReconciling] = useState(false);
 
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
+  useEffect(() => {
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      }
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Petty Cash Reconcile: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
   const loadReconciliationData = useCallback(async () => {
-    if (!user) return;
+    if (!user || !orgId) return;
 
     try {
       setLoading(true);
 
-      // Get user's preschool
-      const { data: userProfile } = await assertSupabase()
-        .from('users')
-        .select('preschool_id')
-        .eq('auth_user_id', user.id)
-        .single();
-
-      if (!userProfile?.preschool_id) {
-        Alert.alert(t('common.error'), t('petty_cash.error_no_school'));
-        return;
-      }
+      // Use orgId from profile (already resolved)
+      const preschoolId = orgId;
 
       // Get system balance
       const currentMonth = new Date();
@@ -113,7 +152,7 @@ export default function PettyCashReconcileScreen() {
       const { data: transactions } = await assertSupabase()
         .from('petty_cash_transactions')
         .select('amount, type')
-        .eq('school_id', userProfile.preschool_id)
+        .eq('school_id', preschoolId)
         .eq('status', 'approved')
         .gte('created_at', currentMonth.toISOString());
 
@@ -133,7 +172,7 @@ export default function PettyCashReconcileScreen() {
       const { data: account } = await assertSupabase()
         .from('petty_cash_accounts')
         .select('opening_balance')
-        .eq('school_id', userProfile.preschool_id)
+        .eq('school_id', preschoolId)
         .eq('is_active', true)
         .single();
 
@@ -144,7 +183,7 @@ export default function PettyCashReconcileScreen() {
       const { data: lastRecon } = await assertSupabase()
         .from('petty_cash_reconciliations')
         .select('created_at, physical_amount')
-        .eq('preschool_id', userProfile.preschool_id)
+        .eq('preschool_id', preschoolId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -164,7 +203,14 @@ export default function PettyCashReconcileScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, t]);
+  }, [user, orgId, t]);
+
+  // Load data when org is available
+  useEffect(() => {
+    if (orgId && user) {
+      loadReconciliationData();
+    }
+  }, [orgId, user?.id, loadReconciliationData]);
 
   const updateCashCount = (index: number, count: string) => {
     const parsedCount = parseInt(count) || 0;
@@ -186,27 +232,19 @@ export default function PettyCashReconcileScreen() {
   };
 
   const performReconciliation = async () => {
-    if (!user) return;
+    if (!user || !orgId) return;
 
     try {
       setIsReconciling(true);
 
-      const { data: userProfile } = await assertSupabase()
-        .from('users')
-        .select('preschool_id')
-        .eq('auth_user_id', user.id)
-        .single();
-
-      if (!userProfile?.preschool_id) {
-        Alert.alert('Error', 'No school assigned to your account');
-        return;
-      }
+      // Use orgId from profile (already resolved)
+      const preschoolId = orgId;
 
       // Save reconciliation record
       const { error } = await assertSupabase()
         .from('petty_cash_reconciliations')
         .insert({
-          preschool_id: userProfile.preschool_id,
+          preschool_id: preschoolId,
           system_amount: reconciliationData.systemBalance,
           physical_amount: reconciliationData.physicalCash,
           variance: reconciliationData.variance,
@@ -255,14 +293,49 @@ export default function PettyCashReconcileScreen() {
     return 'trending-down';
   };
 
-  useEffect(() => {
-    loadReconciliationData();
-  }, [loadReconciliationData]);
-
   const onRefresh = () => {
     setRefreshing(true);
     loadReconciliationData();
   };
+
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme?.primary || '#007AFF'} />
+          <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    if (!user) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme?.primary || '#007AFF'} />
+            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="calculator-outline" size={48} color={theme?.textSecondary || '#6B7280'} />
+          <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+          <TouchableOpacity onPress={() => {
+            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+          }}>
+            <Text style={[styles.loadingText, { color: theme?.primary || '#007AFF', textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (loading && !refreshing) {
     return (
@@ -284,7 +357,7 @@ export default function PettyCashReconcileScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('petty_cash_reconcile.title')}</Text>
         <TouchableOpacity 
-onPress={() => router.push('/screens/petty-cash')}
+onPress={() => routerInstance.push('/screens/petty-cash')}
           disabled={loading}
         >
           <Ionicons name="time-outline" size={24} color={theme?.primary || '#007AFF'} />

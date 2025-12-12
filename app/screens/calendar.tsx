@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Dimensions 
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
@@ -56,9 +56,18 @@ const EVENT_CONFIG: Record<string, { color: string; icon: string; label: string 
  */
 export default function CalendarScreen() {
   const { theme } = useTheme();
-  const { profile, user } = useAuth();
+  const { profile, user, profileLoading, loading: authLoading } = useAuth();
   const { t } = useTranslation();
   const userRole = (profile?.role as string) || 'parent';
+  
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
   
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,27 +77,53 @@ export default function CalendarScreen() {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
+  useEffect(() => {
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      }
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Calendar: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
   // Fetch events from database
   const fetchEvents = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id || !orgId) return;
     
     try {
       const supabase = assertSupabase();
       
-      // Get user's preschool_id
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('preschool_id, organization_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      
-      const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
-      
-      if (!schoolId) {
-        log('📅 No school ID found for calendar');
-        setEvents([]);
-        return;
-      }
+      // Use orgId from profile (already resolved)
+      const schoolId = orgId;
       
       // Calculate month range
       const startOfMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
@@ -146,7 +181,7 @@ export default function CalendarScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, selectedMonth]);
+  }, [user?.id, orgId, selectedMonth]);
 
   useEffect(() => {
     fetchEvents();
@@ -251,6 +286,54 @@ export default function CalendarScreen() {
       </View>
     );
   };
+
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
+        <View style={styles.container}>
+          <Stack.Screen options={{ headerShown: false }} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </View>
+      </DesktopLayout>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    if (!user) {
+      return (
+        <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
+          <View style={styles.container}>
+            <Stack.Screen options={{ headerShown: false }} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+            </View>
+          </View>
+        </DesktopLayout>
+      );
+    }
+    return (
+      <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>
+        <View style={styles.container}>
+          <Stack.Screen options={{ headerShown: false }} />
+          <View style={styles.loadingContainer}>
+            <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
+            <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+            <TouchableOpacity onPress={() => {
+              try { router.replace('/screens/onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+            }}>
+              <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </DesktopLayout>
+    );
+  }
 
   return (
     <DesktopLayout role={userRole as any} title={t('navigation.calendar', { defaultValue: 'Calendar' })}>

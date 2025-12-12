@@ -6,7 +6,7 @@
  * Feature-flagged: Only active when campaigns_enabled is true.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,8 @@ import { router, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -80,13 +82,23 @@ const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
 
 export default function CampaignsScreen() {
   const { theme, isDark } = useTheme();
+  const { user, profile, profileLoading, loading: authLoading } = useAuth();
+  const { t } = useTranslation();
   const flags = getFeatureFlagsSync();
+
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
 
   // State
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
   
   // Modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -104,39 +116,53 @@ export default function CampaignsScreen() {
   const [formActive, setFormActive] = useState(true);
   const [formFeatured, setFormFeatured] = useState(false);
 
-  // Load user's organization
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
   useEffect(() => {
-    const loadOrganization = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('preschool_id')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.preschool_id) {
-          setOrganizationId(profile.preschool_id);
-        }
-      } catch (error) {
-        console.error('Error loading organization:', error);
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
       }
-    };
-
-    loadOrganization();
-  }, []);
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Campaigns: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
 
   // Load campaigns
   const loadCampaigns = useCallback(async () => {
-    if (!organizationId) return;
+    if (!orgId) return;
 
     try {
       const { data, error } = await supabase
         .from('marketing_campaigns')
         .select('*')
-        .eq('organization_id', organizationId)
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -147,13 +173,14 @@ export default function CampaignsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [organizationId]);
+  }, [orgId]);
 
+  // Load campaigns when org is available
   useEffect(() => {
-    if (organizationId) {
+    if (orgId) {
       loadCampaigns();
     }
-  }, [organizationId, loadCampaigns]);
+  }, [orgId, loadCampaigns]);
 
   // Reset form
   const resetForm = () => {
@@ -186,7 +213,7 @@ export default function CampaignsScreen() {
 
   // Save campaign
   const saveCampaign = async () => {
-    if (!formName || !organizationId) {
+    if (!formName || !orgId) {
       Alert.alert('Error', 'Please enter a campaign name');
       return;
     }
@@ -194,7 +221,7 @@ export default function CampaignsScreen() {
     setSaving(true);
     try {
       const campaignData = {
-        organization_id: organizationId,
+        organization_id: orgId,
         name: formName,
         campaign_type: formType,
         description: formDescription || null,
@@ -537,6 +564,33 @@ export default function CampaignsScreen() {
       </TouchableOpacity>
     </View>
   );
+
+  // Loading state
+  if (isStillLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.text, marginTop: 16 }]}>
+          {t('common.loading', 'Loading...')}
+        </Text>
+      </View>
+    );
+  }
+
+  // No organization fallback
+  if (!orgId) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="business-outline" size={64} color={theme.muted} />
+        <Text style={[styles.disabledText, { color: theme.text }]}>
+          {t('common.noOrganization', 'No organization found')}
+        </Text>
+        <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
+          {t('common.contactAdmin', 'Please contact your administrator')}
+        </Text>
+      </View>
+    );
+  }
 
   // Feature flag check - campaigns not enabled
   if (!flags.campaigns_enabled) {

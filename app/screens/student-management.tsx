@@ -9,7 +9,7 @@
  * - Real database integration
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,10 +20,12 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 
@@ -71,9 +73,20 @@ interface FilterOptions {
 }
 
 export default function StudentManagementScreen() {
-  const { user } = useAuth();
+  const { user, profile, profileLoading, loading: authLoading } = useAuth();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
+
   const [students, setStudents] = useState<Student[]>([]);
   const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
   const [, setAgeGroups] = useState<AgeGroup[]>([]);
@@ -88,23 +101,52 @@ export default function StudentManagementScreen() {
     classId: '',
   });
 
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
+  useEffect(() => {
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      }
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Student Management: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
   const fetchData = async () => {
+    if (!orgId) return;
+    
     try {
       setLoading(true);
 
-      // Get user's preschool ID
-      const { data: userProfile } = await assertSupabase()
-        .from('users')
-        .select('preschool_id')
-        .eq('auth_user_id', user?.id)
-        .single();
-
-      if (!userProfile?.preschool_id) {
-        Alert.alert('Error', 'No school assigned to your account');
-        return;
-      }
-
-      const preschoolId = userProfile.preschool_id;
+      // Use orgId from profile (already resolved)
+      const preschoolId = orgId;
 
       // Get school information
       const { data: school } = await assertSupabase()
@@ -279,9 +321,12 @@ export default function StudentManagementScreen() {
     return stats;
   };
 
+  // Load data when org is available
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (orgId && user) {
+      fetchData();
+    }
+  }, [orgId, user?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -296,12 +341,51 @@ export default function StudentManagementScreen() {
     router.push('/screens/student-enrollment');
   };
 
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    if (!user) {
+      return (
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingContent}>
+          <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
+          <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+          <TouchableOpacity onPress={() => {
+            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+          }}>
+            <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
           <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
-          <Text style={styles.loadingText}>Loading students...</Text>
+          <Text style={styles.loadingText}>{t('student_management.loading', { defaultValue: 'Loading students...' })}</Text>
         </View>
       </View>
     );
@@ -318,7 +402,7 @@ export default function StudentManagementScreen() {
             <Ionicons name="chevron-back" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Student Management</Text>
+            <Text style={styles.headerTitle}>{t('student_management.title', { defaultValue: 'Student Management' })}</Text>
             <Text style={styles.headerSubtitle}>
               {schoolInfo?.name} • {getSchoolTypeDisplay(schoolInfo?.school_type || 'preschool')}
             </Text>
@@ -332,15 +416,15 @@ export default function StudentManagementScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{filteredStudents.length}</Text>
-            <Text style={styles.statLabel}>Total Students</Text>
+            <Text style={styles.statLabel}>{t('student_management.total_students', { defaultValue: 'Total Students' })}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{Object.keys(ageGroupStats).length}</Text>
-            <Text style={styles.statLabel}>Age Groups</Text>
+            <Text style={styles.statLabel}>{t('student_management.age_groups', { defaultValue: 'Age Groups' })}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{classes.length}</Text>
-            <Text style={styles.statLabel}>Classes</Text>
+            <Text style={styles.statLabel}>{t('student_management.classes', { defaultValue: 'Classes' })}</Text>
           </View>
         </View>
       </View>
@@ -349,7 +433,7 @@ export default function StudentManagementScreen() {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search students..."
+          placeholder={t('student_management.search_placeholder', { defaultValue: 'Search students...' })}
           placeholderTextColor={theme.textSecondary}
           value={filters.searchTerm}
           onChangeText={(text) => setFilters({...filters, searchTerm: text})}

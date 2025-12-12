@@ -8,7 +8,7 @@
  * - Teacher workload and ratios
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { Picker } from '@react-native-picker/picker';
+import { router } from 'expo-router';
 
 interface ClassInfo {
   id: string;
@@ -58,9 +60,19 @@ interface Teacher {
 }
 
 export default function ClassTeacherManagementScreen() {
-  const { user } = useAuth();
+  const { user, profile, profileLoading, loading: authLoading } = useAuth();
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
 // useRouter not needed; using router singleton from expo-router
+
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
   
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -82,41 +94,52 @@ export default function ClassTeacherManagementScreen() {
     teacher_id: '',
   });
 
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
+  useEffect(() => {
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      }
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Class-Teacher Management: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
   const loadData = useCallback(async () => {
-    if (!user) return;
+    if (!user || !orgId) return;
 
     try {
       setLoading(true);
 
-      // Resolve preschool (school) ID and organization ID robustly across schemas
-      let schoolId: string | null = (user.user_metadata as any)?.preschool_id || null;
-      let orgId: string | null = (user.user_metadata as any)?.organization_id || null;
-      if (!schoolId || !orgId) {
-        try {
-          const { data: prof } = await assertSupabase()
-            .from('profiles')
-            .select('preschool_id, organization_id')
-            .eq('id', user.id)
-            .maybeSingle();
-          schoolId = schoolId || (prof as any)?.preschool_id || null;
-          orgId = orgId || (prof as any)?.organization_id || null;
-        } catch { /* Intentional: non-fatal */ }
-      }
-      if (!schoolId) {
-        try {
-          const { data: userRow } = await assertSupabase()
-            .from('users')
-            .select('preschool_id')
-            .eq('auth_user_id', user.id)
-            .maybeSingle();
-          schoolId = (userRow as any)?.preschool_id || null;
-        } catch { /* Intentional: non-fatal */ }
-      }
-
-      if (!schoolId && !orgId) {
-        Alert.alert('Error', 'No school or organization assigned to your account');
-        return;
-      }
+      // Use orgId from profile (already resolved from organization_id || preschool_id)
+      const schoolId = orgId;
 
       // Load classes with teacher and enrollment information using the same pattern as TeacherDashboard
       const { data: classesData, error: classesError } = await assertSupabase()
@@ -238,7 +261,14 @@ export default function ClassTeacherManagementScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, orgId]);
+
+  // Load data when org is available
+  useEffect(() => {
+    if (orgId && user) {
+      loadData();
+    }
+  }, [orgId, user?.id, loadData]);
 
   // Memoize filtered lists for better performance
   const activeTeachers = useMemo(() => 
@@ -258,16 +288,8 @@ export default function ClassTeacherManagementScreen() {
     }
 
     try {
-      // Resolve school again to be safe
-      let schoolId: string | null = (user?.user_metadata as any)?.preschool_id || null;
-      if (!schoolId && user?.id) {
-        const { data: prof } = await assertSupabase()
-          .from('profiles')
-          .select('preschool_id')
-          .eq('id', user.id)
-          .maybeSingle();
-        schoolId = (prof as any)?.preschool_id || null;
-      }
+      // Use orgId from profile (already resolved)
+      const schoolId = orgId;
 
       const { error } = await assertSupabase()
         .from('classes')
@@ -399,13 +421,56 @@ export default function ClassTeacherManagementScreen() {
 
   const styles = getStyles(theme);
 
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <View style={styles.loadingContainer}>
+          <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
+          <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    // If not authenticated, show loading state
+    if (!user) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+          <View style={styles.loadingContainer}>
+            <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
+            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <View style={styles.loadingContainer}>
+          <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
+          <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+          <TouchableOpacity onPress={() => {
+            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+          }}>
+            <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <View style={styles.loadingContainer}>
           <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
-          <Text style={styles.loadingText}>Loading class and teacher data...</Text>
+          <Text style={styles.loadingText}>{t('class_management.loading', { defaultValue: 'Loading class and teacher data...' })}</Text>
         </View>
       </SafeAreaView>
     );

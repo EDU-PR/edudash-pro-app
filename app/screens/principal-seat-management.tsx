@@ -1,24 +1,37 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Linking } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, router } from 'expo-router';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { assertSupabase } from '@/lib/supabase';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { getEffectiveLimits } from '@/lib/ai/limits';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { navigateBack } from '@/lib/navigation';
 
 export default function PrincipalSeatManagementScreen() {
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
+  const { user, profile, profileLoading, loading: authLoading } = useAuth();
+  
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = authLoading || profileLoading;
+  
   // Use theme tokens and explicit isDark flag for styling
   const styles = React.useMemo(() => createStyles(theme, isDark), [theme, isDark]);
   const params = useLocalSearchParams<{ school?: string }>();
   const routeSchoolId = (params?.school ? String(params.school) : null);
   const { seats, assignSeat, revokeSeat, refresh } = useSubscription();
-  const [effectiveSchoolId, setEffectiveSchoolId] = useState<string | null>(routeSchoolId);
+  const [effectiveSchoolId, setEffectiveSchoolId] = useState<string | null>(routeSchoolId || orgId || null);
   const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
   const [schoolLabel, setSchoolLabel] = useState<string | null>(null);
@@ -32,29 +45,50 @@ export default function PrincipalSeatManagementScreen() {
   const [pendingTeacherId, setPendingTeacherId] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Resolve the school id if not provided in the route
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
   useEffect(() => {
-    (async () => {
-      if (effectiveSchoolId) return; // already set from route
-      try {
-        // Try user metadata first
-        const { data: userRes } = await assertSupabase().auth.getUser();
-        const metaSchool = (userRes?.user?.user_metadata as any)?.preschool_id as string | undefined;
-        if (metaSchool) { setEffectiveSchoolId(metaSchool); return; }
-        // Fallback to profiles table
-        if (userRes?.user?.id) {
-          const { data: prof } = await assertSupabase()
-            .from('profiles')
-            .select('preschool_id')
-            .eq('id', userRes.user.id)
-            .maybeSingle();
-          if (prof?.preschool_id) { setEffectiveSchoolId(prof.preschool_id); }
-        }
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
       } catch (e) {
-        console.debug('Failed to resolve school id:', e);
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
       }
-    })();
-  }, [effectiveSchoolId]);
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Principal Seat Management: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on screen (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
+  // Set effective school id from profile if not from route
+  useEffect(() => {
+    if (!effectiveSchoolId && orgId) {
+      setEffectiveSchoolId(orgId);
+    }
+  }, [effectiveSchoolId, orgId]);
 
   const loadSubscription = useCallback(async () => {
     if (!effectiveSchoolId) return;
@@ -209,21 +243,73 @@ export default function PrincipalSeatManagementScreen() {
   const [canManageAI, setCanManageAI] = useState(false);
   useEffect(() => { (async () => { try { const limits = await getEffectiveLimits(); setCanManageAI(!!limits.canOrgAllocate); } catch { /* noop */ } })(); }, []);
 
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <>
+        <Stack.Screen options={{ title: t('seat_management.title', { defaultValue: 'Seat Management' }), headerStyle: { backgroundColor: theme.headerBackground }, headerTitleStyle: { color: theme.headerText }, headerTintColor: theme.headerTint }} />
+        <ThemedStatusBar />
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    // If not authenticated, show loading state
+    if (!user) {
+      return (
+        <>
+          <Stack.Screen options={{ title: t('seat_management.title', { defaultValue: 'Seat Management' }), headerStyle: { backgroundColor: theme.headerBackground }, headerTitleStyle: { color: theme.headerText }, headerTintColor: theme.headerTint }} />
+          <ThemedStatusBar />
+          <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+            </View>
+          </SafeAreaView>
+        </>
+      );
+    }
+    return (
+      <>
+        <Stack.Screen options={{ title: t('seat_management.title', { defaultValue: 'Seat Management' }), headerStyle: { backgroundColor: theme.headerBackground }, headerTitleStyle: { color: theme.headerText }, headerTintColor: theme.headerTint }} />
+        <ThemedStatusBar />
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
+          <View style={styles.loadingContainer}>
+            <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
+            <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+            <TouchableOpacity onPress={() => {
+              try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+            }}>
+              <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Seat Management', headerStyle: { backgroundColor: theme.headerBackground }, headerTitleStyle: { color: theme.headerText }, headerTintColor: theme.headerTint }} />
+      <Stack.Screen options={{ title: t('seat_management.title', { defaultValue: 'Seat Management' }), headerStyle: { backgroundColor: theme.headerBackground }, headerTitleStyle: { color: theme.headerText }, headerTintColor: theme.headerTint }} />
       <ThemedStatusBar />
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView contentContainerStyle={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
         <View style={styles.backRow}>
           <TouchableOpacity style={styles.backLink} onPress={() => navigateBack('/screens/principal-dashboard')}>
             <Ionicons name="chevron-back" size={20} color={styles.accentColor} />
-            <Text style={styles.backText}>Back to Dashboard</Text>
+            <Text style={styles.backText}>{t('common.back_to_dashboard', { defaultValue: 'Back to Dashboard' })}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Manage Seats</Text>
-        <Text style={styles.subtitle}>School: {schoolLabel || '—'}</Text>
-        <Text style={styles.subtitle}>Seats: {seats ? `${seats.used}/${seats.total}` : '—'}</Text>
+        <Text style={styles.title}>{t('seat_management.manage_seats', { defaultValue: 'Manage Seats' })}</Text>
+        <Text style={styles.subtitle}>{t('seat_management.school', { defaultValue: 'School' })}: {schoolLabel || '—'}</Text>
+        <Text style={styles.subtitle}>{t('seat_management.seats', { defaultValue: 'Seats' })}: {seats ? `${seats.used}/${seats.total}` : '—'}</Text>
 
         {/* Assign all current teachers button */}
         <TouchableOpacity
@@ -644,6 +730,8 @@ const createStyles = (theme: any, isDark: boolean) => {
     backRow: { marginBottom: 8 },
     backLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     backText: { color: accentColor, fontWeight: '800' },
+    loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+    loadingText: { color: textSecondary, fontSize: 16, textAlign: 'center' },
   });
 
   // Return styles object with color properties attached

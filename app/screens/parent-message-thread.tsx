@@ -1029,9 +1029,9 @@ export default function ParentMessageThreadScreen() {
               {displayName}
             </Text>
             <View style={styles.onlineStatus}>
-              <View style={styles.onlineDot} />
+              <View style={[styles.onlineDot, !isOnline && styles.offlineDot]} />
               <Text style={styles.headerSub}>
-                {loading ? 'Loading...' : 'online'}
+                {loading ? 'Loading...' : isOnline ? 'Online' : lastSeenText}
               </Text>
               {/* Show role inline */}
               {recipientRole && (
@@ -1394,6 +1394,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#22c55e',
     marginRight: 6,
+  },
+  offlineDot: {
+    backgroundColor: '#64748b',
   },
   headerSub: { 
     fontSize: 13,

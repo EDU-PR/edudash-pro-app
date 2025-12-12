@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,11 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { ApprovalWorkflowService, type ProofOfPayment, type PettyCashRequest, type ApprovalSummary } from '@/services/ApprovalWorkflowService';
 import { assertSupabase } from '@/lib/supabase';
 
@@ -26,12 +27,22 @@ interface School {
 }
 
 export default function PrincipalApprovalDashboard() {
-  const { user } = useAuth();
+  const { user, profile, profileLoading, loading } = useAuth();
   const { theme } = useTheme();
+  const { t } = useTranslation();
+
+  // Guard against React StrictMode double-invoke in development
+  const navigationAttempted = useRef(false);
+
+  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Wait for auth and profile to finish loading before making routing decisions
+  const isStillLoading = loading || profileLoading;
 
   const [school, setSchool] = useState<School | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('summary');
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [summary, setSummary] = useState<ApprovalSummary>({
@@ -50,27 +61,57 @@ export default function PrincipalApprovalDashboard() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [approvedAmount, setApprovedAmount] = useState('');
 
+  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
+  useEffect(() => {
+    // Skip if still loading data
+    if (isStillLoading) return;
+    
+    // Guard against double navigation (React StrictMode in dev)
+    if (navigationAttempted.current) return;
+    
+    // Decision 1: No user -> sign in
+    if (!user) {
+      navigationAttempted.current = true;
+      try { 
+        router.replace('/(auth)/sign-in'); 
+      } catch (e) {
+        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      }
+      return;
+    }
+    
+    // Decision 2: User exists but no organization -> onboarding
+    if (!orgId) {
+      navigationAttempted.current = true;
+      console.log('Principal Approval dashboard: No school found, redirecting to onboarding', {
+        profile,
+        organization_id: profile?.organization_id,
+        preschool_id: (profile as any)?.preschool_id,
+      });
+      try { 
+        router.replace('/screens/principal-onboarding'); 
+      } catch (e) {
+        console.debug('Redirect to onboarding failed', e);
+      }
+      return;
+    }
+    
+    // Decision 3: All good, stay on dashboard (no navigation needed)
+  }, [isStillLoading, user, orgId, profile]);
+
   const loadApprovalData = async () => {
-    if (!user) return;
+    if (!user || !orgId) return;
 
     try {
-      setLoading(true);
+      setDataLoading(true);
 
-      const { data: userProfile, error: profileError } = await assertSupabase()
-        .from('users')
-        .select('preschool_id')
-        .eq('auth_user_id', user.id)
-        .single();
-
-      if (profileError || !userProfile?.preschool_id) {
-        Alert.alert('Error', 'No school assigned to your account');
-        return;
-      }
+      // Use orgId from profile (already resolved from organization_id || preschool_id)
+      const schoolId = orgId;
 
       const { data: schoolData, error: schoolError } = await assertSupabase()
         .from('preschools')
         .select('id, name')
-        .eq('id', userProfile.preschool_id)
+        .eq('id', schoolId)
         .single();
 
       if (schoolError) {
@@ -93,15 +134,16 @@ export default function PrincipalApprovalDashboard() {
       console.error('Error loading approval data:', error);
       Alert.alert('Error', 'Failed to load approval data');
     } finally {
-      setLoading(false);
+      setDataLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadApprovalData();
-     
-  }, [user?.id]);
+    if (orgId && user) {
+      loadApprovalData();
+    }
+  }, [user?.id, orgId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -204,13 +246,53 @@ export default function PrincipalApprovalDashboard() {
 
   const styles = createStyles(theme);
 
+  // Show loading state while auth/profile is loading
+  if (isStillLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+        <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show redirect message if no organization after loading is complete
+  if (!orgId) {
+    // If not authenticated, show loading state
+    if (!user) {
+      return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+          <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+          <View style={styles.loadingContainer}>
+            <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+        <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
+          <TouchableOpacity onPress={() => {
+            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+          }}>
+            <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
-      <Stack.Screen options={{ title: 'Principal Approvals', headerShown: true }} />
+      <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
 
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Approvals</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Review and manage pending requests</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('approvals.header', { defaultValue: 'Approvals' })}</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t('approvals.subtitle', { defaultValue: 'Review and manage pending requests' })}</Text>
       </View>
 
       <View style={styles.tabs}>
@@ -226,13 +308,13 @@ export default function PrincipalApprovalDashboard() {
       <ScrollView style={{ flex: 1 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {activeTab === 'summary' && (
           <View style={styles.card}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Summary</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>{t('approvals.summary', { defaultValue: 'Summary' })}</Text>
             <View style={styles.summaryGrid}>
-              <SummaryItem label="Pending POPs" value={summary.pending_pops} theme={theme} icon="document-attach" />
-              <SummaryItem label="Pending Petty Cash" value={summary.pending_petty_cash} theme={theme} icon="wallet" />
-              <SummaryItem label="Total Pending" value={`R${summary.total_pending_amount.toFixed(2)}`} theme={theme} icon="cash" />
-              <SummaryItem label="Urgent" value={summary.urgent_requests} theme={theme} icon="alert" />
-              <SummaryItem label="Overdue Receipts" value={summary.overdue_receipts} theme={theme} icon="time" />
+              <SummaryItem label={t('approvals.pending_pops', { defaultValue: 'Pending POPs' })} value={summary.pending_pops} theme={theme} icon="document-attach" />
+              <SummaryItem label={t('approvals.pending_petty_cash', { defaultValue: 'Pending Petty Cash' })} value={summary.pending_petty_cash} theme={theme} icon="wallet" />
+              <SummaryItem label={t('approvals.total_pending', { defaultValue: 'Total Pending' })} value={`R${summary.total_pending_amount.toFixed(2)}`} theme={theme} icon="cash" />
+              <SummaryItem label={t('approvals.urgent', { defaultValue: 'Urgent' })} value={summary.urgent_requests} theme={theme} icon="alert" />
+              <SummaryItem label={t('approvals.overdue_receipts', { defaultValue: 'Overdue Receipts' })} value={summary.overdue_receipts} theme={theme} icon="time" />
             </View>
           </View>
         )}
@@ -406,4 +488,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   modalFooter: { flexDirection: 'row', gap: 12, padding: 16 },
   btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center' },
   btnText: { color: '#fff', fontWeight: '700' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { fontSize: 16 },
 });
