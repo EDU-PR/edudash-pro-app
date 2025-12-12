@@ -33,12 +33,27 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   if (Platform.OS === 'web' || !Device.isDevice) return null
 
   // Android 8+ requires channel configuration for predictable behavior
+  // HIGH importance ensures notifications wake screen and play sound even when locked/backgrounded
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'General',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: Notifications.AndroidImportance.HIGH, // HIGH wakes screen and makes sound even when locked
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F7C',
+      sound: 'default', // Ensure sound plays even in background
+      enableVibrate: true,
+      showBadge: true,
+    })
+    
+    // Also create a separate channel for calls with maximum priority
+    await Notifications.setNotificationChannelAsync('calls', {
+      name: 'Calls',
+      importance: Notifications.AndroidImportance.MAX, // MAX priority for calls
+      vibrationPattern: [0, 250, 250, 250, 250, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
     })
   }
 
