@@ -191,28 +191,34 @@ export default function ParentChildRegistrationScreen() {
         status: 'pending',
       };
       
-      console.log('[Child Registration] Submitting payload:', {
-        ...payload,
-        parent_id: profile.id,
-        preschool_id: selectedOrganizationId,
-      });
+      if (__DEV__) {
+        console.log('[Child Registration] Submitting payload:', {
+          ...payload,
+          parent_id: profile.id,
+          preschool_id: selectedOrganizationId,
+        });
+      }
 
       const response = await assertSupabase().from('child_registration_requests').insert(payload as any).select();
       
       // Log full response for debugging
-      console.log('[Child Registration] Full response:', {
-        hasData: !!response.data,
-        dataLength: response.data?.length,
-        hasError: !!response.error,
-        error: response.error,
-        errorType: typeof response.error,
-        errorKeys: response.error ? Object.keys(response.error) : [],
-        status: (response.error as any)?.status || (response.error as any)?.statusCode,
-      });
+      if (__DEV__) {
+        console.log('[Child Registration] Full response:', {
+          hasData: !!response.data,
+          dataLength: response.data?.length,
+          hasError: !!response.error,
+          error: response.error,
+          errorType: typeof response.error,
+          errorKeys: response.error ? Object.keys(response.error) : [],
+          status: (response.error as any)?.status || (response.error as any)?.statusCode,
+        });
+      }
       
       // Check if we got data (successful insert)
       if (response.data && response.data.length > 0) {
-        console.log('[Child Registration] Insert successful:', response.data);
+        if (__DEV__) {
+          console.log('[Child Registration] Insert successful:', response.data);
+        }
         // Success - show alert and reset form (continues below)
       } else if (response.error) {
         // Handle error
