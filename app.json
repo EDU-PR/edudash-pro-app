@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "mark-1",
     "owner": "dashpro",
-    "version": "1.0.9",
-    "runtimeVersion": "1.0.9",
+    "version": "1.0.10",
+    "runtimeVersion": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -80,7 +80,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 10,
+      "versionCode": 11,
       "intentFilters": [
         {
           "action": "VIEW",
