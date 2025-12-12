@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Stack, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { createOrganization } from '@/services/OrganizationService';
 import { assertSupabase } from '@/lib/supabase';
@@ -10,13 +12,57 @@ import { assertSupabase } from '@/lib/supabase';
 // For new organizations (skills/tertiary/other organizations)
 // Creates both user account and organization, then routes to Org Admin Dashboard
 export default function OrgOnboardingScreen() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, profileLoading, loading } = useAuth();
 
   type Step = 'account_creation' | 'type_selection' | 'details' | 'review';
 
   const [step, setStep] = useState<Step>(user ? 'type_selection' : 'account_creation');
   const [creating, setCreating] = useState(false);
   const [orgId, setOrgId] = useState<string | null>((profile as any)?.organization_id || null);
+  const [hasCheckedOrg, setHasCheckedOrg] = useState(false);
+
+  // Check if user already has an organization - redirect to dashboard if they do
+  useEffect(() => {
+    // Wait for profile to finish loading
+    if (loading || profileLoading) return;
+    
+    // Only check once
+    if (hasCheckedOrg) return;
+    
+    if (!user) {
+      setHasCheckedOrg(true);
+      return;
+    }
+    
+    // If profile is loaded, check for organization
+    if (profile) {
+      setHasCheckedOrg(true);
+      const currentOrgId = profile?.organization_id || (profile as any)?.preschool_id;
+      if (currentOrgId) {
+        console.log('[Org Onboarding] User already has organization, redirecting to dashboard', {
+          organization_id: currentOrgId,
+          profile
+        });
+        setOrgId(currentOrgId);
+        // Show message and redirect
+        Alert.alert(
+          'Organization Already Exists',
+          'You already have an organization set up. Redirecting to your dashboard...',
+          [{ text: 'OK' }]
+        );
+        // Small delay to show alert, then redirect
+        const timer = setTimeout(() => {
+          router.replace('/screens/org-admin-dashboard');
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      // Profile not loaded yet, try refreshing
+      refreshProfile?.().then(() => {
+        setHasCheckedOrg(true);
+      });
+    }
+  }, [user, profile, profileLoading, loading, hasCheckedOrg, refreshProfile]);
 
   // Account creation fields
   const [email, setEmail] = useState('');
@@ -25,6 +71,8 @@ export default function OrgOnboardingScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [creatingAccount, setCreatingAccount] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Organization fields
   const [orgKind, setOrgKind] = useState<'skills' | 'tertiary' | 'org'>('skills');
@@ -58,7 +106,7 @@ export default function OrgOnboardingScreen() {
           data: {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
-            role: 'principal', // Organization admins get principal role
+            role: 'admin', // Organization admins get admin role (for Skills Development, Tertiary, Other orgs)
           }
         }
       });
@@ -124,6 +172,25 @@ export default function OrgOnboardingScreen() {
 
   const handleCreateOrg = useCallback(async () => {
     if (!canCreate || creating) return;
+    
+    // Check if user already has an organization before creating
+    const currentOrgId = profile?.organization_id || (profile as any)?.preschool_id;
+    if (currentOrgId) {
+      Alert.alert(
+        'Organization Already Exists',
+        'You already have an organization. Redirecting to your dashboard...',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.replace('/screens/org-admin-dashboard');
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
     try {
       setCreating(true);
       
@@ -144,16 +211,28 @@ export default function OrgOnboardingScreen() {
 
       // Refresh profile to get updated organization_id
       try { 
-        await refreshProfile?.(); 
+        await refreshProfile?.();
       } catch (e) { 
         console.debug('refreshProfile failed', e); 
       }
+      
+      // Update local state with the created org ID
+      setOrgId(created.id);
 
+      // Show success alert, then navigate after user dismisses
       Alert.alert(
         'Organization Created!', 
-        `${orgName} has been created and activated. You can now start using your organization dashboard.`
+        `${orgName} has been created and activated. You can now start using your organization dashboard.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate after alert is dismissed
+              router.replace('/screens/org-admin-dashboard');
+            }
+          }
+        ]
       );
-      router.replace('/screens/org-admin-dashboard');
     } catch (e: any) {
       console.error('Create org failed', e);
       Alert.alert('Error', e?.message || 'Failed to create organization');
@@ -164,6 +243,7 @@ export default function OrgOnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <StatusBar style="light" />
       <Stack.Screen 
         options={{ 
           title: 'Organization Onboarding', 
@@ -172,6 +252,7 @@ export default function OrgOnboardingScreen() {
           headerTitleStyle: { color: '#fff' },
           headerTintColor: '#00f5ff',
           headerBackTitleVisible: false,
+          headerBackButtonVisible: true, // Enable back button
         }} 
       />
       <ScrollView 
@@ -220,25 +301,55 @@ export default function OrgOnboardingScreen() {
               autoCorrect={false}
             />
 
-            <Text style={styles.label}>Password (minimum 6 characters)</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••"
-              secureTextEntry
-              autoCapitalize="none"
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password (minimum 6 characters)</Text>
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••"
+                  placeholderTextColor="#6B7280"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="••••••"
-              secureTextEntry
-              autoCapitalize="none"
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="••••••"
+                  placeholderTextColor="#6B7280"
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <TouchableOpacity 
               disabled={!canCreateAccount || creatingAccount} 
@@ -251,10 +362,6 @@ export default function OrgOnboardingScreen() {
                 <Text style={styles.buttonText}>Create Account</Text>
               )}
             </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => router.replace('/(auth)/sign-in')} style={styles.linkBtn}>
-              <Text style={styles.linkText}>Already have an account? Sign in</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -265,7 +372,7 @@ export default function OrgOnboardingScreen() {
               {(['skills', 'tertiary', 'org'] as const).map((k) => (
                 <TouchableOpacity key={k} style={[styles.pill, orgKind === k && styles.pillActive]} onPress={() => setOrgKind(k)}>
                   <Text style={[styles.pillText, orgKind === k && styles.pillTextActive]}>
-                    {k === 'skills' ? 'Skills/Training' : k === 'tertiary' ? 'Tertiary/Edu' : 'Organization'}
+                    {k === 'skills' ? 'Skills Development Centre' : k === 'tertiary' ? 'Tertiary Institution' : 'Other Organization'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -274,6 +381,17 @@ export default function OrgOnboardingScreen() {
             <TouchableOpacity style={styles.button} onPress={() => setStep('details')}>
               <Text style={styles.buttonText}>Continue</Text>
             </TouchableOpacity>
+
+            {/* Sign-in option for users who already have accounts */}
+            <View style={styles.signInContainer}>
+              <Text style={styles.signInText}>Already have an account?</Text>
+              <TouchableOpacity 
+                onPress={() => router.replace('/(auth)/sign-in')} 
+                style={styles.signInButton}
+              >
+                <Text style={styles.signInButtonText}>Sign In Instead</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -310,20 +428,35 @@ export default function OrgOnboardingScreen() {
               {creating ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Create organization</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setStep('type_selection')} style={styles.linkBtn}><Text style={styles.linkText}>Back</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setStep('type_selection')} style={styles.linkBtn}>
+              <Text style={styles.linkText}>Back</Text>
+            </TouchableOpacity>
+
+            {/* Sign-in option for users who already have accounts */}
+            <View style={styles.signInContainer}>
+              <Text style={styles.signInText}>Already have an account?</Text>
+              <TouchableOpacity 
+                onPress={() => router.replace('/(auth)/sign-in')} 
+                style={styles.signInButton}
+              >
+                <Text style={styles.signInButtonText}>Sign In Instead</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         
-        {/* Always show sign-in option for users who already have accounts */}
-        <View style={{ marginTop: 32, alignItems: 'center', paddingBottom: 20 }}>
-          <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Already have an account?</Text>
-          <TouchableOpacity 
-            onPress={() => router.replace('/(auth)/sign-in')} 
-            style={{ marginTop: 8 }}
-          >
-            <Text style={{ color: '#00f5ff', fontSize: 16, fontWeight: '600' }}>Sign In Instead</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Sign-in option for users who already have accounts - only show on account creation step */}
+        {step === 'account_creation' && (
+          <View style={styles.signInContainer}>
+            <Text style={styles.signInText}>Already have an account?</Text>
+            <TouchableOpacity 
+              onPress={() => router.replace('/(auth)/sign-in')} 
+              style={styles.signInButton}
+            >
+              <Text style={styles.signInButtonText}>Sign In Instead</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -331,19 +464,132 @@ export default function OrgOnboardingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0b1220' },
-  content: { padding: 16 },
-  heading: { color: '#fff', fontSize: 20, fontWeight: '800', marginBottom: 6 },
-  subheading: { color: '#9CA3AF', marginBottom: 12 },
-  label: { color: '#fff', marginTop: 8, marginBottom: 6 },
-  input: { backgroundColor: '#111827', color: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#1f2937', padding: 12 },
-  button: { marginTop: 12, backgroundColor: '#00f5ff', padding: 12, borderRadius: 10, alignItems: 'center' },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#000', fontWeight: '800' },
-  pillRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  pill: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#1f2937', backgroundColor: '#0b1220' },
-  pillActive: { backgroundColor: '#00f5ff', borderColor: '#00f5ff' },
-  pillText: { color: '#fff', fontWeight: '700' },
-  pillTextActive: { color: '#000' },
-  linkBtn: { marginTop: 8, alignItems: 'center' },
-  linkText: { color: '#60A5FA', textDecorationLine: 'underline' },
+  content: { padding: 20, paddingBottom: 40 },
+  heading: { 
+    color: '#fff', 
+    fontSize: 28, 
+    fontWeight: '800', 
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subheading: { 
+    color: '#9CA3AF', 
+    fontSize: 16,
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  inputContainer: {
+    marginTop: 16,
+  },
+  label: { 
+    color: '#E5E7EB', 
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  input: { 
+    backgroundColor: '#111827', 
+    color: '#fff', 
+    borderRadius: 10, 
+    borderWidth: 1, 
+    borderColor: '#1f2937', 
+    padding: 14,
+    fontSize: 16,
+  },
+  passwordWrapper: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 48,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+  },
+  button: { 
+    marginTop: 24, 
+    backgroundColor: '#00f5ff', 
+    padding: 16, 
+    borderRadius: 10, 
+    alignItems: 'center',
+    shadowColor: '#00f5ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonDisabled: { 
+    opacity: 0.6,
+    shadowOpacity: 0.1,
+  },
+  buttonText: { 
+    color: '#000', 
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  pillRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap',
+    gap: 10, 
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  pill: { 
+    paddingVertical: 10, 
+    paddingHorizontal: 16, 
+    borderRadius: 20, 
+    borderWidth: 1.5, 
+    borderColor: '#1f2937', 
+    backgroundColor: '#0b1220',
+    minWidth: 100,
+  },
+  pillActive: { 
+    backgroundColor: '#00f5ff', 
+    borderColor: '#00f5ff',
+  },
+  pillText: { 
+    color: '#9CA3AF', 
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  pillTextActive: { 
+    color: '#000',
+    fontWeight: '700',
+  },
+  linkBtn: { 
+    marginTop: 16, 
+    alignItems: 'center',
+  },
+  linkText: { 
+    color: '#60A5FA', 
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  signInContainer: {
+    marginTop: 32,
+    alignItems: 'center',
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#1f2937',
+  },
+  signInText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  signInButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  signInButtonText: {
+    color: '#00f5ff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

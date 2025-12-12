@@ -22,13 +22,14 @@ function normalizeRole(r?: string | null): string | null {
   
   // Map potential variants to canonical Role types
   if (s.includes('super') || s === 'superadmin') return 'super_admin';
-  if (s === 'principal' || s.includes('principal') || s === 'admin' || s.includes('school admin')) return 'principal_admin';
+  // Note: 'admin' role is for Skills Development/Tertiary/Other orgs (separate from principal)
+  if (s === 'principal' || s.includes('principal') || s.includes('school admin')) return 'principal_admin';
   if (s.includes('teacher')) return 'teacher';
   if (s.includes('parent')) return 'parent';
   if (s.includes('student') || s.includes('learner')) return 'student';
   
-  // Handle exact matches for the canonical types
-  if (['super_admin', 'principal_admin', 'teacher', 'parent', 'student'].includes(s)) {
+  // Handle exact matches for the canonical types (including 'admin')
+  if (['super_admin', 'principal_admin', 'admin', 'teacher', 'parent', 'student'].includes(s)) {
     return s;
   }
   
@@ -300,6 +301,10 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       case 'super_admin':
         return { path: '/screens/super-admin-dashboard' };
       
+      case 'admin':
+        // Independent organization admins should see onboarding to create organization
+        return { path: '/screens/org-onboarding' };
+      
       case 'principal_admin':
         // Independent principals should see onboarding to create/join organization
         return { path: '/screens/principal-dashboard', params: { standalone: 'true' } };
@@ -321,6 +326,11 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   switch (role) {
     case 'super_admin':
       return { path: '/screens/super-admin-dashboard' };
+    
+    case 'admin':
+      // Organization admins (Skills Development, Tertiary, Other) always go to org-admin-dashboard
+      console.log('[ROUTE DEBUG] Organization admin routing - organization_id:', profile.organization_id);
+      return { path: '/screens/org-admin-dashboard' };
     
     case 'principal_admin':
       console.log('[ROUTE DEBUG] Principal admin routing - organization_id:', profile.organization_id);
@@ -366,7 +376,7 @@ export function validateUserAccess(profile: EnhancedUserProfile | null): {
   // If user has a valid role, grant access regardless of capability check
   // This prevents users from getting stuck on profiles-gate
   const role = normalizeRole(profile.role) as Role;
-  if (role && ['parent', 'teacher', 'principal_admin', 'super_admin'].includes(role)) {
+  if (role && ['parent', 'teacher', 'principal_admin', 'admin', 'super_admin'].includes(role)) {
     console.log('[validateUserAccess] User has valid role:', role, '- granting access');
     return { hasAccess: true };
   }

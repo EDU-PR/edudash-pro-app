@@ -725,7 +725,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       try {
         const { data: selfProfile } = await assertSupabase()
           .from('profiles')
-          .select('id,email,role,first_name,last_name,avatar_url,created_at,preschool_id')
+          .select('id,email,role,first_name,last_name,avatar_url,created_at,preschool_id,organization_id')
           .eq('id', userId)
           .maybeSingle();
         if (selfProfile && (selfProfile as any).id) {

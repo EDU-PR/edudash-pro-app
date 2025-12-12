@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { TenantService } from '@/lib/services/tenant';
@@ -291,9 +292,22 @@ export default function PrincipalOnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <Stack.Screen options={{ title: 'Principal Onboarding', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <StatusBar style="light" />
+      <Stack.Screen 
+        options={{ 
+          title: 'Principal Onboarding', 
+          headerShown: true,
+          headerStyle: { backgroundColor: '#0b1220' },
+          headerTitleStyle: { color: '#fff' },
+          headerTintColor: '#00f5ff',
+          headerBackTitleVisible: false,
+        }} 
+      />
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.heading}>Welcome, {adminName || profile?.first_name || 'Principal'}</Text>
         <Text style={styles.subheading}>
           {step === 'type_selection' 

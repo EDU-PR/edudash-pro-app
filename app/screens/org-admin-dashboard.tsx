@@ -1,15 +1,22 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { DashboardHeader } from '@/components/org-admin/DashboardHeader';
+import { MetricsCards } from '@/components/org-admin/MetricsCards';
+import { QuickActionsGrid } from '@/components/org-admin/QuickActionsGrid';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
 export default function OrgAdminDashboard() {
   const { t } = useTranslation();
   const { user, profile, profileLoading, loading } = useAuth();
   const { theme } = useTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
@@ -48,7 +55,7 @@ export default function OrgAdminDashboard() {
         preschool_id: (profile as any)?.preschool_id,
       });
       try { 
-        router.replace('/screens/onboarding'); 
+        router.replace('/screens/org-onboarding'); 
       } catch (e) {
         console.debug('Redirect to onboarding failed', e);
       }
@@ -89,7 +96,7 @@ export default function OrgAdminDashboard() {
         <View style={styles.empty}>
           <Text style={styles.loadingText}>{t('dashboard.no_org_found_redirect', { defaultValue: 'No organization found. Redirecting to setup...' })}</Text>
           <TouchableOpacity onPress={() => {
-            try { router.replace('/screens/onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+            try { router.replace('/screens/org-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
           }}>
             <Text style={[styles.loadingText, { textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
           </TouchableOpacity>
@@ -98,71 +105,107 @@ export default function OrgAdminDashboard() {
     );
   }
 
+  const orgAdminNavItems = [
+    { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/org-admin-dashboard' },
+    { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/org-admin/programs' },
+    { id: 'cohorts', label: 'Cohorts', icon: 'people', route: '/screens/org-admin/cohorts' },
+    { id: 'instructors', label: 'Team', icon: 'briefcase', route: '/screens/org-admin/instructors' },
+    { id: 'enrollments', label: 'Enrollments', icon: 'list', route: '/screens/org-admin/enrollments' },
+    { id: 'certifications', label: 'Certifications', icon: 'ribbon', route: '/screens/org-admin/certifications' },
+    { id: 'placements', label: 'Placements', icon: 'business', route: '/screens/org-admin/placements' },
+    { id: 'invoices', label: 'Invoices', icon: 'document-text', route: '/screens/org-admin/invoices' },
+    { id: 'data-import', label: 'Data Import', icon: 'cloud-upload', route: '/screens/org-admin/data-import' },
+    { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/org-admin/settings' },
+  ];
+
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: t('org_admin.title', { defaultValue: 'Organization Admin' }) }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.heading}>{t('org_admin.overview', { defaultValue: 'Organization Overview' })}</Text>
-        <View style={styles.kpiRow}>
-          <KPI title={t('org_admin.kpi.active_learners', { defaultValue: 'Active Learners' })} value="--" theme={theme} />
-          <KPI title={t('org_admin.kpi.completion_rate', { defaultValue: 'Completion Rate' })} value="--%" theme={theme} />
-          <KPI title={t('org_admin.kpi.cert_pipeline', { defaultValue: 'Cert Pipeline' })} value="--" theme={theme} />
-          <KPI title={t('org_admin.kpi.mrr', { defaultValue: 'MRR' })} value="$--" theme={theme} />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <Stack.Screen 
+        options={{ 
+          title: t('org_admin.title', { defaultValue: 'Organization Admin' }),
+          headerStyle: { backgroundColor: theme.background },
+          headerTitleStyle: { color: theme.text },
+          headerTintColor: theme.primary,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => setDrawerOpen(true)}
+              style={{ marginLeft: 16, padding: 8 }}
+            >
+              <Ionicons name="menu" size={24} color={theme.text} />
+            </TouchableOpacity>
+          ),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/screens/org-admin/settings' as any)}
+              style={{ marginRight: 16, padding: 8 }}
+            >
+              <View style={styles.avatarButton}>
+                <Ionicons name="person" size={18} color={theme.primary} />
+              </View>
+            </TouchableOpacity>
+          ),
+        }} 
+      />
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <DashboardHeader theme={theme} />
+        
+        <View style={styles.section}>
+          <Text style={styles.heading}>
+            {t('org_admin.overview', { defaultValue: 'Overview' })}
+          </Text>
+          <MetricsCards theme={theme} />
         </View>
 
-        <Text style={styles.sectionTitle}>{t('org_admin.quick_actions', { defaultValue: 'Quick Actions' })}</Text>
-        <View style={styles.row}>
-          <ActionBtn label={t('org_admin.actions.programs', { defaultValue: 'Programs' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.cohorts', { defaultValue: 'Cohorts' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.instructors', { defaultValue: 'Instructors' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.enrollments', { defaultValue: 'Enrollments' })} theme={theme} />
-        </View>
-        <View style={styles.row}>
-          <ActionBtn label={t('org_admin.actions.certifications', { defaultValue: 'Certifications' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.placements', { defaultValue: 'Placements' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.invoices', { defaultValue: 'Invoices' })} theme={theme} />
-          <ActionBtn label={t('org_admin.actions.settings', { defaultValue: 'Settings' })} theme={theme} />
+        <View style={styles.section}>
+          <QuickActionsGrid theme={theme} />
         </View>
       </ScrollView>
-    </View>
+
+      <MobileNavDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        navItems={orgAdminNavItems}
+      />
+    </SafeAreaView>
   );
 }
-
-function KPI({ title, value, theme }: { title: string; value: string; theme: any }) {
-  return (
-    <View style={kpiStyles(theme).kpi}>
-      <Text style={kpiStyles(theme).kpiValue}>{value}</Text>
-      <Text style={kpiStyles(theme).kpiTitle}>{title}</Text>
-    </View>
-  );
-}
-
-function ActionBtn({ label, onPress, theme }: { label: string; onPress?: () => void; theme: any }) {
-  return (
-    <TouchableOpacity style={actionStyles(theme).action} onPress={onPress}>
-      <Text style={actionStyles(theme).actionText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-const kpiStyles = (theme: any) => StyleSheet.create({
-  kpi: { flexBasis: '48%', backgroundColor: theme?.card || '#111827', padding: 12, borderRadius: 12, borderColor: theme?.border || '#1f2937', borderWidth: 1 },
-  kpiValue: { color: theme?.text || '#fff', fontSize: 22, fontWeight: '800' },
-  kpiTitle: { color: theme?.textSecondary || '#9CA3AF', marginTop: 4 },
-});
-
-const actionStyles = (theme: any) => StyleSheet.create({
-  action: { flexBasis: '48%', backgroundColor: theme?.card || '#111827', padding: 14, borderRadius: 12, borderColor: theme?.border || '#1f2937', borderWidth: 1, alignItems: 'center' },
-  actionText: { color: theme?.text || '#fff', fontWeight: '700' },
-});
 
 const createStyles = (theme: any) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme?.background || '#0b1220' },
-  content: { padding: 16, gap: 12 },
-  heading: { color: theme?.text || '#fff', fontSize: 20, fontWeight: '800' },
-  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  sectionTitle: { color: theme?.text || '#fff', fontSize: 16, fontWeight: '700', marginTop: 8 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { color: theme?.text || '#E5E7EB', fontSize: 16 },
+  container: { 
+    flex: 1, 
+    backgroundColor: theme?.background || '#0b1220' 
+  },
+  content: { 
+    padding: 16, 
+    gap: 24,
+    paddingBottom: 32,
+  },
+  section: {
+    gap: 12,
+  },
+  heading: { 
+    color: theme?.text || '#fff', 
+    fontSize: 20, 
+    fontWeight: '800' 
+  },
+  empty: { 
+    flex: 1, 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  loadingText: { 
+    color: theme?.text || '#E5E7EB', 
+    fontSize: 16 
+  },
+  avatarButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme?.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

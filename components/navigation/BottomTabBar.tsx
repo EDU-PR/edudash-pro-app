@@ -109,11 +109,53 @@ const TAB_ITEMS: TabItem[] = [
   // Principal tabs
   { 
     id: 'principal-dashboard', 
-    label: 'Home', 
+    label: 'Home',
     icon: 'home-outline', 
     activeIcon: 'home', 
     route: '/screens/principal-dashboard', 
     roles: ['principal', 'principal_admin'] 
+  },
+  
+  // Org Admin tabs (Skills Development, Tertiary, etc.)
+  { 
+    id: 'org-admin-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/org-admin-dashboard', 
+    roles: ['admin'] 
+  },
+  { 
+    id: 'org-admin-programs', 
+    label: 'Programs',
+    icon: 'school-outline', 
+    activeIcon: 'school', 
+    route: '/screens/org-admin/programs', 
+    roles: ['admin'] 
+  },
+  { 
+    id: 'org-admin-enrollments', 
+    label: 'Enrollments',
+    icon: 'list-outline', 
+    activeIcon: 'list', 
+    route: '/screens/org-admin/enrollments', 
+    roles: ['admin'] 
+  },
+  { 
+    id: 'org-admin-instructors', 
+    label: 'Team',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/org-admin/instructors', 
+    roles: ['admin'] 
+  },
+  { 
+    id: 'org-admin-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/org-admin/settings', 
+    roles: ['admin'] 
   },
   { 
     id: 'principal-students', 
