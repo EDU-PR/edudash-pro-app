@@ -32,7 +32,7 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
         const { assertSupabase } = await import('./supabase');
         const { data: { session } } = await assertSupabase().auth.getSession();
         if (session?.user?.id) {
-          console.log('[authActions] Deactivating push tokens for user:', session.user.id);
+          if (__DEV__) console.log('[authActions] Deactivating push tokens for user:', session.user.id);
           await deactivateCurrentUserTokens(session.user.id);
         }
       } catch (tokenErr) {

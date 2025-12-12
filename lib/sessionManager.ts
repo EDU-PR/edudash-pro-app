@@ -472,7 +472,7 @@ async function refreshSession(
     if (error instanceof Error) {
       // Don't retry for "Already Used" errors - this means a concurrent refresh succeeded
       if (error.message.includes('Already Used')) {
-        console.log('[SessionManager] Refresh token already used (concurrent refresh), fetching current session');
+        if (__DEV__) console.log('[SessionManager] Refresh token already used (concurrent refresh), fetching current session');
         // Try to get the session that was just refreshed
         const currentSession = await getStoredSession();
         if (currentSession) {
@@ -483,7 +483,7 @@ async function refreshSession(
       if (error.message.includes('Invalid Refresh Token') || 
           error.message.includes('Refresh Token Not Found') ||
           error.message.includes('refresh_token_not_found')) {
-        console.log('[SessionManager] Refresh token is invalid, clearing stored session');
+        if (__DEV__) console.log('[SessionManager] Refresh token is invalid, clearing stored session');
         await clearStoredData();
         
         track('edudash.auth.session_refresh_failed', {
@@ -603,10 +603,10 @@ export async function signInWithSession(
   error?: string;
 }> {
   try {
-    console.log('[SessionManager] signInWithSession called for:', email);
+    if (__DEV__) console.log('[SessionManager] signInWithSession called for:', email);
     
     // Clear any stale session data before attempting new sign-in
-    console.log('[SessionManager] Clearing stale session data before sign-in...');
+    if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
     await clearStoredData();
     
     // Small delay to ensure storage is cleared
@@ -622,11 +622,11 @@ export async function signInWithSession(
       
       // Special handling for "already signed in" errors
       if (error.message?.includes('already') || error.message?.includes('signed in')) {
-        console.log('[SessionManager] User already signed in, attempting to get session...');
+        if (__DEV__) console.log('[SessionManager] User already signed in, attempting to get session...');
         try {
           const { data: sessionData } = await assertSupabase().auth.getSession();
           if (sessionData?.session) {
-            console.log('[SessionManager] Retrieved existing session');
+            if (__DEV__) console.log('[SessionManager] Retrieved existing session');
             // Use the existing session
             const session: UserSession = {
               access_token: sessionData.session.access_token,
@@ -671,17 +671,17 @@ export async function signInWithSession(
     };
 
     // Fetch user profile
-    console.log('[SessionManager] Fetching user profile for:', data.user.id);
+    if (__DEV__) console.log('[SessionManager] Fetching user profile for:', data.user.id);
     const profile = await fetchUserProfile(data.user.id);
 
     if (!profile) {
       console.error('[SessionManager] Failed to load user profile for user:', data.user.id);
       return { session: null, profile: null, error: 'Failed to load user profile' };
     }
-    console.log('[SessionManager] Profile loaded successfully. Role:', profile.role, 'Org:', profile.organization_id);
+    if (__DEV__) console.log('[SessionManager] Profile loaded successfully. Role:', profile.role, 'Org:', profile.organization_id);
 
     // Store session and profile
-    console.log('[SessionManager] Storing session and profile...');
+    if (__DEV__) console.log('[SessionManager] Storing session and profile...');
     try {
       await Promise.all([
         storeSession(session),

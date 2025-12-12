@@ -161,7 +161,7 @@ class NotificationService {
         throw error;
       }
 
-      console.log('Push token registered successfully:', this.pushToken);
+      if (__DEV__) console.log('Push token registered successfully');
       return this.pushToken;
 
     } catch (error) {

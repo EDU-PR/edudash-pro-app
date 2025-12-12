@@ -267,7 +267,7 @@ export class EnhancedBiometricAuth {
         console.warn('Could not persist v2 biometric sessions map:', e);
       }
 
-      console.log('Stored biometric session data for user:', email);
+      if (__DEV__) console.log('Stored biometric session data for user:', email);
       return true;
     } catch (error) {
       console.error('Error storing biometric session:', error);
@@ -288,7 +288,7 @@ export class EnhancedBiometricAuth {
         if (sessionData) {
           const expirationTime = new Date(sessionData.expiresAt);
           if (expirationTime < new Date()) {
-            console.log('Biometric session expired for active user, clearing');
+            if (__DEV__) console.log('Biometric session expired for active user, clearing');
             await this.removeBiometricSession(activeId);
             return null;
           }
@@ -307,7 +307,7 @@ export class EnhancedBiometricAuth {
       // Check if session is expired
       const expirationTime = new Date(sessionData.expiresAt);
       if (expirationTime < new Date()) {
-        console.log('Biometric session expired, clearing data');
+        if (__DEV__) console.log('Biometric session expired, clearing data');
         await this.clearBiometricSession();
         return null;
       }
@@ -407,7 +407,7 @@ export class EnhancedBiometricAuth {
           const { data } = await assertSupabase().auth.getSession();
           
           if (!data.session?.user) {
-            console.log('No active Supabase session, attempting to restore');
+            if (__DEV__) console.log('No active Supabase session, attempting to restore');
 
             // Prefer per-user biometric refresh token for active user
             let perUserRefresh: string | null = await this.getRefreshTokenForUser(sessionData.userId);
@@ -417,7 +417,7 @@ export class EnhancedBiometricAuth {
                 refresh_token: perUserRefresh,
               });
               if (!refreshErr && refreshed?.session?.user) {
-                console.log('Restored Supabase session using per-user biometric refresh token');
+                if (__DEV__) console.log('Restored Supabase session using per-user biometric refresh token');
                 sessionRestored = true;
               }
             }
@@ -431,7 +431,7 @@ export class EnhancedBiometricAuth {
                 refresh_token: storedSession.refresh_token,
               });
                 if (!refreshErr2 && refreshed2?.session?.user) {
-                  console.log('Successfully refreshed and restored Supabase session from stored session');
+                  if (__DEV__) console.log('Successfully refreshed and restored Supabase session from stored session');
                   sessionRestored = true;
                 }
               }
@@ -450,14 +450,14 @@ export class EnhancedBiometricAuth {
                   refresh_token: biometricRefresh,
                 });
                 if (!refreshErr3 && refreshed3?.session?.user) {
-                  console.log('Restored Supabase session using global biometric refresh token');
+                  if (__DEV__) console.log('Restored Supabase session using global biometric refresh token');
                   sessionRestored = true;
                 }
               }
             }
 
           } else {
-            console.log('Valid Supabase session already exists');
+            if (__DEV__) console.log('Valid Supabase session already exists');
             sessionRestored = true;
           }
         }
@@ -476,7 +476,7 @@ export class EnhancedBiometricAuth {
       // Migration: ensure this active user exists in v2 sessions map and set active
       await this.ensureSessionInMap(sessionData);
 
-      console.log('Enhanced biometric authentication successful for:', sessionData.email);
+      if (__DEV__) console.log('Enhanced biometric authentication successful for:', sessionData.email);
       
       // Ensure session data is persisted for later restores if we refreshed tokens
       if (sessionRestored) {

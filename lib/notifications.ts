@@ -120,13 +120,13 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
     console.log('[Push Registration] Device metadata:', { installationId, platform: Platform.OS, model: Device.modelName, locale: deviceMetadata.locale, normalizedLanguage })
 
     // Get push token
-    console.log('[Push Registration] Getting push token...')
+    if (__DEV__) console.log('[Push Registration] Getting push token...')
     const token = await registerForPushNotificationsAsync()
     if (!token) {
-      console.log('[Push Registration] Failed to get push token - permissions denied')
+      if (__DEV__) console.log('[Push Registration] Failed to get push token - permissions denied')
       return { status: 'denied', reason: 'permissions_denied', message: 'Push notifications not permitted' }
     }
-    console.log('[Push Registration] Got push token:', token.substring(0, 20) + '...')
+    if (__DEV__) console.log('[Push Registration] Got push token')
 
     // Upsert to database
     console.log('[Push Registration] Saving to database...')

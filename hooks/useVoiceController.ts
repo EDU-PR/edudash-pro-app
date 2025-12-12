@@ -74,21 +74,21 @@ export function useVoiceController(dash: DashAIAssistant | null, opts: Options =
     language: activeLang,
     onPartialTranscript: (text) => {
       streamTranscriptRef.current = text || '';
-      console.log('[VoiceController] Streaming partial:', text);
+      if (__DEV__) console.log('[VoiceController] Streaming partial:', text);
     },
     onFinalTranscript: (text) => {
       streamTranscriptRef.current = text || '';
       streamCompleteRef.current = true;
-      console.log('[VoiceController] Streaming final:', text);
+      if (__DEV__) console.log('[VoiceController] Streaming final:', text);
     },
     onAssistantToken: (token) => {
       // Handle assistant responses if needed in the future
-      console.log('[VoiceController] Assistant token:', token);
+      if (__DEV__) console.log('[VoiceController] Assistant token received');
     },
     onStatusChange: (status) => {
-      console.log('[VoiceController] Stream status:', status);
+      if (__DEV__) console.log('[VoiceController] Stream status:', status);
       if (status === 'error' && state === 'listening') {
-        console.warn('[VoiceController] Streaming failed, will fallback to batch');
+        if (__DEV__) console.warn('[VoiceController] Streaming failed, will fallback to batch');
       }
     },
   });
