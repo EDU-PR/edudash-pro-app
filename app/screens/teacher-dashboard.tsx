@@ -41,21 +41,9 @@ export default function TeacherDashboardScreen() {
       return;
     }
     
-    // Decision 2: User exists but no organization -> onboarding
-    if (!orgId) {
-      navigationAttempted.current = true;
-      console.log('Teacher dashboard: No school found, redirecting to onboarding', {
-        profile,
-        organization_id: profile?.organization_id,
-        preschool_id: (profile as any)?.preschool_id,
-      });
-      try { 
-        router.replace('/screens/onboarding'); 
-      } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
-      }
-      return;
-    }
+    // Decision 2: User exists but no organization -> allow standalone access
+    // Teachers can use the dashboard without an organization (standalone mode)
+    // No redirect needed - dashboard will show appropriate prompts
     
     // Decision 3: All good, stay on dashboard (no navigation needed)
   }, [isStillLoading, user, orgId, profile]);
@@ -70,29 +58,8 @@ export default function TeacherDashboardScreen() {
     );
   }
 
-  // Show redirect message if no organization after loading is complete
-  if (!orgId) {
-    // If not authenticated, show loading state
-    if (!user) {
-      return (
-        <View style={styles.empty}>
-          <Stack.Screen options={{ headerShown: false }} />
-          <Text style={styles.text}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.empty}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <Text style={styles.text}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
-        <TouchableOpacity onPress={() => {
-          try { router.replace('/screens/onboarding'); } catch (e) { console.debug('Redirect failed', e); }
-        }}>
-          <Text style={[styles.text, { textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // Allow access without organization - teachers can use standalone dashboard
+  // Show dashboard content even if no organization (standalone mode)
 
   return (
     <DesktopLayout role="teacher">

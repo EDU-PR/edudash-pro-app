@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTerm } from '@/contexts/TerminologyContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -19,13 +18,13 @@ export function AssignmentsCard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
-        return theme.colors.warning || '#f59e0b';
+        return theme.colors?.warning || theme.warning || '#f59e0b';
       case 'in_progress':
-        return theme.colors.info || '#3b82f6';
+        return theme.colors?.info || theme.info || '#3b82f6';
       case 'completed':
-        return theme.colors.success || '#10b981';
+        return theme.colors?.success || theme.success || '#10b981';
       default:
-        return theme.colors.text;
+        return theme.text;
     }
   };
 
@@ -37,8 +36,8 @@ export function AssignmentsCard() {
             key={idx}
             style={[styles.item, { borderLeftColor: getStatusColor(item.status) }]}
           >
-            <ThemedText style={styles.title}>{item.title}</ThemedText>
-            <ThemedText style={styles.dueDate}>{item.dueDate}</ThemedText>
+            <Text style={[styles.title, { color: theme.text }]}>{item.title}</Text>
+            <Text style={[styles.dueDate, { color: theme.textSecondary }]}>{item.dueDate}</Text>
           </View>
         ))}
       </View>

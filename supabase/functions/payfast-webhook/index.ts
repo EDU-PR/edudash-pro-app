@@ -68,7 +68,20 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Only accept POST requests from PayFast
+  // Allow GET/HEAD for PayFast sandbox connectivity tests
+  if (req.method === "GET" || req.method === "HEAD") {
+    console.log('PayFast webhook health check:', { method: req.method });
+    return new Response(JSON.stringify({ 
+      status: "ok", 
+      service: "payfast-webhook",
+      timestamp: new Date().toISOString()
+    }), { 
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" } 
+    });
+  }
+
+  // Only accept POST requests from PayFast for actual ITN
   if (req.method !== "POST") {
     console.error(`PayFast webhook received invalid method: ${req.method}`);
     return new Response(JSON.stringify({ error: "Method not allowed" }), { 
@@ -348,7 +361,7 @@ serve(async (req: Request) => {
           next_billing_date: endDate.toISOString(),
           seats_total: Math.max(seats, plan.max_teachers || 1),
           seats_used: 0,
-          metadata: {
+          settings: {
             plan_name: plan.name,
             price_paid: existingTx.amount,
             transaction_id: m_payment_id,
@@ -378,16 +391,16 @@ serve(async (req: Request) => {
 
         // Update preschool subscription tier (legacy compatibility)
         await supabase
-          .from('preschools')
-          .update({ subscription_tier: plan.tier })
+          .from('organizations')
+          .update({ plan_tier: plan.tier })
           .eq('id', existingTx.school_id);
         
-        // CRITICAL: Update organizations.subscription_tier (canonical field)
+        // CRITICAL: Update organizations.plan_tier (canonical field)
         // Also update plan_tier for backward compatibility during migration period
         await supabase
           .from('organizations')
           .update({ 
-            subscription_tier: plan.tier,  // Canonical field
+            plan_tier: plan.tier,  // Canonical field
             plan_tier: plan.tier             // Legacy field for compatibility
           })
           .eq('id', existingTx.school_id);
@@ -430,12 +443,12 @@ serve(async (req: Request) => {
         // Send email notification (sandbox & production)
         try {
           const { data: schoolData } = await supabase
-            .from('preschools')
-            .select('name, contact_email')
+            .from('organizations')
+            .select('name, email')
             .eq('id', existingTx.school_id)
             .single();
           
-          if (schoolData?.contact_email) {
+          if (schoolData?.email) {
             const emailSubject = `✅ Subscription Activated - ${plan.name}`;
             const emailBody = `
               <h2>Payment Successful!</h2>
@@ -458,10 +471,10 @@ serve(async (req: Request) => {
             // Queue email via notifications-dispatcher
             await supabase.from('notification_queue').insert({
               notification_type: 'email',
-              recipient: schoolData.contact_email,
+              recipient: schoolData.email,
               subject: emailSubject,
               body: emailBody,
-              metadata: {
+              settings: {
                 payment_id: m_payment_id,
                 pf_payment_id,
                 plan_tier: plan.tier,
@@ -470,7 +483,7 @@ serve(async (req: Request) => {
               }
             });
             
-            console.log('Email notification queued:', schoolData.contact_email);
+            console.log('Email notification queued:', schoolData.email);
           }
         } catch (emailError) {
           console.error('Failed to queue email notification:', emailError);
@@ -486,49 +499,49 @@ serve(async (req: Request) => {
         });
       }
       
-      // Process user subscription - create a personal school for the user
+      // Process user subscription - create a personal organization for the user
       else if (scope === 'user' && ownerId) {
-        console.log('Processing user subscription - creating personal school');
+        console.log('Processing user subscription - creating personal organization');
         
-        // For user subscriptions, we need to create a personal school
+        // For user subscriptions, we need to create a personal organization
         // or find the user's existing school
         let userSchoolId = null;
         
         // Check if user already has a school
         const { data: existingSchool } = await supabase
-          .from('preschools')
+          .from('organizations')
           .select('id')
-          .eq('owner_user_id', ownerId)
-          .eq('is_personal', true)
+          .eq('created_by', ownerId)
           .maybeSingle();
         
         if (existingSchool) {
           userSchoolId = existingSchool.id;
         } else {
           // Create a personal school for the user
-          const personalSchool = {
+          const personalOrg = {
             name: `Personal Account - ${ownerId}`,
-            is_personal: true,
-            owner_user_id: ownerId,
-            subscription_tier: plan.tier,
-            metadata: {
+            type: 'preschool', // Default type for personal accounts
+            created_by: ownerId,
+            plan_tier: plan.tier,
+            settings: {
+              is_personal: true,
               created_by_payment: true,
               payment_id: m_payment_id
             }
           };
           
-          const { data: newSchool, error: schoolError } = await supabase
-            .from('preschools')
-            .insert([personalSchool])
+          const { data: newOrg, error: orgError } = await supabase
+            .from('organizations')
+            .insert([personalOrg])
             .select('id')
             .single();
           
-          if (schoolError) {
-            console.error('Error creating personal school:', schoolError);
-            return new Response("Failed to create personal school", { status: 500, headers: corsHeaders });
+          if (orgError) {
+            console.error('Error creating personal organization:', orgError);
+            return new Response("Failed to create personal organization", { status: 500, headers: corsHeaders });
           }
           
-          userSchoolId = newSchool.id;
+          userSchoolId = newOrg.id;
         }
         
         const startDate = new Date();
@@ -551,7 +564,7 @@ serve(async (req: Request) => {
           next_billing_date: endDate.toISOString(),
           seats_total: 1,
           seats_used: 1,
-          metadata: {
+          settings: {
             plan_name: plan.name,
             price_paid: existingTx.amount,
             transaction_id: m_payment_id,
@@ -590,16 +603,16 @@ serve(async (req: Request) => {
         
         // Update preschool subscription tier (legacy compatibility)
         await supabase
-          .from('preschools')
-          .update({ subscription_tier: plan.tier })
+          .from('organizations')
+          .update({ plan_tier: plan.tier })
           .eq('id', userSchoolId);
         
-        // CRITICAL: Update organizations.subscription_tier (canonical field)
+        // CRITICAL: Update organizations.plan_tier (canonical field)
         // Also update plan_tier for backward compatibility during migration period
         await supabase
           .from('organizations')
           .update({ 
-            subscription_tier: plan.tier,  // Canonical field
+            plan_tier: plan.tier,  // Canonical field
             plan_tier: plan.tier             // Legacy field for compatibility
           })
           .eq('id', userSchoolId);
@@ -659,7 +672,7 @@ serve(async (req: Request) => {
               recipient: emailAddress,
               subject: emailSubject,
               body: emailBody,
-              metadata: {
+              settings: {
                 payment_id: m_payment_id,
                 pf_payment_id,
                 plan_tier: plan.tier,
@@ -733,10 +746,9 @@ serve(async (req: Request) => {
       if (scope === 'user' && ownerId) {
         // Update user's subscription status
         const { data: userSchool } = await supabase
-          .from('preschools')
+          .from('organizations')
           .select('id')
-          .eq('owner_user_id', ownerId)
-          .eq('is_personal', true)
+          .eq('created_by', ownerId)
           .maybeSingle();
         
         if (userSchool) {
@@ -794,7 +806,7 @@ serve(async (req: Request) => {
             recipient: emailAddress,
             subject: emailSubject,
             body: emailBody,
-            metadata: {
+            settings: {
               payment_id: m_payment_id,
               status: newStatus,
               mode: PAYFAST_MODE
@@ -881,10 +893,9 @@ serve(async (req: Request) => {
       // Handle user-scope renewals
       if (scope === 'user' && ownerId) {
         const { data: userSchool } = await supabase
-          .from('preschools')
+          .from('organizations')
           .select('id')
-          .eq('owner_user_id', ownerId)
-          .eq('is_personal', true)
+          .eq('created_by', ownerId)
           .maybeSingle();
         
         if (userSchool) {

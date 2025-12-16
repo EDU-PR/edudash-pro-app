@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export function FixturesCard() {
@@ -33,28 +32,28 @@ export function FixturesCard() {
             key={idx}
             style={[
               styles.item,
-              { backgroundColor: theme.colors.background },
+              { backgroundColor: theme.colors?.background || theme.background },
             ]}
           >
             <View style={styles.header}>
-              <ThemedText style={styles.opponent}>{item.opponent}</ThemedText>
+              <Text style={[styles.opponent, { color: theme.text }]}>{item.opponent}</Text>
               <View
                 style={[
                   styles.venueBadge,
                   {
                     backgroundColor:
                       item.venue === 'Home'
-                        ? theme.colors.success || '#10b981'
-                        : theme.colors.info || '#3b82f6',
+                        ? theme.colors?.success || theme.success || '#10b981'
+                        : theme.colors?.info || theme.info || '#3b82f6',
                   },
                 ]}
               >
-                <ThemedText style={styles.venueText}>{item.venue}</ThemedText>
+                <Text style={styles.venueText}>{item.venue}</Text>
               </View>
             </View>
-            <ThemedText style={styles.datetime}>
+            <Text style={[styles.datetime, { color: theme.textSecondary }]}>
               {item.date} • {item.time}
-            </ThemedText>
+            </Text>
           </View>
         ))}
       </View>

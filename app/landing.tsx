@@ -127,6 +127,28 @@ setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to 
           return;
         }
 
+        // PAYMENT RETURN/CANCEL
+        if (flow === 'payment-return' || flow === 'payment-cancel') {
+          const paymentPath = flow === 'payment-return' ? 'return' : 'cancel';
+          // Build query string from all params except 'flow'
+          const paymentParams = new URLSearchParams();
+          Object.entries(query).forEach(([k, v]) => {
+            if (k !== 'flow') paymentParams.set(k, v);
+          });
+          const queryString = paymentParams.toString() ? `?${paymentParams.toString()}` : '';
+          
+          if (!isWeb) {
+            // Inside app: route to payment return screen with all params
+            router.replace(`/screens/payments/${paymentPath}${queryString}` as any);
+            return;
+          }
+          // On web: try to open app with deep link
+          setMessage(t('payment.redirecting', { defaultValue: 'Redirecting to app...' }));
+          setStatus('ready');
+          tryOpenApp(`/screens/payments/${paymentPath}${queryString}`);
+          return;
+        }
+
         // Default: if native, go home; if web, show minimal UI and attempt to open app root
         if (!isWeb) {
           router.replace('/');

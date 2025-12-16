@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTerm } from '@/contexts/TerminologyContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -33,11 +32,11 @@ export function AnnouncementsCard() {
             key={item.id}
             style={[styles.item, { borderBottomColor: theme.colors.border }]}
           >
-            <ThemedText style={styles.itemTitle}>{item.title}</ThemedText>
-            <ThemedText style={styles.itemDate}>{item.date}</ThemedText>
-            <ThemedText style={styles.itemPreview} numberOfLines={2}>
+            <Text style={[styles.itemTitle, { color: theme.text }]}>{item.title}</Text>
+            <Text style={[styles.itemDate, { color: theme.textSecondary }]}>{item.date}</Text>
+            <Text style={[styles.itemPreview, { color: theme.text }]} numberOfLines={2}>
               {item.preview}
-            </ThemedText>
+            </Text>
           </View>
         ))}
       </View>

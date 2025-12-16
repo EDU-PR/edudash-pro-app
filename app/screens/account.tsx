@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from '@expo/vector-icons';
 // import { router } from 'expo-router';
@@ -46,7 +47,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
 import { useThemedStyles, themedStyles } from "@/hooks/useThemedStyles";
 import { ThemeLanguageSettings } from '@/components/settings/ThemeLanguageSettings';
-import { RoleBasedHeader } from '@/components/RoleBasedHeader';
+import { Stack } from 'expo-router';
 import ProfileImageService from '@/services/ProfileImageService';
 
 export default function AccountScreen() {
@@ -701,16 +702,16 @@ export default function AccountScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <RoleBasedHeader title={t('navigation.account')} showBackButton onBackPress={() => {
-        // Prefer router back when available, fall back to navigation
-        try { 
-          require('expo-router').router.back(); 
-        } catch (error) {
-          // Fallback handled by router
-          console.log('Router back fallback', error);
-        }
-      }} />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <Stack.Screen 
+        options={{ 
+          headerShown: true,
+          title: t('navigation.account', { defaultValue: 'Account' }),
+          headerStyle: { backgroundColor: theme.background },
+          headerTintColor: theme.text,
+          headerTitleStyle: { color: theme.text, fontWeight: '600' },
+        }} 
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -1043,6 +1044,6 @@ export default function AccountScreen() {
           <ThemeLanguageSettings />
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }

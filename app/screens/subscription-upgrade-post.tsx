@@ -205,8 +205,9 @@ export default function SubscriptionUpgradePostScreen() {
       // Ensure data is an array
       const plansData = Array.isArray(data) ? data : [];
       
-      // Role-aware filtering: parents see parent plans only, schools see school plans
-      const isParent = profile?.role === 'parent';
+      // Role-aware filtering: parents and students see parent plans only, schools see school plans
+      const userRole = profile?.role?.toLowerCase() || '';
+      const isParentOrStudent = userRole === 'parent' || userRole === 'student' || userRole === 'learner';
       const currentTierLower = currentTier.toLowerCase();
       
       const filteredPlans = plansData.filter(plan => {
@@ -217,13 +218,21 @@ export default function SubscriptionUpgradePostScreen() {
         // Exclude current tier
         if (planTier === currentTierLower) return false;
         
-        // Parents only see parent tiers
-        if (isParent) {
+        // Parents and students/learners only see parent tiers (not school/organization tiers)
+        if (isParentOrStudent) {
+          // Show free plan and parent plans, exclude school plans (starter, premium, enterprise)
           return planTier === 'free' || planTier.includes('parent');
         }
         
-        // Non-parents don't see parent tiers
-        return !planTier.includes('parent');
+        // Schools/organizations (principals, teachers, admins) see school plans only
+        // Exclude parent tiers and enterprise (unless they're super_admin)
+        if (userRole === 'super_admin' || userRole === 'superadmin') {
+          // Super admins can see all school plans including enterprise
+          return !planTier.includes('parent');
+        }
+        
+        // Regular school roles see school plans but not enterprise
+        return !planTier.includes('parent') && planTier !== 'enterprise';
       });
       
       setPlans(filteredPlans);
@@ -374,13 +383,18 @@ export default function SubscriptionUpgradePostScreen() {
       // Get user email for PayFast
       const userEmail = profile.email || (await assertSupabase().auth.getUser()).data.user?.email;
       
+      // Determine scope based on user role and plan type
+      // Students/learners/parents use 'user' scope, schools use 'school' scope
+      const isIndividualPlan = plan.tier.includes('parent') || profile.role === 'student' || profile.role === 'learner';
+      const scope = isIndividualPlan ? 'user' : 'school';
+      
       const checkoutInput = {
-        scope: 'school' as const,
-        schoolId: profile.organization_id,
+        scope: scope as 'user' | 'school',
+        schoolId: scope === 'school' ? profile.organization_id : undefined,
         userId: profile.id,
         planTier: plan.tier,
         billing: (annual ? 'annual' : 'monthly') as 'annual' | 'monthly',
-        seats: plan.max_teachers,
+        seats: isIndividualPlan ? 1 : plan.max_teachers,
         email_address: userEmail || undefined,
         // PayFast requires http(s) URLs. Use HTTPS bridge pages managed server-side.
         return_url: getReturnUrl(),
@@ -629,13 +643,31 @@ export default function SubscriptionUpgradePostScreen() {
             
             <View style={styles.plansGrid}>
               {plans.map((plan) => {
-                // Handle prices: if > 100, assume stored in cents; otherwise assume rands
-                const rawPrice = annual ? plan.price_annual : plan.price_monthly;
-                const priceInRands = rawPrice > 100 ? rawPrice / 100 : rawPrice;
-                const rawMonthlyPrice = annual ? Math.round(plan.price_annual / 12) : plan.price_monthly;
-                const monthlyPriceInRands = rawMonthlyPrice > 100 ? rawMonthlyPrice / 100 : rawMonthlyPrice;
-                const rawYearlySavings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) : 0;
-                const savings = rawYearlySavings > 100 ? rawYearlySavings / 100 : rawYearlySavings;
+                // Prices are stored in cents - convert to rands by dividing by 100
+                const convertPrice = (price: number): number => {
+                  // If price >= 100, assume it's in cents (most prices are), otherwise assume rands
+                  // This handles both formats gracefully
+                  return price >= 100 ? price / 100 : price;
+                };
+                
+                // Convert prices from cents to rands
+                const monthlyPriceCents = plan.price_monthly || 0;
+                const annualPriceCents = plan.price_annual || 0;
+                
+                const monthlyPriceInRands = convertPrice(monthlyPriceCents);
+                const annualPriceInRands = convertPrice(annualPriceCents);
+                
+                // For display, always show monthly price (not annual/12)
+                // The annual price shows the total billed annually separately
+                const displayMonthlyPrice = monthlyPriceInRands;
+                
+                const displayAnnualPrice = annualPriceInRands;
+                
+                // Calculate savings (in rands)
+                const monthlyTotal = monthlyPriceInRands * 12;
+                const savings = annual && annualPriceInRands > 0 && monthlyTotal > annualPriceInRands
+                  ? monthlyPriceInRands - (annualPriceInRands / 12)
+                  : 0;
                 const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
                 const isSelected = selectedPlan === plan.id;
                 const planColor = getPlanColor(plan.tier);
@@ -678,12 +710,12 @@ export default function SubscriptionUpgradePostScreen() {
                       ) : (
                         <View>
                           <View style={styles.priceRow}>
-                            <Text style={[styles.price, { color: planColor }]}>R{monthlyPriceInRands.toFixed(2)}</Text>
+                            <Text style={[styles.price, { color: planColor }]}>R{displayMonthlyPrice.toFixed(2)}</Text>
                             <Text style={styles.pricePeriod}>/month</Text>
                           </View>
-                          {annual && (
+                          {annual && annualPriceCents > 0 && (
                             <View>
-                              <Text style={styles.annualPrice}>R{priceInRands.toFixed(2)} billed annually</Text>
+                              <Text style={styles.annualPrice}>R{displayAnnualPrice.toFixed(2)} billed annually</Text>
                               {savings > 0 && (
                                 <Text style={styles.savingsAmount}>Save R{savings.toFixed(2)}/month</Text>
                               )}

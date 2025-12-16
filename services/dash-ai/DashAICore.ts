@@ -140,10 +140,22 @@ export class DashAICore {
       organizationId: config?.currentUser?.organizationId,
     });
 
-    this.conversationManager = new DashConversationManager({
-      userId: config?.currentUser?.id || 'unknown',
-      preschoolId: config?.currentUser?.preschoolId || 'unknown',
-    });
+    // Only initialize conversation manager if we have valid userId and organizationId/preschoolId
+    const userId = config?.currentUser?.id;
+    const organizationId = config?.currentUser?.organizationId || config?.currentUser?.preschoolId;
+    
+    if (!userId || !organizationId) {
+      console.warn('[DashAICore] Cannot initialize conversation manager: missing userId or organizationId');
+      console.warn('[DashAICore] userId:', userId, 'organizationId:', organizationId);
+      // Create a dummy conversation manager that will fail gracefully
+      // Users without organizations can still use other Dash features
+      this.conversationManager = null as any;
+    } else {
+      this.conversationManager = new DashConversationManager({
+        userId,
+        preschoolId: organizationId,
+      });
+    }
 
     this.taskManager = new DashTaskManager({ userId: config?.currentUser?.id });
     this.navigator = new DashAINavigator({});
@@ -162,6 +174,7 @@ export class DashAICore {
     // Initialize facades
     this.voice = new DashAIVoiceFacade(this.voiceService);
     this.memory = new DashAIMemoryFacade(this.memoryService);
+    // Create conversation facade - it will handle null manager gracefully
     this.conversation = new DashAIConversationFacade(this.conversationManager);
     this.tasks = new DashAITaskFacade(this.taskManager);
     this.navigation = new DashAINavigationFacade(this.navigator);
@@ -186,7 +199,9 @@ export class DashAICore {
       await Promise.all([
         this.voiceService.initializeAudio(),
         this.memoryService.initialize(),
-        this.conversationManager.initialize(),
+        this.conversationManager?.initialize().catch(err => {
+          console.warn('[DashAICore] Conversation manager initialization failed (user may not have organization):', err);
+        }),
         this.taskManager.initialize(),
         this.profileManager.initialize(),
       ]);

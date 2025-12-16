@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTerm } from '@/contexts/TerminologyContext';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -27,10 +26,10 @@ export function ScheduleCard() {
               { backgroundColor: theme.colors.background },
             ]}
           >
-            <ThemedText style={styles.time}>{item.time}</ThemedText>
+            <Text style={[styles.time, { color: theme.text }]}>{item.time}</Text>
             <View style={styles.details}>
-              <ThemedText style={styles.title}>{item.title}</ThemedText>
-              <ThemedText style={styles.location}>{item.location}</ThemedText>
+              <Text style={[styles.title, { color: theme.text }]}>{item.title}</Text>
+              <Text style={[styles.location, { color: theme.textSecondary }]}>{item.location}</Text>
             </View>
           </View>
         ))}

@@ -104,11 +104,8 @@ export default function CalendarScreen() {
         organization_id: profile?.organization_id,
         preschool_id: (profile as any)?.preschool_id,
       });
-      try { 
-        router.replace('/screens/onboarding'); 
-      } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
-      }
+      // Allow standalone access - calendar can work without organization
+      // No redirect needed
       return;
     }
     
@@ -323,12 +320,7 @@ export default function CalendarScreen() {
           <Stack.Screen options={{ headerShown: false }} />
           <View style={styles.loadingContainer}>
             <Ionicons name="calendar-outline" size={48} color={theme.textSecondary} />
-            <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
-            <TouchableOpacity onPress={() => {
-              try { router.replace('/screens/onboarding'); } catch (e) { console.debug('Redirect failed', e); }
-            }}>
-              <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
-            </TouchableOpacity>
+            <Text style={styles.loadingText}>{t('calendar.standalone_mode', { defaultValue: 'Calendar can be used in standalone mode. Join an organization to access shared events.' })}</Text>
           </View>
         </View>
       </DesktopLayout>

@@ -157,6 +157,48 @@ const TAB_ITEMS: TabItem[] = [
     route: '/screens/org-admin/settings', 
     roles: ['admin'] 
   },
+  
+  // Student/Learner tabs
+  { 
+    id: 'student-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/student-dashboard', 
+    roles: ['student'] 
+  },
+  { 
+    id: 'learner-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/learner-dashboard', 
+    roles: ['learner'] 
+  },
+  { 
+    id: 'student-programs', 
+    label: 'Programs',
+    icon: 'school-outline', 
+    activeIcon: 'school', 
+    route: '/screens/learner/programs', 
+    roles: ['student', 'learner'] 
+  },
+  { 
+    id: 'student-submissions', 
+    label: 'Work',
+    icon: 'document-text-outline', 
+    activeIcon: 'document-text', 
+    route: '/screens/learner/submissions', 
+    roles: ['student', 'learner'] 
+  },
+  { 
+    id: 'student-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/settings', 
+    roles: ['student', 'learner'] 
+  },
   { 
     id: 'principal-students', 
     label: 'Students', 
@@ -193,11 +235,16 @@ const TAB_ITEMS: TabItem[] = [
 
 export function BottomTabBar() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+
+  // Hide navigation bar if user is not authenticated
+  if (!user || !profile) {
+    return null;
+  }
 
   // Determine user role
   const userRole = (profile?.role as string) || 'parent';
@@ -225,6 +272,9 @@ export function BottomTabBar() {
     pathname.includes('principal-onboarding') ||
     pathname.includes('school-registration') ||
     pathname.includes('parent-child-registration') ||
+    pathname.includes('learner-registration') ||
+    pathname.includes('parent-registration') ||
+    pathname.includes('teacher-registration') ||
     pathname.includes('/auth-callback') ||
     pathname.includes('/invite/') ||
     pathname.includes('/parent-message-thread') ||

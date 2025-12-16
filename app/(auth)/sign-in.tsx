@@ -512,20 +512,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
       alignItems: 'center',
       marginBottom: 12,
     },
-    signupOptions: {
-      flexDirection: 'row',
-      gap: 12,
-      marginBottom: 12,
-      ...(Platform.OS === 'web' && {
-        flexDirection: 'row',
-      }),
-    },
     signupButton: {
-      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
+      marginTop: 12,
       paddingVertical: 16,
       paddingHorizontal: 16,
       backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -784,7 +776,7 @@ return (
             </TouchableOpacity>
           </View>
 
-          {/* Sign-up options for parents and teachers */}
+          {/* Sign-up prompt */}
           <View style={styles.signupPrompt}>
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
@@ -792,40 +784,13 @@ return (
               <View style={styles.dividerLine} />
             </View>
             
-            <View style={styles.signupOptions}>
-              <TouchableOpacity
-                style={styles.signupButton}
-                onPress={() => router.push('/screens/parent-registration' as any)}
-              >
-                <Ionicons name="people" size={20} color={theme.primary} />
-                <Text style={styles.signupButtonText}>{t('auth.sign_up_parent', { defaultValue: 'Sign up as Parent' })}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.signupButton}
-                onPress={() => router.push('/screens/teacher-registration' as any)}
-              >
-                <Ionicons name="school" size={20} color={theme.primary} />
-                <Text style={styles.signupButtonText}>{t('auth.sign_up_teacher', { defaultValue: 'Sign up as Teacher' })}</Text>
-              </TouchableOpacity>
-            </View>
-
             <TouchableOpacity
-              style={styles.schoolSignupLink}
-              onPress={() => router.push('/screens/principal-onboarding' as any)}
+              style={styles.signupButton}
+              onPress={() => router.push('/(auth)/role-selection' as any)}
+              activeOpacity={0.8}
             >
-              <Text style={styles.schoolSignupText}>
-                {t('auth.school_register_q', { defaultValue: 'Looking to register a school?' })} <Text style={styles.schoolSignupLinkText}>{t('common.click_here', { defaultValue: 'Click here' })}</Text>
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.schoolSignupLink}
-              onPress={() => router.push('/screens/org-onboarding' as any)}
-            >
-              <Text style={styles.schoolSignupText}>
-                {t('auth.org_onboard_q', { defaultValue: 'Looking to onboard an organization?' })} <Text style={styles.schoolSignupLinkText}>{t('common.click_here', { defaultValue: 'Click here' })}</Text>
-              </Text>
+              <Ionicons name="person-add-outline" size={20} color={theme.primary} />
+              <Text style={styles.signupButtonText}>{t('auth.sign_up', { defaultValue: 'Sign Up' })}</Text>
             </TouchableOpacity>
           </View>
           </GlassCard>

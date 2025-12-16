@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,13 +20,36 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Clipboard from 'expo-clipboard';
 
+// AsyncStorage with web fallback
+let AsyncStorage: any = null;
+try {
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+} catch (e) {
+  // Web fallback using localStorage
+  if (typeof window !== 'undefined' && window.localStorage) {
+    AsyncStorage = {
+      getItem: async (key: string) => window.localStorage.getItem(key),
+      setItem: async (key: string, value: string) => window.localStorage.setItem(key, value),
+      removeItem: async (key: string) => window.localStorage.removeItem(key),
+    };
+  }
+}
+
+const DRAFT_STORAGE_KEY = 'program_creation_draft';
+const AUTO_SAVE_DELAY = 1500; // 1.5 seconds debounce
+
 export default function CreateProgramScreen() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const userId = user?.id || profile?.id;
   
   const [saving, setSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Form fields
   const [title, setTitle] = useState('');
@@ -43,6 +66,198 @@ export default function CreateProgramScreen() {
   const [isSponsored, setIsSponsored] = useState(false);
   const [requirements, setRequirements] = useState('');
   const [learningOutcomes, setLearningOutcomes] = useState('');
+
+  // Draft management functions
+  const getDraftData = useCallback(() => {
+    return {
+      title,
+      courseCode,
+      description,
+      category,
+      duration,
+      maxStudents,
+      startDate,
+      endDate,
+      sponsorName,
+      sponsorContact,
+      fee,
+      isSponsored,
+      requirements,
+      learningOutcomes,
+      showAdvanced,
+      savedAt: new Date().toISOString(),
+    };
+  }, [
+    title,
+    courseCode,
+    description,
+    category,
+    duration,
+    maxStudents,
+    startDate,
+    endDate,
+    sponsorName,
+    sponsorContact,
+    fee,
+    isSponsored,
+    requirements,
+    learningOutcomes,
+    showAdvanced,
+  ]);
+
+  const saveDraft = useCallback(async () => {
+    if (!AsyncStorage) return;
+
+    try {
+      setAutoSaving(true);
+      const draftData = getDraftData();
+      await AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftData));
+      setHasDraft(true);
+    } catch (error) {
+      console.warn('Failed to save draft:', error);
+    } finally {
+      // Keep indicator visible for a moment
+      setTimeout(() => setAutoSaving(false), 500);
+    }
+  }, [getDraftData]);
+
+  const loadDraft = useCallback(async () => {
+    if (!AsyncStorage) return false;
+
+    try {
+      const draftJson = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!draftJson) {
+        setHasDraft(false);
+        return false;
+      }
+
+      const draft = JSON.parse(draftJson);
+      if (!draft || typeof draft !== 'object') {
+        setHasDraft(false);
+        return false;
+      }
+
+      // Restore form fields
+      if (draft.title) setTitle(draft.title);
+      if (draft.courseCode) setCourseCode(draft.courseCode);
+      if (draft.description) setDescription(draft.description);
+      if (draft.category) setCategory(draft.category);
+      if (draft.duration) setDuration(draft.duration);
+      if (draft.maxStudents) setMaxStudents(draft.maxStudents);
+      if (draft.startDate) setStartDate(draft.startDate);
+      if (draft.endDate) setEndDate(draft.endDate);
+      if (draft.sponsorName) setSponsorName(draft.sponsorName);
+      if (draft.sponsorContact) setSponsorContact(draft.sponsorContact);
+      if (draft.fee) setFee(draft.fee);
+      if (draft.isSponsored !== undefined) setIsSponsored(draft.isSponsored);
+      if (draft.requirements) setRequirements(draft.requirements);
+      if (draft.learningOutcomes) setLearningOutcomes(draft.learningOutcomes);
+      if (draft.showAdvanced !== undefined) setShowAdvanced(draft.showAdvanced);
+
+      setHasDraft(true);
+      setRestoredFromDraft(true);
+      
+      // Show notification
+      if (draft.savedAt) {
+        const savedTime = new Date(draft.savedAt);
+        const timeAgo = Math.round((Date.now() - savedTime.getTime()) / 1000 / 60); // minutes ago
+        const timeText = timeAgo < 1 ? 'just now' : timeAgo === 1 ? '1 minute ago' : `${timeAgo} minutes ago`;
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => setRestoredFromDraft(false), 5000);
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('Failed to load draft:', error);
+      setHasDraft(false);
+      return false;
+    }
+  }, []);
+
+  const clearDraft = useCallback(async () => {
+    if (!AsyncStorage) return;
+    try {
+      await AsyncStorage.removeItem(DRAFT_STORAGE_KEY);
+      setHasDraft(false);
+    } catch (error) {
+      console.warn('Failed to clear draft:', error);
+    }
+  }, []);
+
+  // Auto-save with debounce
+  const triggerAutoSave = useCallback(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveDraft();
+    }, AUTO_SAVE_DELAY);
+  }, [saveDraft]);
+
+  // Load draft on mount
+  useEffect(() => {
+    loadDraft();
+  }, [loadDraft]);
+
+  // Auto-save when form fields change
+  useEffect(() => {
+    // Don't auto-save if we just loaded a draft
+    if (restoredFromDraft) {
+      setRestoredFromDraft(false);
+      return;
+    }
+
+    // Don't auto-save if form is empty
+    if (!title.trim() && !description.trim() && !courseCode.trim()) {
+      return;
+    }
+
+    triggerAutoSave();
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [
+    title,
+    courseCode,
+    description,
+    category,
+    duration,
+    maxStudents,
+    startDate,
+    endDate,
+    sponsorName,
+    sponsorContact,
+    fee,
+    isSponsored,
+    requirements,
+    learningOutcomes,
+    showAdvanced,
+    triggerAutoSave,
+    restoredFromDraft,
+  ]);
+
+  // Format date input to auto-add dashes (YYYY-MM-DD)
+  const formatDateInput = (value: string): string => {
+    // Remove all non-numeric characters
+    const numbers = value.replace(/\D/g, '');
+    
+    // Limit to 8 digits (YYYYMMDD)
+    const limited = numbers.slice(0, 8);
+    
+    // Format as YYYY-MM-DD
+    if (limited.length <= 4) {
+      return limited;
+    } else if (limited.length <= 6) {
+      return `${limited.slice(0, 4)}-${limited.slice(4)}`;
+    } else {
+      return `${limited.slice(0, 4)}-${limited.slice(4, 6)}-${limited.slice(6, 8)}`;
+    }
+  };
 
   const generateCourseCode = () => {
     // Auto-generate code based on title
@@ -75,6 +290,17 @@ export default function CreateProgramScreen() {
       return;
     }
 
+    // Validation: Ensure we have required IDs
+    if (!userId) {
+      Alert.alert('Error', 'User ID not available. Please sign in again.');
+      return;
+    }
+
+    if (!orgId) {
+      Alert.alert('Error', 'Organization ID not available. Please ensure you are linked to an organization.');
+      return;
+    }
+
     setSaving(true);
     try {
       const supabase = assertSupabase();
@@ -87,6 +313,7 @@ export default function CreateProgramScreen() {
           course_code: courseCode.trim().toUpperCase(),
           description: description.trim() || null,
           organization_id: orgId,
+          instructor_id: userId, // Required: Set instructor_id to current user ID
           is_active: true,
           max_students: maxStudents ? parseInt(maxStudents) : null,
           start_date: startDate || null,
@@ -105,6 +332,9 @@ export default function CreateProgramScreen() {
         console.log('Sponsor info:', { sponsorName, sponsorContact, programId: newProgram.id });
       }
 
+      // Clear draft after successful creation
+      await clearDraft();
+
       Alert.alert(
         'Program Created!',
         `${newProgram.title} has been created successfully.`,
@@ -113,12 +343,21 @@ export default function CreateProgramScreen() {
             text: 'Create Another',
             style: 'cancel',
             onPress: () => {
-              // Reset form but keep some fields
+              // Reset form
               setTitle('');
               setDescription('');
               setCourseCode('');
               setDuration('');
               setMaxStudents('');
+              setStartDate('');
+              setEndDate('');
+              setSponsorName('');
+              setSponsorContact('');
+              setFee('');
+              setIsSponsored(false);
+              setRequirements('');
+              setLearningOutcomes('');
+              setShowAdvanced(false);
             },
           },
           {
@@ -154,6 +393,19 @@ export default function CreateProgramScreen() {
           headerStyle: { backgroundColor: theme.background },
           headerTitleStyle: { color: theme.text },
           headerTintColor: theme.primary,
+          headerRight: () => (
+            <View style={styles.headerRight}>
+              {autoSaving && (
+                <View style={styles.autoSaveIndicator}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={[styles.autoSaveText, { color: theme.textSecondary }]}>Saving...</Text>
+                </View>
+              )}
+              {hasDraft && !autoSaving && (
+                <Text style={[styles.draftIndicator, { color: theme.textSecondary }]}>Draft saved</Text>
+              )}
+            </View>
+          ),
         }}
       />
       <KeyboardAvoidingView
@@ -165,6 +417,18 @@ export default function CreateProgramScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {restoredFromDraft && (
+            <View style={[styles.draftBanner, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+              <Text style={[styles.draftBannerText, { color: theme.text }]}>
+                Draft restored - You can continue from where you left off
+              </Text>
+              <TouchableOpacity onPress={() => setRestoredFromDraft(false)}>
+                <Ionicons name="close" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.form}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
 
@@ -301,9 +565,11 @@ export default function CreateProgramScreen() {
                     borderColor: theme.border,
                   }]}
                   value={startDate}
-                  onChangeText={setStartDate}
+                  onChangeText={(text) => setStartDate(formatDateInput(text))}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={10}
                 />
               </View>
               <View style={[styles.inputGroup, { flex: 1 }]}>
@@ -315,9 +581,11 @@ export default function CreateProgramScreen() {
                     borderColor: theme.border,
                   }]}
                   value={endDate}
-                  onChangeText={setEndDate}
+                  onChangeText={(text) => setEndDate(formatDateInput(text))}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={10}
                 />
               </View>
             </View>
@@ -452,6 +720,46 @@ export default function CreateProgramScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            {hasDraft && (
+              <TouchableOpacity
+                style={[styles.clearDraftButton, { borderColor: theme.border }]}
+                onPress={async () => {
+                  Alert.alert(
+                    'Clear Draft?',
+                    'This will permanently delete your saved draft. Are you sure?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Clear',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await clearDraft();
+                          // Reset form
+                          setTitle('');
+                          setDescription('');
+                          setCourseCode('');
+                          setDuration('');
+                          setMaxStudents('');
+                          setStartDate('');
+                          setEndDate('');
+                          setSponsorName('');
+                          setSponsorContact('');
+                          setFee('');
+                          setIsSponsored(false);
+                          setRequirements('');
+                          setLearningOutcomes('');
+                          setShowAdvanced(false);
+                        },
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={theme.textSecondary} />
+                <Text style={[styles.clearDraftText, { color: theme.textSecondary }]}>Clear Draft</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -576,6 +884,53 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
+  },
+  autoSaveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  autoSaveText: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  draftIndicator: {
+    fontSize: 11,
+    marginRight: 4,
+  },
+  draftBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  draftBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  clearDraftButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  clearDraftText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

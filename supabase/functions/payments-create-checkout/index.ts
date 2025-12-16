@@ -2,7 +2,18 @@
 // Supabase Edge Function: payments-create-checkout
 // Creates invoice + transaction and returns a PayFast redirect URL (stub)
 
+// @ts-ignore - Deno URL imports work at runtime but TypeScript linter doesn't recognize them
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+// @ts-ignore - Deno URL imports work at runtime but TypeScript linter doesn't recognize them
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// @ts-ignore - Deno is available at runtime in Edge Functions
+// TypeScript doesn't recognize Deno global, but it exists in Deno runtime
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 // MD5 hash function - Web Crypto API doesn't support MD5, so we use a JS implementation
 function md5(text: string): string {
@@ -207,7 +218,7 @@ interface CheckoutInput {
   email_address?: string;
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -257,7 +268,6 @@ serve(async (req) => {
       });
     }
 
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const s = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: plan } = await s
@@ -280,34 +290,10 @@ serve(async (req) => {
     // Check if price is stored as cents (> 100) or as decimal (<= 100)
     const basePrice = basePriceCents > 100 ? basePriceCents / 100 : basePriceCents;
     
-    // Apply promotional pricing if user is eligible (for parent plans)
+    // IMPORTANT: Database prices are ALREADY the final prices (already include any discounts)
+    // DO NOT apply additional promotional discounts here - the plan prices in the DB are what users should pay
+    // If promotional pricing is needed, it should be applied when CREATING the plan, not here
     let finalPriceZAR = basePrice;
-    if (input.scope === 'user' && input.userId) {
-      try {
-        // Check for promotional pricing using database function
-        const { data: promoPriceData, error: promoError } = await s.rpc('get_promotional_price', {
-          p_user_id: input.userId,
-          p_tier: input.planTier,
-          p_user_type: 'parent', // Assume parent for user-scoped subscriptions
-          p_original_price: basePrice
-        });
-        
-        if (!promoError && promoPriceData !== null && promoPriceData !== undefined) {
-          const promoPrice = parseFloat(String(promoPriceData));
-          if (!isNaN(promoPrice) && promoPrice > 0 && promoPrice < basePrice) {
-            finalPriceZAR = promoPrice;
-            console.log('Applied promotional pricing', {
-              tier: input.planTier,
-              originalPrice: basePrice,
-              promoPrice: finalPriceZAR
-            });
-          }
-        }
-      } catch (promoErr: any) {
-        // If promotional pricing fails, use base price (non-critical)
-        console.warn('Could not apply promotional pricing, using base price:', promoErr?.message);
-      }
-    }
     
     // Convert to cents for PayFast (amount must be in ZAR as decimal string)
     const amountZAR = finalPriceZAR;
@@ -405,8 +391,8 @@ serve(async (req) => {
     // Construct webhook URLs - ensure they use the correct Supabase URL
     const webhookBaseUrl = SUPABASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
     const notifyUrl = Deno.env.get('PAYFAST_NOTIFY_URL') || `${webhookBaseUrl}/functions/v1/payfast-webhook`;
-    const returnUrl = input.return_url || Deno.env.get('PAYFAST_RETURN_URL') || `${webhookBaseUrl}/functions/v1/payments-webhook`;
-    const cancelUrl = input.cancel_url || Deno.env.get('PAYFAST_CANCEL_URL') || `${webhookBaseUrl}/functions/v1/payments-webhook`;
+    const returnUrl = input.return_url || Deno.env.get('PAYFAST_RETURN_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/return`;
+    const cancelUrl = input.cancel_url || Deno.env.get('PAYFAST_CANCEL_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/cancel`;
 
     console.log('PayFast configuration:', { 
       mode, 
@@ -418,9 +404,11 @@ serve(async (req) => {
       cancelUrl 
     });
 
+    // PayFast parameters - using ITN-friendly configuration
+    // merchant_key is included for signature but NOT sent in URL (PayFast will reject it)
     const params: Record<string,string> = {
       merchant_id: Deno.env.get('PAYFAST_MERCHANT_ID') || '',
-      merchant_key: Deno.env.get('PAYFAST_MERCHANT_KEY') || '',
+      merchant_key: Deno.env.get('PAYFAST_MERCHANT_KEY') || '', // Only for signature, removed from URL later
       return_url: returnUrl,
       cancel_url: cancelUrl,
       notify_url: notifyUrl,
@@ -435,63 +423,138 @@ serve(async (req) => {
       custom_str4: JSON.stringify({ billing: input.billing, seats: input.seats || 1 }),
     };
 
-    // When a PayFast passphrase is configured, we must sign the request parameters
-    // Per PayFast docs: concatenate non-blank vars, URL-encode (spaces as '+'), append passphrase, then MD5
-    // Use same encoding as payfast-create-payment function for consistency
+    // PayFast requires PHP-style urlencode for signature calculation
+    // Key differences from standard encodeURIComponent:
+    // 1. Spaces become '+' (not %20)
+    // 2. Characters !'()* must be percent-encoded (PHP urlencode behavior)
+    // 3. Percent-hex must be uppercase
     function encodeRFC1738(v: string) {
-      return encodeURIComponent(v).replace(/%20/g, '+');
+      // First apply standard encoding
+      let encoded = encodeURIComponent(v);
+      
+      // Replace %20 with + (PHP urlencode for spaces)
+      encoded = encoded.replace(/%20/g, '+');
+      
+      // Encode !'()* which encodeURIComponent doesn't encode but PHP urlencode does
+      encoded = encoded.replace(/!/g, '%21');
+      encoded = encoded.replace(/'/g, '%27');
+      encoded = encoded.replace(/\(/g, '%28');
+      encoded = encoded.replace(/\)/g, '%29');
+      encoded = encoded.replace(/\*/g, '%2A');
+      
+      // Ensure all percent-encoding is uppercase (PayFast requirement)
+      encoded = encoded.replace(/%[0-9a-f]{2}/gi, (match) => match.toUpperCase());
+      
+      return encoded;
     }
 
-    // Generate signature if passphrase is configured (required for production, optional for sandbox)
+    // Generate signature
     const passphrase = (Deno.env.get('PAYFAST_PASSPHRASE') || '').trim();
-    if (passphrase) {
-      try {
-        // Sort params by key and filter out empty values (PayFast requirement)
-        const sortedEntries = Object.entries(params)
-          .filter(([, v]) => v !== undefined && v !== null && String(v).length > 0)
-          .sort(([a], [b]) => a.localeCompare(b));
+    const isSandbox = mode === 'sandbox';
+    
+    try {
+      // PayFast signature calculation:
+      // 1. Sort keys alphabetically (required by PayFast)
+      // 2. Build parameter string excluding 'signature' key
+      // 3. Filter out empty/null/undefined values
+      // 4. URL encode values (RFC1738: spaces as '+')
+      // 5. Concatenate as key=value&key=value (with trailing &, then remove)
+      // 6. Append &passphrase=xxx if passphrase is set (both sandbox and production)
+      // 7. Calculate MD5 hash
+      
+      // Get sorted keys (alphabetical order)
+      const sortedKeys = Object.keys(params).sort();
+      
+      // Build parameter string (matching payfast-create-payment logic exactly)
+      let paramString = '';
+      const includedKeys: string[] = [];
+      
+      for (const key of sortedKeys) {
+        // Exclude 'signature' key from signature calculation
+        if (key === 'signature') continue;
         
-        // Build query string in sorted order with RFC1738 encoding
-        const orderedQs = sortedEntries
-          .map(([k, v]) => `${k}=${encodeRFC1738(String(v))}`)
-          .join('&');
+        // Filter out empty values (check BEFORE trimming, matching payfast-create-payment)
+        if (params[key] === undefined || params[key] === null || params[key] === '') continue;
         
-        // Append passphrase (PayFast requirement)
-        const signatureBase = `${orderedQs}&passphrase=${encodeRFC1738(passphrase)}`;
+        const value = String(params[key]).trim();
+        // Skip if trimmed value is empty (whitespace-only)
+        if (value.length === 0) continue;
         
-        // Calculate MD5 hash using our custom MD5 implementation
-        const signature = md5(signatureBase);
-        
-        // Add signature to params (must be added AFTER building orderedQs to avoid including it in signature calculation)
-        params.signature = signature;
-        
-        console.log('PayFast signature generated successfully', { mode, hasPassphrase: true });
-      } catch (sigError: any) {
-        console.error('Failed to generate PayFast signature:', sigError);
-        return new Response(JSON.stringify({ 
-          error: 'Failed to generate payment signature',
-          details: sigError?.message 
-        }), { 
-          status: 500,
-          headers: corsHeaders 
+        const encodedValue = encodeRFC1738(value);
+        paramString += `${key}=${encodedValue}&`;
+        includedKeys.push(key);
+      }
+      
+      // Remove trailing & (matching payfast-create-payment)
+      paramString = paramString.slice(0, -1);
+      
+      // Append passphrase if it's set (required for both sandbox and production if passphrase is configured)
+      if (passphrase.length > 0) {
+        paramString += `&passphrase=${encodeRFC1738(passphrase)}`;
+      }
+      
+      // Calculate MD5 hash using our custom MD5 implementation
+      const signature = md5(paramString);
+      
+      // Validation: Log a test hash to verify MD5 correctness
+      // Known test: md5("test") should be "098f6bcd4621d373cade4e832627b4f6"
+      const testHash = md5("test");
+      const expectedTestHash = "098f6bcd4621d373cade4e832627b4f6";
+      if (testHash !== expectedTestHash) {
+        console.error('MD5 implementation validation FAILED!', {
+          testInput: 'test',
+          expected: expectedTestHash,
+          actual: testHash
         });
       }
-    } else {
-      // CRITICAL: If PayFast merchant account has passphrase enabled, signature is REQUIRED
-      // The error "Signature is required" from PayFast means the account has passphrase protection
-      console.error('PAYFAST_PASSPHRASE not set or empty - PayFast requires signature when passphrase is enabled in merchant account');
-      console.error('Please set PAYFAST_PASSPHRASE secret in Supabase Edge Functions secrets');
-      // Continue anyway - PayFast will reject with "Signature is required" error
-      // This helps identify the issue clearly
+      
+      // Add signature to params (must be added AFTER building paramString to avoid including it in signature calculation)
+      // NOTE: merchant_key is KEPT in params - PayFast requires it in the URL
+      params.signature = signature;
+      
+      console.log('PayFast signature generated (ITN mode)', { 
+        mode, 
+        isSandbox,
+        hasPassphrase: passphrase.length > 0,
+        passphraseUsed: passphrase.length > 0,
+        merchantKeyInURL: true,
+        md5ValidationPassed: testHash === expectedTestHash,
+        includedKeys,
+        paramCount: includedKeys.length,
+        paramStringLength: paramString.length,
+        signature: signature,
+        signatureBase: paramString.substring(0, 200) + '...' // Truncate for readability
+      });
+    } catch (sigError: any) {
+      console.error('Failed to generate PayFast signature:', sigError);
+      return new Response(JSON.stringify({ 
+        error: 'Failed to generate payment signature',
+        details: sigError?.message 
+      }), { 
+        status: 500,
+        headers: corsHeaders 
+      });
     }
 
-    // Build URL query string manually using the same encoding as signature calculation
-    // This ensures PayFast receives exactly what we signed
+    // Build URL query string using the EXACT SAME logic as signature calculation
+    // CRITICAL: PayFast signature validation requires parameter order, filtering, and encoding to match EXACTLY
+    const urlSortedKeys = Object.keys(params).sort();
     const urlQueryParts: string[] = [];
-    Object.entries(params).forEach(([k, v]) => {
-      const encodedValue = encodeRFC1738(String(v));
-      urlQueryParts.push(`${k}=${encodedValue}`);
-    });
+    
+    for (const key of urlSortedKeys) {
+      // Use the SAME filtering logic as signature calculation
+      // (signature was already added above, so include it in URL)
+      if (params[key] === undefined || params[key] === null || params[key] === '') continue;
+      
+      const value = String(params[key]).trim();
+      // Skip if trimmed value is empty (same as signature calculation)
+      if (value.length === 0) continue;
+      
+      // Use the SAME encoding as signature calculation
+      const encodedValue = encodeRFC1738(value);
+      urlQueryParts.push(`${key}=${encodedValue}`);
+    }
+    
     const redirect_url = `${base}?${urlQueryParts.join('&')}`;
     
     console.log('PayFast redirect URL generated', { 
@@ -505,7 +568,8 @@ serve(async (req) => {
       headers: corsHeaders 
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e?.message || 'Failed to create checkout' }), { 
+    const errorMessage = e instanceof Error ? e.message : 'Failed to create checkout';
+    return new Response(JSON.stringify({ error: errorMessage }), { 
       status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',

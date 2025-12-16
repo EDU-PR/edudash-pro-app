@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export function CertificationsCard() {
@@ -26,13 +25,13 @@ export function CertificationsCard() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return theme.colors.success || '#10b981';
+        return theme.colors?.success || theme.success || '#10b981';
       case 'in_progress':
-        return theme.colors.info || '#3b82f6';
+        return theme.colors?.info || theme.info || '#3b82f6';
       case 'not_started':
-        return theme.colors.text;
+        return theme.text;
       default:
-        return theme.colors.text;
+        return theme.text;
     }
   };
 
@@ -42,15 +41,15 @@ export function CertificationsCard() {
         {certifications.map((item, idx) => (
           <View key={idx} style={styles.item}>
             <View style={styles.header}>
-              <ThemedText style={styles.name}>{item.name}</ThemedText>
-              <ThemedText style={[styles.progress, { color: getStatusColor(item.status) }]}>
+              <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
+              <Text style={[styles.progress, { color: getStatusColor(item.status) }]}>
                 {item.progress}%
-              </ThemedText>
+              </Text>
             </View>
             <View
               style={[
                 styles.progressBar,
-                { backgroundColor: theme.colors.border },
+                { backgroundColor: theme.colors?.border || theme.border || '#e5e7eb' },
               ]}
             >
               <View
@@ -63,9 +62,9 @@ export function CertificationsCard() {
                 ]}
               />
             </View>
-            <ThemedText style={styles.statusText}>
+            <Text style={[styles.statusText, { color: theme.textSecondary }]}>
               {item.status === 'completed' ? item.completedDate : item.dueDate}
-            </ThemedText>
+            </Text>
           </View>
         ))}
       </View>

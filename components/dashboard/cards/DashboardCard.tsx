@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
-import { ThemedText } from '@/components/ui/ThemedText';
+import { View, StyleSheet, Pressable, Text } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -25,38 +24,42 @@ export function DashboardCard({
 
   const cardContent = (
     <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-        },
-      ]}
+        style={[
+          styles.container,
+          {
+            backgroundColor: theme.colors?.surface || theme.card || theme.background,
+            borderColor: theme.colors?.border || theme.border || '#e5e7eb',
+          },
+        ]}
     >
       <View style={styles.header}>
         <View style={styles.titleRow}>
           {icon && (
-            <Ionicons name={icon} size={20} color={theme.colors.primary} style={styles.icon} />
+            <Ionicons name={icon} size={20} color={theme.colors?.primary || theme.primary} style={styles.icon} />
           )}
-          <ThemedText
-            style={[styles.title, onPress && styles.linkTitle, onPress && { color: theme.colors.primary }]}
+          <Text
+            style={[
+              styles.title, 
+              onPress && styles.linkTitle, 
+              { color: onPress ? (theme.colors?.primary || theme.primary) : theme.text }
+            ]}
             accessibilityRole={onPress ? 'link' : undefined}
           >
             {title}
-          </ThemedText>
+          </Text>
           {onPress && (
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} style={styles.chevron} />
+            <Ionicons name="chevron-forward" size={16} color={theme.colors?.primary || theme.primary} style={styles.chevron} />
           )}
         </View>
       </View>
 
       <View style={styles.content}>
         {loading ? (
-          <ThemedText style={styles.placeholder}>Loading...</ThemedText>
+          <Text style={[styles.placeholder, { color: theme.textSecondary }]}>Loading...</Text>
         ) : error ? (
-          <ThemedText style={[styles.placeholder, { color: theme.colors.error }]}>
+          <Text style={[styles.placeholder, { color: theme.colors?.error || theme.error || '#ef4444' }]}>
             {error}
-          </ThemedText>
+          </Text>
         ) : (
           children
         )}

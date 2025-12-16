@@ -68,11 +68,38 @@ export default function OrgAdminSettingsScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => router.push('/screens/org-admin/branding')}
+          >
             <Ionicons name="color-palette-outline" size={24} color={theme.text} />
             <View style={styles.settingContent}>
               <Text style={styles.settingLabel}>Branding</Text>
               <Text style={styles.settingValue}>Customize appearance</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => router.push('/screens/org-admin/ai-settings')}
+          >
+            <Ionicons name="sparkles-outline" size={24} color={theme.text} />
+            <View style={styles.settingContent}>
+              <Text style={styles.settingLabel}>AI & Automation</Text>
+              <Text style={styles.settingValue}>Configure AI preferences</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => router.push('/screens/org-admin/ai-automation')}
+          >
+            <Ionicons name="rocket-outline" size={24} color={theme.text} />
+            <View style={styles.settingContent}>
+              <Text style={styles.settingLabel}>AI Automation Tools</Text>
+              <Text style={styles.settingValue}>Use AI-powered automation</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>

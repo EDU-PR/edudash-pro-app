@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { DashboardCard } from './DashboardCard';
-import { ThemedText } from '@/components/ui/ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export function GradesCard() {
@@ -15,10 +14,10 @@ export function GradesCard() {
   ];
 
   const getGradeColor = (percentage: number) => {
-    if (percentage >= 90) return theme.colors.success || '#10b981';
-    if (percentage >= 80) return theme.colors.info || '#3b82f6';
-    if (percentage >= 70) return theme.colors.warning || '#f59e0b';
-    return theme.colors.error;
+    if (percentage >= 90) return theme.colors?.success || theme.success || '#10b981';
+    if (percentage >= 80) return theme.colors?.info || theme.info || '#3b82f6';
+    if (percentage >= 70) return theme.colors?.warning || theme.warning || '#f59e0b';
+    return theme.colors?.error || theme.error || '#ef4444';
   };
 
   return (
@@ -27,14 +26,14 @@ export function GradesCard() {
         {grades.map((item, idx) => (
           <View key={idx} style={styles.item}>
             <View style={styles.subjectRow}>
-              <ThemedText style={styles.subject}>{item.subject}</ThemedText>
+              <Text style={[styles.subject, { color: theme.text }]}>{item.subject}</Text>
               <View style={styles.gradeContainer}>
-                <ThemedText
+                <Text
                   style={[styles.grade, { color: getGradeColor(item.percentage) }]}
                 >
                   {item.grade}
-                </ThemedText>
-                <ThemedText style={styles.percentage}>({item.percentage}%)</ThemedText>
+                </Text>
+                <Text style={[styles.percentage, { color: theme.textSecondary }]}>({item.percentage}%)</Text>
               </View>
             </View>
           </View>
