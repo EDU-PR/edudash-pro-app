@@ -8,11 +8,14 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 function html(content: string, status = 200) {
+  // NOTE: Supabase/edge/CDN layers may inject restrictive headers (e.g. CSP sandbox).
+  // We still send explicit HTML headers for best-effort rendering in browsers.
   return new Response(content, {
     status,
     headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
+      // Prefer canonical header casing (some intermediaries are picky)
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
     },
   });
 }
@@ -27,13 +30,20 @@ function buildDeepLink(path: 'return' | 'cancel', search: string) {
   return { universalLink, customScheme };
 }
 
+function escapeHtmlAttr(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function page(title: string, message: string, links: { universalLink: string; customScheme: string }) {
   // Use Universal Link first (more reliable), with custom scheme fallback
+  const safeUniversal = escapeHtmlAttr(links.universalLink);
+  const safeCustom = escapeHtmlAttr(links.customScheme);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="refresh" content="0;url=${safeUniversal}" />
 <title>${title}</title>
 <style>
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; margin: 0; background: #0b1220; color: #fff; display: grid; place-items: center; min-height: 100vh; }
@@ -50,7 +60,10 @@ function page(title: string, message: string, links: { universalLink: string; cu
     <h1>${title}</h1>
     <p>${message}</p>
     <p class="sub">Redirecting to EduDash Pro...</p>
-    <a class="btn" href="${links.universalLink}" id="universalLink">Open EduDash Pro</a>
+    <a class="btn" href="${safeUniversal}" id="universalLink">Open EduDash Pro</a>
+    <div class="sub" style="margin-top:10px;">
+      <a href="${safeCustom}" style="color:#00f5ff;">If needed, open via app link</a>
+    </div>
     <p class="sub">If the app doesn't open automatically, tap the button above.</p>
   </div>
   <script>
@@ -88,6 +101,19 @@ function page(title: string, message: string, links: { universalLink: string; cu
 </html>`;
 }
 
+function redirectOrHtml(location: string, content: string) {
+  // Primary behavior: HTTP redirect to Universal Link.
+  // This avoids reliance on JS execution (often blocked after payment providers redirect).
+  return new Response(content, {
+    status: 302,
+    headers: {
+      'Location': location,
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
 serve((req) => {
   try {
     const url = new URL(req.url);
@@ -100,10 +126,12 @@ serve((req) => {
       const links = buildDeepLink(action as 'return' | 'cancel', search);
       const title = action === 'return' ? 'Payment Complete' : 'Payment Cancelled';
       const msg = action === 'return' ? 'Your payment was processed. Returning to EduDash Pro…' : 'Payment cancelled. Returning to EduDash Pro…';
-      return html(page(title, msg, links));
+      const content = page(title, msg, links);
+      return redirectOrHtml(links.universalLink, content);
     }
 
-    return html(page('Payments', 'Unknown payments action.', 'edudashpro://'), 404);
+    const unknownLinks = buildDeepLink('return', search);
+    return html(page('Payments', 'Unknown payments action.', unknownLinks), 404);
   } catch (e) {
     return html('<h1>Payments Bridge Error</h1>', 500);
   }
