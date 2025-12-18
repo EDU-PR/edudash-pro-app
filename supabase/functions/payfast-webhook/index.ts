@@ -21,6 +21,14 @@ interface TransactionMetadata {
   owner_user_id?: string;
   created_by_payment?: boolean;
   payment_id?: string;
+  plan_tier?: string;
+  actor_user_id?: string;
+  promo?: {
+    applied?: boolean;
+    user_type?: string;
+    original_price?: number;
+    promo_price?: number;
+  };
   [key: string]: unknown; // Allow other properties
 }
 
@@ -312,16 +320,19 @@ serve(async (req: Request) => {
       const scope = payload.custom_str2 || '';
       const ownerId = payload.custom_str3 || '';
       const customData = payload.custom_str4 || '{}';
+      const actorUserId = payload.custom_str5 || ''; // initiating user id (set by checkout)
       
       console.log('[PayFast ITN] Received tier from custom_str1:', planTier);
       
       let billing = 'monthly';
       let seats = 1;
+      let invoiceNumberFromCustom: string | null = null;
       
       try {
         const parsed = JSON.parse(customData);
         billing = parsed.billing || 'monthly';
         seats = parsed.seats || 1;
+        invoiceNumberFromCustom = parsed.invoice_number || null;
       } catch (e) {
         console.warn('Error parsing custom_str4:', e);
       }
@@ -329,7 +340,7 @@ serve(async (req: Request) => {
       // Get plan details - now using same tier format everywhere (underscores)
       const { data: plan } = await supabase
         .from('subscription_plans')
-        .select('id, tier, name, max_teachers')
+        .select('id, tier, name, max_teachers, price_monthly, price_annual')
         .eq('tier', planTier)
         .eq('is_active', true)
         .maybeSingle();
@@ -389,55 +400,83 @@ serve(async (req: Request) => {
             .insert(subscriptionData);
         }
 
-        // Update preschool subscription tier (legacy compatibility)
-        await supabase
-          .from('organizations')
-          .update({ plan_tier: plan.tier })
-          .eq('id', existingTx.school_id);
-        
-        // CRITICAL: Update organizations.plan_tier (canonical field)
-        // Also update plan_tier for backward compatibility during migration period
+        // Update organizations.plan_tier (canonical)
         await supabase
           .from('organizations')
           .update({ 
-            plan_tier: plan.tier,  // Canonical field
-            plan_tier: plan.tier             // Legacy field for compatibility
+            plan_tier: plan.tier,
           })
           .eq('id', existingTx.school_id);
         
-        // CRITICAL: Update user_ai_tiers for all school users
-        // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
-        const { error: tierUpdateError } = await supabase
-          .from('user_ai_tiers')
-          .update({ tier: planTier })
-          .eq('organization_id', existingTx.school_id);
-        
-        if (tierUpdateError) {
-          console.error('Error updating user_ai_tiers for school:', tierUpdateError);
-        } else {
-          console.log('Updated user_ai_tiers for school users with tier:', planTier);
-        }
-        
-        // CRITICAL: Also update user_ai_usage.current_tier for all school users (this is what the UI reads)
-        // Use original planTier (with underscores) for consistency
-        // First get all user IDs for this school
-        const { data: schoolUsers } = await supabase
-          .from('user_ai_tiers')
-          .select('user_id')
-          .eq('organization_id', existingTx.school_id);
-        
-        if (schoolUsers && schoolUsers.length > 0) {
-          const userIds = schoolUsers.map(u => u.user_id);
-          const { error: usageUpdateError } = await supabase
+        // Update AI tier for all org members (use profiles org membership, not a non-existent user_ai_tiers.organization_id)
+        const orgId = existingTx.school_id;
+        const { data: orgUsers, error: orgUsersErr } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`organization_id.eq.${orgId},preschool_id.eq.${orgId}`);
+
+        if (orgUsersErr) {
+          console.error('Error fetching org users for AI tier update:', orgUsersErr);
+        } else if (orgUsers && orgUsers.length > 0) {
+          // Upsert user_ai_tiers (one row per user)
+          const tierRows = orgUsers.map((u: any) => ({
+            user_id: u.id,
+            tier: planTier,
+            updated_at: new Date().toISOString(),
+          }));
+          const { error: upsertTierErr } = await supabase
+            .from('user_ai_tiers')
+            .upsert(tierRows as any, { onConflict: 'user_id' });
+
+          if (upsertTierErr) console.error('Error upserting user_ai_tiers for org:', upsertTierErr);
+
+          // Upsert user_ai_usage.current_tier (one row per user)
+          const usageRows = orgUsers.map((u: any) => ({
+            user_id: u.id,
+            current_tier: planTier,
+            updated_at: new Date().toISOString(),
+          }));
+          const { error: upsertUsageErr } = await supabase
             .from('user_ai_usage')
-            .update({ current_tier: planTier })
-            .in('user_id', userIds);
-          
-          if (usageUpdateError) {
-            console.error('Error updating user_ai_usage for school:', usageUpdateError);
-          } else {
-            console.log('Updated user_ai_usage.current_tier for school users with tier:', planTier);
+            .upsert(usageRows as any, { onConflict: 'user_id' });
+
+          if (upsertUsageErr) console.error('Error upserting user_ai_usage for org:', upsertUsageErr);
+
+          console.log('Updated AI tiers for org users:', { orgId, userCount: orgUsers.length, tier: planTier });
+        }
+
+        // Record promo subscription for the initiating user (if applicable)
+        try {
+          const actorId = actorUserId || ''; // should be set by checkout
+          if (actorId) {
+            const md = (existingTx.metadata as TransactionMetadata) || {};
+            const originalPrice = md?.promo?.original_price ?? null;
+            const hasExistingPromo = await supabase
+              .from('user_promotional_subscriptions')
+              .select('id')
+              .eq('user_id', actorId)
+              .eq('tier', planTier)
+              .eq('is_active', true)
+              .gt('promo_end_date', new Date().toISOString())
+              .maybeSingle();
+
+            if (!hasExistingPromo.data && typeof originalPrice === 'number' && originalPrice > 0) {
+              const { data: actorProfile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', actorId)
+                .maybeSingle();
+              const userType = String(actorProfile?.role || 'all').toLowerCase();
+              await supabase.rpc('record_promotional_subscription', {
+                p_user_id: actorId,
+                p_tier: planTier,
+                p_user_type: userType === 'parent' ? 'parent' : userType === 'teacher' ? 'teacher' : userType.includes('principal') || userType === 'admin' || userType === 'super_admin' ? 'principal' : 'all',
+                p_original_price: originalPrice,
+              });
+            }
           }
+        } catch (promoErr) {
+          console.warn('Promo record skipped/failed (non-fatal):', promoErr);
         }
 
         // Send email notification (sandbox & production)
@@ -621,8 +660,7 @@ serve(async (req: Request) => {
         // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum
         const { error: tierUpdateError } = await supabase
           .from('user_ai_tiers')
-          .update({ tier: planTier })
-          .eq('user_id', ownerId);
+          .upsert({ user_id: ownerId, tier: planTier, updated_at: new Date().toISOString() } as any, { onConflict: 'user_id' });
         
         if (tierUpdateError) {
           console.error('Error updating user_ai_tiers for user:', tierUpdateError);
@@ -634,13 +672,43 @@ serve(async (req: Request) => {
         // Use original planTier (with underscores) for consistency
         const { error: usageUpdateError } = await supabase
           .from('user_ai_usage')
-          .update({ current_tier: planTier })
-          .eq('user_id', ownerId);
+          .upsert({ user_id: ownerId, current_tier: planTier, updated_at: new Date().toISOString() } as any, { onConflict: 'user_id' });
         
         if (usageUpdateError) {
           console.error('Error updating user_ai_usage for user:', usageUpdateError);
         } else {
           console.log('Updated user_ai_usage.current_tier for user:', ownerId, 'with tier:', planTier);
+        }
+
+        // Record promo subscription for the user (if eligible and not already recorded)
+        try {
+          const md = (existingTx.metadata as TransactionMetadata) || {};
+          const originalPrice = md?.promo?.original_price ?? null;
+          const { data: promoExisting } = await supabase
+            .from('user_promotional_subscriptions')
+            .select('id')
+            .eq('user_id', ownerId)
+            .eq('tier', planTier)
+            .eq('is_active', true)
+            .gt('promo_end_date', new Date().toISOString())
+            .maybeSingle();
+
+          if (!promoExisting && typeof originalPrice === 'number' && originalPrice > 0) {
+            const { data: actorProfile } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', ownerId)
+              .maybeSingle();
+            const userType = String(actorProfile?.role || 'all').toLowerCase();
+            await supabase.rpc('record_promotional_subscription', {
+              p_user_id: ownerId,
+              p_tier: planTier,
+              p_user_type: userType === 'parent' ? 'parent' : userType === 'teacher' ? 'teacher' : userType.includes('principal') || userType === 'admin' || userType === 'super_admin' ? 'principal' : 'all',
+              p_original_price: originalPrice,
+            });
+          }
+        } catch (promoErr) {
+          console.warn('Promo record skipped/failed (non-fatal):', promoErr);
         }
 
         // Send email notification for user subscription

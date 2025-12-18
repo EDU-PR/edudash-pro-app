@@ -6,7 +6,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
-import { useLearnerEnrollments, useLearnerProgress, useLearnerSubmissions } from '@/hooks/useLearnerData';
+import { ActivityFeed } from '@/components/learner/ActivityFeed';
+import { AssignmentWidget } from '@/components/learner/AssignmentWidget';
+import { ProgramProgressCard } from '@/components/learner/ProgramProgressCard';
+import { QuickActions } from '@/components/learner/QuickActions';
+import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 export default function LearnerDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -17,10 +22,11 @@ export default function LearnerDashboard() {
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
 
-  // Fetch learner data
-  const { data: enrollments, isLoading: enrollmentsLoading, refetch: refetchEnrollments } = useLearnerEnrollments();
-  const { data: progress, isLoading: progressLoading } = useLearnerProgress();
-  const { data: submissions, isLoading: submissionsLoading } = useLearnerSubmissions();
+  // Fetch learner dashboard data (aggregated)
+  const learnerDashboard = useLearnerDashboard();
+  const enrollments = learnerDashboard.data?.enrollments ?? [];
+  const progress = learnerDashboard.data?.progress ?? null;
+  const submissions = learnerDashboard.data?.submissions ?? [];
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
@@ -55,7 +61,7 @@ export default function LearnerDashboard() {
   }, [isStillLoading, user, orgId, profile]);
 
   const handleRefresh = () => {
-    refetchEnrollments();
+    learnerDashboard.refetchAll();
   };
 
   // Show loading state while auth/profile is loading
@@ -71,35 +77,21 @@ export default function LearnerDashboard() {
     );
   }
 
-  // Show redirect message if no organization after loading is complete
-  if (!orgId) {
-    if (!user) {
-      return (
-        <View style={styles.container}>
-          <Stack.Screen options={{ title: t('learner.dashboard_title', { defaultValue: 'Learner Dashboard' }) }} />
-          <View style={styles.empty}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
-          </View>
-        </View>
-      );
-    }
+  // If auth/profile finished but user is missing, show a minimal fallback while navigation runs.
+  if (!user) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('learner.dashboard_title', { defaultValue: 'Learner Dashboard' }) }} />
         <View style={styles.empty}>
-          <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No organization found. Redirecting to setup...' })}</Text>
-          <TouchableOpacity onPress={() => {
-            try { router.replace('/screens/org-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
-          }}>
-            <Text style={[styles.loadingText, { textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
-          </TouchableOpacity>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
       </View>
     );
   }
 
-  const isLoading = enrollmentsLoading || progressLoading || submissionsLoading;
+  const isLoading = learnerDashboard.isLoading;
+  const draftCount = learnerDashboard.data?.draftCount ?? 0;
 
   return (
     <View style={styles.container}>
@@ -170,55 +162,61 @@ export default function LearnerDashboard() {
         {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('learner.quick_actions', { defaultValue: 'Quick Actions' })}</Text>
-          <View style={styles.quickActionsGrid}>
-            <QuickActionCard
-              icon="school-outline"
-              title={t('learner.my_programs', { defaultValue: 'My Programs' })}
-              subtitle={t('learner.view_enrollments', { defaultValue: 'View enrollments' })}
-              onPress={() => router.push('/screens/learner/programs')}
-              theme={theme}
-            />
-            <QuickActionCard
-              icon="document-text-outline"
-              title={t('learner.submissions', { defaultValue: 'Submissions' })}
-              subtitle={t('learner.view_assignments', { defaultValue: 'View assignments' })}
-              onPress={() => router.push('/screens/learner/submissions')}
-              badge={submissions?.filter(s => s.status === 'draft').length}
-              theme={theme}
-            />
-            <QuickActionCard
-              icon="people-outline"
-              title={t('learner.connections', { defaultValue: 'Connections' })}
-              subtitle={t('learner.network_peers', { defaultValue: 'Network with peers' })}
-              onPress={() => router.push('/screens/learner/connections')}
-              theme={theme}
-            />
-            <QuickActionCard
-              icon="book-outline"
-              title={t('learner.courses', { defaultValue: 'Online Courses' })}
-              subtitle={t('learner.browse_courses', { defaultValue: 'Browse courses' })}
-              onPress={() => router.push('/screens/learner/courses')}
-              theme={theme}
-            />
-            <QuickActionCard
-              icon="briefcase-outline"
-              title={t('learner.my_cv', { defaultValue: 'My CV' })}
-              subtitle={t('learner.manage_cv', { defaultValue: 'Manage CV' })}
-              onPress={() => router.push('/screens/learner/cv')}
-              theme={theme}
-            />
-            <QuickActionCard
-              icon="folder-outline"
-              title={t('learner.portfolio', { defaultValue: 'Portfolio' })}
-              subtitle={t('learner.showcase_work', { defaultValue: 'Showcase your work' })}
-              onPress={() => router.push('/screens/learner/portfolio')}
-              theme={theme}
-            />
-          </View>
+          <QuickActions
+            actions={[
+              {
+                icon: 'school-outline',
+                title: t('learner.my_programs', { defaultValue: 'My Programs' }),
+                subtitle: t('learner.view_enrollments', { defaultValue: 'View enrollments' }),
+                onPress: () => router.push('/screens/learner/programs'),
+              },
+              {
+                icon: 'document-text-outline',
+                title: t('learner.submissions', { defaultValue: 'Submissions' }),
+                subtitle: t('learner.view_assignments', { defaultValue: 'View assignments' }),
+                onPress: () => router.push('/screens/learner/submissions'),
+                badge: draftCount || undefined,
+              },
+              {
+                icon: 'people-outline',
+                title: t('learner.connections', { defaultValue: 'Connections' }),
+                subtitle: t('learner.network_peers', { defaultValue: 'Network with peers' }),
+                onPress: () => router.push('/screens/learner/connections'),
+              },
+              {
+                icon: 'book-outline',
+                title: t('learner.courses', { defaultValue: 'Online Courses' }),
+                subtitle: t('learner.browse_courses', { defaultValue: 'Browse courses' }),
+                onPress: () => router.push('/screens/learner/courses'),
+              },
+              {
+                icon: 'briefcase-outline',
+                title: t('learner.my_cv', { defaultValue: 'My CV' }),
+                subtitle: t('learner.manage_cv', { defaultValue: 'Manage CV' }),
+                onPress: () => router.push('/screens/learner/cv'),
+              },
+              {
+                icon: 'folder-outline',
+                title: t('learner.portfolio', { defaultValue: 'Portfolio' }),
+                subtitle: t('learner.showcase_work', { defaultValue: 'Showcase your work' }),
+                onPress: () => router.push('/screens/learner/portfolio'),
+              },
+            ]}
+          />
+        </View>
+
+        {/* Upcoming assignments (derived from submissions until full assignments feed is implemented) */}
+        <View style={styles.section}>
+          <AssignmentWidget submissions={submissions} onPressSeeAll={() => router.push('/screens/learner/assignments')} />
+        </View>
+
+        {/* Recent activity */}
+        <View style={styles.section}>
+          <ActivityFeed submissions={submissions} />
         </View>
 
         {/* Recent Enrollments */}
-        {enrollments && enrollments.length > 0 && (
+        {enrollments.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t('learner.recent_programs', { defaultValue: 'Recent Programs' })}</Text>
@@ -227,38 +225,17 @@ export default function LearnerDashboard() {
               </TouchableOpacity>
             </View>
             {enrollments.slice(0, 3).map((enrollment) => (
-              <Card key={enrollment.id} padding={16} margin={0} elevation="small" style={styles.enrollmentCard}>
-                <TouchableOpacity
-                  onPress={() => router.push(`/screens/learner/program-detail?id=${enrollment.program_id}`)}
-                >
-                  <View style={styles.enrollmentHeader}>
-                    <View style={styles.enrollmentInfo}>
-                      <Text style={styles.enrollmentTitle}>{enrollment.program?.title || 'Program'}</Text>
-                      <Text style={styles.enrollmentCode}>{enrollment.program?.code || ''}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(enrollment.status, theme) }]}>
-                      <Text style={styles.statusText}>{enrollment.status}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.progressBar}>
-                    <View 
-                      style={[
-                        styles.progressBarFill, 
-                        { width: `${enrollment.progress_percentage || 0}%`, backgroundColor: theme.primary }
-                      ]} 
-                    />
-                  </View>
-                  <Text style={styles.progressText}>
-                    {enrollment.progress_percentage || 0}% {t('learner.complete', { defaultValue: 'complete' })}
-                  </Text>
-                </TouchableOpacity>
-              </Card>
+              <ProgramProgressCard
+                key={enrollment.id}
+                enrollment={enrollment}
+                onPress={() => router.push(`/screens/learner/program-detail?id=${enrollment.program_id}`)}
+              />
             ))}
           </View>
         )}
 
         {/* Loading State */}
-        {isLoading && enrollments?.length === 0 && (
+        {isLoading && enrollments.length === 0 && (
           <View style={styles.empty}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('dashboard.loading', { defaultValue: 'Loading...' })}</Text>
@@ -293,7 +270,7 @@ export default function LearnerDashboard() {
         )}
 
         {/* Empty State - Has Org but No Enrollments */}
-        {!isLoading && orgId && (!enrollments || enrollments.length === 0) && (
+        {!isLoading && orgId && enrollments.length === 0 && (
           <Card padding={32} margin={0} elevation="small">
             <View style={styles.empty}>
               <Ionicons name="school-outline" size={64} color={theme.textSecondary} />
@@ -315,56 +292,7 @@ export default function LearnerDashboard() {
   );
 }
 
-// Quick Action Card Component
-function QuickActionCard({
-  icon,
-  title,
-  subtitle,
-  onPress,
-  badge,
-  theme,
-}: {
-  icon: string;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  badge?: number;
-  theme: any;
-}) {
-  const styles = createStyles(theme);
-  
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-      <Card padding={16} margin={0} elevation="small" style={styles.quickActionCard}>
-        <View style={styles.quickActionIcon}>
-          <Ionicons name={icon as any} size={28} color={theme.primary} />
-          {badge && badge > 0 && (
-            <View style={[styles.badge, { backgroundColor: theme.error }]}>
-              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.quickActionTitle}>{title}</Text>
-        <Text style={styles.quickActionSubtitle}>{subtitle}</Text>
-      </Card>
-    </TouchableOpacity>
-  );
-}
-
-function getStatusColor(status: string, theme: any): string {
-  switch (status) {
-    case 'completed':
-      return theme.success || '#10B981';
-    case 'enrolled':
-      return theme.primary;
-    case 'withdrawn':
-      return theme.textSecondary;
-    default:
-      return theme.border;
-  }
-}
-
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: theme?.background || '#0b1220' 

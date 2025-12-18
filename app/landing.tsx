@@ -14,6 +14,7 @@ export default function LandingHandler() {
   const params = useLocalSearchParams<any>();
   const [status, setStatus] = useState<'loading'|'ready'|'error'|'done'>('loading');
   const [message, setMessage] = useState<string>('');
+  const [openAppPath, setOpenAppPath] = useState<string>('/');
   const { t } = useTranslation();
 
   const isWeb = Platform.OS === 'web';
@@ -58,6 +59,8 @@ export default function LandingHandler() {
     const run = async () => {
       try {
         const flow = (query.flow || query.type || '').toLowerCase();
+        // Default target for the "Open app" CTA (can be overridden by flows below)
+        setOpenAppPath(query.token_hash ? '(auth)/sign-in?emailVerified=true' : '/');
 
         // EMAIL CONFIRMATION: verify via token_hash if provided
         const tokenHash = query.token_hash || query.token || '';
@@ -93,6 +96,7 @@ export default function LandingHandler() {
             // Still try to open the app so the user can continue there
             if (isWeb) {
               setTimeout(() => {
+                setOpenAppPath('(auth)/sign-in?emailVerificationFailed=true');
                 tryOpenApp('(auth)/sign-in?emailVerificationFailed=true');
               }, 2000);
             }
@@ -111,7 +115,9 @@ export default function LandingHandler() {
           // On web: attempt to open app with deep link to parent registration
 setMessage(t('invite.opening_parent_registration', { defaultValue: 'Opening the app for parent registration...' }));
           setStatus('ready');
-          tryOpenApp(`/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}`);
+          const path = `/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}`;
+          setOpenAppPath(path);
+          tryOpenApp(path);
           return;
         }
 
@@ -123,7 +129,9 @@ setMessage(t('invite.opening_parent_registration', { defaultValue: 'Opening the 
           }
 setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to join by code...' }));
           setStatus('ready');
-          tryOpenApp(`/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}`);
+          const path = `/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}`;
+          setOpenAppPath(path);
+          tryOpenApp(path);
           return;
         }
 
@@ -136,16 +144,18 @@ setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to 
             if (k !== 'flow') paymentParams.set(k, v);
           });
           const queryString = paymentParams.toString() ? `?${paymentParams.toString()}` : '';
+          const path = `/screens/payments/${paymentPath}${queryString}`;
           
           if (!isWeb) {
             // Inside app: route to payment return screen with all params
-            router.replace(`/screens/payments/${paymentPath}${queryString}` as any);
+            router.replace(path as any);
             return;
           }
           // On web: try to open app with deep link
           setMessage(t('payment.redirecting', { defaultValue: 'Redirecting to app...' }));
           setStatus('ready');
-          tryOpenApp(`/screens/payments/${paymentPath}${queryString}`);
+          setOpenAppPath(path);
+          tryOpenApp(path);
           return;
         }
 
@@ -156,6 +166,7 @@ setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to 
         }
 setMessage(t('invite.opening_app', { defaultValue: 'Opening the app...' }));
         setStatus('ready');
+        setOpenAppPath('/');
         tryOpenApp('/');
       } catch (e: any) {
         setStatus('error');
@@ -198,8 +209,7 @@ setMessage(e?.message || t('common.unexpected_error', { defaultValue: 'Something
         <>
           <TouchableOpacity 
             onPress={() => {
-              const path = query.token_hash ? '(auth)/sign-in?emailVerified=true' : '/';
-              tryOpenApp(path);
+              tryOpenApp(openAppPath);
             }} 
             style={{ backgroundColor: '#00f5ff', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginTop: 8 }}
           >

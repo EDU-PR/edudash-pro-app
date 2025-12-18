@@ -302,7 +302,8 @@ console.log('[SignIn] Component rendering, theme:', theme);
       flex: 1,
       backgroundColor: theme.background,
       ...(Platform.OS === 'web' && {
-        minHeight: '100vh',
+        // RN dimension values support percentages but not viewport units like `vh`
+        minHeight: '100%',
         justifyContent: 'center',
         alignItems: 'center',
       }),
@@ -355,7 +356,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
       flexGrow: 1,
       paddingBottom: Platform.OS === 'ios' ? 20 : 40,
       ...(Platform.OS === 'web' && {
-        minHeight: '100vh',
+        minHeight: '100%',
         justifyContent: 'center',
         paddingVertical: 40,
       }),

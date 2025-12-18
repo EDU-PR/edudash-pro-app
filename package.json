@@ -64,6 +64,8 @@
     "vercel-build": "npm run web:build && bash scripts/copy-locales.sh && node scripts/patch-manifest-link.js",
     "web:preview": "serve -s dist -l 4173",
     "web:prod": "expo start --web --no-dev --minify",
+    "cache:clear": "bash scripts/clear-caches.sh",
+    "ota:preview:android": "npm run cache:clear && cross-env NODE_OPTIONS=--max-old-space-size=8192 eas update --channel preview --platform android --clear-cache --message \"Preview: PayFast return deep link, tier refresh, Dash AI nav hide, promo pricing\"",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -109,6 +109,9 @@ export default function SubscriptionUpgradePostScreen() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [screenMounted, setScreenMounted] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
+  const promoPercentOff = 0.5; // 50% off
+  const isLaunchPromoActive = new Date() <= promoEndDate;
 
   // Safely extract parameters
   const currentTier = (takeFirst(rawParams.currentTier) || 'free').toString();
@@ -657,11 +660,15 @@ export default function SubscriptionUpgradePostScreen() {
                 const monthlyPriceInRands = convertPrice(monthlyPriceCents);
                 const annualPriceInRands = convertPrice(annualPriceCents);
                 
+                const normalizeTier = (v: string): string => String(v || '').toLowerCase().replace(/-/g, '_');
+                const tierNorm = normalizeTier(plan.tier);
+                const isParentTier = tierNorm === 'parent_starter' || tierNorm === 'parent_plus';
+                const isPromoEligible = isLaunchPromoActive && isParentTier && monthlyPriceInRands > 0;
+                
                 // For display, always show monthly price (not annual/12)
                 // The annual price shows the total billed annually separately
-                const displayMonthlyPrice = monthlyPriceInRands;
-                
-                const displayAnnualPrice = annualPriceInRands;
+                const displayMonthlyPrice = isPromoEligible ? monthlyPriceInRands * promoPercentOff : monthlyPriceInRands;
+                const displayAnnualPrice = isPromoEligible && annualPriceInRands > 0 ? annualPriceInRands * promoPercentOff : annualPriceInRands;
                 
                 // Calculate savings (in rands)
                 const monthlyTotal = monthlyPriceInRands * 12;
@@ -713,6 +720,12 @@ export default function SubscriptionUpgradePostScreen() {
                             <Text style={[styles.price, { color: planColor }]}>R{displayMonthlyPrice.toFixed(2)}</Text>
                             <Text style={styles.pricePeriod}>/month</Text>
                           </View>
+                          {isPromoEligible && (
+                            <Text style={styles.annualPrice}>
+                              <Text style={{ textDecorationLine: 'line-through' }}>R{monthlyPriceInRands.toFixed(2)}</Text>
+                              {' '}launch special
+                            </Text>
+                          )}
                           {annual && annualPriceCents > 0 && (
                             <View>
                               <Text style={styles.annualPrice}>R{displayAnnualPrice.toFixed(2)} billed annually</Text>

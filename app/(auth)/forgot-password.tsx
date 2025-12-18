@@ -61,7 +61,8 @@ export default function ForgotPassword() {
       flex: 1,
       backgroundColor: theme.background,
       ...(Platform.OS === 'web' && {
-        minHeight: '100vh',
+        // RN dimension values support percentages but not viewport units like `vh`
+        minHeight: '100%',
         justifyContent: 'center',
         alignItems: 'center',
       }),
@@ -81,7 +82,7 @@ export default function ForgotPassword() {
       flexGrow: 1,
       paddingBottom: 40,
       ...(Platform.OS === 'web' && {
-        minHeight: '100vh',
+        minHeight: '100%',
         justifyContent: 'center',
         paddingVertical: 40,
       }),

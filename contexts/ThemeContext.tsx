@@ -76,8 +76,12 @@ export interface ThemeColors {
   tabIconDefault: string;
   tabIconSelected: string;
   cardBackground: string;
+  /** Alias used across the app for card surfaces */
+  card: string;
   modalBackground: string;
   modalOverlay: string;
+  /** Muted/low-emphasis foreground color (alias) */
+  muted: string;
   
   // Input colors
   inputBackground: string;
@@ -123,6 +127,9 @@ export interface ThemeColors {
     errorContainer: string;
     onErrorContainer: string;
     onBackground: string;
+    /** Common aliases used in some screens */
+    text: string;
+    textSecondary: string;
   };
 
   // Typography tokens used in some components for sizing
@@ -202,8 +209,10 @@ const lightTheme: ThemeColors = {
   tabIconDefault: '#9CA3AF',
   tabIconSelected: '#4F46E5',
   cardBackground: '#FFFFFF',      // Cards are white on gray background
+  card: '#FFFFFF',
   modalBackground: '#FFFFFF',
   modalOverlay: 'rgba(0, 0, 0, 0.6)', // Darker overlay for better focus
+  muted: '#9CA3AF',
   
   // Input colors
   inputBackground: '#F9FAFB',
@@ -249,6 +258,8 @@ const lightTheme: ThemeColors = {
     errorContainer: '#F87171',
     onErrorContainer: '#FFFFFF',
     onBackground: '#111827',
+    text: '#111827',
+    textSecondary: '#6B7280',
   },
 
   // Basic typography tokens for components referencing theme.typography
@@ -328,8 +339,10 @@ const darkTheme: ThemeColors = {
   tabIconDefault: '#64748B',
   tabIconSelected: '#818CF8',
   cardBackground: '#1E293B',
+  card: '#1E293B',
   modalBackground: '#1E293B',
   modalOverlay: 'rgba(0, 0, 0, 0.7)',
+  muted: '#94A3B8',
   
   // Input colors
   inputBackground: '#1E293B',
@@ -375,6 +388,8 @@ const darkTheme: ThemeColors = {
     errorContainer: '#FCA5A5',
     onErrorContainer: '#000000',
     onBackground: '#F9FAFB',
+    text: '#F9FAFB',
+    textSecondary: '#CBD5E1',
   },
 
   // Basic typography tokens for components referencing theme.typography

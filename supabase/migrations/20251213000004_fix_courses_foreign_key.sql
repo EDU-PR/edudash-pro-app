@@ -18,3 +18,4 @@ ON DELETE CASCADE;
 COMMENT ON CONSTRAINT courses_organization_id_fkey ON courses IS 'References organizations table (standardized from preschools)';
 
 
+

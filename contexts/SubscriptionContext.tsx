@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 
-type Tier = 'free' | 'starter' | 'basic' | 'premium' | 'pro' | 'enterprise';
+type Tier = 'free' | 'parent_starter' | 'parent_plus' | 'starter' | 'basic' | 'premium' | 'pro' | 'enterprise';
 
 type Seats = { total: number; used: number } | null;
 
@@ -63,8 +63,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         
         let t: Tier = 'free';
         let source: TierSource = 'unknown';
-        const metaTier = (user?.user_metadata as any)?.subscription_tier as string | undefined;
-        if (metaTier && ['free','starter','premium','enterprise'].includes(metaTier)) {
+        const normalizeTier = (v: string): string => String(v || '').trim().toLowerCase().replace(/-/g, '_');
+        const knownTiers: Tier[] = ['free', 'parent_starter', 'parent_plus', 'starter', 'premium', 'enterprise', 'basic', 'pro'];
+        const metaTierRaw = (user?.user_metadata as any)?.subscription_tier as string | undefined;
+        const metaTier = metaTierRaw ? normalizeTier(metaTierRaw) : '';
+        if (metaTier && knownTiers.includes(metaTier as Tier)) {
           t = metaTier as Tier;
           source = 'user';
         }
@@ -115,9 +118,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 .eq('id', orgId)
                 .maybeSingle();
               if (org?.plan_tier) {
-                const tierStr = String(org.plan_tier).toLowerCase();
-                const knownTiers: Tier[] = ['free','starter','premium','enterprise'];
-                if (knownTiers.includes(tierStr as Tier)) {
+                const tierStr = normalizeTier(String(org.plan_tier));
+                const orgKnownTiers: Tier[] = ['free','starter','premium','enterprise'];
+                if (orgKnownTiers.includes(tierStr as Tier)) {
                   t = tierStr as Tier;
                   source = 'organization';
                 }
@@ -142,9 +145,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     .select('tier')
                     .eq('id', sub.plan_id)
                     .maybeSingle();
-                  const tierStr = (planRow?.tier || '').toLowerCase();
-                  const knownTiers: Tier[] = ['free','starter','premium','enterprise'];
-                  if (knownTiers.includes(tierStr as Tier)) {
+                  const tierStr = normalizeTier(planRow?.tier || '');
+                  const schoolKnownTiers: Tier[] = ['free','starter','premium','enterprise'];
+                  if (schoolKnownTiers.includes(tierStr as Tier)) {
                     t = tierStr as Tier;
                     source = 'school_plan';
                   }
@@ -160,14 +163,38 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                     .eq('id', schoolId)
                     .maybeSingle();
                   if (school?.subscription_tier) {
-                    const tierStr = String(school.subscription_tier).toLowerCase();
-                    const knownTiers: Tier[] = ['free','starter','premium','enterprise'];
-                    if (knownTiers.includes(tierStr as Tier)) {
+                    const tierStr = normalizeTier(String(school.subscription_tier));
+                    const schoolKnownTiers: Tier[] = ['free','starter','premium','enterprise'];
+                    if (schoolKnownTiers.includes(tierStr as Tier)) {
                       t = tierStr as Tier;
                       source = 'school_default';
                     }
                   }
                 } catch {/* ignore */}
+              }
+            } catch {/* ignore */}
+          }
+
+          // If we still look "free", try user AI tier tables (parent subscriptions live here)
+          // Priority (for user-scoped tiers): user_ai_usage.current_tier > user_ai_tiers.tier
+          if (mounted && (source === 'unknown' || t === 'free')) {
+            try {
+              const supabase = assertSupabase();
+              const { data: usage } = await supabase
+                .from('user_ai_usage')
+                .select('current_tier')
+                .eq('user_id', user.id)
+                .maybeSingle();
+              const { data: tierRow } = await supabase
+                .from('user_ai_tiers')
+                .select('tier')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+              const aiTierStr = normalizeTier((usage as any)?.current_tier || (tierRow as any)?.tier || '');
+              if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
+                t = aiTierStr as Tier;
+                source = 'user';
               }
             } catch {/* ignore */}
           }

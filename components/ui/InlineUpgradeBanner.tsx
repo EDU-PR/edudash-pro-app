@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface InlineUpgradeBannerProps {
   /**
@@ -88,10 +89,18 @@ export default function InlineUpgradeBanner({
 }: InlineUpgradeBannerProps) {
   const { theme } = useTheme();
   const { tier } = useSubscription();
+  const { profile } = useAuth();
   const { t } = useTranslation();
 
-  // Don't show if user already has premium
-  if (tier === 'premium' || !visible) {
+  const role = String(profile?.role || '').toLowerCase();
+  const isParentLike = role === 'parent' || role === 'student' || role === 'learner';
+
+  // Don't show if user already has an appropriate paid tier for their category
+  // - Parent-like: any non-free tier (e.g. parent_starter/parent_plus) means they've upgraded
+  // - School-like: hide only for higher tiers (premium/enterprise) to still allow upsell from starter → premium
+  const hasUpgraded = isParentLike ? tier !== 'free' : tier === 'premium' || tier === 'enterprise';
+
+  if (!visible || hasUpgraded) {
     return null;
   }
 

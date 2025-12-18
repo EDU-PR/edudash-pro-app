@@ -7,11 +7,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/useOrgSettings';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { assertSupabase } from '@/lib/supabase';
+import { base64ToUint8Array } from '@/lib/utils/base64';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function OrgBrandingScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const { profile } = useAuth();
   
   const { data: orgSettings, isLoading } = useOrgSettings();
   const updateSettings = useUpdateOrgSettings();
@@ -25,6 +32,7 @@ export default function OrgBrandingScreen() {
   const [twitter, setTwitter] = useState(orgSettings?.social_media?.twitter || '');
   const [linkedin, setLinkedin] = useState(orgSettings?.social_media?.linkedin || '');
   const [instagram, setInstagram] = useState(orgSettings?.social_media?.instagram || '');
+  const [logoUploading, setLogoUploading] = useState(false);
 
   React.useEffect(() => {
     if (orgSettings) {
@@ -40,27 +48,92 @@ export default function OrgBrandingScreen() {
     }
   }, [orgSettings]);
 
+  const canManageBranding =
+    profile?.role === 'admin' ||
+    profile?.role === 'super_admin' ||
+    profile?.role === 'principal' ||
+    profile?.role === 'principal_admin';
+
   const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert(
-        t('common.permission_required', { defaultValue: 'Permission Required' }),
-        t('common.photo_permission', { defaultValue: 'Please grant photo library access to upload a logo' })
+    try {
+      if (!canManageBranding) {
+        Alert.alert(
+          t('common.permission_denied', { defaultValue: 'Permission Denied' }),
+          t('branding.permission_required', { defaultValue: 'You do not have permission to update branding settings.' })
+        );
+        return;
+      }
+
+      const orgId = orgSettings?.id || profile?.organization_id;
+      if (!orgId) {
+        Alert.alert(
+          t('common.error', { defaultValue: 'Error' }),
+          t('branding.no_organization', { defaultValue: 'No organization found.' })
+        );
+        return;
+      }
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('common.permission_required', { defaultValue: 'Permission Required' }),
+          t('common.photo_permission', { defaultValue: 'Please grant photo library access to upload a logo' })
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      setLogoUploading(true);
+
+      // Process logo for consistent sizing and storage efficiency
+      const processed = await manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 512, height: 512 } }],
+        { compress: 0.85, format: SaveFormat.PNG }
       );
-      return;
-    }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+      const base64Data = await FileSystem.readAsStringAsync(processed.uri, { encoding: 'base64' });
+      const body = base64ToUint8Array(base64Data);
 
-    if (!result.canceled && result.assets[0]) {
-      // TODO: Upload to Supabase Storage and get URL
-      // For now, just set the local URI
-      setLogoUrl(result.assets[0].uri);
+      if (body.byteLength === 0) {
+        throw new Error('Failed to prepare logo for upload');
+      }
+
+      const bucket = 'school-assets';
+      const timestamp = Date.now();
+      const path = `${orgId}/branding/logo_${timestamp}.png`;
+
+      const { error: uploadError } = await assertSupabase().storage
+        .from(bucket)
+        .upload(path, body as any, { contentType: 'image/png', upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: publicData } = assertSupabase().storage.from(bucket).getPublicUrl(path);
+      const publicUrl = publicData?.publicUrl;
+      if (!publicUrl) {
+        throw new Error('Failed to generate logo URL');
+      }
+
+      // Set state to the hosted URL (never persist local file:// URIs)
+      setLogoUrl(publicUrl);
+    } catch (error: any) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        error.message || t('branding.logo_upload_failed', { defaultValue: 'Failed to upload logo' })
+      );
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -131,8 +204,12 @@ export default function OrgBrandingScreen() {
           <View style={styles.logoSection}>
             {logoUrl ? (
               <View style={styles.logoPreview}>
-                {/* TODO: Use actual Image component with proper source */}
-                <Text style={styles.logoPlaceholder}>Logo Preview</Text>
+                <Image
+                  source={{ uri: logoUrl }}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                  transition={150}
+                />
               </View>
             ) : (
               <View style={[styles.logoPlaceholder, { backgroundColor: theme.surface }]}>
@@ -142,8 +219,13 @@ export default function OrgBrandingScreen() {
             <TouchableOpacity
               style={[styles.uploadButton, { backgroundColor: theme.primary }]}
               onPress={handlePickImage}
+              disabled={logoUploading || !canManageBranding}
             >
-              <Ionicons name="camera-outline" size={20} color="#fff" />
+              {logoUploading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera-outline" size={20} color="#fff" />
+              )}
               <Text style={styles.uploadButtonText}>
                 {logoUrl ? t('branding.change_logo', { defaultValue: 'Change Logo' }) : t('branding.upload_logo', { defaultValue: 'Upload Logo' })}
               </Text>
@@ -280,6 +362,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   sectionTitle: { color: theme.text, fontSize: 18, fontWeight: '700', marginBottom: 16 },
   logoSection: { alignItems: 'center', gap: 16 },
   logoPreview: { width: 120, height: 120, borderRadius: 12, backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'center' },
+  logoImage: { width: 112, height: 112 },
   logoPlaceholder: { width: 120, height: 120, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   uploadButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   uploadButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },

@@ -641,6 +641,14 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
   const isFree = rawPrice === 0;
   const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
   
+  // Launch promo (parents): 50% off until Dec 31, 2025 (display only; checkout/webhook enforce pricing server-side)
+  const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
+  const isLaunchPromoActive = new Date() <= promoEndDate;
+  const tierNorm = tierLower.replace(/-/g, '_');
+  const isParentPromoEligible = isLaunchPromoActive && isParentTier && !isFree && !isEnterprise && priceInRands > 0;
+  const originalPriceInRands = priceInRands;
+  const promoPriceInRands = isParentPromoEligible ? originalPriceInRands * 0.5 : originalPriceInRands;
+  
   // Check if this plan is specifically optimized for the school type
   const isRecommended = schoolType && plan.school_types && 
     (plan.school_types.includes(schoolType) && plan.school_types.length === 1);
@@ -691,11 +699,19 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
               <Text style={styles.customPrice}>Custom</Text>
             ) : (
               <>
-                <Text style={[styles.price, { color: planColor }]}>R{priceInRands.toFixed(2)}</Text>
+                <Text style={[styles.price, { color: planColor }]}>R{promoPriceInRands.toFixed(2)}</Text>
                 <Text style={styles.pricePeriod}>/ {annual ? 'year' : 'month'}</Text>
               </>
             )}
           </View>
+          {isParentPromoEligible && (
+            <View style={styles.savingsBadge}>
+              <Text style={styles.savings}>
+                <Text style={{ textDecorationLine: 'line-through' }}>R{originalPriceInRands.toFixed(2)}</Text>
+                {' '}launch special
+              </Text>
+            </View>
+          )}
           {savings > 0 && (
             <View style={styles.savingsBadge}>
               <Text style={styles.savings}>Save R{savings.toFixed(2)}/mo</Text>
