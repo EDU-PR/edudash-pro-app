@@ -18,6 +18,65 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
+type ProgramInfo = {
+  id: string;
+  title: string;
+  description: string | null;
+  course_code: string;
+  organizations: { id: string; name: string; slug: string | null } | null;
+};
+
+async function fetchProgramByCode(programCode: string): Promise<ProgramInfo | null> {
+  const code = programCode.trim();
+  if (!code) return null;
+  const supabase = assertSupabase();
+
+  // Preferred: public RPC (works even when unauthenticated and RLS blocks direct SELECT)
+  try {
+    const { data, error } = await supabase.rpc('validate_program_code', { p_code: code });
+    if (!error && data && typeof data === 'object' && (data as any).valid) {
+      const course = (data as any).course;
+      const org = (data as any).organization;
+      if (course?.id && course?.title) {
+        return {
+          id: String(course.id),
+          title: String(course.title),
+          description: course.description ?? null,
+          course_code: String(course.course_code ?? ''),
+          organizations: org?.id
+            ? { id: String(org.id), name: String(org.name ?? ''), slug: org.slug ?? null }
+            : null,
+        };
+      }
+    }
+  } catch {
+    // Fall back below
+  }
+
+  // Fallback: direct query (works for authenticated users with appropriate RLS)
+  const { data: legacy, error: legacyErr } = await supabase
+    .from('courses')
+    .select(
+      `
+          id,
+          title,
+          description,
+          course_code,
+          organizations (
+            id,
+            name,
+            slug
+          )
+        `
+    )
+    .or(`course_code.eq.${code},id.eq.${code}`)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (legacyErr || !legacy) return null;
+  return legacy as unknown as ProgramInfo;
+}
+
 export default function PublicRegistrationScreen() {
   const { theme } = useTheme();
   const params = useLocalSearchParams();
@@ -30,7 +89,7 @@ export default function PublicRegistrationScreen() {
   const [step, setStep] = useState<'code' | 'details'>('code');
   const [programCode, setProgramCode] = useState(getParam('code') || '');
   const [loading, setLoading] = useState(false);
-  const [programInfo, setProgramInfo] = useState<any>(null);
+  const [programInfo, setProgramInfo] = useState<ProgramInfo | null>(null);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -45,29 +104,7 @@ export default function PublicRegistrationScreen() {
     queryKey: ['program-by-code', programCode],
     queryFn: async () => {
       if (!programCode) return null;
-
-      const supabase = assertSupabase();
-
-      // Try to find program by course_code or generated code
-      const { data, error } = await supabase
-        .from('courses')
-        .select(`
-          id,
-          title,
-          description,
-          course_code,
-          organizations (
-            id,
-            name,
-            slug
-          )
-        `)
-        .or(`course_code.eq.${programCode},id.eq.${programCode}`)
-        .eq('is_active', true)
-        .single();
-
-      if (error || !data) return null;
-      return data;
+      return await fetchProgramByCode(programCode);
     },
     enabled: !!programCode && step === 'details',
   });
@@ -87,27 +124,8 @@ export default function PublicRegistrationScreen() {
 
     setLoading(true);
     try {
-      const supabase = assertSupabase();
-
-      // Fetch program
-      const { data, error } = await supabase
-        .from('courses')
-        .select(`
-          id,
-          title,
-          description,
-          course_code,
-          organizations (
-            id,
-            name,
-            slug
-          )
-        `)
-        .or(`course_code.eq.${programCode.trim()},id.eq.${programCode.trim()}`)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (error || !data) {
+      const data = await fetchProgramByCode(programCode);
+      if (!data) {
         Alert.alert('Invalid Code', 'The program code you entered is invalid or the program is no longer active.');
         return;
       }
