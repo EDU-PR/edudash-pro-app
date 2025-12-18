@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/lib/storage';
 import { secureStore } from '@/lib/secure-store';
 import { signInWithSession } from '@/lib/sessionManager';
+import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { marketingTokens } from '@/components/marketing/tokens';
 import { GlassCard } from '@/components/marketing/GlassCard';
@@ -216,12 +217,18 @@ console.log('[SignIn] Component rendering, theme:', theme);
         console.warn('Remember me save failed:', credErr);
       }
 
-      // AuthContext will handle routing via auth state change listener
-      // No fallback timeout needed - this was causing double navigation
-      console.log('[Sign-In] Sign-in complete, AuthContext will handle routing');
-      
-      // Keep loading true - AuthContext will handle routing and the screen will unmount
-      // Don't set loading false when sign-in succeeds
+      // Ensure we don't get stuck if AuthContext doesn't receive a SIGNED_IN event
+      // (can happen when switching accounts / existing session edge cases).
+      try {
+        const { data } = await assertSupabase().auth.getUser();
+        await routeAfterLogin(data.user, null);
+      } catch (routeErr) {
+        console.warn('[SignIn] routeAfterLogin failed (non-fatal):', routeErr);
+      } finally {
+        // If navigation doesn't happen for any reason, never keep the UI stuck.
+        // AuthContext may still redirect; setting loading false is safe.
+        setLoading(false);
+      }
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
       console.error('=== SIGN IN ERROR DEBUG ===');
