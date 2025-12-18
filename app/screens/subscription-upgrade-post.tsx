@@ -577,20 +577,30 @@ export default function SubscriptionUpgradePostScreen() {
   // Wrap in try-catch to prevent render crashes on mobile
   try {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <Stack.Screen options={{ 
-        title: 'Upgrade Plan',
-        headerShown: true,
-        headerStyle: { 
-          backgroundColor: '#0b1220',
-        } as any,
-        headerTitleStyle: { color: '#fff' },
-        headerTintColor: '#00f5ff',
-        headerBackVisible: true,
-        gestureEnabled: true,
-        headerTransparent: false,
+        headerShown: false, // Use custom header instead
+        contentStyle: { backgroundColor: '#0b1220' },
       }} />
       <StatusBar style="light" backgroundColor="#0b1220" translucent={false} />
+      {/* Custom Header with SafeArea */}
+      <View style={[styles.customHeader, { paddingTop: insets.top }]}>
+        <TouchableOpacity 
+          onPress={() => {
+            try {
+              router.back();
+            } catch {
+              router.replace('/screens/principal-dashboard');
+            }
+          }}
+          style={styles.headerBackButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name={Platform.OS === 'ios' ? 'chevron-back' : 'arrow-back'} size={24} color="#00f5ff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Upgrade Plan</Text>
+        <View style={styles.headerRightSpacer} />
+      </View>
         <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: 24 + insets.bottom }]}>
           
           {/* Header Section */}
@@ -883,6 +893,30 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#0b1220',
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0b1220',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
+    minHeight: 56,
+  },
+  headerBackButton: {
+    padding: 4,
+    marginRight: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  headerRightSpacer: {
+    width: 36, // Match back button width for centering
   },
   scrollContainer: {
     padding: 16,
