@@ -607,6 +607,23 @@ export async function signInWithSession(
 }> {
   try {
     if (__DEV__) console.log('[SessionManager] signInWithSession called for:', email);
+
+    // Ensure Supabase in-memory auth state is clean before switching accounts.
+    // Otherwise Supabase may respond "already signed in", and AuthContext won't receive a SIGNED_IN event.
+    try {
+      const wantedEmail = email.trim().toLowerCase();
+      const { data: existing } = await assertSupabase().auth.getSession();
+      const existingEmail = existing?.session?.user?.email?.toLowerCase();
+      if (existing?.session && existingEmail && existingEmail !== wantedEmail) {
+        if (__DEV__) console.log('[SessionManager] Existing session detected for different user, signing out first...');
+        await assertSupabase().auth.signOut({ scope: 'local' } as any);
+        // small delay to allow auth state to settle
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    } catch (e) {
+      // Non-fatal; proceed with sign-in attempt.
+      if (__DEV__) console.log('[SessionManager] Pre sign-in signOut check failed (non-fatal)', e);
+    }
     
     // Clear any stale session data before attempting new sign-in
     if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
@@ -630,6 +647,34 @@ export async function signInWithSession(
           const { data: sessionData } = await assertSupabase().auth.getSession();
           if (sessionData?.session) {
             if (__DEV__) console.log('[SessionManager] Retrieved existing session');
+            // If the existing session is for a different user, sign out and retry once.
+            const existingEmail = sessionData.session.user.email?.toLowerCase();
+            const wantedEmail = email.trim().toLowerCase();
+            if (existingEmail && existingEmail !== wantedEmail) {
+              if (__DEV__) console.log('[SessionManager] Existing session is for different email; signing out and retrying sign-in...');
+              await assertSupabase().auth.signOut({ scope: 'local' } as any);
+              await new Promise((resolve) => setTimeout(resolve, 150));
+              const retry = await assertSupabase().auth.signInWithPassword({ email, password });
+              if (retry.error) {
+                return { session: null, profile: null, error: retry.error.message };
+              }
+              if (!retry.data.session || !retry.data.user) {
+                return { session: null, profile: null, error: 'Invalid credentials' };
+              }
+              const session: UserSession = {
+                access_token: retry.data.session.access_token,
+                refresh_token: retry.data.session.refresh_token,
+                expires_at: retry.data.session.expires_at || Date.now() / 1000 + 3600,
+                user_id: retry.data.user.id,
+                email: retry.data.user.email,
+              };
+              const profile = await fetchUserProfile(retry.data.user.id);
+              if (!profile) return { session: null, profile: null, error: 'Failed to load user profile' };
+              await storeSession(session);
+              await storeProfile(profile);
+              setupAutoRefresh(session);
+              return { session, profile };
+            }
             // Use the existing session
             const session: UserSession = {
               access_token: sessionData.session.access_token,
