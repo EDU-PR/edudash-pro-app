@@ -102,3 +102,79 @@ declare module 'react-native-webrtc' {
 
   export function registerGlobals(): void;
 }
+
+declare module 'expo-file-system' {
+  // Expo SDK 54+ exposes many legacy fields at runtime, but the types live under `expo-file-system/legacy`.
+  // This augmentation makes common legacy usages type-safe in the app codebase.
+  export const documentDirectory: string | null;
+  export const cacheDirectory: string | null;
+  export const bundleDirectory: string | null;
+
+  export enum EncodingType {
+    UTF8 = 'utf8',
+    Base64 = 'base64',
+  }
+
+  export interface InfoOptions {
+    readonly md5?: boolean;
+    readonly size?: boolean;
+  }
+
+  export interface FileInfo {
+    readonly exists: boolean;
+    readonly isDirectory: boolean;
+    readonly uri: string;
+    readonly size?: number;
+    readonly modificationTime?: number;
+    readonly md5?: string;
+  }
+
+  export interface ReadingOptions {
+    readonly encoding?: EncodingType | 'utf8' | 'base64';
+    readonly length?: number;
+    readonly position?: number;
+  }
+
+  export interface DownloadProgressData {
+    readonly totalBytesWritten: number;
+    readonly totalBytesExpectedToWrite: number;
+  }
+
+  export type FileSystemProgressCallback = (progress: DownloadProgressData) => void;
+
+  export interface DownloadResult {
+    readonly uri: string;
+    readonly status: number;
+    readonly headers: Record<string, string>;
+    readonly md5?: string;
+  }
+
+  export interface MakeDirectoryOptions {
+    readonly intermediates?: boolean;
+  }
+
+  export function getInfoAsync(fileUri: string, options?: InfoOptions): Promise<FileInfo>;
+  export function readAsStringAsync(fileUri: string, options?: ReadingOptions): Promise<string>;
+  export function makeDirectoryAsync(fileUri: string, options?: MakeDirectoryOptions): Promise<void>;
+
+  export class DownloadResumable {
+    constructor(
+      url: string,
+      fileUri: string,
+      options?: Record<string, unknown>,
+      callback?: FileSystemProgressCallback,
+      resumeData?: string
+    );
+    downloadAsync(): Promise<DownloadResult | undefined>;
+    pauseAsync(): Promise<{ readonly resumeData?: string }>;
+    resumeAsync(): Promise<DownloadResult | undefined>;
+  }
+
+  export function createDownloadResumable(
+    url: string,
+    fileUri: string,
+    options?: Record<string, unknown>,
+    callback?: FileSystemProgressCallback,
+    resumeData?: string
+  ): DownloadResumable;
+}

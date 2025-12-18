@@ -11,10 +11,6 @@ export default function DebugUser() {
   const [legacyRole, setLegacyRole] = useState<{ role: string | null; school: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDebugData();
-  }, [user, loadDebugData]);
-
   const loadDebugData = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
@@ -35,6 +31,10 @@ export default function DebugUser() {
       setLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    loadDebugData();
+  }, [user, loadDebugData]);
 
   const testRouting = async () => {
     try {

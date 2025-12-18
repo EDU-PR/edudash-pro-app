@@ -399,7 +399,7 @@ export default function SubscriptionSetupScreen() {
       
       const checkoutInput = {
         scope: scope,
-        schoolId: scope === 'school' ? schoolId : undefined,
+        schoolId: scope === 'school' && schoolId ? schoolId : undefined,
         userId: scope === 'user' ? profile?.id : undefined,
         planTier: plan.tier,
         billing: (annual ? 'annual' : 'monthly') as 'annual' | 'monthly',

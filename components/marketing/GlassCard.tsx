@@ -1,10 +1,11 @@
 import React, { PropsWithChildren } from 'react';
-import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { marketingTokens } from './tokens';
 
 interface GlassCardProps {
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   intensity?: 'soft' | 'medium' | 'strong';
 }
 

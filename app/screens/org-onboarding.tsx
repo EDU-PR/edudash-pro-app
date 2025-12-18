@@ -251,8 +251,6 @@ export default function OrgOnboardingScreen() {
           headerStyle: { backgroundColor: '#0b1220' },
           headerTitleStyle: { color: '#fff' },
           headerTintColor: '#00f5ff',
-          headerBackTitleVisible: false,
-          headerBackButtonVisible: true, // Enable back button
         }} 
       />
       <ScrollView 

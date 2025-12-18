@@ -18,17 +18,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
-interface RegistrationParams {
-  org?: string;
-  code?: string;
-  program?: string;
-}
-
 export default function PublicRegistrationScreen() {
   const { theme } = useTheme();
-  const params = useLocalSearchParams<RegistrationParams>();
+  const params = useLocalSearchParams();
+  const getParam = (key: string): string | undefined => {
+    const value = (params as Record<string, string | string[] | undefined>)[key];
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value[0];
+    return undefined;
+  };
   const [step, setStep] = useState<'code' | 'details'>('code');
-  const [programCode, setProgramCode] = useState(params.code || '');
+  const [programCode, setProgramCode] = useState(getParam('code') || '');
   const [loading, setLoading] = useState(false);
   const [programInfo, setProgramInfo] = useState<any>(null);
 

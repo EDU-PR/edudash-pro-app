@@ -130,6 +130,12 @@ export interface ThemeColors {
     /** Common aliases used in some screens */
     text: string;
     textSecondary: string;
+    border: string;
+    success: string;
+    warning: string;
+    info: string;
+    disabled: string;
+    cardBackground: string;
   };
 
   // Typography tokens used in some components for sizing
@@ -260,6 +266,12 @@ const lightTheme: ThemeColors = {
     onBackground: '#111827',
     text: '#111827',
     textSecondary: '#6B7280',
+    border: '#D1D5DB',
+    success: '#10B981',
+    warning: '#F59E0B',
+    info: '#3B82F6',
+    disabled: '#D1D5DB',
+    cardBackground: '#FFFFFF',
   },
 
   // Basic typography tokens for components referencing theme.typography
@@ -390,6 +402,12 @@ const darkTheme: ThemeColors = {
     onBackground: '#F9FAFB',
     text: '#F9FAFB',
     textSecondary: '#CBD5E1',
+    border: '#334155',
+    success: '#34D399',
+    warning: '#FCD34D',
+    info: '#60A5FA',
+    disabled: '#64748B',
+    cardBackground: '#1E293B',
   },
 
   // Basic typography tokens for components referencing theme.typography
@@ -412,6 +430,10 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 // Theme context interface
 interface ThemeContextType {
   theme: ThemeColors;
+  /** Alias to `theme.colors` for legacy callers */
+  colors: ThemeColors['colors'];
+  /** Current computed color scheme */
+  colorScheme: 'light' | 'dark';
   mode: ThemeMode;
   isDark: boolean;
   setMode: (mode: ThemeMode) => Promise<void>;
@@ -495,6 +517,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     <ThemeContext.Provider
       value={{
         theme,
+        colors: theme.colors,
+        colorScheme: isDark ? 'dark' : 'light',
         mode,
         isDark,
         setMode,

@@ -12,11 +12,11 @@ import { QASection } from '@/components/marketing/sections/QASection';
 import { supabase } from '@/lib/supabase';
 
 type DBPlan = {
-  id: string;
+  id?: string;
   name: string;
   tier: string;
   price_monthly: number | null;
-  features: string[] | any;
+  features: unknown;
   is_active: boolean;
   description?: string | null;
 };
@@ -156,7 +156,7 @@ export default function PricingPage() {
         // Fetch from subscription_plans table
         const { data, error } = await supabase
           .from('subscription_plans')
-          .select('name,tier,price_monthly,description,features,is_active')
+          .select('id,name,tier,price_monthly,description,features,is_active')
           .eq('is_active', true)
           .order('tier', { ascending: true });
 
@@ -197,10 +197,10 @@ export default function PricingPage() {
               price,
               period,
               description: p.description || '',
-              features: Array.isArray(p.features) 
-                ? p.features.map((f: any) => 
-                    typeof f === 'string' ? { name: f, included: true } : f
-                  ) 
+              features: Array.isArray(p.features)
+                ? (p.features as unknown[]).map((f) =>
+                    typeof f === 'string' ? { name: f, included: true } : (f as { name: string; included: boolean })
+                  )
                 : [],
               cta: isEnterprise || price === 'Custom' ? 'Contact Sales' : isFree ? 'Get Started' : 'Start Free Trial',
               featured: p.tier === 'parent-starter' || p.tier === 'premium',
@@ -267,7 +267,14 @@ export default function PricingPage() {
           {/* Pricing Cards */}
           <View style={[styles.grid, isDesktop && styles.gridDesktop, isTablet && !isDesktop && styles.gridTablet]}>
             {plans.map((plan) => (
-              <View key={plan.name} style={styles.cardWrapper}>
+              <View
+                key={plan.name}
+                style={[
+                  styles.cardWrapper,
+                  isTablet && !isDesktop && styles.cardWrapperTablet,
+                  isDesktop && styles.cardWrapperDesktop,
+                ]}
+              >
                 <GlassCard 
                   intensity={plan.featured ? 'strong' : 'medium'}
                   style={[
@@ -431,18 +438,14 @@ const styles = StyleSheet.create({
     marginTop: marketingTokens.spacing.md,
     width: '100%',
   },
-  '@media (min-width: 768px)': {
-    cardWrapper: {
-      width: '48%',
-      minWidth: 320,
-    },
+  cardWrapperTablet: {
+    width: '48%',
+    minWidth: 320,
   },
-  '@media (min-width: 1024px)': {
-    cardWrapper: {
-      width: '31%',
-      minWidth: 340,
-      maxWidth: 400,
-    },
+  cardWrapperDesktop: {
+    width: '31%',
+    minWidth: 340,
+    maxWidth: 400,
   },
   card: {
     position: 'relative',

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text, Pressable, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
+import { Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -13,8 +14,8 @@ interface GradientButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'indigo';
   size?: 'sm' | 'md' | 'lg';
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
   testID?: string;
 }

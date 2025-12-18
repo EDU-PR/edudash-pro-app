@@ -113,9 +113,12 @@ export interface UserProfile {
   organization_id?: string;
   organization_name?: string;
   preschool_id?: string;
+  preschool_name?: string;
   first_name?: string;
   last_name?: string;
+  full_name?: string;
   avatar_url?: string;
+  date_of_birth?: string;
   seat_status?: 'active' | 'inactive' | 'pending';
   capabilities?: string[];
   created_at?: string;

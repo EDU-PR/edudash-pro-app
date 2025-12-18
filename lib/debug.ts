@@ -14,6 +14,8 @@ export const log: LogFn = (message: string, ...args: any[]) => logger.info(messa
 export const warn: LogFn = (message: string, ...args: any[]) => logger.warn(message, ...args);
 export const debug: LogFn = (message: string, ...args: any[]) => logger.debug(message, ...args);
 export const error: LogFn = (message: string, ...args: any[]) => logger.error(message, ...args);
+// Common alias used in older code paths
+export const logError: LogFn = error;
 
 // Optional: helper to safely stringify objects without throwing
 export function safeJson(value: any, space: number = 2): string {

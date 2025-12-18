@@ -17,18 +17,19 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 
-interface RegistrationParams {
-  code?: string;
-  program?: string;
-}
-
 export default function LearnerRegistrationScreen() {
   const { theme } = useTheme();
-  const params = useLocalSearchParams<RegistrationParams>();
+  const params = useLocalSearchParams();
+  const getParam = (key: string): string | undefined => {
+    const value = (params as Record<string, string | string[] | undefined>)[key];
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value[0];
+    return undefined;
+  };
   const [mode, setMode] = useState<'choose' | 'standalone' | 'program'>(
-    params.code ? 'program' : 'choose'
+    getParam('code') ? 'program' : 'choose'
   );
-  const [programCode, setProgramCode] = useState(params.code || '');
+  const [programCode, setProgramCode] = useState(getParam('code') || '');
   const [loading, setLoading] = useState(false);
   const [programInfo, setProgramInfo] = useState<any>(null);
 

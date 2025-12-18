@@ -13,6 +13,7 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { assertSupabase } from '@/lib/supabase';
 import { base64ToUint8Array } from '@/lib/utils/base64';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeRole } from '@/lib/rbac';
 
 export default function OrgBrandingScreen() {
   const { t } = useTranslation();
@@ -48,11 +49,11 @@ export default function OrgBrandingScreen() {
     }
   }, [orgSettings]);
 
+  const normalizedRole = profile?.role ? normalizeRole(profile.role) : null;
   const canManageBranding =
-    profile?.role === 'admin' ||
-    profile?.role === 'super_admin' ||
-    profile?.role === 'principal' ||
-    profile?.role === 'principal_admin';
+    normalizedRole === 'principal_admin' ||
+    normalizedRole === 'super_admin' ||
+    normalizedRole === 'principal';
 
   const handlePickImage = async () => {
     try {

@@ -301,7 +301,6 @@ export default function PrincipalOnboardingScreen() {
           headerStyle: { backgroundColor: '#0b1220' },
           headerTitleStyle: { color: '#fff' },
           headerTintColor: '#00f5ff',
-          headerBackTitleVisible: false,
         }} 
       />
       <ScrollView 

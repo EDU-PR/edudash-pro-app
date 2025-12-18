@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { normalizeRole } from '@/lib/rbac';
 
 export default function CVUploadScreen() {
   const { t } = useTranslation();
@@ -27,11 +28,11 @@ export default function CVUploadScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
 
+  const normalizedRole = profile?.role ? normalizeRole(profile.role) : null;
   const canUploadCVs =
-    profile?.role === 'admin' ||
-    profile?.role === 'super_admin' ||
-    profile?.role === 'principal' ||
-    profile?.role === 'principal_admin';
+    normalizedRole === 'principal_admin' ||
+    normalizedRole === 'super_admin' ||
+    normalizedRole === 'principal';
 
   const handlePickDocument = async () => {
     try {
