@@ -85,7 +85,6 @@ export default function RoleSelectionScreen() {
           headerTitleStyle: { color: theme.text },
           headerTintColor: theme.primary,
           headerShown: true,
-          headerBackTitleVisible: false,
         }}
       />
       <ScrollView
@@ -237,5 +236,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
   },
 });
+
 
 

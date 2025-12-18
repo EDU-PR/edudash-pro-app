@@ -429,9 +429,9 @@ serve(async (req: Request) => {
     const structuredData = await extractStructuredCVData(rawText);
     structuredData.extraction_method = extractionMethod;
 
-    // Store processed CV in database
+    // Store processed CV in database (org-admin uploads table)
     const { data: cvRecord, error: insertError } = await supabase
-      .from("learner_cvs")
+      .from("cv_uploads")
       .insert({
         organization_id,
         uploaded_by: user.id,

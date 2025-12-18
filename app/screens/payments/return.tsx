@@ -23,11 +23,15 @@ interface PaymentReturn {
   status?: string;
   invoice_id?: string;
   transaction_id?: string;
+  m_payment_id?: string;
+  invoice_number?: string;
+  plan_tier?: string;
+  scope?: string;
 }
 
 export default function PaymentReturnScreen() {
   const params = useLocalSearchParams() as Partial<PaymentReturn>;
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const { theme } = useTheme();
   const { refresh: refreshSubscription } = useSubscription();
   
@@ -62,42 +66,60 @@ export default function PaymentReturnScreen() {
     }
 
     try {
-      // Poll for active subscription
-      const ownerId = profile?.organization_id || profile?.id;
-      if (!ownerId) {
-        setPaymentStatus('failed');
-        setMessage('Unable to verify user information. Please contact support.');
-        return;
-      }
+      const txId = params.transaction_id || params.m_payment_id || '';
+      if (txId) {
+        // Prefer polling payment_transactions by tx id (reliable for both user + school scope)
+        const { data: tx, error: txErr } = await assertSupabase()
+          .from('payment_transactions')
+          .select('id,status,school_id,amount,subscription_plan_id,metadata,completed_at')
+          .eq('id', txId)
+          .maybeSingle();
 
-      const { data: activeSubscription, error } = await assertSupabase()
-        .from('subscriptions')
-        .select('*')
-        .eq(profile?.organization_id ? 'school_id' : 'user_id', ownerId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        if (txErr && (txErr as any)?.code !== 'PGRST116') {
+          console.warn('Payment transaction polling error:', txErr);
+        }
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Subscription polling error:', error);
-      }
+        if (tx?.status === 'completed') {
+          setPaymentStatus('success');
+          setMessage('Payment successful! Updating your account...');
 
-      if (activeSubscription) {
-        // Found active subscription - payment successful!
-        setSubscription(activeSubscription);
-        setPaymentStatus('success');
-        setMessage('Payment successful! Your subscription is now active.');
-        
-        track('payment_activation_success', {
-          subscription_id: activeSubscription.id,
-          plan_id: activeSubscription.plan_id,
-          polling_attempts: pollingCount + 1,
-        });
-        
-        // Refresh subscription context with the new data
-        refreshSubscription();
-        return;
+          // Best-effort: fetch latest active subscription for display
+          try {
+            if (tx.school_id) {
+              const { data: sub } = await assertSupabase()
+                .from('subscriptions')
+                .select('*')
+                .eq('school_id', tx.school_id)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (sub) setSubscription(sub);
+            }
+          } catch {
+            // non-fatal
+          }
+
+          track('payment_activation_success', {
+            transaction_id: tx.id,
+            polling_attempts: pollingCount + 1,
+          });
+
+          // Refresh both subscription + profile (tier/capabilities) so dashboards update
+          try {
+            await refreshProfile();
+          } catch (e) {
+            console.warn('refreshProfile failed after payment:', e);
+          }
+          try {
+            refreshSubscription();
+          } catch {
+            // non-fatal
+          }
+
+          setMessage('Payment successful! Your subscription is now active.');
+          return;
+        }
       }
 
       // Continue polling

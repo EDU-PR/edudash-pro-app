@@ -218,6 +218,32 @@ interface CheckoutInput {
   email_address?: string;
 }
 
+type PromoUserType = 'parent' | 'teacher' | 'principal' | 'all';
+
+function mapRoleToPromoUserType(role: string | null | undefined): PromoUserType {
+  const r = String(role || '').toLowerCase();
+  if (r === 'parent') return 'parent';
+  if (r === 'teacher' || r === 'instructor') return 'teacher';
+  if (r === 'principal' || r === 'principal_admin' || r === 'admin' || r === 'super_admin') return 'principal';
+  return 'all';
+}
+
+function appendQueryParams(urlStr: string, params: Record<string, string>): string {
+  try {
+    const u = new URL(urlStr);
+    for (const [k, v] of Object.entries(params)) {
+      if (v) u.searchParams.set(k, v);
+    }
+    return u.toString();
+  } catch {
+    // Best-effort fallback (urlStr may already include query)
+    const hasQuery = urlStr.includes('?');
+    const q = new URLSearchParams(params).toString();
+    if (!q) return urlStr;
+    return urlStr + (hasQuery ? '&' : '?') + q;
+  }
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -261,7 +287,8 @@ serve(async (req: Request) => {
     // Resolve plan price from public.subscription_plans
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
       return new Response(JSON.stringify({ error: 'Server config missing' }), { 
         status: 500,
         headers: corsHeaders 
@@ -269,6 +296,55 @@ serve(async (req: Request) => {
     }
 
     const s = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    // Validate the bearer token and resolve the requester identity
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    const user = userData?.user;
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    // Load requester profile for scope validation + promo user_type
+    const { data: requesterProfile, error: profileErr } = await s
+      .from('profiles')
+      .select('id, role, organization_id, preschool_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileErr || !requesterProfile) {
+      return new Response(JSON.stringify({ error: 'Profile not found' }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    // Enforce scope ownership / tenant isolation
+    if (input.scope === 'user') {
+      if (input.userId && input.userId !== user.id) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
+      input.userId = user.id;
+    } else {
+      const requestedSchoolId = input.schoolId || '';
+      const profileSchoolId = (requesterProfile as any).organization_id || (requesterProfile as any).preschool_id || '';
+      const role = String(requesterProfile.role || '').toLowerCase();
+      const canManageSchool =
+        role === 'admin' || role === 'principal' || role === 'principal_admin' || role === 'super_admin';
+
+      if (!requestedSchoolId || !canManageSchool || (profileSchoolId && profileSchoolId !== requestedSchoolId)) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: corsHeaders });
+      }
+
+      // Ensure userId is always the initiating user (used for promos + auditing)
+      input.userId = user.id;
+    }
 
     const { data: plan } = await s
       .from('subscription_plans')
@@ -290,10 +366,29 @@ serve(async (req: Request) => {
     // Check if price is stored as cents (> 100) or as decimal (<= 100)
     const basePrice = basePriceCents > 100 ? basePriceCents / 100 : basePriceCents;
     
-    // IMPORTANT: Database prices are ALREADY the final prices (already include any discounts)
-    // DO NOT apply additional promotional discounts here - the plan prices in the DB are what users should pay
-    // If promotional pricing is needed, it should be applied when CREATING the plan, not here
+    // Apply promotional pricing (if eligible)
+    // Promotions are time-bound “join window” + “promo duration” tracked in DB.
+    // The DB function also returns persisted promo pricing for users who joined within the window.
+    const promoUserType = mapRoleToPromoUserType(requesterProfile.role);
     let finalPriceZAR = basePrice;
+    let promoApplied = false;
+    let promoOriginalPrice = basePrice;
+    let promoPrice = basePrice;
+    try {
+      const { data: promoResult, error: promoErr } = await s.rpc('get_promotional_price', {
+        p_user_id: user.id,
+        p_tier: plan.tier,
+        p_user_type: promoUserType,
+        p_original_price: basePrice,
+      });
+      if (!promoErr && typeof promoResult === 'number' && Number.isFinite(promoResult)) {
+        promoPrice = promoResult;
+        finalPriceZAR = promoResult;
+        promoApplied = promoPrice < promoOriginalPrice;
+      }
+    } catch (e) {
+      // Non-fatal: fallback to base price
+    }
     
     // Convert to cents for PayFast (amount must be in ZAR as decimal string)
     const amountZAR = finalPriceZAR;
@@ -365,7 +460,17 @@ serve(async (req: Request) => {
       currency: 'ZAR',
       status: 'pending',
       due_date: new Date().toISOString(),
-      invoice_data: { plan_tier: plan.tier, billing: input.billing, seats: input.seats || 1 },
+      invoice_data: {
+        plan_tier: plan.tier,
+        billing: input.billing,
+        seats: input.seats || 1,
+        promo: {
+          applied: promoApplied,
+          user_type: promoUserType,
+          original_price: promoOriginalPrice,
+          promo_price: promoPrice,
+        },
+      },
     } as any);
 
     const { error: txErr } = await s.from('payment_transactions').insert({
@@ -375,7 +480,20 @@ serve(async (req: Request) => {
       amount: amountZAR,
       currency: 'ZAR',
       status: 'pending',
-      metadata: { scope: input.scope, billing: input.billing, seats: input.seats || 1, invoice_number: invoiceNumber },
+      metadata: {
+        scope: input.scope,
+        billing: input.billing,
+        seats: input.seats || 1,
+        invoice_number: invoiceNumber,
+        plan_tier: plan.tier,
+        actor_user_id: user.id,
+        promo: {
+          applied: promoApplied,
+          user_type: promoUserType,
+          original_price: promoOriginalPrice,
+          promo_price: promoPrice,
+        },
+      },
     } as any);
     if (txErr) {
       return new Response(JSON.stringify({ error: txErr.message }), { 
@@ -391,8 +509,22 @@ serve(async (req: Request) => {
     // Construct webhook URLs - ensure they use the correct Supabase URL
     const webhookBaseUrl = SUPABASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
     const notifyUrl = Deno.env.get('PAYFAST_NOTIFY_URL') || `${webhookBaseUrl}/functions/v1/payfast-webhook`;
-    const returnUrl = input.return_url || Deno.env.get('PAYFAST_RETURN_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/return`;
-    const cancelUrl = input.cancel_url || Deno.env.get('PAYFAST_CANCEL_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/cancel`;
+    const baseReturnUrl = input.return_url || Deno.env.get('PAYFAST_RETURN_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/return`;
+    const baseCancelUrl = input.cancel_url || Deno.env.get('PAYFAST_CANCEL_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/cancel`;
+
+    // Always append identifiers so the app can reliably poll and refresh state after PayFast redirects.
+    const returnUrl = appendQueryParams(baseReturnUrl, {
+      transaction_id: txId,
+      invoice_number: invoiceNumber,
+      scope: input.scope,
+      plan_tier: plan.tier,
+    });
+    const cancelUrl = appendQueryParams(baseCancelUrl, {
+      transaction_id: txId,
+      invoice_number: invoiceNumber,
+      scope: input.scope,
+      plan_tier: plan.tier,
+    });
 
     console.log('PayFast configuration:', { 
       mode, 
@@ -420,7 +552,8 @@ serve(async (req: Request) => {
       custom_str1: input.planTier,
       custom_str2: input.scope,
       custom_str3: input.schoolId || input.userId || '',
-      custom_str4: JSON.stringify({ billing: input.billing, seats: input.seats || 1 }),
+      custom_str4: JSON.stringify({ billing: input.billing, seats: input.seats || 1, invoice_number: invoiceNumber, promo: { applied: promoApplied, original_price: promoOriginalPrice, promo_price: promoPrice } }),
+      custom_str5: user.id,
     };
 
     // PayFast requires PHP-style urlencode for signature calculation

@@ -53,3 +53,4 @@ CREATE POLICY "courses_admin_create" ON courses
 COMMENT ON POLICY "courses_admin_create" ON courses IS 'Allows organization admins (admin, principal, principal_admin, super_admin) to create courses in their organization';
 
 
+

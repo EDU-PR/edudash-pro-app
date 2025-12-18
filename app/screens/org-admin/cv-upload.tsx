@@ -27,8 +27,22 @@ export default function CVUploadScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
 
+  const canUploadCVs =
+    profile?.role === 'admin' ||
+    profile?.role === 'super_admin' ||
+    profile?.role === 'principal' ||
+    profile?.role === 'principal_admin';
+
   const handlePickDocument = async () => {
     try {
+      if (!canUploadCVs) {
+        Alert.alert(
+          t('common.permission_denied', { defaultValue: 'Permission Denied' }),
+          t('cv_upload.permission_required', { defaultValue: 'You do not have permission to upload CVs.' })
+        );
+        return;
+      }
+
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         copyToCacheDirectory: true,
@@ -48,6 +62,14 @@ export default function CVUploadScreen() {
 
   const handlePickImages = async () => {
     try {
+      if (!canUploadCVs) {
+        Alert.alert(
+          t('common.permission_denied', { defaultValue: 'Permission Denied' }),
+          t('cv_upload.permission_required', { defaultValue: 'You do not have permission to upload CVs.' })
+        );
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
@@ -93,6 +115,8 @@ export default function CVUploadScreen() {
 
     try {
       const processedFiles = [];
+      const supabase = assertSupabase();
+      const bucket = 'cv-uploads';
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -100,34 +124,48 @@ export default function CVUploadScreen() {
 
         // Upload file to Supabase Storage
         const fileExt = file.name.split('.').pop();
-        const fileName = `${profile.organization_id}/cvs/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const safeExt = (fileExt || 'bin').toLowerCase();
+        const fileName = `${profile.organization_id}/cvs/${Date.now()}_${Math.random().toString(36).substring(7)}.${safeExt}`;
         
-        // Read file as base64 or blob
-        const formData = new FormData();
-        formData.append('file', {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType || 'application/octet-stream',
-        } as any);
+        const mimeType = file.mimeType || 'application/octet-stream';
+        // Basic validation: reject obviously huge files
+        const size = typeof file.size === 'number' ? file.size : 0;
+        const maxBytes = 25 * 1024 * 1024; // 25MB
+        if (size > maxBytes) {
+          processedFiles.push({
+            ...file,
+            status: 'error',
+            error: t('cv_upload.file_too_large', { defaultValue: 'File is too large (max 25MB).' }),
+          });
+          continue;
+        }
 
-        // TODO: Upload to Supabase Storage bucket
-        // const { data, error } = await supabase.storage
-        //   .from('cv-uploads')
-        //   .upload(fileName, formData, {
-        //     contentType: file.mimeType,
-        //   });
+        // Read local file into a Blob (works for Expo-managed RN)
+        const res = await fetch(file.uri);
+        const blob = await res.blob();
 
-        // For now, simulate upload
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(fileName, blob, { contentType: mimeType, upsert: false });
+
+        if (uploadError) {
+          processedFiles.push({
+            ...file,
+            status: 'error',
+            error: uploadError.message,
+          });
+          continue;
+        }
 
         // Call Edge Function to process CV
-        const { data: processData, error: processError } = await assertSupabase().functions.invoke(
+        const { data: processData, error: processError } = await supabase.functions.invoke(
           'process-cv-upload',
           {
             body: {
-              file_url: fileName, // Would be actual storage URL
+              file_url: fileName, // Storage path within bucket
               organization_id: profile.organization_id,
-              file_type: fileExt,
+              file_type: safeExt,
+              storage_bucket: bucket,
             },
           }
         );
@@ -144,6 +182,7 @@ export default function CVUploadScreen() {
             ...file,
             status: 'success',
             processed_data: processData,
+            file_url: fileName,
           });
         }
       }
@@ -173,6 +212,23 @@ export default function CVUploadScreen() {
         }} 
       />
       <ScrollView contentContainerStyle={styles.content}>
+        {!canUploadCVs && (
+          <Card padding={20} margin={0} elevation="small" style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {t('common.permission_denied', { defaultValue: 'Permission Denied' })}
+            </Text>
+            <Text style={styles.instructionText}>
+              {t('cv_upload.permission_required', { defaultValue: 'You do not have permission to upload CVs.' })}
+            </Text>
+            <TouchableOpacity
+              style={[styles.uploadButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.uploadButtonText}>{t('common.go_back', { defaultValue: 'Go Back' })}</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
         {/* Instructions */}
         <Card padding={20} margin={0} elevation="small" style={styles.section}>
           <Text style={styles.sectionTitle}>
@@ -198,7 +254,7 @@ export default function CVUploadScreen() {
           <TouchableOpacity
             style={[styles.uploadButton, { backgroundColor: theme.primary }]}
             onPress={handlePickDocument}
-            disabled={uploading}
+            disabled={uploading || !canUploadCVs}
           >
             <Ionicons name="document-text-outline" size={24} color="#fff" />
             <Text style={styles.uploadButtonText}>
@@ -209,7 +265,7 @@ export default function CVUploadScreen() {
           <TouchableOpacity
             style={[styles.uploadButton, styles.secondaryButton, { borderColor: theme.border }]}
             onPress={handlePickImages}
-            disabled={uploading}
+            disabled={uploading || !canUploadCVs}
           >
             <Ionicons name="image-outline" size={24} color={theme.text} />
             <Text style={[styles.uploadButtonText, styles.secondaryButtonText, { color: theme.text }]}>

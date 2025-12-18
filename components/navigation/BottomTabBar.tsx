@@ -245,6 +245,18 @@ export function BottomTabBar() {
   if (!user || !profile) {
     return null;
   }
+  
+  // Hide bottom nav on full-screen / immersive experiences (e.g. Dash AI assistant)
+  if (
+    typeof pathname === 'string' &&
+    (pathname.includes('/screens/dash-assistant') ||
+      pathname.includes('dash-assistant') ||
+      pathname.startsWith('/screens/ai-') ||
+      pathname.includes('/screens/worksheet-viewer') ||
+      pathname.includes('/screens/lesson-viewer'))
+  ) {
+    return null;
+  }
 
   // Determine user role
   const userRole = (profile?.role as string) || 'parent';
