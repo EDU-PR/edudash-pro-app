@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,8 @@ import { ActivityFeed } from '@/components/learner/ActivityFeed';
 import { AssignmentWidget } from '@/components/learner/AssignmentWidget';
 import { ProgramProgressCard } from '@/components/learner/ProgramProgressCard';
 import { QuickActions } from '@/components/learner/QuickActions';
+import { TierBadge } from '@/components/ui/TierBadge';
+import { SubscriptionStatusCard } from '@/components/ui/SubscriptionStatusCard';
 import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 
@@ -17,6 +20,7 @@ export default function LearnerDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { tier, ready: subscriptionReady, tierSource } = useSubscription();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   
   // Guard against React StrictMode double-invoke in development
@@ -120,16 +124,34 @@ export default function LearnerDashboard() {
       >
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
-          <Text style={styles.greeting}>
-            {t('learner.welcome_back', { 
-              defaultValue: 'Welcome back',
-              name: profile?.first_name || 'Learner'
-            })}
-          </Text>
-          <Text style={styles.subheading}>
-            {t('learner.continue_learning', { defaultValue: 'Continue your skills development journey' })}
-          </Text>
+          <View style={styles.welcomeHeader}>
+            <View style={styles.welcomeTextContainer}>
+              <Text style={styles.greeting}>
+                {t('learner.welcome_back', { 
+                  defaultValue: 'Welcome back',
+                  name: profile?.first_name || 'Learner'
+                })}
+              </Text>
+              <Text style={styles.subheading}>
+                {t('learner.continue_learning', { defaultValue: 'Continue your skills development journey' })}
+              </Text>
+            </View>
+            {subscriptionReady && (
+              <TierBadge tier={tier} size="sm" />
+            )}
+          </View>
         </View>
+
+        {/* Subscription Status Card - Show tier details for standalone users */}
+        {subscriptionReady && (
+          <Card padding={16} margin={0} elevation="small" style={{ marginBottom: 16 }}>
+            <SubscriptionStatusCard 
+              showPaymentHistory={false}
+              showUpgradeCTA={tier === 'free' || !tier}
+              showCancelOption={false}
+            />
+          </Card>
+        )}
 
         {/* Progress Overview */}
         {progress && (
@@ -314,6 +336,15 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   welcomeSection: {
     marginBottom: 24,
+  },
+  welcomeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  welcomeTextContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   greeting: {
     color: theme?.text || '#fff',

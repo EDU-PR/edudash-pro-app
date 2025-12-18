@@ -109,8 +109,44 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             }
           }
 
-          // Organization path first
-          if (orgId && mounted) {
+          // Check user-scoped tiers FIRST (parent subscriptions take precedence)
+          // This ensures standalone users and users with personal subscriptions get the correct tier
+          if (mounted) {
+            try {
+              const supabase = assertSupabase();
+              const { data: usage } = await supabase
+                .from('user_ai_usage')
+                .select('current_tier')
+                .eq('user_id', user.id)
+                .maybeSingle();
+              const { data: tierRow } = await supabase
+                .from('user_ai_tiers')
+                .select('tier')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+              // Handle enum types - Supabase returns enums as strings, but ensure we convert properly
+              const usageTier = (usage as any)?.current_tier;
+              const tierRowTier = (tierRow as any)?.tier;
+              const rawTier = usageTier || tierRowTier || '';
+              
+              // Convert to string and normalize (handles enum types, null, undefined)
+              const aiTierStr = normalizeTier(String(rawTier || ''));
+              
+              if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
+                t = aiTierStr as Tier;
+                source = 'user';
+              }
+            } catch (err) {
+              // Log error in dev for debugging
+              if (__DEV__) {
+                console.warn('[SubscriptionContext] Error reading user_ai_usage/user_ai_tiers:', err);
+              }
+            }
+          }
+
+          // Organization path (only if user doesn't have a personal tier)
+          if (orgId && mounted && (source === 'unknown' || t === 'free')) {
             try {
               const { data: org } = await assertSupabase()
                 .from('organizations')
@@ -175,29 +211,6 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             } catch {/* ignore */}
           }
 
-          // If we still look "free", try user AI tier tables (parent subscriptions live here)
-          // Priority (for user-scoped tiers): user_ai_usage.current_tier > user_ai_tiers.tier
-          if (mounted && (source === 'unknown' || t === 'free')) {
-            try {
-              const supabase = assertSupabase();
-              const { data: usage } = await supabase
-                .from('user_ai_usage')
-                .select('current_tier')
-                .eq('user_id', user.id)
-                .maybeSingle();
-              const { data: tierRow } = await supabase
-                .from('user_ai_tiers')
-                .select('tier')
-                .eq('user_id', user.id)
-                .maybeSingle();
-
-              const aiTierStr = normalizeTier((usage as any)?.current_tier || (tierRow as any)?.tier || '');
-              if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
-                t = aiTierStr as Tier;
-                source = 'user';
-              }
-            } catch {/* ignore */}
-          }
         } catch {/* ignore */}
 
         if (mounted) {
