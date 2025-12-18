@@ -123,30 +123,52 @@ export default function LearnerRegistrationScreen() {
     setLoading(true);
     try {
       const supabase = assertSupabase();
+      // Preferred: public RPC (works even when unauthenticated and RLS blocks direct SELECT)
+      let program: any | null = null;
+      try {
+        const { data, error } = await supabase.rpc('validate_program_code', { p_code: programCode.trim() });
+        if (!error && data && typeof data === 'object' && (data as any).valid) {
+          const course = (data as any).course;
+          const org = (data as any).organization;
+          program = {
+            id: String(course?.id ?? ''),
+            title: String(course?.title ?? ''),
+            description: course?.description ?? null,
+            course_code: String(course?.course_code ?? ''),
+            organizations: org?.id ? { id: String(org.id), name: String(org.name ?? ''), slug: org.slug ?? null } : null,
+          };
+        }
+      } catch {
+        // ignore and fall back below
+      }
 
-      const { data, error } = await supabase
-        .from('courses')
-        .select(`
-          id,
-          title,
-          description,
-          course_code,
-          organizations (
+      // Fallback: direct query (works for authenticated users with RLS access)
+      if (!program?.id) {
+        const { data, error } = await supabase
+          .from('courses')
+          .select(`
             id,
-            name,
-            slug
-          )
-        `)
-        .or(`course_code.eq.${programCode.trim()},id.eq.${programCode.trim()}`)
-        .eq('is_active', true)
-        .maybeSingle();
+            title,
+            description,
+            course_code,
+            organizations (
+              id,
+              name,
+              slug
+            )
+          `)
+          .or(`course_code.eq.${programCode.trim()},id.eq.${programCode.trim()}`)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (!error && data) program = data;
+      }
 
-      if (error || !data) {
+      if (!program?.id) {
         Alert.alert('Invalid Code', 'The program code you entered is invalid or the program is no longer active.');
         return;
       }
 
-      setProgramInfo(data);
+      setProgramInfo(program);
       setMode('program');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to verify program code');

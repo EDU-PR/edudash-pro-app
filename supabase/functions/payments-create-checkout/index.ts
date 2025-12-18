@@ -223,6 +223,9 @@ type PromoUserType = 'parent' | 'teacher' | 'principal' | 'all';
 function mapRoleToPromoUserType(role: string | null | undefined): PromoUserType {
   const r = String(role || '').toLowerCase();
   if (r === 'parent') return 'parent';
+  // Learners/students use the consumer (parent) promo bucket.
+  // Our DB promo schema doesn't include 'student' as a user_type, so treat them as 'parent'.
+  if (r === 'student' || r.includes('student') || r.includes('learner')) return 'parent';
   if (r === 'teacher' || r === 'instructor') return 'teacher';
   if (r === 'principal' || r === 'principal_admin' || r === 'admin' || r === 'super_admin') return 'principal';
   return 'all';
@@ -381,9 +384,20 @@ serve(async (req: Request) => {
         p_user_type: promoUserType,
         p_original_price: basePrice,
       });
-      if (!promoErr && typeof promoResult === 'number' && Number.isFinite(promoResult)) {
-        promoPrice = promoResult;
-        finalPriceZAR = promoResult;
+      if (!promoErr) {
+        // PostgREST can return DECIMAL as number or string depending on config.
+        // Accept both, plus tolerate accidental object shapes.
+        const resolvedPromo =
+          typeof promoResult === 'number' ? promoResult
+            : typeof promoResult === 'string' ? Number(promoResult)
+            : promoResult && typeof promoResult === 'object' && 'promo_price' in (promoResult as any)
+              ? Number((promoResult as any).promo_price)
+              : null;
+
+        if (resolvedPromo !== null && Number.isFinite(resolvedPromo)) {
+          promoPrice = resolvedPromo;
+          finalPriceZAR = resolvedPromo;
+        }
         promoApplied = promoPrice < promoOriginalPrice;
       }
     } catch (e) {
