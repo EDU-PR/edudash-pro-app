@@ -354,7 +354,6 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       borderRightWidth: 1,
       borderRightColor: theme.border,
       flexDirection: 'column',
-      transition: 'width 0.3s ease' as any,
       // Hide on mobile screens
       ['@media (max-width: 767px)' as any]: {
         display: 'none' as any,
@@ -398,7 +397,6 @@ const createStyles = (theme: any, collapsed: boolean, insets: any) =>
       borderRadius: 10,
       gap: 12,
       cursor: 'pointer' as any,
-      transition: 'background-color 0.2s ease' as any,
     },
     navItemActive: {
       backgroundColor: theme.primaryLight + '20',

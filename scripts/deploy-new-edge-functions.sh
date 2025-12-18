@@ -63,3 +63,5 @@ echo "3. Monitor function logs in Supabase Dashboard → Edge Functions → Logs
 
 
 
+
+

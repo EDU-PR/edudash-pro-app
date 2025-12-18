@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import type { Teacher } from '@/types/teacher-management';
 import { getStatusColor } from '@/types/teacher-management';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface TeacherCardProps {
   teacher: Teacher;
@@ -20,7 +21,7 @@ interface TeacherCardProps {
   isAssigning: boolean;
   isRevoking: boolean;
   shouldDisableAssignment: boolean;
-  theme?: Record<string, string>;
+  theme?: ThemeColors;
 }
 
 export function TeacherCard({
@@ -148,7 +149,7 @@ export function TeacherCard({
   );
 }
 
-const createStyles = (theme?: Record<string, string>) => StyleSheet.create({
+const createStyles = (theme?: ThemeColors) => StyleSheet.create({
   teacherCard: {
     backgroundColor: theme?.cardBackground || 'white',
     borderRadius: 16,

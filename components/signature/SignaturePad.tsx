@@ -231,8 +231,6 @@ export const SignaturePad = ({
             minWidth={1}
             maxWidth={3}
             // Canvas dimensions (optimized for mobile)
-            canvasHeight={250}
-            canvasWidth={600}
           />
         </View>
 

@@ -63,7 +63,7 @@ export const SuggestionsModal: React.FC<SuggestionsModalProps> = ({
       transparent
       onRequestClose={onClose}
       accessibilityLabel="Suggestions modal"
-      accessibilityRole="dialog"
+      accessibilityRole={"dialog" as any}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>

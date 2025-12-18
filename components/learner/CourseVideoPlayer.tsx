@@ -51,7 +51,7 @@ export function CourseVideoPlayer({
   const [currentPosition, setCurrentPosition] = useState(startTime);
   const [duration, setDuration] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Auto-hide controls after 3 seconds
@@ -94,9 +94,9 @@ export function CourseVideoPlayer({
       if (status.didJustFinish && onComplete) {
         onComplete();
       }
-    } else if (status.error) {
+    } else if ((status as any).error) {
       setIsLoading(false);
-      console.error('Video playback error:', status.error);
+      console.error('Video playback error:', (status as any).error);
     }
   };
 
@@ -347,6 +347,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
   },
 });
+
 
 
 

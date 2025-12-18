@@ -13,6 +13,8 @@ import {
 } from './types';
 
 export interface GeneratedPrompt {
+  // Alias expected by some screens
+  prompt: string;
   systemPrompt: string;
   displayTitle: string;
 }
@@ -93,7 +95,7 @@ export function buildExamPrompt(config: ExamPrepConfig): GeneratedPrompt {
     systemPrompt += `\n\n**Additional User Requirements:**\n${config.customPrompt}`;
   }
 
-  return { systemPrompt, displayTitle };
+  return { prompt: systemPrompt, systemPrompt, displayTitle };
 }
 
 function buildPracticeTestPrompt(

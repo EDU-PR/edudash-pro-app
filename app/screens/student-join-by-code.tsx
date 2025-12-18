@@ -32,6 +32,12 @@ export default function StudentJoinByCodeScreen() {
         .rpc('validate_invitation_code', { p_code: code.trim(), p_email: email.trim() });
       if (error) throw error;
       if (!data) throw new Error('Code not found or inactive');
+      // Handle new JSON response format with school/org info
+      if (typeof data === 'object' && 'valid' in data) {
+        if (!(data as any).valid) {
+          throw new Error((data as any).error || 'Invalid invitation code');
+        }
+      }
       setValidated(data);
       Alert.alert('Code valid', 'You can join this organization.');
     } catch (e: any) {

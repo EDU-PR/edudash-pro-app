@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
+import { logger } from '@/lib/logger';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import Feedback from '@/lib/feedback';
@@ -304,9 +305,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                   { color: tier === 'free' ? theme.textSecondary : theme.success }
                 ]}>
                   {tier === 'free' ? t('subscription.free', { defaultValue: 'Free' }) :
-                   tier === 'parent-starter' || tier === 'parent_starter' ? t('subscription.starter', { defaultValue: 'Starter' }) :
-                   tier === 'parent-plus' || tier === 'parent_plus' ? t('subscription.plus', { defaultValue: 'Plus' }) :
-                   tier === 'trial' ? t('subscription.trial', { defaultValue: 'Trial' }) :
+                   tier === 'parent_starter' ? t('subscription.starter', { defaultValue: 'Starter' }) :
+                   tier === 'parent_plus' ? t('subscription.plus', { defaultValue: 'Plus' }) :
                    t('subscription.premium', { defaultValue: 'Premium' })}
                 </Text>
               </View>

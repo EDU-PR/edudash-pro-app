@@ -6,7 +6,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import type { ServiceHealth } from "../hooks/useServiceHealthData";
+import type { ServiceHealth } from "@/hooks/superadmin/useServiceHealthData";
 
 interface ServiceStatusGridProps {
   services: ServiceHealth[];

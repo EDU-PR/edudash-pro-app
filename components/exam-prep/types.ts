@@ -261,6 +261,7 @@ export interface ExamPrepConfig {
   examType: string;
   language: SouthAfricanLanguage;
   customPrompt?: string;
+  enableInteractive?: boolean;
 }
 
 export interface GeneratedExam {

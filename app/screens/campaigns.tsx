@@ -979,6 +979,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   backButton: {
     marginTop: 24,
     paddingVertical: 12,

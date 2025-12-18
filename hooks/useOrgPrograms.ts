@@ -71,7 +71,7 @@ export function useOrgPrograms() {
           return {
             ...program,
             enrollment_count: count || 0,
-          } as Program;
+          } as unknown as Program;
         })
       );
 

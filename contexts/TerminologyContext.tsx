@@ -92,7 +92,10 @@ export function useTerms(): TerminologyContextValue {
  * // Returns: "Athlete", "Team" for sports club
  * ```
  */
-export function useTerm(key: keyof OrganizationTerminology): string {
+export function useTerm(key: string): string {
   const { terminology } = useTerms();
-  return terminology[key];
+  const v = (terminology as any)?.[key];
+  if (typeof v === 'string') return v;
+  if (typeof v === 'function') return String(v(''));
+  return String(v ?? key);
 }

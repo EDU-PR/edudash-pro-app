@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, type DimensionValue } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { marketingTokens } from '../tokens';
@@ -74,7 +74,7 @@ export function RoleBasedBenefitsSection({ columns }: RoleBasedBenefitsSectionPr
 
 interface RoleCardProps {
   role: typeof roles[0];
-  width: string;
+  width: DimensionValue;
 }
 
 function RoleCard({ role, width }: RoleCardProps) {

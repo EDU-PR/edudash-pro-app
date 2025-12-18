@@ -8,6 +8,9 @@ import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useTheme, ThemeColors } from '@/contexts/ThemeContext';
 
+// Backwards-compatible alias (some screens import `Theme` from this module).
+export type Theme = ThemeColors;
+
 /**
  * Hook to create themed styles
  * @param stylesFn A function that receives theme colors and returns styles

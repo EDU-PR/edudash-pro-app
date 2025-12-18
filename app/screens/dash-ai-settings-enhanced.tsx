@@ -17,7 +17,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { router } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AudioModule } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { voiceService } from '@/lib/voice/client';
 import { initAndMigrate, setVoicePrefs, normalizeLanguageCode, resolveDefaultVoiceId } from '@/lib/ai/dashSettings';
 

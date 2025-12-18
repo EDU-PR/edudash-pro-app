@@ -8,8 +8,8 @@ export interface Student {
   id: string;
   first_name: string;
   last_name: string;
-  parent_email: string;
-  parent_name: string;
+  parent_email?: string;
+  parent_name?: string;
   date_of_birth?: string;
   age_years?: number;
 }

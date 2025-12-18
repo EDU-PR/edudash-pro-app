@@ -103,7 +103,7 @@ export const generateSchoolReadinessEmail = async (
 
   // Generate readiness table
   const readinessTableHtml = report.school_readiness_indicators
-    ? generateReadinessTableHtml(report.school_readiness_indicators)
+    ? generateReadinessTableHtml(report.school_readiness_indicators as any)
     : '<p>No readiness data available</p>';
 
   // Generate milestones checklist

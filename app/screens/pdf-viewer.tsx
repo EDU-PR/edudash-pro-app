@@ -38,7 +38,7 @@ interface PDFViewerParams {
 }
 
 export default function PDFViewerScreen() {
-  const params = useLocalSearchParams<PDFViewerParams>();
+  const params = useLocalSearchParams() as Partial<PDFViewerParams>;
   const { theme } = useTheme();
   
   const [loading, setLoading] = useState(true);

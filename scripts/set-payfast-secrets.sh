@@ -32,6 +32,7 @@ PAYFAST_MERCHANT_KEY=REDACTED
 PAYFAST_MODE="production"  # Production mode for live payments (requires passphrase)
 # Note: For sandbox testing, use PAYFAST_MODE=sandbox with sandbox credentials
 PAYFAST_TEST_EMAIL="test@edudashpro.org.za"  # Fallback email for testing
+WEB_BASE_URL="https://www.edudashpro.org.za"
 
 echo "Setting PayFast secrets..."
 echo ""
@@ -51,6 +52,16 @@ supabase secrets set PAYFAST_MERCHANT_KEY=REDACTED
 # Set test email for sandbox
 echo "📝 Setting PAYFAST_TEST_EMAIL..."
 supabase secrets set PAYFAST_TEST_EMAIL="${PAYFAST_TEST_EMAIL}"
+
+# Set public URLs (important: PayFast cannot send Authorization header to Supabase Edge Functions)
+echo "📝 Setting PAYFAST_NOTIFY_URL..."
+supabase secrets set PAYFAST_NOTIFY_URL="${WEB_BASE_URL}/api/payfast/webhook"
+
+echo "📝 Setting PAYFAST_RETURN_URL..."
+supabase secrets set PAYFAST_RETURN_URL="${WEB_BASE_URL}/landing?flow=payment-return"
+
+echo "📝 Setting PAYFAST_CANCEL_URL..."
+supabase secrets set PAYFAST_CANCEL_URL="${WEB_BASE_URL}/landing?flow=payment-cancel"
 
 echo ""
 echo "⚠️  IMPORTANT: Production mode requires PAYFAST_PASSPHRASE"

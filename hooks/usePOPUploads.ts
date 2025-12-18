@@ -79,6 +79,7 @@ export interface CreatePOPUploadData {
   upload_type: POPUploadType;
   title: string;
   description?: string;
+  tags?: string[];
   file_uri: string;
   file_name: string;
   
@@ -92,6 +93,8 @@ export interface CreatePOPUploadData {
   subject?: string;
   achievement_level?: string;
   learning_area?: string;
+  is_milestone?: boolean;
+  milestone_type?: string;
 }
 
 // Query keys

@@ -9,10 +9,11 @@ import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Teacher } from '@/types/teacher-management';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface PayrollViewProps {
   teachers: Teacher[];
-  theme?: Record<string, string>;
+  theme?: ThemeColors;
   onGeneratePayslip?: (teacherId: string) => void;
 }
 
@@ -103,7 +104,7 @@ export function PayrollView({ teachers, theme, onGeneratePayslip }: PayrollViewP
   );
 }
 
-const createStyles = (theme?: Record<string, string>) =>
+const createStyles = (theme?: ThemeColors) =>
   StyleSheet.create({
     container: {
       flex: 1,

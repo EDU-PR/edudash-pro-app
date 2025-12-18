@@ -108,7 +108,9 @@
     "students": "Students",
     "children": "Children",
     "messages": "Messages",
-    "calendar": "Calendar"
+    "calendar": "Calendar",
+    "programs": "Programs",
+    "work": "Work"
   },
   "auth": {
     "resend_confirmation": "Resend confirmation email",
@@ -176,6 +178,16 @@
     "principal": "Principal",
     "admin": "Administrator",
     "superAdmin": "Super Admin"
+  },
+  "student": {
+    "dashboard_title": "Student Dashboard",
+    "welcome_back": "Welcome back, {{name}}",
+    "continue_learning": "Continue your learning journey",
+    "upgrade_title": "Unlock Premium Features",
+    "upgrade_description": "Get unlimited AI homework help, advanced analytics, and more",
+    "join_organization": "Join an Organization",
+    "join_prompt": "Join your school or organization to access assignments, grades, and more.",
+    "join_now": "Join Now"
   },
   "admin": {
     "header": {

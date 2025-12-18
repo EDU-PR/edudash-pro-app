@@ -269,12 +269,12 @@ export function usePresence(
     channelRef.current = supabase
       .channel('presence-changes')
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         {
           event: '*',
           schema: 'public',
           table: 'user_presence',
-        },
+        } as any,
         (payload: { eventType: string; new: PresenceRecord }) => {
           const record = payload.new;
           if (record && record.user_id) {

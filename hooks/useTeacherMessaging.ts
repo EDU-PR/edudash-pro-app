@@ -378,7 +378,7 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
           table: 'messages',
           filter: `thread_id=eq.${threadId}`,
         },
-        async (payload) => {
+        async (payload: any) => {
           console.log('[MessagesRealtime] New message received:', payload.new.id);
           
           // Fetch sender profile for the new message

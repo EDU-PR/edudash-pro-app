@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { navigateBack } from '@/lib/navigation';
 import * as DocumentPicker from 'expo-document-picker';
@@ -434,7 +434,7 @@ function InviteModal({ inviteEmail, setInviteEmail, onClose, onInvite, styles }:
   );
 }
 
-const createStyles = (theme: Record<string, string> | undefined) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme?.background || '#f8fafc',

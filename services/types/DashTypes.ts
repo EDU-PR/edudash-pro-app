@@ -181,6 +181,11 @@ export interface DashMemoryItem {
   created_at: number;
   updated_at: number;
   expires_at?: number;
+  /** Optional server-side scoring fields used by SemanticMemoryEngine */
+  importance?: number;
+  recency_score?: number;
+  accessed_count?: number;
+  text_embedding?: number[] | null;
   relatedEntities?: Array<{
     type: 'user' | 'student' | 'parent' | 'class' | 'subject';
     id: string;

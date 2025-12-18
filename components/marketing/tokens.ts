@@ -124,8 +124,9 @@ export const marketingTokens = {
   
   // Shadow helper (platform-specific)
   shadow: (level: 'xs' | 'sm' | 'md' | 'lg') => {
+    // Keep this loosely typed to avoid RN `Platform.select` overload issues when returning style fragments.
     return Platform.select({
-      ios: {
+      ios: ({
         xs: {
           shadowColor: '#000',
           shadowOpacity: 0.25,
@@ -150,14 +151,14 @@ export const marketingTokens = {
           shadowRadius: 20,
           shadowOffset: { width: 0, height: 12 },
         },
-      }[level],
-      android: {
+      } as any)[level],
+      android: ({
         xs: { elevation: 2 },
         sm: { elevation: 4 },
         md: { elevation: 8 },
         lg: { elevation: 12 },
-      }[level],
+      } as any)[level],
       default: {},
-    });
+    }) as any;
   },
 } as const;

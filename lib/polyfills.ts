@@ -2,12 +2,19 @@
 
 // Promise.allSettled polyfill
 if (!Promise.allSettled) {
-  Promise.allSettled = function<T>(promises: Promise<T>[]): Promise<Array<{status: 'fulfilled' | 'rejected', value?: T, reason?: any}>> {
-    return Promise.all(promises.map(promise => 
-      promise
-        .then(value => ({ status: 'fulfilled' as const, value }))
-        .catch(reason => ({ status: 'rejected' as const, reason }))
-    ));
+  // Match the standard lib signature (best-effort) and keep implementation simple.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Promise as any).allSettled = function <T>(
+    values: Iterable<T | PromiseLike<T>>
+  ): Promise<PromiseSettledResult<Awaited<T>>[]> {
+    const list = Array.from(values);
+    return Promise.all(
+      list.map((p) =>
+        Promise.resolve(p)
+          .then((value) => ({ status: 'fulfilled' as const, value: value as Awaited<T> }))
+          .catch((reason) => ({ status: 'rejected' as const, reason }))
+      )
+    );
   };
 }
 

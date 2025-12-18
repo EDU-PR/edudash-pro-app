@@ -87,15 +87,35 @@ export default function TeacherSignUpScreen() {
         return;
       }
 
-      // Fetch school info
-      const { data: school } = await supabase
-        .from('preschools')
-        .select('id, name')
-        .eq('id', data.school_id)
-        .single();
+      // New JSON format (from public.validate_invitation_code): { valid, school_id, school_name, ... }
+      if (typeof data === 'object' && 'valid' in data) {
+        if (!(data as any).valid) {
+          setSchoolInfo(null);
+          return;
+        }
+        const schoolName = String((data as any).school_name || '');
+        const schoolId = String((data as any).school_id || '');
+        if (schoolName && schoolId) {
+          setSchoolInfo({ name: schoolName, id: schoolId });
+          return;
+        }
+      }
 
-      if (school) {
-        setSchoolInfo({ name: school.name, id: school.id });
+      // Legacy fallback: if response has school_id but no school_name, try preschools lookup
+      if ((data as any)?.school_id) {
+        const { data: school } = await supabase
+          .from('preschools')
+          .select('id, name')
+          .eq('id', (data as any).school_id)
+          .maybeSingle();
+
+        if (school) {
+          setSchoolInfo({ name: school.name, id: school.id });
+        } else {
+          setSchoolInfo(null);
+        }
+      } else {
+        setSchoolInfo(null);
       }
     } catch (err) {
       console.warn('Code validation error:', err);

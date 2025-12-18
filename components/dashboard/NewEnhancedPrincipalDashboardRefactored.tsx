@@ -193,8 +193,8 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         <View style={styles.section}>
           <PrincipalMetricsSection
             stats={data.stats}
-            studentsCount={data.studentsCount}
-            classesCount={data.classesCount}
+            studentsCount={data.stats?.students?.total ?? 0}
+            classesCount={data.stats?.classes?.total ?? 0}
             collapsedSections={collapsedSections}
             onToggleSection={toggleSection}
           />

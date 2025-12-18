@@ -494,6 +494,12 @@ serve(async (req: Request) => {
       amount: amountZAR,
       currency: 'ZAR',
       status: 'pending',
+      // For user-scoped purchases, store these explicitly so:
+      // - the app can poll `payment_transactions` under RLS (user_id = auth.uid())
+      // - the DB trigger can upgrade tiers when the tx is marked completed
+      user_id: input.scope === 'user' ? (input.userId || user.id) : null,
+      tier: input.scope === 'user' ? String(plan.tier) : null,
+      provider: 'payfast',
       metadata: {
         scope: input.scope,
         billing: input.billing,
@@ -520,11 +526,19 @@ serve(async (req: Request) => {
     const mode = (Deno.env.get('PAYFAST_MODE') || 'sandbox').toLowerCase();
     const base = mode === 'live' ? 'https://www.payfast.co.za/eng/process' : 'https://sandbox.payfast.co.za/eng/process';
 
-    // Construct webhook URLs - ensure they use the correct Supabase URL
-    const webhookBaseUrl = SUPABASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
-    const notifyUrl = Deno.env.get('PAYFAST_NOTIFY_URL') || `${webhookBaseUrl}/functions/v1/payfast-webhook`;
-    const baseReturnUrl = input.return_url || Deno.env.get('PAYFAST_RETURN_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/return`;
-    const baseCancelUrl = input.cancel_url || Deno.env.get('PAYFAST_CANCEL_URL') || `${webhookBaseUrl}/functions/v1/payments-bridge/cancel`;
+    // IMPORTANT:
+    // Supabase Edge Functions require an Authorization header at the gateway, which PayFast ITN cannot send.
+    // So we default notify/return/cancel to the public web domain, and the web will proxy ITN to Supabase.
+    const publicBaseUrl = (Deno.env.get('BASE_URL') || 'https://www.edudashpro.org.za').replace(/\/$/, '');
+    const notifyUrl = Deno.env.get('PAYFAST_NOTIFY_URL') || `${publicBaseUrl}/api/payfast/webhook`;
+    const baseReturnUrl =
+      input.return_url ||
+      Deno.env.get('PAYFAST_RETURN_URL') ||
+      `${publicBaseUrl}/landing?flow=payment-return`;
+    const baseCancelUrl =
+      input.cancel_url ||
+      Deno.env.get('PAYFAST_CANCEL_URL') ||
+      `${publicBaseUrl}/landing?flow=payment-cancel`;
 
     // Always append identifiers so the app can reliably poll and refresh state after PayFast redirects.
     const returnUrl = appendQueryParams(baseReturnUrl, {

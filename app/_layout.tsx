@@ -17,7 +17,7 @@ if (__DEV__) {
 // Initialize notification router for multi-account support
 import { setupNotificationRouter } from '../lib/NotificationRouter';
 import { StatusBar } from 'expo-status-bar';
-import { Stack, usePathname } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import ToastProvider from '../components/ui/ToastProvider';
 import { QueryProvider } from '../lib/query/queryClient';
@@ -45,6 +45,7 @@ import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
 import { useFABVisibility } from '../hooks/useFABVisibility';
 import { setupPWAMetaTags } from '../lib/utils/pwa';
 import { injectWebStyles } from '../lib/utils/web-styles';
+import * as Linking from 'expo-linking';
 
 // Inner component with access to AuthContext
 function LayoutContent() {
@@ -193,6 +194,54 @@ function RootLayoutContent() {
       console.log('[RootLayout] Cleaning up notification router');
       cleanup();
     };
+  }, []);
+
+  // Handle runtime deep links (e.g. returning from PayFast while the app is already open).
+  // Cold-start deep links are handled by Expo Router + `app/index.tsx` safeguards, but warm-start
+  // needs an explicit listener because the app may resume to the previous screen.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const handleUrl = (url: string) => {
+      try {
+        const parsed = Linking.parse(url);
+        const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
+        const host = typeof (parsed as any).hostname === 'string' ? String((parsed as any).hostname) : '';
+        const qp = (parsed.queryParams || {}) as Record<string, unknown>;
+
+        const flow = String(qp.flow || '').toLowerCase();
+        if (flow === 'payment-return' || flow === 'payment-cancel') {
+          const paymentPath = flow === 'payment-return' ? 'return' : 'cancel';
+          const search = new URLSearchParams();
+          for (const [k, v] of Object.entries(qp)) {
+            if (k === 'flow') continue;
+            if (v === undefined || v === null) continue;
+            search.set(k, String(v));
+          }
+          const target = `/screens/payments/${paymentPath}${search.toString() ? `?${search.toString()}` : ''}`;
+          router.replace(target as any);
+          return;
+        }
+
+        // Handle direct custom-scheme links (edudashpro://screens/payments/return?...).
+        const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
+        const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
+        if (normalized.startsWith('/screens/payments/return') || normalized.startsWith('/screens/payments/cancel')) {
+          const search = new URLSearchParams();
+          for (const [k, v] of Object.entries(qp)) {
+            if (v === undefined || v === null) continue;
+            search.set(k, String(v));
+          }
+          const target = `${normalized}${search.toString() ? `?${search.toString()}` : ''}`;
+          router.replace(target as any);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
   }, []);
   
   // Register service worker for PWA (web-only)

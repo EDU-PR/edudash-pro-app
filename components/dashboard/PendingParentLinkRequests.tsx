@@ -76,7 +76,7 @@ export function PendingParentLinkRequests() {
     setApproveModalVisible(false);
     
     try {
-      await ParentJoinService.approve(selectedRequest.id, user.id);
+      await ParentJoinService.approve(selectedRequest.id, selectedRequest.student_id, user.id);
       
       // Invalidate queries to refresh
       queryClient.invalidateQueries({ queryKey: ['pending-parent-link-requests', organizationId] });

@@ -86,7 +86,7 @@ export const usePrincipalDashboard = () => {
 
       // Use centralized organization lookup
       const orgIdentifier = resolveOrgIdentifier(
-        userProfile as Record<string, unknown>,
+        userProfile as unknown as Record<string, unknown>,
         user
       );
       

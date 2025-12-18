@@ -16,7 +16,9 @@ function LandingInner() {
   const playStoreUrl = "https://play.google.com/store/apps/details?id=com.edudashpro";
 
   const tryOpenApp = (pathAndQuery: string) => {
-    const schemeUrl = `edudashpro://${pathAndQuery.replace(/^\//, "")}`;
+    // IMPORTANT: Use triple-slash so Android doesn't treat the first segment as hostname.
+    // Example: `edudashpro:///screens/payments/return?...`
+    const schemeUrl = `edudashpro:///${pathAndQuery.replace(/^\//, "")}`;
     let didHide = false;
     const visibilityHandler = () => {
       if (document.hidden) didHide = true;
@@ -26,10 +28,11 @@ function LandingInner() {
     setTimeout(() => {
       document.removeEventListener("visibilitychange", visibilityHandler);
       if (!didHide) {
-        setStatus("error");
-        setMessage("App not detected. Please install EduDash Pro to continue.");
+        // Android "Open with" chooser may not hide the page; avoid false "not installed" messaging.
+        setStatus("ready");
+        setMessage("If prompted, choose EduDash Pro to open. If nothing happens, you can install the app from Google Play.");
       }
-    }, 2000);
+    }, 6000);
   };
 
   useEffect(() => {

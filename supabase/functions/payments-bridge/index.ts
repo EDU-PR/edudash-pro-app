@@ -24,7 +24,9 @@ function buildDeepLink(path: 'return' | 'cancel', search: string) {
   // Use Universal Link (https) for better reliability, with custom scheme fallback
   // Expo Router will handle the routing when the app opens
   const universalLink = `https://www.edudashpro.org.za/landing?flow=payment-${path}${search ? '&' + search.substring(1) : ''}`;
-  const customScheme = `edudashpro://screens/payments/${path}${search ? search : ''}`;
+  // IMPORTANT: Use triple-slash so the first path segment is not treated as the URL host on Android.
+  // This ensures expo-linking/expo-router receive `screens/payments/...` as the actual path.
+  const customScheme = `edudashpro:///screens/payments/${path}${search ? search : ''}`;
   
   // Return both - try Universal Link first, fallback to custom scheme
   return { universalLink, customScheme };

@@ -109,7 +109,18 @@ export interface UserSession {
 export interface UserProfile {
   id: string;
   email: string;
-  role: 'super_admin' | 'principal_admin' | 'principal' | 'teacher' | 'parent';
+  // Keep this permissive: DB can contain additional role strings (e.g. student/learner/admin),
+  // and RBAC normalization handles mapping to canonical roles where needed.
+  role:
+    | 'super_admin'
+    | 'principal_admin'
+    | 'principal'
+    | 'teacher'
+    | 'parent'
+    | 'admin'
+    | 'student'
+    | 'learner'
+    | 'superadmin';
   organization_id?: string;
   organization_name?: string;
   preschool_id?: string;

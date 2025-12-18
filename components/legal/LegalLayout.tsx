@@ -44,7 +44,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: DesignSystem.spacing.xxl,
     ...(Platform.OS === 'web' && {
-      minHeight: '100vh',
+      // RN StyleSheet doesn't support vh units; use a safe percentage fallback.
+      minHeight: '100%',
     }),
   },
   contentContainer: {

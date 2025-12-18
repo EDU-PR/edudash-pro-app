@@ -25,7 +25,7 @@ export const biometrics = {
 
       return {
         success: result.success,
-        error: result.success ? undefined : result.error || 'Authentication failed',
+        error: result.success ? undefined : (result as any)?.error || 'Authentication failed',
       };
     } catch (error: any) {
       return {

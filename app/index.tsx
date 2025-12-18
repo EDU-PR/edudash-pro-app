@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketingLanding from '@/components/marketing/MarketingLanding';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
@@ -41,23 +42,64 @@ export default function Index() {
     // Native app: Always skip landing page
     if (isNative) {
       hasNavigatedRef.current = true;
-      
-      // If authenticated with profile, go to dashboard
-      if (session && user && profile?.role) {
-        console.log('[Index] Native + authenticated, routing to dashboard');
-        routeAfterLogin(user, profile).catch((err) => {
-          console.error('[Index] routeAfterLogin failed:', err);
+
+      // If we were launched via a deep link (e.g. PayFast return -> /landing?flow=payment-return),
+      // respect it and route there before running our "default" native redirects.
+      // This avoids losing deep links on cold start due to the Index screen redirecting immediately.
+      (async () => {
+        try {
+          const initialUrl = await Linking.getInitialURL();
+          if (initialUrl) {
+            const parsed = Linking.parse(initialUrl);
+            const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
+            const host = typeof (parsed as any).hostname === 'string' ? String((parsed as any).hostname) : '';
+            // Some Android intent flows treat the first segment as the URL host:
+            // - `edudashpro://screens/payments/return?...` => host="screens", path="payments/return"
+            // For robustness, reconstruct a full path when host is present.
+            const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
+            const path = combined ? `/${combined.replace(/^\/+/, '')}` : '';
+
+            // Ignore common "empty" or dev-client URLs
+            const shouldHandle =
+              !!path &&
+              path !== '/' &&
+              !path.startsWith('/--/') &&
+              !path.startsWith('/expo-development-client');
+
+            if (shouldHandle) {
+              const qp = (parsed.queryParams || {}) as Record<string, unknown>;
+              const search = new URLSearchParams();
+              for (const [k, v] of Object.entries(qp)) {
+                if (v === undefined || v === null) continue;
+                search.set(k, String(v));
+              }
+              const target = `${path}${search.toString() ? `?${search.toString()}` : ''}`;
+              console.log('[Index] Detected initial deep link, routing to:', target);
+              router.replace(target as any);
+              return;
+            }
+          }
+        } catch (e) {
+          // Non-fatal: continue with normal routing below
+        }
+
+        // If authenticated with profile, go to dashboard
+        if (session && user && profile?.role) {
+          console.log('[Index] Native + authenticated, routing to dashboard');
+          routeAfterLogin(user, profile).catch((err) => {
+            console.error('[Index] routeAfterLogin failed:', err);
+            router.replace('/profiles-gate');
+          });
+        } else if (session && user) {
+          // Authenticated but no role - go to profiles gate
+          console.log('[Index] Native + authenticated but no role, going to profiles-gate');
           router.replace('/profiles-gate');
-        });
-      } else if (session && user) {
-        // Authenticated but no role - go to profiles gate
-        console.log('[Index] Native + authenticated but no role, going to profiles-gate');
-        router.replace('/profiles-gate');
-      } else {
-        // Not authenticated - go directly to sign-in
-        console.log('[Index] Native + not authenticated, going to sign-in');
-        router.replace('/(auth)/sign-in');
-      }
+        } else {
+          // Not authenticated - go directly to sign-in
+          console.log('[Index] Native + not authenticated, going to sign-in');
+          router.replace('/(auth)/sign-in');
+        }
+      })();
       return;
     }
     

@@ -33,7 +33,7 @@ interface NotificationButton {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: [string, string];
-  action: () => Promise<void> | void;
+  action: () => Promise<unknown> | unknown;
 }
 
 export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
@@ -57,7 +57,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
     setCurrentBadge(badge);
   };
 
-  const runAction = async (key: string, action: () => Promise<void> | void) => {
+  const runAction = async (key: string, action: () => Promise<unknown> | unknown) => {
     setLoading(key);
     try {
       await action();

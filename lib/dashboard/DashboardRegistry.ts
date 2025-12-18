@@ -9,15 +9,18 @@
  */
 
 import type { ComponentType } from 'react';
-import type { OrganizationType } from '@/lib/types/organization';
+import { OrganizationType } from '@/lib/types/organization';
 import type { AgeGroup } from '@/lib/hooks/useAgeGroup';
 
 /**
  * Organization type groups for widget visibility
  * Extracted to constants to reduce duplication and ease maintenance
  */
-const CERTIFICATION_ORG_TYPES: OrganizationType[] = ['corporate', 'training_center', 'skills_development'];
-const SPORTS_ORG_TYPES: OrganizationType[] = ['sports_club'];
+const CERTIFICATION_ORG_TYPES: OrganizationType[] = [
+  OrganizationType.TRAINING_CENTER,
+  OrganizationType.SKILLS_DEVELOPMENT,
+];
+const SPORTS_ORG_TYPES: OrganizationType[] = [];
 
 /**
  * Widget definition in the registry

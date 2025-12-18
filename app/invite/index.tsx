@@ -18,7 +18,8 @@ export default function InviteEntry() {
 
   const tryOpenApp = (pathAndQuery: string) => {
     if (!isWeb) return;
-    const schemeUrl = `edudashpro://${pathAndQuery.replace(/^\//, '')}`;
+    // IMPORTANT: Use triple-slash so Android doesn't treat the first segment as hostname.
+    const schemeUrl = `edudashpro:///${pathAndQuery.replace(/^\//, '')}`;
     let didHide = false;
     const visibilityHandler = () => {
       if (document.hidden) didHide = true;

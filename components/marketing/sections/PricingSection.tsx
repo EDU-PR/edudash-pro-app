@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withRepeat, withSequence, withDelay } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { marketingTokens } from '../tokens';
 import { Section } from '../Section';
@@ -194,8 +194,8 @@ function PricingCard({ plan, width, index }: PricingCardProps) {
 
   // Animate in on mount
   React.useEffect(() => {
-    opacity.value = withTiming(1, { duration: 400, delay: index * 80 });
-    translateY.value = withTiming(0, { duration: 400, delay: index * 80 });
+    opacity.value = withDelay(index * 80, withTiming(1, { duration: 400 }));
+    translateY.value = withDelay(index * 80, withTiming(0, { duration: 400 }));
 
     // Start breathing animation for glow (breathing effect)
     glow.value = withRepeat(
@@ -209,7 +209,7 @@ function PricingCard({ plan, width, index }: PricingCardProps) {
   }, [index]);
 
   return (
-    <Animated.View style={[styles.cardWrapper, { width }, animatedStyle]}>
+    <Animated.View style={[styles.cardWrapper, { width: width as any }, animatedStyle]}>
       {/* Featured glow background */}
       {plan.featured && (
         <Animated.View pointerEvents="none" style={[styles.featuredGlow, glowStyle]}>

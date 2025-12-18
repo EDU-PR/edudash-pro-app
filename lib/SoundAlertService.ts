@@ -65,7 +65,9 @@ export interface SoundAlert {
 
 class SoundAlertService {
   private static instance: SoundAlertService;
-  private audioCache = new Map<string, Audio.Sound>();
+  // Runtime audio implementation varies by platform/package (expo-audio vs expo-av).
+  // Keep this cache loosely typed to avoid coupling to a specific Audio namespace.
+  private audioCache = new Map<string, unknown>();
   private isInitialized = false;
   private userSettings: Map<string, SoundAlertSettings> = new Map();
   
@@ -546,7 +548,10 @@ class SoundAlertService {
     try {
       // Unload cached sounds
       for (const [key, sound] of this.audioCache) {
-        await sound.unloadAsync();
+        const s = sound as any;
+        if (typeof s?.unloadAsync === 'function') {
+          await s.unloadAsync();
+        }
       }
       this.audioCache.clear();
       

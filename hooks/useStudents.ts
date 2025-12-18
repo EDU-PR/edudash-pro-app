@@ -119,7 +119,7 @@ export function useCanEditStudents(): boolean {
     role === 'principal_admin' ||
     role === 'principal' ||
     role === 'admin' ||
-    role === 'superadmin' ||
+    role === 'super_admin' ||
     role === 'teacher'
   );
 }

@@ -28,6 +28,78 @@ export interface PrincipalDashboardData {
   }>;
 }
 
+export interface DashboardQuickStat {
+  label: string;
+  value: string | number;
+  icon?: string;
+  trend?: string;
+  color?: string;
+}
+
+export interface RecentActivity {
+  id: string;
+  type: string;
+  message: string;
+  time: string;
+  userName?: string;
+}
+
+export interface UpcomingEvent {
+  id: string;
+  title: string;
+  time: string;
+  type?: string;
+}
+
+export interface ChildData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  grade?: string;
+  className?: string;
+  teacher?: string;
+}
+
+export function createEmptyPrincipalData(): PrincipalDashboardData {
+  return {
+    schoolName: '',
+    totalStudents: 0,
+    totalTeachers: 0,
+    totalParents: 0,
+    attendanceRate: 0,
+    monthlyRevenue: 0,
+    pendingApplications: 0,
+    upcomingEvents: 0,
+    recentActivity: [],
+  };
+}
+
+export function createEmptyTeacherData(): TeacherDashboardData {
+  return {
+    schoolName: '',
+    totalStudents: 0,
+    totalClasses: 0,
+    upcomingLessons: 0,
+    pendingGrading: 0,
+    myClasses: [],
+    recentAssignments: [],
+    upcomingEvents: [],
+  };
+}
+
+export function createEmptyParentData(): ParentDashboardData {
+  return {
+    schoolName: '',
+    totalChildren: 0,
+    children: [],
+    attendanceRate: 0,
+    presentToday: 0,
+    recentHomework: [],
+    upcomingEvents: [],
+    unreadMessages: 0,
+  };
+}
+
 export interface TeacherDashboardData {
   schoolName: string;
   schoolTier?: 'free' | 'starter' | 'premium' | 'enterprise' | 'solo' | 'group_5' | 'group_10';

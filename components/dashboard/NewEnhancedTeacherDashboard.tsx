@@ -123,7 +123,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
         refreshControl={
           <RefreshControl
             refreshing={state.refreshing}
-            onRefresh={() => state.handleRefresh(refresh)}
+            onRefresh={() => state.handleRefresh(async () => { await Promise.resolve(refresh()); })}
             colors={[theme.primary]}
             tintColor={theme.primary}
           />

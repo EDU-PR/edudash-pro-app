@@ -30,6 +30,7 @@ export interface HomeworkResult {
   toolsUsed?: Array<{ name: string; result: any }>;
   practiceProblems?: any[];
   suggestedActions?: Array<{ label: string; action: () => void }>;
+  __fallbackUsed?: boolean;
 }
 
 export function useHomeworkGenerator() {

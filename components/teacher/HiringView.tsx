@@ -19,6 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import type { AvailableTeacher, TeacherInvite } from '@/types/teacher-management';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface HiringViewProps {
   availableTeachers: AvailableTeacher[];
@@ -26,7 +27,7 @@ interface HiringViewProps {
   hiringSearch: string;
   radiusKm: number;
   loading: boolean;
-  theme?: Record<string, string>;
+  theme?: ThemeColors;
   userId?: string;
   preschoolId: string | null;
   onSearchChange: (search: string) => void;
@@ -183,7 +184,7 @@ export function HiringView({
   );
 }
 
-const createStyles = (theme?: Record<string, string>) =>
+const createStyles = (theme?: ThemeColors) =>
   StyleSheet.create({
     container: {
       flex: 1,

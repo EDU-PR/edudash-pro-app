@@ -93,7 +93,12 @@ function chooseStorage() {
 
 const storage = chooseStorage();
 
-export type AIUsageFeature = 'lesson_generation' | 'grading_assistance' | 'homework_help' | 'transcription'
+export type AIUsageFeature =
+  | 'lesson_generation'
+  | 'grading_assistance'
+  | 'homework_help'
+  | 'homework_help_agentic'
+  | 'transcription'
 
 const STORAGE_PREFIX = 'ai_usage'
 
@@ -120,6 +125,8 @@ export type AIUsageLogEvent = {
   tokensIn?: number
   tokensOut?: number
   estCostCents?: number
+  // Optional context to help debugging/analytics
+  metadata?: Record<string, unknown>
   timestamp: string // ISO string
 }
 
@@ -133,10 +140,11 @@ export async function getUsage(): Promise<AIUsageRecord> {
       lesson_generation: Number(parsed.lesson_generation) || 0,
       grading_assistance: Number(parsed.grading_assistance) || 0,
       homework_help: Number(parsed.homework_help) || 0,
+      homework_help_agentic: Number(parsed.homework_help_agentic) || 0,
       transcription: Number(parsed.transcription) || 0,
     }
   } catch {
-    return { lesson_generation: 0, grading_assistance: 0, homework_help: 0, transcription: 0 }
+    return { lesson_generation: 0, grading_assistance: 0, homework_help: 0, homework_help_agentic: 0, transcription: 0 }
   }
 }
 
@@ -328,6 +336,7 @@ export async function getServerUsage(): Promise<AIUsageRecord | null> {
       lesson_generation: Number(src.lesson_generation ?? src.lesson ?? src.lessons ?? 0) || 0,
       grading_assistance: Number(src.grading_assistance ?? src.grading ?? 0) || 0,
       homework_help: Number(src.homework_help ?? src.helper ?? 0) || 0,
+      homework_help_agentic: Number(src.homework_help_agentic ?? src.homework_help_agent ?? src.agentic ?? 0) || 0,
       transcription: Number(src.transcription ?? src.asr ?? 0) || 0,
     }
     return counts

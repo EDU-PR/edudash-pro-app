@@ -13,7 +13,7 @@ import { SectionHeader } from '../SectionHeader';
 import { GlassCard } from '../GlassCard';
 
 interface FeaturesSectionProps {
-  setSelectedFeature: (feature: any) => void;
+  setSelectedFeature?: (feature: any) => void;
   columns: number;
 }
 
@@ -31,7 +31,7 @@ export function FeaturesSection({ setSelectedFeature, columns }: FeaturesSection
           <FeatureCard
             key={feature.id}
             feature={feature}
-            onPress={() => setSelectedFeature(feature)}
+            onPress={() => setSelectedFeature?.(feature)}
             width={columns === 1 ? '100%' : columns === 2 ? '48%' : '31%'}
           />
         ))}
@@ -43,7 +43,7 @@ export function FeaturesSection({ setSelectedFeature, columns }: FeaturesSection
 interface FeatureCardProps {
   feature: any;
   onPress: () => void;
-  width: string;
+  width: any;
 }
 
 function FeatureCard({ feature, onPress, width }: FeatureCardProps) {
@@ -54,7 +54,7 @@ function FeatureCard({ feature, onPress, width }: FeatureCardProps) {
   }));
 
   return (
-    <Animated.View style={[styles.cardWrapper, { width }, animatedStyle]}>
+    <Animated.View style={[styles.cardWrapper, { width: width as any }, animatedStyle]}>
       <Pressable
         onPress={onPress}
         onPressIn={() => { scale.value = 0.98; }}

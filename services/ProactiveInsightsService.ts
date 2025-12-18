@@ -246,7 +246,7 @@ export class ProactiveInsightsService {
       return lessons;
     } catch (error) {
       console.error('[ProactiveInsightsService] Failed to fetch lessons:', error);
-      return this.getDefaultInteractiveLessons(studentGrade);
+      return this.getDefaultInteractiveLessons('Grade R');
     }
   }
 

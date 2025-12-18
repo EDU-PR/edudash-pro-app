@@ -194,7 +194,7 @@ export default function ExamPrepScreen() {
               onPress={() => setSelectedSubject(item)}
             >
               <Ionicons
-                name={getSubjectIcon(item)}
+                name={getSubjectIcon(item) as any}
                 size={24}
                 color={isSelected ? '#ffffff' : theme.primary}
               />

@@ -317,6 +317,12 @@ export interface DashMemoryItem {
   
   /** Access tracking for memory optimization */
   accessed_count?: number;
+
+  /** Combined recency score from DB (used by semantic search ranking) */
+  recency_score?: number;
+
+  /** Raw pgvector embedding field (if returned from DB) */
+  text_embedding?: number[] | null;
 }
 
 /**

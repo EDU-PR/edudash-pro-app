@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { TeacherDocumentsService, TeacherDocument } from '@/lib/services/TeacherDocumentsService';
 import type { Teacher } from '@/types/teacher-management';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface TeacherProfileViewProps {
   teacher: Teacher;
@@ -28,7 +29,7 @@ interface TeacherProfileViewProps {
   shouldDisableAssignment: boolean;
   isAssigning: boolean;
   isRevoking: boolean;
-  theme?: Record<string, string>;
+  theme?: ThemeColors;
   onBack: () => void;
   onMessage: () => void;
   onAssignSeat: (teacherUserId: string, teacherName: string) => void;
@@ -246,7 +247,7 @@ export function TeacherProfileView({
   );
 }
 
-const createStyles = (theme?: Record<string, string>) =>
+const createStyles = (theme?: ThemeColors) =>
   StyleSheet.create({
     container: {
       flex: 1,

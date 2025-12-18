@@ -277,7 +277,7 @@ export const generateProgressReportPDFHTML = (options: PDFGeneratorOptions): str
   // Generate components
   const radarChartSVG =
     isSchoolReadiness && report.school_readiness_indicators
-      ? generateRadarChartSVG(report.school_readiness_indicators)
+      ? generateRadarChartSVG(report.school_readiness_indicators as any)
       : '';
 
   const milestoneProgress =
@@ -295,7 +295,7 @@ export const generateProgressReportPDFHTML = (options: PDFGeneratorOptions): str
   const readinessHTML =
     isSchoolReadiness && report.school_readiness_indicators
       ? generateReadinessIndicatorsHTML(
-          report.school_readiness_indicators,
+          report.school_readiness_indicators as any,
           report.developmental_milestones
         )
       : '';

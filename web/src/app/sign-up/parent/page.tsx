@@ -38,27 +38,32 @@ function ParentSignUpForm() {
     
     try {
       const supabase = createClient();
-      
-      // Call validation function
+
+      // Call validation function (new JSON response: { valid, school_id, school_name, ... })
       const { data, error } = await supabase.rpc('validate_invitation_code', {
-        invite_code: code,
-        invite_role: 'parent'
+        p_code: code,
+        p_email: '',
       });
 
       if (error) throw error;
 
-      if (data && data.length > 0 && data[0].valid) {
-        // Valid invitation - auto-select organization
-        const orgData = data[0];
-        setSelectedOrganization({
-          id: orgData.organization_id,
-          name: orgData.organization_name,
-          type: null,
-        });
-        setHasInvitation(true);
-        setError(null);
+      if (data && typeof data === 'object' && (data as any).valid) {
+        const schoolId = String((data as any).school_id || '');
+        const schoolName = String((data as any).school_name || '');
+        if (schoolId && schoolName) {
+          setSelectedOrganization({
+            id: schoolId,
+            name: schoolName,
+            type: null,
+          });
+          setHasInvitation(true);
+          setError(null);
+        } else {
+          setError('Invalid invitation code');
+          setInvitationCode(null);
+        }
       } else {
-        setError(data[0]?.error_message || 'Invalid invitation code');
+        setError((data as any)?.error || 'Invalid invitation code');
         setInvitationCode(null);
       }
     } catch (err: any) {

@@ -9,10 +9,9 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
-  StatusBar as RNStatusBar,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -112,6 +111,7 @@ export default function SubscriptionUpgradePostScreen() {
   const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
   const promoPercentOff = 0.5; // 50% off
   const isLaunchPromoActive = new Date() <= promoEndDate;
+  const insets = useSafeAreaInsets();
 
   // Safely extract parameters
   const currentTier = (takeFirst(rawParams.currentTier) || 'free').toString();
@@ -576,26 +576,22 @@ export default function SubscriptionUpgradePostScreen() {
 
   // Wrap in try-catch to prevent render crashes on mobile
   try {
-    const statusBarHeight = Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0;
-    
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <Stack.Screen options={{ 
         title: 'Upgrade Plan',
         headerShown: true,
         headerStyle: { 
           backgroundColor: '#0b1220',
-          height: 56 + statusBarHeight, // Standard header height + status bar
-        },
+        } as any,
         headerTitleStyle: { color: '#fff' },
         headerTintColor: '#00f5ff',
         headerBackVisible: true,
         gestureEnabled: true,
         headerTransparent: false,
-        headerStatusBarHeight: statusBarHeight,
       }} />
-      <StatusBar style="light" backgroundColor="#0b1220" />
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <StatusBar style="light" backgroundColor="#0b1220" translucent={false} />
+        <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingBottom: 24 + insets.bottom }]}>
           
           {/* Header Section */}
           <View style={styles.headerSection}>
@@ -851,7 +847,7 @@ export default function SubscriptionUpgradePostScreen() {
           )}
           
         </ScrollView>
-      </View>
+      </SafeAreaView>
     );
   } catch (renderError: any) {
     // Fallback render for crash protection

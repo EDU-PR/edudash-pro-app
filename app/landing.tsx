@@ -33,7 +33,9 @@ export default function LandingHandler() {
   // Attempt to open the native app via custom scheme with fallback to Play Store on web
   const tryOpenApp = (pathAndQuery: string) => {
     if (!isWeb) return; // Native environment already inside app
-    const schemeUrl = `edudashpro://${pathAndQuery.replace(/^\//, '')}`;
+    // IMPORTANT: Use triple-slash so Android doesn't treat the first segment as hostname.
+    // Example: `edudashpro:///screens/payments/return?...`
+    const schemeUrl = `edudashpro:///${pathAndQuery.replace(/^\//, '')}`;
 
     let didHide = false;
     const visibilityHandler = () => {
@@ -44,15 +46,20 @@ export default function LandingHandler() {
     // Immediate redirect via location.replace (more reliable than href on mobile)
     window.location.replace(schemeUrl);
 
-    // After 2s, if we are still visible, assume app is not installed and go to Play Store
+    // After a short delay, if we are still visible, keep the page in a "ready" state.
+    // NOTE: On Android, an "Open with" chooser may not immediately hide the page,
+    // so we should avoid falsely claiming the app isn't installed.
     setTimeout(() => {
       document.removeEventListener('visibilitychange', visibilityHandler);
       if (!didHide) {
-        // Show install prompt instead of immediate redirect
-        setStatus('error');
-        setMessage(t('landing.app_not_installed', { defaultValue: 'App not detected. Please install EduDash Pro to continue.' }));
+        setStatus('ready');
+        setMessage(
+          t('landing.open_prompt', {
+            defaultValue: 'If prompted, choose EduDash Pro to open. If nothing happens, you can install the app from Google Play.',
+          })
+        );
       }
-    }, 2000);
+    }, 6000);
   };
 
   useEffect(() => {

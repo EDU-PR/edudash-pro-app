@@ -50,93 +50,97 @@ export default function PaymentReturnScreen() {
       transaction_id: params.transaction_id,
     });
 
-    // Start polling for subscription activation
-    pollForActivation();
-  }, []);
+    let cancelled = false;
+    const txId = params.transaction_id || params.m_payment_id || '';
 
-  const pollForActivation = async () => {
-    if (pollingCount >= maxPollingAttempts) {
+    const poll = async () => {
+      for (let attempt = 1; attempt <= maxPollingAttempts; attempt += 1) {
+        if (cancelled) return;
+        setPollingCount(attempt);
+
+        try {
+          if (txId) {
+            // Prefer polling payment_transactions by tx id (reliable for both user + school scope)
+            const { data: tx, error: txErr } = await assertSupabase()
+              .from('payment_transactions')
+              .select('id,status,school_id,amount,subscription_plan_id,metadata,completed_at')
+              .eq('id', txId)
+              .maybeSingle();
+
+            if (txErr && (txErr as any)?.code !== 'PGRST116') {
+              console.warn('Payment transaction polling error:', txErr);
+            }
+
+            if (tx?.status === 'completed') {
+              setPaymentStatus('success');
+              setMessage('Payment successful! Updating your account...');
+
+              // Best-effort: fetch latest active subscription for display (school scope)
+              try {
+                if (tx.school_id) {
+                  const { data: sub } = await assertSupabase()
+                    .from('subscriptions')
+                    .select('*')
+                    .eq('school_id', tx.school_id)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (sub) setSubscription(sub);
+                }
+              } catch {
+                // non-fatal
+              }
+
+              track('payment_activation_success', {
+                transaction_id: tx.id,
+                polling_attempts: attempt,
+              });
+
+              // Refresh both subscription + profile (tier/capabilities) so dashboards update
+              try {
+                await refreshProfile();
+              } catch (e) {
+                console.warn('refreshProfile failed after payment:', e);
+              }
+              try {
+                refreshSubscription();
+              } catch {
+                // non-fatal
+              }
+
+              setMessage('Payment successful! Your subscription is now active.');
+              return;
+            }
+          }
+        } catch (error: any) {
+          console.error('Payment verification error:', error);
+          setPaymentStatus('failed');
+          setMessage('Unable to verify payment status. Please contact support.');
+          track('payment_verification_error', {
+            error: error.message,
+            polling_attempts: attempt,
+          });
+          return;
+        }
+
+        await new Promise<void>((resolve) => setTimeout(resolve, pollingInterval));
+      }
+
+      if (cancelled) return;
       setPaymentStatus('failed');
       setMessage('Payment processing timed out. Please contact support if you were charged.');
       track('payment_activation_timeout', {
-        polling_attempts: pollingCount,
+        polling_attempts: maxPollingAttempts,
         invoice_id: params.invoice_id,
       });
-      return;
-    }
+    };
 
-    try {
-      const txId = params.transaction_id || params.m_payment_id || '';
-      if (txId) {
-        // Prefer polling payment_transactions by tx id (reliable for both user + school scope)
-        const { data: tx, error: txErr } = await assertSupabase()
-          .from('payment_transactions')
-          .select('id,status,school_id,amount,subscription_plan_id,metadata,completed_at')
-          .eq('id', txId)
-          .maybeSingle();
-
-        if (txErr && (txErr as any)?.code !== 'PGRST116') {
-          console.warn('Payment transaction polling error:', txErr);
-        }
-
-        if (tx?.status === 'completed') {
-          setPaymentStatus('success');
-          setMessage('Payment successful! Updating your account...');
-
-          // Best-effort: fetch latest active subscription for display
-          try {
-            if (tx.school_id) {
-              const { data: sub } = await assertSupabase()
-                .from('subscriptions')
-                .select('*')
-                .eq('school_id', tx.school_id)
-                .eq('status', 'active')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-              if (sub) setSubscription(sub);
-            }
-          } catch {
-            // non-fatal
-          }
-
-          track('payment_activation_success', {
-            transaction_id: tx.id,
-            polling_attempts: pollingCount + 1,
-          });
-
-          // Refresh both subscription + profile (tier/capabilities) so dashboards update
-          try {
-            await refreshProfile();
-          } catch (e) {
-            console.warn('refreshProfile failed after payment:', e);
-          }
-          try {
-            refreshSubscription();
-          } catch {
-            // non-fatal
-          }
-
-          setMessage('Payment successful! Your subscription is now active.');
-          return;
-        }
-      }
-
-      // Continue polling
-      setPollingCount(prev => prev + 1);
-      setTimeout(pollForActivation, pollingInterval);
-
-    } catch (error: any) {
-      console.error('Payment verification error:', error);
-      setPaymentStatus('failed');
-      setMessage('Unable to verify payment status. Please contact support.');
-      
-      track('payment_verification_error', {
-        error: error.message,
-        polling_attempts: pollingCount,
-      });
-    }
-  };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.invoice_id, params.m_payment_id, params.status, params.transaction_id, refreshProfile, refreshSubscription]);
 
   const handleContinue = () => {
     if (paymentStatus === 'success') {

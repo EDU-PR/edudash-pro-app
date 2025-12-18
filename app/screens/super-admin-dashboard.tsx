@@ -482,7 +482,7 @@ export default function SuperAdminDashboardScreen() {
   }
 
   return (
-    <DesktopLayout role="superadmin">
+    <DesktopLayout role="super_admin">
       <View style={styles.container}>
         <ThemedStatusBar />
       

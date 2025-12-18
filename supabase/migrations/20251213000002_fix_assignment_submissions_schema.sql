@@ -100,3 +100,5 @@ ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
 
 
 
+
+

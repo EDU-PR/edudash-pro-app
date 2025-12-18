@@ -80,6 +80,7 @@ export type OrganizationType =
   | 'k12_school'
   | 'university'
   | 'training_center'
+  | 'skills_development'
   | 'other';
 
 export interface Address {

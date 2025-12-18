@@ -203,7 +203,7 @@ export class ParentJoinService {
       return (retry.data || []) as SearchedStudent[];
     }
     if (error) throw error;
-    return (data || []) as SearchedStudent[];
+    return (data || []) as unknown as SearchedStudent[];
   }
 
   /**

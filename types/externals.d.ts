@@ -155,7 +155,24 @@ declare module 'expo-file-system' {
 
   export function getInfoAsync(fileUri: string, options?: InfoOptions): Promise<FileInfo>;
   export function readAsStringAsync(fileUri: string, options?: ReadingOptions): Promise<string>;
+  export function writeAsStringAsync(
+    fileUri: string,
+    contents: string,
+    options?: { readonly encoding?: EncodingType | 'utf8' | 'base64' }
+  ): Promise<void>;
   export function makeDirectoryAsync(fileUri: string, options?: MakeDirectoryOptions): Promise<void>;
+  export function deleteAsync(fileUri: string, options?: { readonly idempotent?: boolean }): Promise<void>;
+  export function moveAsync(options: { from: string; to: string }): Promise<void>;
+  export function copyAsync(options: { from: string; to: string }): Promise<void>;
+
+  export function uploadAsync(
+    url: string,
+    fileUri: string,
+    options?: Record<string, unknown>
+  ): Promise<{ status: number; headers: Record<string, string>; body?: string }>;
+
+  export function getFreeDiskStorageAsync(): Promise<number>;
+  export function getTotalDiskCapacityAsync(): Promise<number>;
 
   export class DownloadResumable {
     constructor(

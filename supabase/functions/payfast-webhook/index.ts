@@ -55,13 +55,18 @@ async function validateWithPayFast(rawBody: string, isSandbox: boolean): Promise
     : 'https://www.payfast.co.za/eng/query/validate';
 
   try {
+    // Guard against long network stalls. PayFast expects a quick 200 response.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
     const response = await fetch(validateUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: rawBody,
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     
     const responseText = await response.text();
     return responseText.trim() === 'VALID';
@@ -213,8 +218,10 @@ serve(async (req: Request) => {
       }
     }
 
-    // Validate with PayFast (optional but recommended)
-    const isValidWithPayFast = await validateWithPayFast(rawBody, PAYFAST_MODE === 'sandbox');
+    const isSandbox = PAYFAST_MODE === 'sandbox';
+    // Validate with PayFast (optional but recommended).
+    // In sandbox, skip the network round-trip to avoid ITN timeouts being reported as "cURL Error".
+    const isValidWithPayFast = isSandbox ? true : await validateWithPayFast(rawBody, false);
 
     // Log the ITN for audit purposes
     const { error: logError } = await supabase.from("payfast_itn_logs").insert({
@@ -246,8 +253,6 @@ serve(async (req: Request) => {
 
     // Only process payment if validation passes
     // In sandbox mode, be lenient with signature validation (PayFast sandbox can be unreliable)
-    const isSandbox = PAYFAST_MODE === 'sandbox';
-    
     if (!isSandbox && !signatureValid && PAYFAST_PASSPHRASE) {
       console.warn('Skipping payment processing due to invalid signature (production mode)');
       return new Response("Signature invalid", { status: 400, headers: corsHeaders });
@@ -291,19 +296,37 @@ serve(async (req: Request) => {
       return new Response("Already processed", { status: 200, headers: corsHeaders });
     }
 
+    // Extract custom fields early so we can persist them on the tx update.
+    // These are set by `payments-create-checkout`.
+    const planTier = payload.custom_str1 || ''; // e.g. parent_starter
+    const scope = payload.custom_str2 || ''; // 'user' | 'school'
+    const ownerId = payload.custom_str3 || ''; // userId or schoolId depending on scope
+    const customData = payload.custom_str4 || '{}';
+    const actorUserId = payload.custom_str5 || ''; // initiating user id (set by checkout)
+
     // Update transaction status
     const newStatus = payment_status === 'COMPLETE' ? 'completed' : 
                      payment_status === 'CANCELLED' ? 'cancelled' :
                      payment_status === 'FAILED' ? 'failed' : 'pending';
 
+    // IMPORTANT: For user-scoped transactions, store `user_id` + `tier` in the same UPDATE
+    // that marks the tx completed, so the DB trigger can auto-upgrade `user_ai_usage`.
+    const txUpdate: Record<string, unknown> = {
+      status: newStatus,
+      payfast_payment_id: pf_payment_id,
+      provider: 'payfast',
+      provider_payment_id: pf_payment_id,
+      completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+    if (String(scope).toLowerCase() === 'user' && ownerId) {
+      txUpdate.user_id = ownerId;
+      txUpdate.tier = planTier || null;
+    }
+
     const { error: updateError } = await supabase
       .from('payment_transactions')
-      .update({ 
-        status: newStatus,
-        payfast_payment_id: pf_payment_id,
-        completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString()
-      })
+      .update(txUpdate as any)
       .eq('id', m_payment_id);
 
     if (updateError) {
@@ -311,16 +334,16 @@ serve(async (req: Request) => {
       return new Response("Failed to update transaction", { status: 500, headers: corsHeaders });
     }
 
+    // Fast-path: user-scoped purchases rely on the DB trigger to update `user_ai_usage` / `user_ai_tiers`.
+    // Returning early improves ITN reliability significantly.
+    if (newStatus === 'completed' && String(scope).toLowerCase() === 'user') {
+      console.log('[PayFast ITN] User-scoped tx completed; returning early for reliability:', m_payment_id);
+      return new Response("OK", { status: 200, headers: corsHeaders });
+    }
+
     // Process successful payment
     if (newStatus === 'completed') {
       console.log('Processing successful payment:', m_payment_id);
-      
-      // Extract custom data from PayFast
-      const planTier = payload.custom_str1 || ''; // Database enum format (parent_plus, parent_starter, etc)
-      const scope = payload.custom_str2 || '';
-      const ownerId = payload.custom_str3 || '';
-      const customData = payload.custom_str4 || '{}';
-      const actorUserId = payload.custom_str5 || ''; // initiating user id (set by checkout)
       
       console.log('[PayFast ITN] Received tier from custom_str1:', planTier);
       
@@ -372,12 +395,14 @@ serve(async (req: Request) => {
           next_billing_date: endDate.toISOString(),
           seats_total: Math.max(seats, plan.max_teachers || 1),
           seats_used: 0,
-          settings: {
+          metadata: {
             plan_name: plan.name,
             price_paid: existingTx.amount,
             transaction_id: m_payment_id,
             pf_payment_id,
-            activated_by_payment: true
+            activated_by_payment: true,
+            invoice_number: invoiceNumberFromCustom || null,
+            actor_user_id: actorUserId || null,
           }
         };
 
@@ -538,50 +563,9 @@ serve(async (req: Request) => {
         });
       }
       
-      // Process user subscription - create a personal organization for the user
-      else if (scope === 'user' && ownerId) {
-        console.log('Processing user subscription - creating personal organization');
-        
-        // For user subscriptions, we need to create a personal organization
-        // or find the user's existing school
-        let userSchoolId = null;
-        
-        // Check if user already has a school
-        const { data: existingSchool } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('created_by', ownerId)
-          .maybeSingle();
-        
-        if (existingSchool) {
-          userSchoolId = existingSchool.id;
-        } else {
-          // Create a personal school for the user
-          const personalOrg = {
-            name: `Personal Account - ${ownerId}`,
-            type: 'preschool', // Default type for personal accounts
-            created_by: ownerId,
-            plan_tier: plan.tier,
-            settings: {
-              is_personal: true,
-              created_by_payment: true,
-              payment_id: m_payment_id
-            }
-          };
-          
-          const { data: newOrg, error: orgError } = await supabase
-            .from('organizations')
-            .insert([personalOrg])
-            .select('id')
-            .single();
-          
-          if (orgError) {
-            console.error('Error creating personal organization:', orgError);
-            return new Response("Failed to create personal organization", { status: 500, headers: corsHeaders });
-          }
-          
-          userSchoolId = newOrg.id;
-        }
+      // Process user subscription (parent/student tiers) - user-owned subscription + AI tier
+      else if (String(scope).toLowerCase() === 'user' && ownerId) {
+        console.log('Processing user subscription');
         
         const startDate = new Date();
         const endDate = new Date(startDate);
@@ -593,7 +577,8 @@ serve(async (req: Request) => {
         }
 
         const subscriptionData = {
-          school_id: userSchoolId,
+          school_id: null,
+          user_id: ownerId,
           plan_id: plan.id,
           status: 'active',
           owner_type: 'user',
@@ -602,23 +587,26 @@ serve(async (req: Request) => {
           end_date: endDate.toISOString(),
           next_billing_date: endDate.toISOString(),
           seats_total: 1,
-          seats_used: 1,
-          settings: {
+          seats_used: 0,
+          payfast_payment_id: pf_payment_id,
+          metadata: {
             plan_name: plan.name,
             price_paid: existingTx.amount,
             transaction_id: m_payment_id,
             pf_payment_id,
             activated_by_payment: true,
-            owner_user_id: ownerId
+            owner_user_id: ownerId,
+            invoice_number: invoiceNumberFromCustom || null,
+            actor_user_id: actorUserId || null,
           }
         };
 
-        // Try to update existing user subscription first
+        // Try to update existing user subscription first (by user_id)
         const { data: existing } = await supabase
           .from('subscriptions')
           .select('id')
           .eq('owner_type', 'user')
-          .eq('school_id', userSchoolId)
+          .eq('user_id', ownerId)
           .maybeSingle();
 
         if (existing) {
@@ -639,22 +627,6 @@ serve(async (req: Request) => {
             console.error('Error creating user subscription:', insertError);
           }
         }
-        
-        // Update preschool subscription tier (legacy compatibility)
-        await supabase
-          .from('organizations')
-          .update({ plan_tier: plan.tier })
-          .eq('id', userSchoolId);
-        
-        // CRITICAL: Update organizations.plan_tier (canonical field)
-        // Also update plan_tier for backward compatibility during migration period
-        await supabase
-          .from('organizations')
-          .update({ 
-            plan_tier: plan.tier,  // Canonical field
-            plan_tier: plan.tier             // Legacy field for compatibility
-          })
-          .eq('id', userSchoolId);
         
         // CRITICAL: Update user_ai_tiers for the owner user
         // Use original planTier (with underscores) since user_ai_tiers uses tier_name_aligned enum

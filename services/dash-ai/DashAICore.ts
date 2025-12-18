@@ -145,8 +145,13 @@ export class DashAICore {
     const organizationId = config?.currentUser?.organizationId || config?.currentUser?.preschoolId;
     
     if (!userId || !organizationId) {
-      console.warn('[DashAICore] Cannot initialize conversation manager: missing userId or organizationId');
-      console.warn('[DashAICore] userId:', userId, 'organizationId:', organizationId);
+      // Standalone users (no organization) are allowed; avoid noisy warnings.
+      if (__DEV__) {
+        console.log('[DashAICore] Skipping conversation manager init (standalone user):', {
+          hasUserId: !!userId,
+          hasOrganizationId: !!organizationId,
+        });
+      }
       // Create a dummy conversation manager that will fail gracefully
       // Users without organizations can still use other Dash features
       this.conversationManager = null as any;

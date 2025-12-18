@@ -374,9 +374,12 @@ serve(async (req: Request) => {
     const payFastData: Record<string, string> = {
       merchant_id: PAYFAST_MERCHANT_ID,
       merchant_key: PAYFAST_MERCHANT_KEY,
-      return_url: `${BASE_URL}/dashboard/parent?payment=success`,
-      cancel_url: `${BASE_URL}/dashboard/parent?payment=cancelled`,
-      notify_url: `${SUPABASE_URL}/functions/v1/payfast-webhook`,
+      // Use public web endpoints for return/cancel/notify:
+      // - PayFast cannot send the Authorization header that Supabase Edge Functions require at the gateway.
+      // - The web `api/payfast/webhook` route proxies ITN to Supabase securely.
+      return_url: `${BASE_URL.replace(/\/$/, '')}/landing?flow=payment-return`,
+      cancel_url: `${BASE_URL.replace(/\/$/, '')}/landing?flow=payment-cancel`,
+      notify_url: `${BASE_URL.replace(/\/$/, '')}/api/payfast/webhook`,
       name_first: firstName || email.split('@')[0],
       name_last: lastName || 'User',
       email_address: email,
