@@ -336,7 +336,37 @@ serve(async (req: Request) => {
 
     // Fast-path: user-scoped purchases rely on the DB trigger to update `user_ai_usage` / `user_ai_tiers`.
     // Returning early improves ITN reliability significantly.
+    // However, not all environments have the DB trigger applied, so we also upsert the user tier here.
     if (newStatus === 'completed' && String(scope).toLowerCase() === 'user') {
+      if (ownerId && planTier) {
+        try {
+          const tierValue = String(planTier);
+          const nowIso = new Date().toISOString();
+
+          // Keep `user_ai_tiers` and `user_ai_usage.current_tier` in sync (this is what the app reads).
+          const { error: tierUpdateError } = await supabase
+            .from('user_ai_tiers')
+            .upsert({ user_id: ownerId, tier: tierValue, updated_at: nowIso } as any, { onConflict: 'user_id' });
+          if (tierUpdateError) {
+            console.error('[PayFast ITN] Failed to upsert user_ai_tiers:', tierUpdateError);
+          }
+
+          const { error: usageUpdateError } = await supabase
+            .from('user_ai_usage')
+            .upsert({ user_id: ownerId, current_tier: tierValue, updated_at: nowIso } as any, { onConflict: 'user_id' });
+          if (usageUpdateError) {
+            console.error('[PayFast ITN] Failed to upsert user_ai_usage.current_tier:', usageUpdateError);
+          }
+        } catch (e) {
+          console.error('[PayFast ITN] User-tier upsert threw (non-fatal):', e);
+        }
+      } else {
+        console.warn('[PayFast ITN] User-scoped tx completed but missing ownerId/planTier:', {
+          ownerIdPresent: !!ownerId,
+          planTierPresent: !!planTier,
+        });
+      }
+
       console.log('[PayFast ITN] User-scoped tx completed; returning early for reliability:', m_payment_id);
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
