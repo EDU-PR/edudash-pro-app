@@ -60,8 +60,8 @@ export default function LearnerProgramsScreen() {
                   <Text style={styles.programTitle}>{enrollment.program?.title || 'Program'}</Text>
                   <Text style={styles.programCode}>{enrollment.program?.code || ''}</Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(enrollment.status, theme) }]}>
-                  <Text style={styles.statusText}>{enrollment.status}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(enrollment.is_active ? 'enrolled' : 'withdrawn', theme) }]}>
+                  <Text style={styles.statusText}>{enrollment.is_active ? 'Enrolled' : 'Withdrawn'}</Text>
                 </View>
               </View>
               <View style={styles.progressSection}>
@@ -69,17 +69,17 @@ export default function LearnerProgramsScreen() {
                   <View 
                     style={[
                       styles.progressBarFill, 
-                      { width: `${enrollment.progress_percentage || 0}%`, backgroundColor: theme.primary }
+                      { width: `${0}%`, backgroundColor: theme.primary } // TODO: Calculate progress from course modules
                     ]} 
                   />
                 </View>
                 <Text style={styles.progressText}>
-                  {enrollment.progress_percentage || 0}% {t('learner.complete', { defaultValue: 'complete' })}
+                  0% {t('learner.complete', { defaultValue: 'complete' })}
                 </Text>
               </View>
               <View style={styles.footer}>
                 <Text style={styles.enrolledDate}>
-                  {t('learner.enrolled_on', { defaultValue: 'Enrolled' })}: {new Date(enrollment.enrollment_date).toLocaleDateString()}
+                  {t('learner.enrolled_on', { defaultValue: 'Enrolled' })}: {new Date(enrollment.enrolled_at).toLocaleDateString()}
                 </Text>
                 <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
               </View>

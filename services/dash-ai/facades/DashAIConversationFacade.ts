@@ -31,9 +31,20 @@ export class DashAIConversationFacade {
 
   /**
    * Get conversation by ID
+   * For users without organizations, returns a temporary in-memory conversation
    */
   public async getConversation(conversationId: string): Promise<DashConversation | null> {
     if (!this.conversationManager) {
+      // Return temporary conversation for users without organization
+      if (conversationId.startsWith('temp_conv_')) {
+        return {
+          id: conversationId,
+          title: 'Temporary Conversation',
+          messages: [],
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        };
+      }
       console.warn('[DashAIConversationFacade] Conversation manager not initialized');
       return null;
     }

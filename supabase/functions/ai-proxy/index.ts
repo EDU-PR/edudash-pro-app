@@ -207,7 +207,25 @@ serve(async (req: Request): Promise<Response> => {
       tier = 'free'
     }
     
-    console.log(`[ai-proxy:${requestId}] Effective tier from trials/profile:`, tier)
+    // If tier is still 'free' after trial checks, use unified tier lookup RPC
+    // This ensures we get the correct tier from user_ai_usage, user_ai_tiers, or organization
+    if (tier === 'free' || !tier) {
+      try {
+        const { data: rpcTier, error: rpcError } = await supabase
+          .rpc('get_user_subscription_tier', { user_id: user.id });
+        
+        if (!rpcError && rpcTier) {
+          tier = rpcTier;
+          console.log(`[ai-proxy:${requestId}] Tier from RPC (get_user_subscription_tier):`, tier);
+        } else if (rpcError) {
+          console.warn(`[ai-proxy:${requestId}] RPC tier lookup failed:`, rpcError);
+        }
+      } catch (rpcTierError) {
+        console.warn(`[ai-proxy:${requestId}] Error calling get_user_subscription_tier:`, rpcTierError);
+      }
+    }
+    
+    console.log(`[ai-proxy:${requestId}] Final effective tier:`, tier)
     
     const role = profile?.role || metadata.role || scope
     const hasOrganization = !!organizationId

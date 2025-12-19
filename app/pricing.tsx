@@ -346,7 +346,7 @@ export default function PricingScreen() {
 
         {/* Trust Badges */}
         <View style={styles.trustBadges}>
-          <Text style={styles.trustTitle}>✅ Why Choose Young Eagles?</Text>
+          <Text style={styles.trustTitle}>✅ Why Choose EduDash Pro?</Text>
           <View style={styles.trustList}>
             <Text style={styles.trustItem}>🔒 Multi-tenant security</Text>
             <Text style={styles.trustItem}>🇿🇦 Built for South Africa</Text>

@@ -1,7 +1,8 @@
 import { logger } from '@/lib/logger';
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import * as Updates from 'expo-updates';
-import { AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { AppState, Platform } from 'react-native';
 import { trackOTAUpdateCheck, trackOTAUpdateFetch, trackOTAUpdateApply, trackOTAError } from '@/lib/otaObservability';
 
 // Types for update state
@@ -75,6 +76,19 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         trackOTAUpdateFetch(result);
         // Download complete - this will also trigger the UPDATE_DOWNLOADED event
         updateState({ isDownloading: false, isUpdateDownloaded: true });
+        
+        // Send system notification instead of showing banner
+        await sendUpdateNotification();
+        
+        // Set app badge to show update available
+        if (Platform.OS !== 'web') {
+          try {
+            await Notifications.setBadgeCountAsync(1);
+          } catch (badgeError) {
+            logger.warn('[Updates] Failed to set badge count:', badgeError);
+          }
+        }
+        
         return true;
       } else {
         logger.info('[Updates] No update available');
@@ -102,6 +116,28 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     }
   };
 
+  // Send system notification for update
+  const sendUpdateNotification = useCallback(async () => {
+    try {
+      if (Platform.OS === 'web') return; // Web doesn't support native notifications for updates
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Update Ready',
+          body: 'Tap to restart and apply the latest version',
+          data: { type: 'update_ready' },
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null, // Show immediately
+      });
+      
+      logger.info('[Updates] System notification sent for update');
+    } catch (error) {
+      logger.warn('[Updates] Failed to send update notification:', error);
+    }
+  }, []);
+
   // Apply the downloaded update
   const applyUpdate = async () => {
     try {
@@ -124,9 +160,32 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     }
   };
 
-  // Dismiss the update banner (user chose "Later")
+  // Handle notification taps for updates
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      async (response) => {
+        const data = response.notification.request.content.data;
+        if (data?.type === 'update_ready' && state.isUpdateDownloaded) {
+          logger.info('[Updates] Update notification tapped, applying update...');
+          await applyUpdate();
+        }
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [state.isUpdateDownloaded]);
+
+  // Dismiss the update (clear badge)
   const dismissUpdate = () => {
     updateState({ isUpdateDownloaded: false });
+    // Clear badge when update is dismissed
+    if (Platform.OS !== 'web') {
+      Notifications.setBadgeCountAsync(0).catch(() => {});
+    }
   };
 
   // Dismiss error messages
@@ -168,6 +227,18 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
           isUpdateDownloaded: true,
           lastCheckTime: new Date()
         });
+        
+        // Send system notification for background update
+        await sendUpdateNotification();
+        
+        // Set app badge to show update available
+        if (Platform.OS !== 'web') {
+          try {
+            await Notifications.setBadgeCountAsync(1);
+          } catch (badgeError) {
+            logger.warn('[Updates] Failed to set badge count:', badgeError);
+          }
+        }
       } else {
         logger.info('[Updates] No background update available');
         updateState({ 

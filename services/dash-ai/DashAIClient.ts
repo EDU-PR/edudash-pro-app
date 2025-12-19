@@ -213,6 +213,14 @@ export class DashAIClient {
       
       const url = `${supabaseUrl}/functions/v1/ai-proxy`;
       
+      // Get actual user role from profile, default to 'student' for standalone users
+      const userProfile = this.getUserProfile();
+      const userRole = userProfile?.role?.toLowerCase() || 'student';
+      // Map student/learner roles to appropriate scope
+      const scope = ['teacher','principal','parent','admin'].includes(userRole)
+        ? userRole
+        : 'student'; // Use 'student' scope for students/learners, not 'teacher'
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -220,9 +228,7 @@ export class DashAIClient {
           'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          scope: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
-            ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
-            : 'teacher'),
+          scope: scope,
           service_type: 'dash_conversation',
           payload: {
             prompt: params.promptText,
@@ -231,9 +237,7 @@ export class DashAIClient {
           stream: true,
           enable_tools: true,
           metadata: {
-            role: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
-              ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
-              : 'teacher')
+            role: userRole // Use actual role, not default to teacher
           }
         }),
       });

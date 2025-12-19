@@ -36,7 +36,7 @@ import { BottomTabBar } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
-import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
+// GlobalUpdateBanner removed - using system notifications instead
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
 
@@ -102,8 +102,7 @@ function LayoutContent() {
         <AppTutorial />
       )}
       
-      {/* Update Banner - shows when OTA update is ready */}
-      {Platform.OS !== 'web' && <GlobalUpdateBanner />}
+      {/* Update Banner removed - using system notifications instead */}
       
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       

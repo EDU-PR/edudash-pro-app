@@ -94,7 +94,7 @@ function formatServiceType(serviceType: AIQuotaFeature): string {
   const names: Record<AIQuotaFeature, string> = {
     lesson_generation: 'Lessons',
     grading_assistance: 'Grading',
-    homework_help: 'Homework Help',
+    homework_help: 'Assignment Help',
     transcription: 'Voice',
   };
   return names[serviceType] || serviceType;
@@ -193,6 +193,33 @@ export const AIQuotaDisplay: React.FC<AIQuotaDisplayProps> = ({
   
   // Compact view
   if (compact) {
+    // Show fallback if quota data is not available
+    if (!quotaData && !isLoading && !isError) {
+      return (
+        <View style={[styles.compactContainer, containerStyle, { backgroundColor: theme.surface }]}>
+          <View style={styles.compactHeader}>
+            <Ionicons 
+              name={getServiceIcon(serviceType) as any} 
+              size={16} 
+              color={theme.textSecondary} 
+            />
+            <Text style={[styles.compactLabel, { color: theme.text }]}>
+              {formatServiceType(serviceType)}
+            </Text>
+          </View>
+          <QuotaBar 
+            used={0} 
+            limit={0} 
+            color={theme.textSecondary}
+            showLabel={false}
+          />
+          <Text style={[styles.compactSubtext, { color: theme.textSecondary }]}>
+            Loading quota...
+          </Text>
+        </View>
+      );
+    }
+    
     return (
       <View style={[styles.compactContainer, containerStyle, { backgroundColor: theme.surface }]}>
         <View style={styles.compactHeader}>
@@ -204,12 +231,17 @@ export const AIQuotaDisplay: React.FC<AIQuotaDisplayProps> = ({
           <Text style={[styles.compactLabel, { color: theme.text }]}>
             {formatServiceType(serviceType)}
           </Text>
+          {usageStats.limit > 0 && (
+            <Text style={[styles.compactNumbers, { color: theme.textSecondary }]}>
+              {usageStats.used}/{usageStats.limit}
+            </Text>
+          )}
         </View>
         <QuotaBar 
           used={usageStats.used} 
           limit={usageStats.limit} 
           color={usageStats.color}
-          showLabel={true}
+          showLabel={usageStats.limit > 0}
         />
       </View>
     );
@@ -403,6 +435,17 @@ const styles = StyleSheet.create({
   compactLabel: {
     fontSize: 13,
     fontWeight: '600',
+    flex: 1,
+  },
+  compactNumbers: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  compactSubtext: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 4,
   },
   header: {
     flexDirection: 'row',

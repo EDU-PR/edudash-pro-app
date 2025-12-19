@@ -252,37 +252,51 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
           <TierBadge tier={tier} size="md" />
         </View>
         
-        {subscriptionDetails && !isFreeTier ? (
-          <View style={styles.planDetails}>
-            <View style={styles.planDetailRow}>
-              <Ionicons 
-                name={getStatusIcon(subscriptionDetails.status) as any} 
-                size={16} 
-                color={getStatusColor(subscriptionDetails.status, theme)} 
-              />
-              <Text style={[styles.planDetailText, { color: theme.text }]}>
-                Status: <Text style={{ fontWeight: '600' }}>{subscriptionDetails.status}</Text>
+        {!isFreeTier ? (
+          subscriptionDetails ? (
+            <View style={styles.planDetails}>
+              <View style={styles.planDetailRow}>
+                <Ionicons 
+                  name={getStatusIcon(subscriptionDetails.status) as any} 
+                  size={16} 
+                  color={getStatusColor(subscriptionDetails.status, theme)} 
+                />
+                <Text style={[styles.planDetailText, { color: theme.text }]}>
+                  Status: <Text style={{ fontWeight: '600' }}>{subscriptionDetails.status}</Text>
+                </Text>
+              </View>
+              
+              {planDetails?.price_monthly && (
+                <View style={styles.planDetailRow}>
+                  <Ionicons name="card" size={16} color={theme.textSecondary} />
+                  <Text style={[styles.planDetailText, { color: theme.text }]}>
+                    {formatCurrency(planDetails.price_monthly)}/{subscriptionDetails.billing_frequency || 'month'}
+                  </Text>
+                </View>
+              )}
+              
+              {subscriptionDetails.next_billing_date && (
+                <View style={styles.planDetailRow}>
+                  <Ionicons name="calendar" size={16} color={theme.textSecondary} />
+                  <Text style={[styles.planDetailText, { color: theme.text }]}>
+                    Next billing: {formatDate(subscriptionDetails.next_billing_date)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.planDetails}>
+              <View style={styles.planDetailRow}>
+                <Ionicons name="checkmark-circle" size={16} color={theme.success || '#10B981'} />
+                <Text style={[styles.planDetailText, { color: theme.text }]}>
+                  Status: <Text style={{ fontWeight: '600' }}>Active</Text>
+                </Text>
+              </View>
+              <Text style={[styles.freeTierText, { color: theme.textSecondary, marginTop: 8 }]}>
+                Your {tier.replace('_', ' ')} subscription is active.
               </Text>
             </View>
-            
-            {planDetails?.price_monthly && (
-              <View style={styles.planDetailRow}>
-                <Ionicons name="card" size={16} color={theme.textSecondary} />
-                <Text style={[styles.planDetailText, { color: theme.text }]}>
-                  {formatCurrency(planDetails.price_monthly)}/{subscriptionDetails.billing_frequency || 'month'}
-                </Text>
-              </View>
-            )}
-            
-            {subscriptionDetails.next_billing_date && (
-              <View style={styles.planDetailRow}>
-                <Ionicons name="calendar" size={16} color={theme.textSecondary} />
-                <Text style={[styles.planDetailText, { color: theme.text }]}>
-                  Next billing: {formatDate(subscriptionDetails.next_billing_date)}
-                </Text>
-              </View>
-            )}
-          </View>
+          )
         ) : (
           <Text style={[styles.freeTierText, { color: theme.textSecondary }]}>
             You're on the free plan with limited AI features.

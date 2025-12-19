@@ -85,6 +85,17 @@ const getDefaultNavItems = (role: string): NavItem[] => {
         { id: 'data-import', label: 'Data Import', icon: 'cloud-upload', route: '/screens/org-admin/data-import' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/org-admin/settings' },
       ];
+    case 'student':
+    case 'learner':
+      return [
+        { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/learner-dashboard' },
+        { id: 'programs', label: 'My Programs', icon: 'school', route: '/screens/learner/programs' },
+        { id: 'assignments', label: 'Assignments', icon: 'document-text', route: '/screens/learner/submissions' },
+        { id: 'ai-help', label: 'Assignment Help', icon: 'help-circle', route: '/screens/ai-homework-helper' },
+        { id: 'portfolio', label: 'Portfolio', icon: 'folder', route: '/screens/learner/portfolio' },
+        { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+        { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
+      ];
     default:
       return [
         { id: 'home', label: 'Home', icon: 'home', route: '/' },

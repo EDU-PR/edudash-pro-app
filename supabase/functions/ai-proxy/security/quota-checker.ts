@@ -77,6 +77,12 @@ export async function checkQuota(
         homework_help: 50,
         dash_conversation: 200
       },
+      parent_starter: {
+        lesson_generation: 50,
+        grading_assistance: 50,
+        homework_help: 100,
+        dash_conversation: 500
+      },
       parent_plus: {
         lesson_generation: 100,
         grading_assistance: 100,

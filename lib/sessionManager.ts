@@ -627,9 +627,10 @@ export async function signInWithSession(
       const existingEmail = existing?.session?.user?.email?.toLowerCase();
       if (existing?.session && existingEmail && existingEmail !== wantedEmail) {
         if (__DEV__) console.log('[SessionManager] Existing session detected for different user, signing out first...');
-        await assertSupabase().auth.signOut({ scope: 'local' } as any);
-        // small delay to allow auth state to settle
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        // Use global scope to ensure server-side session is cleared
+        await assertSupabase().auth.signOut({ scope: 'global' } as any);
+        // Increased delay to allow auth state to fully settle
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     } catch (e) {
       // Non-fatal; proceed with sign-in attempt.
@@ -640,8 +641,22 @@ export async function signInWithSession(
     if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
     await clearStoredData();
     
-    // Small delay to ensure storage is cleared
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Additional delay to ensure storage and Supabase client state are fully cleared
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Force clear Supabase client state by getting a fresh client instance
+    try {
+      const supabase = assertSupabase();
+      // Ensure client is in a clean state
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      if (sessionCheck?.session) {
+        if (__DEV__) console.log('[SessionManager] Stale session still present, forcing clear...');
+        await supabase.auth.signOut({ scope: 'global' } as any);
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    } catch (clientCheckError) {
+      if (__DEV__) console.log('[SessionManager] Client state check failed (non-fatal):', clientCheckError);
+    }
     
     const { data, error } = await assertSupabase().auth.signInWithPassword({
       email,
@@ -663,8 +678,10 @@ export async function signInWithSession(
             const wantedEmail = email.trim().toLowerCase();
             if (existingEmail && existingEmail !== wantedEmail) {
               if (__DEV__) console.log('[SessionManager] Existing session is for different email; signing out and retrying sign-in...');
-              await assertSupabase().auth.signOut({ scope: 'local' } as any);
-              await new Promise((resolve) => setTimeout(resolve, 150));
+              // Use global scope to ensure complete sign-out
+              await assertSupabase().auth.signOut({ scope: 'global' } as any);
+              await clearStoredData();
+              await new Promise((resolve) => setTimeout(resolve, 300));
               const retry = await assertSupabase().auth.signInWithPassword({ email, password });
               if (retry.error) {
                 return { session: null, profile: null, error: retry.error.message };
@@ -822,33 +839,42 @@ export async function signOut(): Promise<void> {
     }
 
     try {
-      // Sign out from Supabase and clear local session
-      console.log('[SessionManager] Signing out from Supabase (local scope)...');
-      await assertSupabase().auth.signOut({ scope: 'local' } as any);
-      console.log('[SessionManager] Supabase sign-out (local) successful');
-    } catch (supabaseLocalError) {
-      console.warn('[SessionManager] Supabase local sign-out error:', supabaseLocalError);
+      // Sign out from Supabase with global scope first to clear server-side session
+      // This ensures the session is completely cleared on both client and server
+      console.log('[SessionManager] Signing out from Supabase (global scope to clear server session)...');
+      await assertSupabase().auth.signOut({ scope: 'global' } as any);
+      console.log('[SessionManager] Supabase sign-out (global) successful');
+      
+      // Additional delay to ensure server-side state is cleared
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch (supabaseGlobalError) {
+      console.warn('[SessionManager] Supabase global sign-out error:', supabaseGlobalError);
       try {
-        // Fallback: try default signOut without scope
-        console.log('[SessionManager] Attempting Supabase sign-out (default scope)...');
-        await assertSupabase().auth.signOut();
-        console.log('[SessionManager] Supabase sign-out (default) successful');
-      } catch (supabaseDefaultError) {
-        console.warn('[SessionManager] Supabase default sign-out error:', supabaseDefaultError);
+        // Fallback: try local scope
+        console.log('[SessionManager] Attempting Supabase sign-out (local scope)...');
+        await assertSupabase().auth.signOut({ scope: 'local' } as any);
+        console.log('[SessionManager] Supabase sign-out (local) successful');
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (supabaseLocalError) {
+        console.warn('[SessionManager] Supabase local sign-out error:', supabaseLocalError);
         try {
-          // Last resort: try global (revokes refresh token); safe for client sign-out
-          console.log('[SessionManager] Attempting Supabase sign-out (global scope)...');
-          await assertSupabase().auth.signOut({ scope: 'global' } as any);
-          console.log('[SessionManager] Supabase sign-out (global) successful');
-        } catch (supabaseGlobalError) {
+          // Last resort: try default signOut
+          console.log('[SessionManager] Attempting Supabase sign-out (default scope)...');
+          await assertSupabase().auth.signOut();
+          console.log('[SessionManager] Supabase sign-out (default) successful');
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        } catch (supabaseDefaultError) {
           // Continue even if Supabase sign-out ultimately fails (network issues, etc.)
-          console.warn('[SessionManager] Supabase sign-out failed across all scopes (continuing):', supabaseGlobalError);
+          console.warn('[SessionManager] Supabase sign-out failed across all scopes (continuing):', supabaseDefaultError);
         }
       }
     }
 
     // Clear stored data
     await clearStoredData();
+    
+    // Additional delay to ensure all state is cleared before allowing new sign-in
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     track('edudash.auth.sign_out', {
       session_duration_minutes: sessionDuration,

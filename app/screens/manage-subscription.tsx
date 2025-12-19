@@ -1,94 +1,203 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
-import { Stack } from 'expo-router';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import { TierBadge } from '@/components/ui/TierBadge';
+import { SubscriptionStatusCard } from '@/components/ui/SubscriptionStatusCard';
+import { Card } from '@/components/ui/Card';
 
-// Optional RevenueCat integration with graceful fallback when SDK not installed
 export default function ManageSubscriptionScreen() {
-  const [loading, setLoading] = useState(true);
-  const [rcAvailable, setRcAvailable] = useState(false);
-  const [customerInfo, setCustomerInfo] = useState<any>(null);
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  const { profile } = useAuth();
+  const { tier, ready: subscriptionReady } = useSubscription();
+  const styles = createStyles(theme);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        // Try to require RevenueCat SDK
-        const Purchases = require('react-native-purchases');
-        setRcAvailable(true);
-        // Configure if not already configured (no-op if already set)
-        // Support multiple env var names for convenience
-        const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_SDK_KEY
-          || process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_PUBLIC_KEY
-          || process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
-        const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_SDK_KEY
-          || process.env.EXPO_PUBLIC_REVENUECAT_IOS_PUBLIC_KEY
-          || process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-        const key = Platform.OS === 'ios' ? iosKey : androidKey;
-        if (!key) {
-          setLoading(false);
-          return;
-        }
-        try { Purchases.configure({ apiKey: key }); } catch { /* Intentional: non-fatal */ }
-        const info = await Purchases.getCustomerInfo();
-        if (active) setCustomerInfo(info);
-      } catch {
-        setRcAvailable(false);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, []);
+  const isFreeTier = !tier || tier === 'free';
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: 'Manage Subscription' }} />
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.content}>
-          {loading ? (
-            <ActivityIndicator />
-          ) : rcAvailable ? (
-            customerInfo ? (
-              <>
-                <Text style={styles.title}>Current Entitlements</Text>
-                <Text style={styles.text}>{JSON.stringify(customerInfo?.entitlements?.active || {}, null, 2)}</Text>
-                <TouchableOpacity style={styles.btn} onPress={async () => {
-                  try {
-                    const Purchases = require('react-native-purchases');
-                    await Purchases.presentCodeRedemptionSheet?.();
-                  } catch (e: any) {
-                    Alert.alert('Error', e?.message || 'Unable to manage subscription');
-                  }
-                }}>
-                  <Text style={styles.btnText}>Open subscription management</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.title}>RevenueCat configured</Text>
-                <Text style={styles.text}>No entitlements found yet.</Text>
-              </>
-            )
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <Stack.Screen 
+        options={{ 
+          title: t('settings.billing.manage_subscription', { defaultValue: 'Manage Subscription' }),
+          headerStyle: { backgroundColor: theme.background },
+          headerTintColor: theme.text,
+        }} 
+      />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* Current Subscription Status */}
+        <Card padding={20} margin={0} elevation="medium" style={styles.statusCard}>
+          <View style={styles.statusHeader}>
+            <Text style={styles.sectionTitle}>
+              {t('settings.billing.current_subscription', { defaultValue: 'Current Subscription' })}
+            </Text>
+            {tier && tier !== 'free' && (
+              <TierBadge tier={tier} size="md" />
+            )}
+          </View>
+          
+          <SubscriptionStatusCard 
+            showPaymentHistory={false}
+            showUpgradeCTA={isFreeTier}
+            showCancelOption={false}
+          />
+        </Card>
+
+        {/* Upgrade/Manage Actions */}
+        <Card padding={20} margin={0} elevation="small" style={styles.actionsCard}>
+          <Text style={styles.sectionTitle}>
+            {t('settings.billing.actions', { defaultValue: 'Actions' })}
+          </Text>
+          
+          {isFreeTier ? (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.primary }]}
+              onPress={() => router.push('/screens/subscription-upgrade-post')}
+            >
+              <Ionicons name="arrow-up-circle" size={24} color="#fff" />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>
+                  {t('settings.billing.upgrade_plan', { defaultValue: 'Upgrade Plan' })}
+                </Text>
+                <Text style={styles.actionSubtitle}>
+                  {t('settings.billing.upgrade_subtitle', { defaultValue: 'Unlock premium features and unlimited AI access' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#fff" />
+            </TouchableOpacity>
           ) : (
             <>
-              <Text style={styles.title}>RevenueCat not installed</Text>
-              <Text style={styles.text}>
-                To enable in-app subscriptions, add the RevenueCat SDK and set EXPO_PUBLIC_REVENUECAT_ANDROID_KEY.
-              </Text>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }]}
+                onPress={() => router.push('/screens/subscription-upgrade-post')}
+              >
+                <Ionicons name="swap-horizontal" size={24} color={theme.primary} />
+                <View style={styles.actionContent}>
+                  <Text style={[styles.actionTitle, { color: theme.text }]}>
+                    {t('settings.billing.change_plan', { defaultValue: 'Change Plan' })}
+                  </Text>
+                  <Text style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
+                    {t('settings.billing.change_plan_subtitle', { defaultValue: 'Upgrade or downgrade your subscription' })}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+              
+              <View style={styles.infoBox}>
+                <Ionicons name="information-circle" size={20} color={theme.primary} />
+                <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                  {t('settings.billing.payfast_note', { 
+                    defaultValue: 'Subscriptions are managed through PayFast. To cancel or modify your subscription, please contact support or visit your PayFast account.' 
+                  })}
+                </Text>
+              </View>
             </>
           )}
-        </View>
-      </SafeAreaView>
-    </View>
+        </Card>
+
+        {/* Payment History Link */}
+        {!isFreeTier && (
+          <Card padding={20} margin={0} elevation="small" style={styles.historyCard}>
+            <TouchableOpacity
+              style={styles.historyButton}
+              onPress={() => {
+                // TODO: Navigate to payment history screen when available
+                router.push('/screens/payments/return');
+              }}
+            >
+              <Ionicons name="receipt-outline" size={24} color={theme.primary} />
+              <View style={styles.actionContent}>
+                <Text style={[styles.actionTitle, { color: theme.text }]}>
+                  {t('settings.billing.payment_history', { defaultValue: 'Payment History' })}
+                </Text>
+                <Text style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
+                  {t('settings.billing.view_payments', { defaultValue: 'View your past payments and invoices' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </Card>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0b1220' },
-  content: { padding: 16 },
-  title: { color: '#fff', fontWeight: '700', fontSize: 16, marginBottom: 8 },
-  text: { color: '#9CA3AF' },
-  btn: { backgroundColor: '#00f5ff', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 16 },
-  btnText: { color: '#000', fontWeight: '700' },
+const createStyles = (theme: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  statusCard: {
+    marginBottom: 16,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 12,
+  },
+  actionsCard: {
+    marginBottom: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  actionContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  actionSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: theme.surfaceVariant || theme.surface,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    marginLeft: 8,
+  },
+  historyCard: {
+    marginBottom: 16,
+  },
+  historyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
 });
