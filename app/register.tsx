@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
@@ -79,6 +80,7 @@ async function fetchProgramByCode(programCode: string): Promise<ProgramInfo | nu
 
 export default function PublicRegistrationScreen() {
   const { theme } = useTheme();
+  const { user, loading: authLoading } = useAuth();
   const params = useLocalSearchParams();
   const getParam = (key: string): string | undefined => {
     const value = (params as Record<string, string | string[] | undefined>)[key];
@@ -87,9 +89,21 @@ export default function PublicRegistrationScreen() {
     return undefined;
   };
   const [step, setStep] = useState<'code' | 'details'>('code');
-  const [programCode, setProgramCode] = useState(getParam('code') || '');
+  const programCodeParam = getParam('code') || '';
+  const [programCode, setProgramCode] = useState(programCodeParam);
   const [loading, setLoading] = useState(false);
   const [programInfo, setProgramInfo] = useState<ProgramInfo | null>(null);
+
+  // Redirect logged-in users to enrollment screen
+  useEffect(() => {
+    if (!authLoading && user && programCodeParam) {
+      // User is logged in and has a program code - redirect to enrollment screen
+      router.replace({
+        pathname: '/screens/learner/enroll-by-program-code',
+        params: { code: programCodeParam },
+      } as any);
+    }
+  }, [authLoading, user, programCodeParam]);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -176,6 +190,34 @@ export default function PublicRegistrationScreen() {
       });
 
       if (authError) throw authError;
+
+      // Update profile with organization_id if program has one
+      // This must happen before enrollment to satisfy RLS policies
+      // Wait a moment for the profile trigger to create the profile
+      if (authData.user && programInfo?.organizations?.id) {
+        // Small delay to ensure profile is created by trigger
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { error: profileUpdateError } = await supabase
+          .from('profiles')
+          .upsert(
+            { 
+              id: authData.user.id,
+              organization_id: programInfo.organizations.id,
+              email: email.trim(),
+              role: 'student',
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              phone: phone.trim() || null,
+            },
+            { onConflict: 'id' }
+          );
+
+        if (profileUpdateError) {
+          console.warn('Profile update error (non-fatal):', profileUpdateError);
+          // Continue anyway - enrollment might still work
+        }
+      }
 
       // Auto-enroll in program
       if (authData.user && programInfo) {

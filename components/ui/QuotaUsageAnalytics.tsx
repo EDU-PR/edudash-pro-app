@@ -46,7 +46,7 @@ function formatFeatureName(feature: AIQuotaFeature): string {
   const names: Record<AIQuotaFeature, string> = {
     lesson_generation: 'Lessons',
     grading_assistance: 'Grading',
-    homework_help: 'Homework Help',
+    homework_help: 'Assignment Help',
     transcription: 'Voice',
   };
   return names[feature] || feature;

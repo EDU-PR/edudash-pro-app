@@ -158,22 +158,14 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['admin'] 
   },
   
-  // Student/Learner tabs
-  { 
-    id: 'student-dashboard', 
-    label: 'Home',
-    icon: 'home-outline', 
-    activeIcon: 'home', 
-    route: '/screens/student-dashboard', 
-    roles: ['student'] 
-  },
+  // Student/Learner tabs - Use learner-dashboard for both (students with org_id should use learner-dashboard)
   { 
     id: 'learner-dashboard', 
     label: 'Home',
     icon: 'home-outline', 
     activeIcon: 'home', 
     route: '/screens/learner-dashboard', 
-    roles: ['learner'] 
+    roles: ['student', 'learner'] 
   },
   { 
     id: 'student-programs', 
@@ -192,11 +184,11 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['student', 'learner'] 
   },
   { 
-    id: 'student-settings', 
-    label: 'Settings',
-    icon: 'settings-outline', 
-    activeIcon: 'settings', 
-    route: '/screens/settings', 
+    id: 'learner-messages', 
+    label: 'Messages',
+    icon: 'chatbubble-outline', 
+    activeIcon: 'chatbubble', 
+    route: '/screens/learner/messages', 
     roles: ['student', 'learner'] 
   },
   { 

@@ -23,6 +23,8 @@ export interface LearnerEnrollment {
   program_id: string;
   status: 'enrolled' | 'completed' | 'withdrawn';
   enrollment_date: string;
+  enrolled_at: string; // Added for compatibility with database schema
+  is_active: boolean; // Added for compatibility with database schema
   completion_date: string | null;
   progress_percentage: number;
   program?: {
@@ -108,18 +110,39 @@ export function useLearnerEnrollments() {
         .from('enrollments')
         .select(`
           *,
-          program:programs (
+          course:courses (
             id,
             title,
-            code,
+            course_code,
             organization_id
           )
         `)
-        .eq('learner_id', learnerId)
-        .order('enrollment_date', { ascending: false });
+        .eq('student_id', learnerId) // Fixed: use student_id instead of learner_id
+        .eq('is_active', true) // Only get active enrollments
+        .order('enrolled_at', { ascending: false }); // Fixed: use enrolled_at instead of enrollment_date
 
       if (error) throw error;
-      return data as LearnerEnrollment[];
+      
+      // Transform the data to match LearnerEnrollment interface
+      const transformed = (data || []).map((enrollment: any) => ({
+        id: enrollment.id,
+        learner_id: enrollment.student_id, // Map student_id to learner_id for interface compatibility
+        program_id: enrollment.course_id, // Map course_id to program_id for interface compatibility
+        status: enrollment.is_active ? 'enrolled' as const : 'withdrawn' as const,
+        enrollment_date: enrollment.enrolled_at,
+        enrolled_at: enrollment.enrolled_at, // Added for compatibility
+        is_active: enrollment.is_active, // Added for compatibility
+        completion_date: enrollment.dropped_at || null,
+        progress_percentage: 0, // TODO: Calculate from actual progress data
+        program: enrollment.course ? {
+          id: enrollment.course.id,
+          title: enrollment.course.title,
+          code: enrollment.course.course_code,
+          organization_id: enrollment.course.organization_id,
+        } : undefined,
+      }));
+      
+      return transformed as LearnerEnrollment[];
     },
     enabled: !!learnerId,
     staleTime: 2 * 60 * 1000, // 2 minutes

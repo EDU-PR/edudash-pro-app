@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -13,15 +14,22 @@ import { ProgramProgressCard } from '@/components/learner/ProgramProgressCard';
 import { QuickActions } from '@/components/learner/QuickActions';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { SubscriptionStatusCard } from '@/components/ui/SubscriptionStatusCard';
+import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
 import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { useOrganization } from '@/hooks/useOrganization';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 
 export default function LearnerDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { t } = useTranslation();
   const { tier, ready: subscriptionReady, tierSource } = useSubscription();
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const styles = React.useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+  
+  // State for mobile nav drawer
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
@@ -34,6 +42,11 @@ export default function LearnerDashboard() {
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  
+  // Fetch organization details
+  const { data: organization, isLoading: orgLoading } = useOrganization();
+  const orgName = organization?.name || null;
+  const orgSlug = organization?.slug || null;
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;
@@ -98,20 +111,46 @@ export default function LearnerDashboard() {
   const draftCount = learnerDashboard.data?.draftCount ?? 0;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen 
         options={{ 
-          title: t('learner.dashboard_title', { defaultValue: 'My Learning' }),
-          headerRight: () => (
-              <TouchableOpacity
-                onPress={() => router.push('/screens/account')}
-                style={{ marginRight: 16 }}
-              >
-                <Ionicons name="person-circle-outline" size={28} color={theme.text} />
-              </TouchableOpacity>
-          ),
+          headerShown: false, // Use custom header instead
         }} 
       />
+      {/* Custom Header with Hamburger Menu - ALWAYS VISIBLE */}
+      {/* DEBUG: If you see this comment, the learner-dashboard.tsx file is loading */}
+      <View style={[styles.customHeader, { 
+        backgroundColor: theme.background,
+        paddingTop: Math.max(insets.top, 8),
+        borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
+        borderBottomWidth: isDark ? 2 : 1.5,
+      }]}>
+        <TouchableOpacity
+          onPress={() => setIsDrawerOpen(true)}
+          style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="menu" size={26} color={theme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            {t('learner.dashboard_title', { defaultValue: 'My Learning' })}
+          </Text>
+          {orgName && (
+            <Text style={[styles.orgName, { color: theme.textSecondary }]} numberOfLines={1}>
+              {orgName}
+              {orgSlug && ` • @${orgSlug}`}
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/screens/account')}
+          style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="person-circle-outline" size={26} color={theme.text} />
+        </TouchableOpacity>
+      </View>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -136,14 +175,18 @@ export default function LearnerDashboard() {
                 {t('learner.continue_learning', { defaultValue: 'Continue your skills development journey' })}
               </Text>
             </View>
-            {subscriptionReady && (
+            {tier ? (
               <TierBadge tier={tier} size="sm" />
-            )}
+            ) : subscriptionReady ? (
+              <View style={[styles.tierPlaceholder, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.tierPlaceholderText, { color: theme.textSecondary }]}>Free</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
         {/* Subscription Status Card - Show tier details for standalone users */}
-        {subscriptionReady && (
+        {(subscriptionReady || tier !== 'free') && (
           <Card padding={16} margin={0} elevation="small" style={{ marginBottom: 16 }}>
             <SubscriptionStatusCard 
               showPaymentHistory={false}
@@ -151,6 +194,17 @@ export default function LearnerDashboard() {
               showCancelOption={false}
             />
           </Card>
+        )}
+
+        {/* AI Quota Display - Assignment Help */}
+        {user && (
+          <View style={{ marginBottom: 16 }}>
+            <AIQuotaDisplay 
+              serviceType="homework_help"
+              compact={true}
+              showUpgradePrompt={true}
+            />
+          </View>
         )}
 
         {/* Progress Overview */}
@@ -186,6 +240,12 @@ export default function LearnerDashboard() {
           <Text style={styles.sectionTitle}>{t('learner.quick_actions', { defaultValue: 'Quick Actions' })}</Text>
           <QuickActions
             actions={[
+              {
+                icon: 'help-circle-outline',
+                title: t('learner.assignment_help', { defaultValue: 'Assignment Help' }),
+                subtitle: t('learner.get_ai_help', { defaultValue: 'Get AI-powered help' }),
+                onPress: () => router.push('/screens/ai-homework-helper'),
+              },
               {
                 icon: 'school-outline',
                 title: t('learner.my_programs', { defaultValue: 'My Programs' }),
@@ -264,8 +324,8 @@ export default function LearnerDashboard() {
           </View>
         )}
 
-        {/* No Organization - Join Prompt */}
-        {!orgId && (
+        {/* No Organization - Join Prompt (only show if user has no enrollments) */}
+        {!orgId && enrollments.length === 0 && !isLoading && (
           <Card padding={32} margin={0} elevation="small" style={{ marginBottom: 24 }}>
             <View style={styles.empty}>
               <Ionicons name="school-outline" size={64} color={theme.primary} />
@@ -275,7 +335,7 @@ export default function LearnerDashboard() {
               </Text>
               <TouchableOpacity
                 style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/register')}
+                onPress={() => router.push('/screens/learner/enroll-by-program-code')}
               >
                 <Text style={styles.primaryButtonText}>{t('learner.join_with_code', { defaultValue: 'Join with Program Code' })}</Text>
               </TouchableOpacity>
@@ -310,18 +370,33 @@ export default function LearnerDashboard() {
           </Card>
         )}
       </ScrollView>
-    </View>
+      
+      {/* Mobile Navigation Drawer */}
+      <MobileNavDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        navItems={[
+          { id: 'home', label: t('learner.dashboard_title', { defaultValue: 'Dashboard' }), icon: 'home', route: '/screens/learner-dashboard' },
+          { id: 'programs', label: t('learner.my_programs', { defaultValue: 'My Programs' }), icon: 'school', route: '/screens/learner/programs' },
+          { id: 'assignments', label: t('learner.submissions', { defaultValue: 'Assignments' }), icon: 'document-text', route: '/screens/learner/submissions' },
+          { id: 'ai-help', label: t('learner.assignment_help', { defaultValue: 'Assignment Help' }), icon: 'help-circle', route: '/screens/ai-homework-helper' },
+          { id: 'portfolio', label: t('learner.portfolio', { defaultValue: 'Portfolio' }), icon: 'folder', route: '/screens/learner/portfolio' },
+          { id: 'account', label: t('common.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
+          { id: 'settings', label: t('common.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
+        ]}
+      />
+    </SafeAreaView>
   );
 }
 
-const createStyles = (theme: ThemeColors) => StyleSheet.create({
+const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: theme?.background || '#0b1220' 
   },
   content: { 
-    padding: 16,
-    paddingBottom: 32,
+    padding: 20,
+    paddingBottom: 40,
   },
   empty: { 
     flex: 1, 
@@ -334,30 +409,87 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 16,
     marginTop: 12,
   },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    minHeight: 60,
+    zIndex: 1000,
+    elevation: 6, // Android shadow
+    shadowColor: '#000', // iOS shadow
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  headerButton: {
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  orgName: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  tierPlaceholder: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  tierPlaceholderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   welcomeSection: {
-    marginBottom: 24,
+    marginBottom: 20,
+    paddingTop: 8,
   },
   welcomeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 4,
   },
   welcomeTextContainer: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 16,
   },
   greeting: {
     color: theme?.text || '#fff',
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subheading: {
     color: theme?.textSecondary || '#9CA3AF',
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 4,
   },
   progressCard: {
-    marginBottom: 24,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   progressHeader: {
     flexDirection: 'row',
@@ -369,6 +501,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     color: theme?.text || '#fff',
     fontSize: 20,
     fontWeight: '700',
+    letterSpacing: -0.3,
   },
   progressGrid: {
     flexDirection: 'row',
@@ -379,22 +512,28 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     flex: 1,
     minWidth: '45%',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: theme?.surface || theme?.card,
-    borderRadius: 12,
+    padding: 20,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
   },
   progressValue: {
     color: theme?.text || '#fff',
     fontSize: 32,
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
   progressLabel: {
     color: theme?.textSecondary || '#9CA3AF',
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -404,8 +543,10 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   sectionTitle: {
     color: theme?.text || '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 4,
   },
   seeAll: {
     color: theme?.primary,

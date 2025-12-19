@@ -318,7 +318,8 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         return { path: '/screens/parent-dashboard', params: { standalone: 'true' } };
 
       case 'student':
-        return { path: '/screens/student-dashboard', params: { standalone: 'true' } };
+        // Standalone students should use learner dashboard (skills development focused)
+        return { path: '/screens/learner-dashboard', params: { standalone: 'true' } };
     }
   }
 
@@ -347,9 +348,14 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/parent-dashboard' };
 
     case 'student':
-      if (isSkillsLike) {
+      // Students with organization_id (registered via program code) should always go to learner-dashboard
+      // Only truly standalone students (no org) should go to student-dashboard
+      if (hasOrganization) {
+        console.log('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
         return { path: '/screens/learner-dashboard' };
       }
+      // Standalone students (no organization) go to student-dashboard
+      console.log('[ROUTE DEBUG] Standalone student (no organization) - routing to student-dashboard');
       return { path: '/screens/student-dashboard' };
   }
 

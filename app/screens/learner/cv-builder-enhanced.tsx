@@ -30,7 +30,7 @@ const { width } = Dimensions.get('window');
 
 interface CVSection {
   id: string;
-  type: 'personal' | 'experience' | 'education' | 'skills' | 'certifications' | 'languages';
+  type: 'personal' | 'experience' | 'education' | 'skills' | 'certifications' | 'languages' | 'projects' | 'references' | 'achievements' | 'volunteer';
   title: string;
   data: any;
 }
@@ -318,6 +318,22 @@ export default function CVBuilderEnhancedScreen() {
                     text: t('cv.languages', { defaultValue: 'Languages' }),
                     onPress: () => addSection('languages'),
                   },
+                  {
+                    text: t('cv.projects', { defaultValue: 'Projects' }),
+                    onPress: () => addSection('projects'),
+                  },
+                  {
+                    text: t('cv.references', { defaultValue: 'References' }),
+                    onPress: () => addSection('references'),
+                  },
+                  {
+                    text: t('cv.achievements', { defaultValue: 'Achievements' }),
+                    onPress: () => addSection('achievements'),
+                  },
+                  {
+                    text: t('cv.volunteer', { defaultValue: 'Volunteer Work' }),
+                    onPress: () => addSection('volunteer'),
+                  },
                 ]
               );
             }}
@@ -475,6 +491,62 @@ function renderPreviewSection(section: CVSection, theme: any, t: any, previewSty
           ))}
         </View>
       );
+    case 'projects':
+      return (section.data.items || []).map((item: any, index: number) => (
+        <View key={index} style={previewStyles.previewItem}>
+          <View style={previewStyles.previewItemHeader}>
+            <Text style={previewStyles.previewItemTitle}>{item.name || t('cv.project_name', { defaultValue: 'Project' })}</Text>
+            <Text style={previewStyles.previewItemDate}>
+              {item.startDate || ''} {item.endDate ? `- ${item.endDate}` : item.current ? '- Present' : ''}
+            </Text>
+          </View>
+          {item.technologies && (
+            <Text style={previewStyles.previewItemCompany}>
+              {Array.isArray(item.technologies) ? item.technologies.join(', ') : item.technologies}
+            </Text>
+          )}
+          {item.description && <Text style={previewStyles.previewItemDescription}>{item.description}</Text>}
+          {item.url && (
+            <Text style={[previewStyles.previewItemDescription, { color: theme.primary, marginTop: 4 }]}>
+              {item.url}
+            </Text>
+          )}
+        </View>
+      ));
+    case 'references':
+      return (section.data.items || []).map((item: any, index: number) => (
+        <View key={index} style={previewStyles.previewItem}>
+          <Text style={previewStyles.previewItemTitle}>{item.name || t('cv.reference_name', { defaultValue: 'Reference' })}</Text>
+          <Text style={previewStyles.previewItemCompany}>{item.position || ''}</Text>
+          {item.company && <Text style={previewStyles.previewItemDescription}>{item.company}</Text>}
+          {item.email && <Text style={previewStyles.previewItemDescription}>{item.email}</Text>}
+          {item.phone && <Text style={previewStyles.previewItemDescription}>{item.phone}</Text>}
+        </View>
+      ));
+    case 'achievements':
+      return (section.data.items || []).map((item: any, index: number) => (
+        <View key={index} style={previewStyles.previewItem}>
+          <View style={previewStyles.previewItemHeader}>
+            <Text style={previewStyles.previewItemTitle}>{item.title || t('cv.achievement_title', { defaultValue: 'Achievement' })}</Text>
+            {item.date && <Text style={previewStyles.previewItemDate}>{item.date}</Text>}
+          </View>
+          {item.issuer && <Text style={previewStyles.previewItemCompany}>{item.issuer}</Text>}
+          {item.description && <Text style={previewStyles.previewItemDescription}>{item.description}</Text>}
+        </View>
+      ));
+    case 'volunteer':
+      return (section.data.items || []).map((item: any, index: number) => (
+        <View key={index} style={previewStyles.previewItem}>
+          <View style={previewStyles.previewItemHeader}>
+            <Text style={previewStyles.previewItemTitle}>{item.role || t('cv.volunteer_role', { defaultValue: 'Volunteer Role' })}</Text>
+            <Text style={previewStyles.previewItemDate}>
+              {item.startDate || ''} {item.endDate ? `- ${item.endDate}` : item.current ? '- Present' : ''}
+            </Text>
+          </View>
+          <Text style={previewStyles.previewItemCompany}>{item.organization || t('cv.organization', { defaultValue: 'Organization' })}</Text>
+          {item.description && <Text style={previewStyles.previewItemDescription}>{item.description}</Text>}
+        </View>
+      ));
     default:
       return null;
   }
@@ -700,6 +772,12 @@ function SectionEditorModal({
         return <CertificationsEditor data={data} onChange={setData} theme={theme} t={t} />;
       case 'languages':
         return <LanguagesEditor data={data} onChange={setData} theme={theme} t={t} />;
+      case 'projects':
+      case 'references':
+      case 'achievements':
+      case 'volunteer':
+        // Use ExperienceEditor as template for these sections (they have similar structure)
+        return <ExperienceEditor data={data} onChange={setData} theme={theme} t={t} />;
       default:
         return null;
     }
@@ -999,8 +1077,12 @@ function getSectionTitle(type: CVSection['type'], t: any): string {
     skills: t('cv.skills', { defaultValue: 'Skills' }),
     certifications: t('cv.certifications', { defaultValue: 'Certifications' }),
     languages: t('cv.languages', { defaultValue: 'Languages' }),
+    projects: t('cv.projects', { defaultValue: 'Projects' }),
+    references: t('cv.references', { defaultValue: 'References' }),
+    achievements: t('cv.achievements', { defaultValue: 'Achievements' }),
+    volunteer: t('cv.volunteer', { defaultValue: 'Volunteer Work' }),
   };
-  return titles[type];
+  return titles[type] || type;
 }
 
 function getDefaultSectionData(type: CVSection['type']): any {
@@ -1015,6 +1097,14 @@ function getDefaultSectionData(type: CVSection['type']): any {
       return { items: [] };
     case 'languages':
       return { languages: [] };
+    case 'projects':
+      return { items: [] };
+    case 'references':
+      return { items: [] };
+    case 'achievements':
+      return { items: [] };
+    case 'volunteer':
+      return { items: [] };
     default:
       return {};
   }

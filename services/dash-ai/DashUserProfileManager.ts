@@ -64,17 +64,40 @@ export class DashUserProfileManager {
     };
   }
 
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
+
   /**
    * Initialize and load user profile
    */
   public async initialize(): Promise<void> {
+    // If already initialized, return immediately
+    if (this.isInitialized) {
+      return Promise.resolve();
+    }
+
+    // If initialization is in progress, return the existing promise
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+
+    // Start new initialization
+    this.initializationPromise = this._doInitialize();
+    return this.initializationPromise;
+  }
+
+  private async _doInitialize(): Promise<void> {
     try {
       await this.loadUserProfile();
+      this.isInitialized = true;
       console.log(
         `[DashProfile] Initialized user profile for ${this.userProfile?.role || 'unknown'}`
       );
     } catch (error) {
+      this.isInitialized = false;
+      this.initializationPromise = null;
       console.error('[DashProfile] Initialization failed:', error);
+      throw error;
     }
   }
 

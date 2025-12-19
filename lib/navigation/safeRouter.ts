@@ -34,6 +34,7 @@ const VALID_ROUTES = new Set([
   '/index',
   '/(auth)/sign-in',
   '/(auth)/sign-up',
+  '/register',  // Public registration screen (for new users)
   '/profiles-gate',
   '/pricing',
   '/marketing/pricing',
@@ -93,6 +94,7 @@ const VALID_PATTERNS = [
   /^\/screens\/payments\//,  // Allow all payments/* routes
   /^\/screens\/super-admin/,  // Allow all super-admin routes
   /^\/screens\/.+/,  // Allow all other screens routes (catch-all for screens)
+  /^\/screens\/learner\//,  // Allow all learner/* routes (e.g., enroll-by-program-code)
   /^\/invite/,  // Allow all invite routes
   /^\/pricing/,  // Allow pricing routes
   /^\/marketing/,  // Allow marketing routes

@@ -117,6 +117,8 @@ export class DashAICore {
   // Configuration
   private personality: DashPersonality;
   private supabaseClient: any;
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor(config: DashAICoreConfig) {
     this.supabaseClient = config.supabaseClient;
@@ -194,11 +196,38 @@ export class DashAICore {
   }
 
   public async initialize(config?: { supabaseClient?: any; currentUser?: any }): Promise<void> {
+    // If already initialized and no new config provided, return existing promise or resolve immediately
+    if (this.isInitialized && !config) {
+      if (this.initializationPromise) {
+        return this.initializationPromise;
+      }
+      return Promise.resolve();
+    }
+
+    // If initialization is in progress, return the existing promise
+    if (this.initializationPromise && !config) {
+      return this.initializationPromise;
+    }
+
+    // Start new initialization
+    this.initializationPromise = this._doInitialize(config);
+    return this.initializationPromise;
+  }
+
+  private async _doInitialize(config?: { supabaseClient?: any; currentUser?: any }): Promise<void> {
     console.log('[DashAICore] Initializing...');
 
     try {
+      // Re-initialize services if config provided (user change, etc.)
       if (!this.voiceService || config) {
         this.initializeServices(config);
+        this.isInitialized = false; // Reset flag if re-initializing
+      }
+
+      // Skip if already initialized without new config
+      if (this.isInitialized && !config) {
+        console.log('[DashAICore] Already initialized, skipping...');
+        return;
       }
 
       await Promise.all([
@@ -211,8 +240,11 @@ export class DashAICore {
         this.profileManager.initialize(),
       ]);
 
+      this.isInitialized = true;
       console.log('[DashAICore] Initialization complete');
     } catch (error) {
+      this.isInitialized = false;
+      this.initializationPromise = null;
       console.error('[DashAICore] Initialization failed:', error);
       throw error;
     }
@@ -275,9 +307,11 @@ export class DashAICore {
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void
   ): Promise<DashMessage> {
-    const convId = conversationId || this.conversation.getCurrentConversationId();
+    let convId = conversationId || this.conversation.getCurrentConversationId();
     if (!convId) {
-      throw new Error('No active conversation');
+      // Auto-create conversation if none exists (for users without organizations, creates temp conversation)
+      convId = await this.conversation.startNewConversation();
+      this.conversation.setCurrentConversationId(convId);
     }
 
     const userMessage: DashMessage = {

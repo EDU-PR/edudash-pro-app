@@ -176,6 +176,10 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
+# IMPORTANT: Keep this enabled to catch wrong email addresses during registration.
+# If a user registers with a wrong email, they won't be able to sign in until they verify,
+# which prevents account lockouts and security issues.
+# NOTE: For this to work, you MUST configure SMTP settings below (uncomment [auth.email.smtp] section).
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
@@ -187,14 +191,21 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
+# IMPORTANT: Uncomment and configure this section for email confirmations to work.
+# Without SMTP configured, confirmation emails won't be sent and users can't verify their accounts.
+# 
+# For production, use a service like SendGrid, AWS SES, or Mailgun.
+# For local development, Supabase uses Inbucket (email testing server) automatically.
+#
+# Example configuration (uncomment and fill in your values):
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
+# host = "smtp.sendgrid.net"  # Or your SMTP provider
 # port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# user = "apikey"  # Or your SMTP username
+# pass = "env(SENDGRID_API_KEY)"  # Use environment variable for security
+# admin_email = "admin@edudashpro.org.za"  # Your admin email
+# sender_name = "EduDash Pro"  # Display name for emails
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

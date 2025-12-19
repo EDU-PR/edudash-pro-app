@@ -140,9 +140,24 @@ export class DashAIAssistant implements IDashAIAssistant {
             console.warn('[DashAICompat] Failed to fetch organization_id/preschool_id from profile:', profileError);
           }
 
+          // Fetch full profile to get correct role
+          let userRole = 'student'; // Default to student for standalone users
+          try {
+            const { data: fullProfile } = await initConfig.supabaseClient
+              .from('profiles')
+              .select('role')
+              .eq('id', session.user_id)
+              .maybeSingle();
+            if (fullProfile?.role) {
+              userRole = fullProfile.role;
+            }
+          } catch (roleError) {
+            console.warn('[DashAICompat] Failed to fetch role from profile, using default:', roleError);
+          }
+
           initConfig.currentUser = {
             id: session.user_id,
-            role: session.role || 'teacher',
+            role: userRole, // Use actual role from profile, not default to teacher
             name: undefined, // Not available in session
             email: session.email,
             organizationId: organizationId || session.organization_id,

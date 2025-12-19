@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useOnboarding } from '@/contexts/OnboardingContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { OrganizationType } from '@/lib/types/organization';
 
 interface OrgTypeOption {
@@ -71,10 +72,19 @@ const ORG_TYPE_OPTIONS: OrgTypeOption[] = [
 
 export default function OrgTypeSelectionScreen() {
   const router = useRouter();
+  const { user, profile } = useAuth();
   const { state, updateState, completeStep } = useOnboarding();
   const [selectedType, setSelectedType] = useState<OrganizationType | null>(
     state.organizationType || null
   );
+
+  // Guard: If user is logged in and has a profile, redirect away from onboarding
+  useEffect(() => {
+    if (user && profile) {
+      // User is already logged in - they shouldn't be in onboarding
+      router.replace('/');
+    }
+  }, [user, profile]);
 
   const handleSelect = (type: OrganizationType) => {
     setSelectedType(type);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -13,16 +13,25 @@ import { ScheduleCard } from '@/components/dashboard/cards/ScheduleCard';
 import { AnnouncementsCard } from '@/components/dashboard/cards/AnnouncementsCard';
 import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
+import { useLearnerEnrollments } from '@/hooks/useLearnerData';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
 export default function StudentDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { tier } = useSubscription();
   const { t } = useTranslation();
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const styles = React.useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+  
+  // State for mobile nav drawer
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
+
+  // Fetch enrollments to check if user has enrolled in programs
+  const { data: enrollments = [], isLoading: enrollmentsLoading } = useLearnerEnrollments();
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
@@ -49,11 +58,25 @@ export default function StudentDashboard() {
       return;
     }
     
-    // Decision 2: User exists but no organization -> allow standalone access
-    // Students can use the dashboard without an organization and join later
+    // Decision 2: User has organization_id -> redirect to learner-dashboard
+    // Students who registered with program codes should have organization_id
+    // and should use the learner-dashboard, not the standalone student-dashboard
+    if (orgId) {
+      navigationAttempted.current = true;
+      console.log('[StudentDashboard] User has organization_id, redirecting to learner-dashboard');
+      try {
+        router.replace('/screens/learner-dashboard');
+      } catch (e) {
+        console.warn('[StudentDashboard] Redirect failed:', e);
+      }
+      return;
+    }
+    
+    // Decision 3: User exists but no organization -> allow standalone access
+    // Standalone learners can use the dashboard without an organization and join later
     // No redirect needed - dashboard will show join prompt
     
-    // Decision 3: All good, stay on dashboard (no navigation needed)
+    // Decision 4: All good, stay on dashboard (no navigation needed)
   }, [isStillLoading, user, orgId, profile]);
 
   // Show loading state while auth/profile is loading
@@ -69,8 +92,9 @@ export default function StudentDashboard() {
     );
   }
 
-  // Show join prompt if no organization
-  const showJoinPrompt = !orgId;
+  // Show join prompt if no organization AND no enrollments
+  // If user has enrollments, they don't need to join an organization
+  const showJoinPrompt = !orgId && enrollments.length === 0 && !enrollmentsLoading;
   
   // Get student name (handle both first_name and full name)
   const studentName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'Student';
@@ -80,29 +104,43 @@ export default function StudentDashboard() {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen 
         options={{ 
-          headerShown: true, // Explicitly show header
-          title: t('student.dashboard_title', { defaultValue: 'Student Dashboard' }),
-          headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.text,
-          headerTitleStyle: { color: theme.text, fontWeight: '600' },
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 8 }}>
-              <TouchableOpacity
-                onPress={() => router.push('/screens/settings')}
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="settings-outline" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => router.push('/screens/account')}
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="person-circle-outline" size={28} color={theme.text} />
-              </TouchableOpacity>
-            </View>
-          ),
+          headerShown: false, // Use custom header instead
         }} 
       />
+      {/* Custom Header with Hamburger Menu */}
+      <View style={[styles.customHeader, { 
+        backgroundColor: theme.background,
+        paddingTop: Math.max(insets.top, 8),
+        borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
+        borderBottomWidth: isDark ? 2 : 1.5,
+      }]}>
+        <TouchableOpacity
+          onPress={() => setIsDrawerOpen(true)}
+          style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="menu" size={26} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          {t('student.dashboard_title', { defaultValue: 'Student Dashboard' })}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => router.push('/screens/settings')}
+            style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="settings-outline" size={24} color={theme.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/screens/account')}
+            style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="person-circle-outline" size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+      </View>
       <ScrollView 
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -153,7 +191,7 @@ export default function StudentDashboard() {
               </Text>
               <TouchableOpacity 
                 style={[styles.joinButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/register')}
+                onPress={() => router.push('/screens/learner/enroll-by-program-code')}
               >
                 <Text style={styles.joinButtonText}>
                   {t('student.join_now', { defaultValue: 'Join Now' })}
@@ -170,12 +208,27 @@ export default function StudentDashboard() {
           <AssignmentsCard />
           <GradesCard />
         </View>
-      </ScrollView>
+          </ScrollView>
+      
+      {/* Mobile Navigation Drawer */}
+      <MobileNavDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        navItems={[
+          { id: 'home', label: t('student.dashboard_title', { defaultValue: 'Dashboard' }), icon: 'home', route: '/screens/student-dashboard' },
+          { id: 'programs', label: t('learner.my_programs', { defaultValue: 'My Programs' }), icon: 'school', route: '/screens/learner/programs' },
+          { id: 'assignments', label: t('learner.submissions', { defaultValue: 'Assignments' }), icon: 'document-text', route: '/screens/learner/submissions' },
+          { id: 'ai-help', label: t('learner.assignment_help', { defaultValue: 'Assignment Help' }), icon: 'help-circle', route: '/screens/ai-homework-helper' },
+          { id: 'portfolio', label: t('learner.portfolio', { defaultValue: 'Portfolio' }), icon: 'folder', route: '/screens/learner/portfolio' },
+          { id: 'account', label: t('common.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
+          { id: 'settings', label: t('common.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
+        ]}
+      />
     </SafeAreaView>
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: theme?.background || '#0b1220' 
@@ -245,5 +298,34 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   quotaDisplay: {
     marginBottom: 16,
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    minHeight: 56,
+    zIndex: 1000,
+    elevation: 4, // Android shadow
+    shadowColor: '#000', // iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerButton: {
+    padding: 10,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
 });

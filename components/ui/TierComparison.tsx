@@ -238,7 +238,7 @@ const TierCard: React.FC<{
         </Text>
         <View style={styles.quotasList}>
           <QuotaItem 
-            label="Homework Help" 
+            label="Assignment Help" 
             value={tier.quotas.homework_help} 
             theme={theme} 
           />
