@@ -281,9 +281,9 @@ export default function LearnerRegistrationScreen() {
           .insert({
             student_id: authData.user.id,
             course_id: programInfo.id,
-            organization_id: programInfo.organizations?.id,
+            enrollment_method: 'join_code',
             is_active: true,
-            enrollment_date: new Date().toISOString(),
+            enrolled_at: new Date().toISOString(),
           });
 
         if (enrollError) {
