@@ -1,5 +1,0 @@
-                  id                  |    guardian_email     | student_first_name |  status  | synced_to_edudash | edudash_parent_id | edudash_student_id |       reviewed_date        |          updated_at           
---------------------------------------+-----------------------+--------------------+----------+-------------------+-------------------+--------------------+----------------------------+-------------------------------
- d2993a49-f5c7-4281-93ef-3e32038d2fc0 | Zanelelwndl@gmail.com | Olivia             | approved | f                 |                   |                    | 2025-11-23 10:08:22.183+00 | 2025-11-23 10:08:22.301089+00
-(1 row)
-
