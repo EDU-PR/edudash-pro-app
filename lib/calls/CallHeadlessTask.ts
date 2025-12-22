@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 let RNCallKeep: any = null;
 try {
   RNCallKeep = require('react-native-callkeep').default;
-} catch (error) {
+} catch {
   console.warn('[CallHeadlessTask] react-native-callkeep not available');
 }
 
@@ -27,7 +27,7 @@ try {
 let messaging: any = null;
 try {
   messaging = require('@react-native-firebase/messaging').default;
-} catch (error) {
+} catch {
   // Firebase messaging not available - will use Expo notifications fallback
   console.warn('[CallHeadlessTask] Firebase messaging not available');
 }
@@ -98,7 +98,7 @@ async function setupCallKeepHeadless(): Promise<boolean> {
   }
   
   try {
-    await RNCallKeep.setup({
+    const options = {
       ios: {
         appName: 'EduDash Pro',
         imageName: 'AppIcon',
@@ -114,15 +114,30 @@ async function setupCallKeepHeadless(): Promise<boolean> {
         okButton: 'OK',
         imageName: 'ic_launcher',
         additionalPermissions: [],
-        selfManaged: true,
+        selfManaged: true, // Important for Android 11+
         foregroundService: {
           channelId: 'com.edudashpro.app.calls',
           channelName: 'Voice & Video Calls',
           notificationTitle: 'EduDash Call in progress',
           notificationIcon: 'ic_launcher',
         },
+        // Enable wake screen for incoming calls
+        wakeScreen: true,
+        useFullScreenIntent: true,
+        turnScreenOn: true,
+        showWhenLocked: true,
       },
-    });
+    };
+    
+    await RNCallKeep.setup(options);
+    
+    // Request phone account permission for Android
+    if (Platform.OS === 'android') {
+      const hasPermission = await RNCallKeep.checkPhoneAccountPermission();
+      if (!hasPermission) {
+        await RNCallKeep.requestPhoneAccountPermission();
+      }
+    }
     
     console.log('[CallHeadlessTask] CallKeep setup complete');
     return true;
