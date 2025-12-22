@@ -18,6 +18,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { getPendingCall, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
+import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -431,7 +432,7 @@ export function CallProvider({ children }: CallProviderProps) {
       console.log('[CallProvider] Refreshing presence before call check...');
       await refreshPresence();
       
-      // Check if user is online before starting call
+      // Check if user is online
       const userOnline = isUserOnline(userId);
       const lastSeenText = getLastSeenText(userId);
       console.log('[CallProvider] Presence check:', {
@@ -441,23 +442,14 @@ export function CallProvider({ children }: CallProviderProps) {
         lastSeenText
       });
       
+      // Allow calls to offline users - they'll receive a push notification
+      // Previously we blocked calls to offline users, but push notifications can wake the app
       if (!userOnline) {
-        console.log('[CallProvider] User offline, showing alert');
-        Alert.alert(
-          'Unable to Call',
-          `${userName || 'This user'} is currently offline (${lastSeenText}). Please try again when they are online.`,
-          [
-            { 
-              text: 'OK', 
-              style: 'default',
-              onPress: () => console.log('[CallProvider] User acknowledged offline status')
-            }
-          ]
-        );
-        return;
+        console.log('[CallProvider] User offline, will send push notification');
+        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
       }
       
-      console.log('[CallProvider] User is online, starting call');
+      console.log('[CallProvider] Starting call (user online:', userOnline, ')');
       
       setOutgoingCall({ userId, userName, callType: 'voice' });
       setIsCallInterfaceOpen(true);
@@ -479,7 +471,7 @@ export function CallProvider({ children }: CallProviderProps) {
       console.log('[CallProvider] Refreshing presence before video call check...');
       await refreshPresence();
       
-      // Check if user is online before starting call
+      // Check if user is online
       const userOnline = isUserOnline(userId);
       const lastSeenText = getLastSeenText(userId);
       console.log('[CallProvider] Video presence check:', {
@@ -489,23 +481,13 @@ export function CallProvider({ children }: CallProviderProps) {
         lastSeenText
       });
       
+      // Allow calls to offline users - they'll receive a push notification
       if (!userOnline) {
-        console.log('[CallProvider] User offline, showing video call alert');
-        Alert.alert(
-          'Unable to Video Call',
-          `${userName || 'This user'} is currently offline (${lastSeenText}). Please try again when they are online.`,
-          [
-            { 
-              text: 'OK', 
-              style: 'default',
-              onPress: () => console.log('[CallProvider] User acknowledged offline status')
-            }
-          ]
-        );
-        return;
+        console.log('[CallProvider] User offline, will send push notification for video call');
+        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
       }
       
-      console.log('[CallProvider] User is online, starting video call');
+      console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
       
       setOutgoingCall({ userId, userName, callType: 'video' });
       setIsCallInterfaceOpen(true);

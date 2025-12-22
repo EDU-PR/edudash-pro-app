@@ -42,6 +42,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.edudashpro.app",
       "permissions": [
         "android.permission.INTERNET",

@@ -58,7 +58,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const { tier, ready: subscriptionReady } = useSubscription();
+  const { tier, ready: subscriptionReady, refresh: refreshSubscription } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
@@ -84,7 +84,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       console.log('[ParentDashboard] Clearing stuck dashboardSwitching flag');
       delete (window as any).dashboardSwitching;
     }
-  }, []);
+    // Refresh subscription data on dashboard mount to ensure tier is up-to-date
+    // This handles cases where payment was completed but tier wasn't refreshed
+    refreshSubscription();
+  }, [refreshSubscription]);
 
   // Update children state when dashboard data changes
   useEffect(() => {
@@ -107,6 +110,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
+      // Refresh subscription tier first (in case payment was processed)
+      refreshSubscription();
       await refresh();
       try { await Feedback.vibrate(10); } catch { /* ignore */ }
     } catch (_error) {

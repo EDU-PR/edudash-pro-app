@@ -11,7 +11,7 @@
  * - DashTypingIndicator for loading states
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { 
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   Platform,
   Dimensions,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from './DashAssistant.styles';
@@ -54,7 +55,26 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   initialMessage
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
-  const [showCommandPalette, setShowCommandPalette] = React.useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  
+  // Keyboard listeners for reliable show/hide detection
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKeyboardVisible(true);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardVisible(false);
+    });
+    
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   
   // Use custom hook for all business logic
   const {
@@ -211,9 +231,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <KeyboardAvoidingView 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        enabled={true}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={Platform.OS === 'ios'}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         

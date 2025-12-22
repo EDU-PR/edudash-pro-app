@@ -199,6 +199,100 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Quota status check - returns current usage vs limits for a specific service type
+    if (action === 'quota_status') {
+      const userId = body.user_id;
+      const serviceType = body.service_type;
+      
+      if (!userId) return bad('user_id required', 400);
+      if (!serviceType) return bad('service_type required', 400);
+      
+      try {
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        
+        // Get user's tier from user_ai_tiers table (this is the source of truth after PayFast webhook)
+        const { data: tierData } = await supabase
+          .from('user_ai_tiers')
+          .select('tier')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        // Also check user_ai_usage for current_tier (secondary source)
+        const { data: usageData } = await supabase
+          .from('user_ai_usage')
+          .select('current_tier')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        // Prefer user_ai_tiers, fallback to user_ai_usage, then 'free'
+        const userTier = tierData?.tier || usageData?.current_tier || 'free';
+        
+        // Define tier limits (matches lib/ai/limits.ts)
+        const TIER_LIMITS: Record<string, Record<string, number>> = {
+          free: { lesson_generation: 5, grading_assistance: 5, homework_help: 15, transcription: 60, claude_messages: 10 },
+          parent_starter: { lesson_generation: 0, grading_assistance: 0, homework_help: 30, transcription: 120, claude_messages: 30 },
+          parent_plus: { lesson_generation: 0, grading_assistance: 0, homework_help: 100, transcription: 300, claude_messages: 100 },
+          private_teacher: { lesson_generation: 20, grading_assistance: 20, homework_help: 100, transcription: 600, claude_messages: 100 },
+          pro: { lesson_generation: 50, grading_assistance: 100, homework_help: 300, transcription: 1800, claude_messages: 500 },
+          enterprise: { lesson_generation: 5000, grading_assistance: 10000, homework_help: 30000, transcription: 36000, claude_messages: 50000 },
+        };
+        
+        const tierLimits = TIER_LIMITS[userTier] || TIER_LIMITS.free;
+        const limit = tierLimits[serviceType] || 0;
+        
+        // Get current month's usage from ai_usage_logs
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        
+        const { count, error: countError } = await supabase
+          .from('ai_usage_logs')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('service_type', serviceType)
+          .gte('created_at', startOfMonth.toISOString());
+        
+        if (countError) {
+          console.error('Count error:', countError);
+        }
+        
+        const used = count || 0;
+        const remaining = Math.max(0, limit - used);
+        
+        // Calculate reset date (first of next month)
+        const resetAt = new Date();
+        resetAt.setMonth(resetAt.getMonth() + 1);
+        resetAt.setDate(1);
+        resetAt.setHours(0, 0, 0, 0);
+        
+        console.log('Quota status check:', { userId, serviceType, userTier, used, limit, remaining });
+        
+        return ok({
+          service_type: serviceType,
+          used,
+          limit,
+          remaining,
+          reset_at: resetAt.toISOString(),
+          current_tier: userTier,
+        });
+        
+      } catch (error) {
+        console.error('Quota status error:', error);
+        // On error, return generous defaults to not block users
+        return ok({
+          service_type: serviceType,
+          used: 0,
+          limit: 100,
+          remaining: 100,
+          reset_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          current_tier: 'free',
+        });
+      }
+    }
+
     if (action === 'org_limits') {
       // Return placeholder limits so UI can render
       return ok({ quotas: { lesson_generation: 1000, grading_assistance: 1000, homework_help: 1000 }, used: { lesson_generation: 0, grading_assistance: 0, homework_help: 0 } });
