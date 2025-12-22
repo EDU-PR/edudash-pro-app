@@ -11,7 +11,8 @@ import { GradientButton } from '@/components/marketing/GradientButton';
 import { QASection } from '@/components/marketing/sections/QASection';
 import { supabase } from '@/lib/supabase';
 
-type DBPlan = {
+/** Database plan row from subscription_plans table */
+interface DBPlan {
   id?: string;
   name: string;
   tier: string;
@@ -19,7 +20,27 @@ type DBPlan = {
   features: unknown;
   is_active: boolean;
   description?: string | null;
-};
+}
+
+/** Feature item in a plan */
+interface PlanFeature {
+  name: string;
+  included: boolean;
+}
+
+/** Mapped plan for display */
+interface MappedPlan {
+  name: string;
+  price: string;
+  period: string;
+  description: string;
+  features: PlanFeature[];
+  cta: string;
+  featured: boolean;
+  badge: string | null;
+  tier: string;
+  sortOrder: number;
+}
 
 // Fallback plans - Correct order: Parent plans, then School plans (Free, Starter, Premium, Enterprise)
 const fallbackPlans = [
@@ -151,7 +172,7 @@ export default function PricingPage() {
   useEffect(() => {
     (async () => {
       try {
-        let mapped: any[] | null = null;
+        let mapped: MappedPlan[] | null = null;
 
         // Fetch from subscription_plans table
         const { data, error } = await supabase
@@ -215,7 +236,7 @@ export default function PricingPage() {
           });
           
           // Sort by defined order
-          mapped.sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+          mapped.sort((a, b) => a.sortOrder - b.sortOrder);
         }
 
         setPlans(mapped || fallbackPlans);

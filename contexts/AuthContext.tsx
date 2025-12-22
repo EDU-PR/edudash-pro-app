@@ -479,18 +479,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             // Register or update push token (best-effort)
+            // Also checks if token needs refresh due to project ID or version changes
             try {
-              const { registerPushDevice } = await import('@/lib/notifications');
-              const result = await registerPushDevice(assertSupabase(), s.user);
+              const { registerPushDevice, checkAndRefreshTokenIfNeeded } = await import('@/lib/notifications');
               
-              // Log result for debugging (no sensitive data)
-              if (result.status === 'error') {
-                logger.debug('Push registration failed:', result.reason);
-              } else if (result.status === 'denied') {
-                logger.debug('Push permissions denied');
-                // Could surface a non-blocking UI hint here in the future
-              } else if (result.status === 'registered') {
-                logger.debug('Push registration successful');
+              // First check if existing token needs refresh
+              const wasRefreshed = await checkAndRefreshTokenIfNeeded(assertSupabase(), s.user);
+              
+              if (!wasRefreshed) {
+                // Token didn't need refresh, do normal registration
+                const result = await registerPushDevice(assertSupabase(), s.user);
+                
+                // Log result for debugging (no sensitive data)
+                if (result.status === 'error') {
+                  logger.debug('Push registration failed:', result.reason);
+                } else if (result.status === 'denied') {
+                  logger.debug('Push permissions denied');
+                  // Could surface a non-blocking UI hint here in the future
+                } else if (result.status === 'registered') {
+                  logger.debug('Push registration successful');
+                }
+              } else {
+                logger.debug('Push token was refreshed due to version/project change');
               }
             } catch (e) {
               logger.debug('Push registration exception:', e);

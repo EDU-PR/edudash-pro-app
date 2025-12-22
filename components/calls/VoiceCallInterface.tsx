@@ -33,6 +33,7 @@ import {
   useVoiceCallAudio,
   useVoiceCallDaily,
   useVoiceCallTimeout,
+  useCallBackgroundHandler,
 } from './hooks';
 
 // Components
@@ -89,6 +90,7 @@ export function VoiceCallInterface({
     userName,
     isOwner,
     calleeId,
+    isSpeakerEnabled: state.isSpeakerEnabled,
     dailyRef: state.dailyRef,
     callIdRef: state.callIdRef,
     setCallState: state.setCallState,
@@ -110,6 +112,16 @@ export function VoiceCallInterface({
     setCallState: state.setCallState,
     cleanupCall: daily.cleanupCall,
     onClose,
+  });
+
+  // Background handling (KeepAwake + app state management)
+  useCallBackgroundHandler({
+    callState: state.callState,
+    isCallActive: isOpen,
+    callId: state.callIdRef.current,
+    onReturnFromBackground: () => {
+      console.log('[VoiceCallInterface] Returned from background');
+    },
   });
 
   // Handlers

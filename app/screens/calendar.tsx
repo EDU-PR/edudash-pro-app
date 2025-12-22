@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { log, logError } from '@/lib/debug';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -64,7 +65,7 @@ export default function CalendarScreen() {
   const navigationAttempted = useRef(false);
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = authLoading || profileLoading;

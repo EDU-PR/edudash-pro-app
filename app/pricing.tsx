@@ -317,14 +317,14 @@ export default function PricingScreen() {
                         Alert.alert('Restricted', 'Only principals or school admins can request Enterprise plans.');
                         return;
                       }
-                      router.push('/sales/contact?plan=enterprise' as any);
+                      router.push('/sales/contact?plan=enterprise' as `/${string}`);
                       return;
                     }
                     if (price === 0) {
                       if (isLoggedIn) {
-                        router.push('/dashboard/parent' as any);
+                        router.push('/dashboard/parent' as `/${string}`);
                       } else {
-                        router.push('/(auth)/sign-in' as any);
+                        router.push('/(auth)/sign-in' as `/${string}`);
                       }
                       return;
                     }
@@ -336,7 +336,7 @@ export default function PricingScreen() {
                     // Map school plan keys
                     if (plan.key === 'starter') planId = 'school_starter';
                     if (plan.key === 'premium') planId = 'school_premium';
-                    navigateTo.subscriptionSetup({ planId, billing: annual ? 'annual' : 'monthly', auto: '1' as any });
+                    navigateTo.subscriptionSetup({ planId, billing: annual ? 'annual' : 'monthly', auto: '1' });
                   }}
                 />
               </View>
@@ -367,7 +367,7 @@ export default function PricingScreen() {
                   Alert.alert(t('common.restricted', { defaultValue: 'Restricted' }), t('pricing.restricted_submit_only', { defaultValue: 'Only principals or school admins can submit these requests.' }));
                   return;
                 }
-                router.push(`/sales/contact?plan=${planId}` as any);
+                router.push(`/sales/contact?plan=${planId}` as `/${string}`);
                 return;
               }
               navigateTo.subscriptionSetup({ planId: planId, billing: annual ? 'annual' : 'monthly' });

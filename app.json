@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "EduDashPro",
-    "slug": "comedudashproapp",
-    "owner": "dash-ts-organization",
+    "slug": "edudashpro",
+    "owner": "dash-pro",
     "version": "1.0.11",
     "runtimeVersion": "1.0.11",
     "orientation": "portrait",
@@ -72,7 +72,8 @@
         "android.permission.READ_PHONE_STATE",
         "android.permission.CALL_PHONE",
         "android.permission.ANSWER_PHONE_CALLS",
-        "android.permission.FOREGROUND_SERVICE_PHONE_CALL"
+        "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -195,7 +196,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
+        "projectId": "7f8f6d60-a127-4cbc-ad34-c9d617aa2880"
       },
       "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",
@@ -203,7 +204,7 @@
       "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
     },
     "updates": {
-      "url": "https://u.expo.dev/ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
+      "url": "https://u.expo.dev/@dashpro/edudashpro"
     }
   }
 }

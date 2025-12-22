@@ -1,4 +1,13 @@
-import React, { useState, useRef } from 'react';
+/**
+ * CV Builder Screen (React Native)
+ * 
+ * CV building functionality for learners.
+ * Allows creating, editing, and sharing CVs.
+ * 
+ * Refactored to use extracted components from components/cv-builder/
+ */
+
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +17,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Modal,
-  Dimensions,
-  Platform,
-  Share,
-  Linking,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,28 +26,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { useLearnerCVs, useCreateCV } from '@/hooks/useLearnerData';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import * as Print from 'expo-print';
+import {
+  CVSection,
+  ViewMode,
+  getSectionTitle,
+  getDefaultSectionData,
+} from '@/components/cv-builder/types';
+import {
+  PersonalInfoSection,
+  SectionCard,
+  SectionEditorModal,
+} from '@/components/cv-builder/CVComponents';
+import { CVPreview } from '@/components/cv-builder/CVPreview';
+import { handleShare as shareCV } from '@/components/cv-builder/sharing';
 
-const { width } = Dimensions.get('window');
-
-interface CVSection {
-  id: string;
-  type: 'personal' | 'experience' | 'education' | 'skills' | 'certifications' | 'languages';
-  title: string;
-  data: any;
-}
-
-type ViewMode = 'edit' | 'preview';
-
-export default function CVBuilderEnhancedScreen() {
+export default function CVBuilderScreen() {
   const { t } = useTranslation();
   const { theme, isDark } = useTheme();
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const styles = createStyles(theme, isDark, insets);
 
   const { data: cvs } = useLearnerCVs();
   const existingCV = cvs?.find((cv) => cv.id === id);
@@ -86,7 +88,10 @@ export default function CVBuilderEnhancedScreen() {
 
   const handleSave = async () => {
     if (!cvTitle.trim()) {
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.title_required', { defaultValue: 'Please enter a CV title' }));
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('cv.title_required', { defaultValue: 'Please enter a CV title' })
+      );
       return;
     }
 
@@ -103,76 +108,19 @@ export default function CVBuilderEnhancedScreen() {
         [{ text: t('common.ok', { defaultValue: 'OK' }), onPress: () => router.back() }]
       );
     } catch (error: any) {
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), error.message || t('common.save_failed', { defaultValue: 'Failed to save CV' }));
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        error.message || t('common.save_failed', { defaultValue: 'Failed to save CV' })
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
-  const generatePDF = async (): Promise<string | null> => {
-    try {
-      const html = generateCVHTML(sections, cvTitle, profile, theme);
-      const { uri } = await Print.printToFileAsync({ html });
-      return uri;
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.pdf_generation_failed', { defaultValue: 'Failed to generate PDF' }));
-      return null;
-    }
-  };
-
-  const handleShare = async (method: 'native' | 'pdf' | 'linkedin' | 'whatsapp' | 'email') => {
+  const handleSharePress = async (method: 'native' | 'pdf' | 'linkedin' | 'whatsapp' | 'email') => {
     setIsSharing(true);
     try {
-      if (method === 'pdf') {
-        const pdfUri = await generatePDF();
-        if (pdfUri && (await Sharing.isAvailableAsync())) {
-          await Sharing.shareAsync(pdfUri, {
-            mimeType: 'application/pdf',
-            dialogTitle: t('cv.share_cv', { defaultValue: 'Share CV' }),
-          });
-        } else {
-          Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.sharing_not_available', { defaultValue: 'Sharing is not available on this device' }));
-        }
-      } else if (method === 'native') {
-        const text = generateCVText(sections, cvTitle, profile);
-        await Share.share({
-          message: text,
-          title: cvTitle,
-        });
-      } else if (method === 'linkedin') {
-        const text = encodeURIComponent(generateCVText(sections, cvTitle, profile));
-        const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://www.edudashpro.org.za')}&summary=${text}`;
-        const canOpen = await Linking.canOpenURL(url);
-        if (canOpen) {
-          await Linking.openURL(url);
-        } else {
-          Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.linkedin_not_available', { defaultValue: 'LinkedIn app not available' }));
-        }
-      } else if (method === 'whatsapp') {
-        const text = encodeURIComponent(generateCVText(sections, cvTitle, profile));
-        const url = `whatsapp://send?text=${text}`;
-        const canOpen = await Linking.canOpenURL(url);
-        if (canOpen) {
-          await Linking.openURL(url);
-        } else {
-          Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.whatsapp_not_available', { defaultValue: 'WhatsApp not available' }));
-        }
-      } else if (method === 'email') {
-        const text = generateCVText(sections, cvTitle, profile);
-        const subject = encodeURIComponent(cvTitle);
-        const body = encodeURIComponent(text);
-        const url = `mailto:?subject=${subject}&body=${body}`;
-        const canOpen = await Linking.canOpenURL(url);
-        if (canOpen) {
-          await Linking.openURL(url);
-        } else {
-          Alert.alert(t('common.error', { defaultValue: 'Error' }), t('cv.email_not_available', { defaultValue: 'Email app not available' }));
-        }
-      }
-    } catch (error: any) {
-      console.error('Share error:', error);
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), error.message || t('cv.share_failed', { defaultValue: 'Failed to share CV' }));
+      await shareCV(method, sections, cvTitle, profile, theme, t);
     } finally {
       setIsSharing(false);
     }
@@ -184,42 +132,44 @@ export default function CVBuilderEnhancedScreen() {
       t('cv.select_share_method', { defaultValue: 'Select sharing method' }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-        {
-          text: t('cv.share_as_pdf', { defaultValue: 'Share as PDF' }),
-          onPress: () => handleShare('pdf'),
-        },
-        {
-          text: t('cv.share_as_text', { defaultValue: 'Share as Text' }),
-          onPress: () => handleShare('native'),
-        },
-        {
-          text: 'LinkedIn',
-          onPress: () => handleShare('linkedin'),
-        },
-        {
-          text: 'WhatsApp',
-          onPress: () => handleShare('whatsapp'),
-        },
-        {
-          text: t('cv.email', { defaultValue: 'Email' }),
-          onPress: () => handleShare('email'),
-        },
+        { text: t('cv.share_as_pdf', { defaultValue: 'Share as PDF' }), onPress: () => handleSharePress('pdf') },
+        { text: t('cv.share_as_text', { defaultValue: 'Share as Text' }), onPress: () => handleSharePress('native') },
+        { text: 'LinkedIn', onPress: () => handleSharePress('linkedin') },
+        { text: 'WhatsApp', onPress: () => handleSharePress('whatsapp') },
+        { text: t('cv.email', { defaultValue: 'Email' }), onPress: () => handleSharePress('email') },
+      ]
+    );
+  };
+
+  const showAddSectionOptions = () => {
+    Alert.alert(
+      t('cv.add_section', { defaultValue: 'Add Section' }),
+      t('cv.select_section_type', { defaultValue: 'Select section type' }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        { text: t('cv.experience', { defaultValue: 'Experience' }), onPress: () => addSection('experience') },
+        { text: t('cv.education', { defaultValue: 'Education' }), onPress: () => addSection('education') },
+        { text: t('cv.skills', { defaultValue: 'Skills' }), onPress: () => addSection('skills') },
+        { text: t('cv.certifications', { defaultValue: 'Certifications' }), onPress: () => addSection('certifications') },
+        { text: t('cv.languages', { defaultValue: 'Languages' }), onPress: () => addSection('languages') },
       ]
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
-          title: existingCV ? t('cv.edit_cv', { defaultValue: 'Edit CV' }) : t('cv.create_cv', { defaultValue: 'Create CV' }),
+          title: existingCV
+            ? t('cv.edit_cv', { defaultValue: 'Edit CV' })
+            : t('cv.create_cv', { defaultValue: 'Create CV' }),
           headerRight: () => (
-            <View style={{ flexDirection: 'row', gap: 12, marginRight: 16 }}>
+            <View style={styles.headerRight}>
               <TouchableOpacity onPress={() => setViewMode(viewMode === 'edit' ? 'preview' : 'edit')}>
-                <Ionicons 
-                  name={viewMode === 'edit' ? 'eye-outline' : 'create-outline'} 
-                  size={24} 
-                  color={theme.primary} 
+                <Ionicons
+                  name={viewMode === 'edit' ? 'eye-outline' : 'create-outline'}
+                  size={24}
+                  color={theme.primary}
                 />
               </TouchableOpacity>
               {viewMode === 'preview' && (
@@ -235,7 +185,7 @@ export default function CVBuilderEnhancedScreen() {
                 {isSaving || createCV.isPending ? (
                   <ActivityIndicator size="small" color={theme.primary} />
                 ) : (
-                  <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>
+                  <Text style={[styles.saveText, { color: theme.primary }]}>
                     {t('common.save', { defaultValue: 'Save' })}
                   </Text>
                 )}
@@ -244,15 +194,17 @@ export default function CVBuilderEnhancedScreen() {
           ),
         }}
       />
-      
+
       {viewMode === 'edit' ? (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* CV Title */}
           <Card padding={16} margin={0} elevation="small" style={styles.section}>
-            <Text style={styles.label}>{t('cv.cv_title', { defaultValue: 'CV Title' })}</Text>
+            <Text style={[styles.label, { color: theme.text }]}>
+              {t('cv.cv_title', { defaultValue: 'CV Title' })}
+            </Text>
             <TextInput
               style={[styles.input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
               value={cvTitle}
@@ -292,35 +244,7 @@ export default function CVBuilderEnhancedScreen() {
           {/* Add Section Button */}
           <TouchableOpacity
             style={[styles.addSectionButton, { borderColor: theme.border }]}
-            onPress={() => {
-              Alert.alert(
-                t('cv.add_section', { defaultValue: 'Add Section' }),
-                t('cv.select_section_type', { defaultValue: 'Select section type' }),
-                [
-                  { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-                  {
-                    text: t('cv.experience', { defaultValue: 'Experience' }),
-                    onPress: () => addSection('experience'),
-                  },
-                  {
-                    text: t('cv.education', { defaultValue: 'Education' }),
-                    onPress: () => addSection('education'),
-                  },
-                  {
-                    text: t('cv.skills', { defaultValue: 'Skills' }),
-                    onPress: () => addSection('skills'),
-                  },
-                  {
-                    text: t('cv.certifications', { defaultValue: 'Certifications' }),
-                    onPress: () => addSection('certifications'),
-                  },
-                  {
-                    text: t('cv.languages', { defaultValue: 'Languages' }),
-                    onPress: () => addSection('languages'),
-                  },
-                ]
-              );
-            }}
+            onPress={showAddSectionOptions}
           >
             <Ionicons name="add-circle-outline" size={24} color={theme.primary} />
             <Text style={[styles.addSectionText, { color: theme.primary }]}>
@@ -346,703 +270,44 @@ export default function CVBuilderEnhancedScreen() {
           onUpdate={(data) => updateSection(activeSection.id, { data })}
           onClose={() => setActiveSection(null)}
           theme={theme}
-          t={t}
           insets={insets}
+          t={t}
         />
       )}
     </SafeAreaView>
   );
 }
 
-// CV Preview Component
-function CVPreview({
-  sections,
-  cvTitle,
-  profile,
-  theme,
-  insets,
-  t,
-}: {
-  sections: CVSection[];
-  cvTitle: string;
-  profile: any;
-  theme: any;
-  insets: any;
-  t: any;
-}) {
-  const personalSection = sections.find((s) => s.type === 'personal');
-  const personalData = personalSection?.data || {};
-  const previewStyles = createStyles(theme, false, insets);
-
-  return (
-    <ScrollView 
-      style={previewStyles.previewContainer}
-      contentContainerStyle={[previewStyles.previewContent, { paddingBottom: insets.bottom + 16 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[previewStyles.previewPaper, { backgroundColor: '#fff', shadowColor: theme.shadow }]}>
-        {/* Header */}
-        <View style={previewStyles.previewHeader}>
-          <Text style={previewStyles.previewTitle}>{personalData.fullName || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Your Name'}</Text>
-          <Text style={previewStyles.previewSubtitle}>{personalData.summary || t('cv.professional_summary_placeholder', { defaultValue: 'Professional summary...' })}</Text>
-          <View style={previewStyles.previewContact}>
-            {personalData.email && (
-              <Text style={previewStyles.previewContactItem}>
-                <Ionicons name="mail-outline" size={14} color="#666" /> {personalData.email}
-              </Text>
-            )}
-            {personalData.phone && (
-              <Text style={previewStyles.previewContactItem}>
-                <Ionicons name="call-outline" size={14} color="#666" /> {personalData.phone}
-              </Text>
-            )}
-            {personalData.address && (
-              <Text style={previewStyles.previewContactItem}>
-                <Ionicons name="location-outline" size={14} color="#666" /> {personalData.address}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Sections */}
-        {sections
-          .filter((s) => s.type !== 'personal')
-          .map((section) => (
-            <View key={section.id} style={previewStyles.previewSection}>
-              <Text style={previewStyles.previewSectionTitle}>{section.title}</Text>
-              {renderPreviewSection(section, theme, t, previewStyles)}
-            </View>
-          ))}
-      </View>
-    </ScrollView>
-  );
-}
-
-function renderPreviewSection(section: CVSection, theme: any, t: any, previewStyles: any) {
-  switch (section.type) {
-    case 'experience':
-      return (section.data.items || []).map((item: any, index: number) => (
-        <View key={index} style={previewStyles.previewItem}>
-          <View style={previewStyles.previewItemHeader}>
-            <Text style={previewStyles.previewItemTitle}>{item.position || t('cv.position', { defaultValue: 'Position' })}</Text>
-            <Text style={previewStyles.previewItemDate}>
-              {item.startDate || ''} {item.endDate ? `- ${item.endDate}` : item.current ? '- Present' : ''}
-            </Text>
-          </View>
-          <Text style={previewStyles.previewItemCompany}>{item.company || t('cv.company', { defaultValue: 'Company' })}</Text>
-          {item.description && <Text style={previewStyles.previewItemDescription}>{item.description}</Text>}
-        </View>
-      ));
-    case 'education':
-      return (section.data.items || []).map((item: any, index: number) => (
-        <View key={index} style={previewStyles.previewItem}>
-          <View style={previewStyles.previewItemHeader}>
-            <Text style={previewStyles.previewItemTitle}>{item.degree || t('cv.degree', { defaultValue: 'Degree' })}</Text>
-            <Text style={previewStyles.previewItemDate}>
-              {item.startDate || ''} {item.endDate ? `- ${item.endDate}` : ''}
-            </Text>
-          </View>
-          <Text style={previewStyles.previewItemCompany}>{item.institution || t('cv.institution', { defaultValue: 'Institution' })}</Text>
-          {item.field && <Text style={previewStyles.previewItemDescription}>{item.field}</Text>}
-        </View>
-      ));
-    case 'skills':
-      return (
-        <View style={previewStyles.previewSkills}>
-          {(section.data.skills || []).map((skill: any, index: number) => (
-            <View key={index} style={previewStyles.previewSkillTag}>
-              <Text style={previewStyles.previewSkillText}>{skill.name}</Text>
-            </View>
-          ))}
-        </View>
-      );
-    case 'certifications':
-      return (section.data.items || []).map((item: any, index: number) => (
-        <View key={index} style={previewStyles.previewItem}>
-          <Text style={previewStyles.previewItemTitle}>{item.name || t('cv.certification_name', { defaultValue: 'Certification' })}</Text>
-          <Text style={previewStyles.previewItemCompany}>{item.issuer || t('cv.issuer', { defaultValue: 'Issuer' })}</Text>
-          <Text style={previewStyles.previewItemDate}>{item.date || ''}</Text>
-        </View>
-      ));
-    case 'languages':
-      return (
-        <View style={previewStyles.previewLanguages}>
-          {(section.data.languages || []).map((lang: any, index: number) => (
-            <View key={index} style={previewStyles.previewLanguageItem}>
-              <Text style={previewStyles.previewLanguageName}>{lang.name}</Text>
-              <Text style={previewStyles.previewLanguageLevel}>{lang.proficiency || 'intermediate'}</Text>
-            </View>
-          ))}
-        </View>
-      );
-    default:
-      return null;
-  }
-}
-
-// Helper functions for sharing
-function generateCVText(sections: CVSection[], cvTitle: string, profile: any): string {
-  const personalSection = sections.find((s) => s.type === 'personal');
-  const personalData = personalSection?.data || {};
-  
-  let text = `${cvTitle}\n\n`;
-  text += `${personalData.fullName || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}\n`;
-  if (personalData.email) text += `Email: ${personalData.email}\n`;
-  if (personalData.phone) text += `Phone: ${personalData.phone}\n`;
-  if (personalData.address) text += `Address: ${personalData.address}\n`;
-  text += `\n${personalData.summary || ''}\n\n`;
-
-  sections
-    .filter((s) => s.type !== 'personal')
-    .forEach((section) => {
-      text += `${section.title}\n`;
-      if (section.type === 'experience' || section.type === 'education' || section.type === 'certifications') {
-        (section.data.items || []).forEach((item: any) => {
-          text += `- ${item.position || item.degree || item.name}\n`;
-          if (item.company || item.institution || item.issuer) {
-            text += `  ${item.company || item.institution || item.issuer}\n`;
-          }
-          if (item.startDate) text += `  ${item.startDate} - ${item.endDate || 'Present'}\n`;
-          if (item.description) text += `  ${item.description}\n`;
-        });
-      } else if (section.type === 'skills' || section.type === 'languages') {
-        const items = section.data.skills || section.data.languages || [];
-        text += items.map((item: any) => item.name).join(', ') + '\n';
-      }
-      text += '\n';
-    });
-
-  return text;
-}
-
-function generateCVHTML(sections: CVSection[], cvTitle: string, profile: any, theme: any): string {
-  const personalSection = sections.find((s) => s.type === 'personal');
-  const personalData = personalSection?.data || {};
-  
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-        h1 { color: #333; border-bottom: 2px solid ${theme.primary}; padding-bottom: 10px; }
-        h2 { color: #555; margin-top: 30px; }
-        .section { margin-bottom: 25px; }
-        .item { margin-bottom: 15px; }
-        .header { margin-bottom: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>${personalData.fullName || `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()}</h1>
-        <p>${personalData.email || ''} | ${personalData.phone || ''} | ${personalData.address || ''}</p>
-        <p>${personalData.summary || ''}</p>
-      </div>
-      ${sections
-        .filter((s) => s.type !== 'personal')
-        .map((section) => {
-          let html = `<div class="section"><h2>${section.title}</h2>`;
-          if (section.type === 'experience' || section.type === 'education') {
-            html += (section.data.items || [])
-              .map((item: any) => `
-                <div class="item">
-                  <strong>${item.position || item.degree}</strong> - ${item.company || item.institution}<br>
-                  ${item.startDate || ''} - ${item.endDate || 'Present'}<br>
-                  ${item.description || item.field || ''}
-                </div>
-              `)
-              .join('');
-          }
-          html += '</div>';
-          return html;
-        })
-        .join('')}
-    </body>
-    </html>
-  `;
-}
-
-// Keep existing components (PersonalInfoSection, SectionCard, SectionEditorModal, etc.)
-// ... (I'll include the key ones, but you can copy the rest from the original file)
-
-function PersonalInfoSection({
-  section,
-  onUpdate,
-  theme,
-  t,
-}: {
-  section?: CVSection;
-  onUpdate: (data: any) => void;
-  theme: any;
-  t: any;
-}) {
-  const { profile } = useAuth();
-  const [data, setData] = useState(
-    section?.data || {
-      fullName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
-      email: profile?.email || '',
-      phone: '',
-      address: '',
-      summary: '',
-    }
-  );
-
-  React.useEffect(() => {
-    onUpdate(data);
-  }, [data]);
-
-  return (
-    <Card padding={16} margin={0} elevation="small" style={{ marginBottom: 12 }}>
-      <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>
-        {t('cv.personal_info', { defaultValue: 'Personal Information' })}
-      </Text>
-      {[
-        { key: 'fullName', label: t('cv.full_name', { defaultValue: 'Full Name' }), placeholder: 'John Doe' },
-        { key: 'email', label: t('cv.email', { defaultValue: 'Email' }), placeholder: 'john@example.com', keyboardType: 'email-address' },
-        { key: 'phone', label: t('cv.phone', { defaultValue: 'Phone' }), placeholder: '+27 12 345 6789', keyboardType: 'phone-pad' },
-        { key: 'address', label: t('cv.address', { defaultValue: 'Address' }), placeholder: 'City, Country' },
-      ].map((field) => (
-        <View key={field.key} style={{ marginBottom: 16 }}>
-          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>{field.label}</Text>
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-            value={data[field.key]}
-            onChangeText={(text) => setData({ ...data, [field.key]: text })}
-            placeholder={field.placeholder}
-            placeholderTextColor={theme.textSecondary}
-            keyboardType={field.keyboardType as any}
-          />
-        </View>
-      ))}
-      <View style={{ marginBottom: 16 }}>
-        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
-          {t('cv.summary', { defaultValue: 'Professional Summary' })}
-        </Text>
-        <TextInput
-          style={[
-            createStyles(theme, false, { top: 0, bottom: 0 }).input,
-            { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, minHeight: 100, textAlignVertical: 'top' },
-          ]}
-          value={data.summary}
-          onChangeText={(text) => setData({ ...data, summary: text })}
-          placeholder={t('cv.summary_placeholder', { defaultValue: 'Brief summary of your professional background...' })}
-          placeholderTextColor={theme.textSecondary}
-          multiline
-          numberOfLines={4}
-        />
-      </View>
-    </Card>
-  );
-}
-
-function SectionCard({
-  section,
-  onEdit,
-  onDelete,
-  theme,
-  t,
-}: {
-  section: CVSection;
-  onEdit: () => void;
-  onDelete: () => void;
-  theme: any;
-  t: any;
-}) {
-  return (
-    <Card padding={16} margin={0} elevation="small" style={{ marginBottom: 12 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>{section.title}</Text>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <TouchableOpacity onPress={onEdit}>
-            <Ionicons name="create-outline" size={20} color={theme.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onDelete}>
-            <Ionicons name="trash-outline" size={20} color={theme.error || '#EF4444'} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Card>
-  );
-}
-
-function SectionEditorModal({
-  section,
-  onUpdate,
-  onClose,
-  theme,
-  t,
-  insets,
-}: {
-  section: CVSection;
-  onUpdate: (data: any) => void;
-  onClose: () => void;
-  theme: any;
-  t: any;
-  insets: any;
-}) {
-  const [data, setData] = useState(section.data);
-
-  const handleSave = () => {
-    onUpdate(data);
-    onClose();
-  };
-
-  const renderEditor = () => {
-    switch (section.type) {
-      case 'experience':
-        return <ExperienceEditor data={data} onChange={setData} theme={theme} t={t} />;
-      case 'education':
-        return <EducationEditor data={data} onChange={setData} theme={theme} t={t} />;
-      case 'skills':
-        return <SkillsEditor data={data} onChange={setData} theme={theme} t={t} />;
-      case 'certifications':
-        return <CertificationsEditor data={data} onChange={setData} theme={theme} t={t} />;
-      case 'languages':
-        return <LanguagesEditor data={data} onChange={setData} theme={theme} t={t} />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top', 'bottom']}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: insets.top + 8, borderBottomWidth: 1, borderBottomColor: theme.border }}>
-          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '700' }}>{section.title}</Text>
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <TouchableOpacity onPress={handleSave}>
-              <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>{t('common.save', { defaultValue: 'Save' })}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={theme.text} />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <ScrollView style={{ flex: 1, padding: 16 }} contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
-          {renderEditor()}
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-// Include all editor components from original file (ExperienceEditor, EducationEditor, etc.)
-// For brevity, I'll include a simplified version - you should copy the full implementations
-
-function ExperienceEditor({ data, onChange, theme, t }: { data: any; onChange: (data: any) => void; theme: any; t: any }) {
-  const items = data.items || [];
-  const addItem = () => {
-    onChange({ items: [...items, { company: '', position: '', startDate: '', endDate: '', description: '', current: false }] });
-  };
-  const updateItem = (index: number, updates: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], ...updates };
-    onChange({ items: newItems });
-  };
-  return (
-    <View>
-      {items.map((item: any, index: number) => (
-        <Card key={index} padding={16} margin={0} elevation="small" style={{ marginBottom: 12 }}>
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.position}
-            onChangeText={(text) => updateItem(index, { position: text })}
-            placeholder={t('cv.position', { defaultValue: 'Position/Title' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.company}
-            onChangeText={(text) => updateItem(index, { company: text })}
-            placeholder={t('cv.company', { defaultValue: 'Company' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.startDate}
-              onChangeText={(text) => updateItem(index, { startDate: text })}
-              placeholder={t('cv.start_date', { defaultValue: 'Start Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.endDate}
-              onChangeText={(text) => updateItem(index, { endDate: text })}
-              placeholder={t('cv.end_date', { defaultValue: 'End Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-          <TextInput
-            style={[
-              createStyles(theme, false, { top: 0, bottom: 0 }).input,
-              { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, minHeight: 80, textAlignVertical: 'top' },
-            ]}
-            value={item.description}
-            onChangeText={(text) => updateItem(index, { description: text })}
-            placeholder={t('cv.description', { defaultValue: 'Job Description' })}
-            placeholderTextColor={theme.textSecondary}
-            multiline
-          />
-        </Card>
-      ))}
-      <TouchableOpacity
-        style={[createStyles(theme, false, { top: 0, bottom: 0 }).addSectionButton, { borderColor: theme.border }]}
-        onPress={addItem}
-      >
-        <Ionicons name="add" size={20} color={theme.primary} />
-        <Text style={{ color: theme.primary }}>{t('cv.add_experience', { defaultValue: 'Add Experience' })}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function EducationEditor({ data, onChange, theme, t }: { data: any; onChange: (data: any) => void; theme: any; t: any }) {
-  const items = data.items || [];
-  const addItem = () => {
-    onChange({ items: [...items, { institution: '', degree: '', field: '', startDate: '', endDate: '' }] });
-  };
-  const updateItem = (index: number, updates: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], ...updates };
-    onChange({ items: newItems });
-  };
-  return (
-    <View>
-      {items.map((item: any, index: number) => (
-        <Card key={index} padding={16} margin={0} elevation="small" style={{ marginBottom: 12 }}>
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.degree}
-            onChangeText={(text) => updateItem(index, { degree: text })}
-            placeholder={t('cv.degree', { defaultValue: 'Degree' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.institution}
-            onChangeText={(text) => updateItem(index, { institution: text })}
-            placeholder={t('cv.institution', { defaultValue: 'Institution' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.field}
-            onChangeText={(text) => updateItem(index, { field: text })}
-            placeholder={t('cv.field_of_study', { defaultValue: 'Field of Study' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.startDate}
-              onChangeText={(text) => updateItem(index, { startDate: text })}
-              placeholder={t('cv.start_date', { defaultValue: 'Start Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.endDate}
-              onChangeText={(text) => updateItem(index, { endDate: text })}
-              placeholder={t('cv.end_date', { defaultValue: 'End Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-        </Card>
-      ))}
-      <TouchableOpacity
-        style={[createStyles(theme, false, { top: 0, bottom: 0 }).addSectionButton, { borderColor: theme.border }]}
-        onPress={addItem}
-      >
-        <Ionicons name="add" size={20} color={theme.primary} />
-        <Text style={{ color: theme.primary }}>{t('cv.add_education', { defaultValue: 'Add Education' })}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function SkillsEditor({ data, onChange, theme, t }: { data: any; onChange: (data: any) => void; theme: any; t: any }) {
-  const skills = data.skills || [];
-  const [newSkill, setNewSkill] = useState('');
-  const addSkill = () => {
-    if (newSkill.trim()) {
-      onChange({ skills: [...skills, { name: newSkill.trim(), level: 'intermediate' }] });
-      setNewSkill('');
-    }
-  };
-  return (
-    <View>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-        <TextInput
-          style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-          value={newSkill}
-          onChangeText={setNewSkill}
-          placeholder={t('cv.skill_name', { defaultValue: 'Skill name' })}
-          placeholderTextColor={theme.textSecondary}
-          onSubmitEditing={addSkill}
-        />
-        <TouchableOpacity style={{ padding: 12, backgroundColor: theme.primary, borderRadius: 8 }} onPress={addSkill}>
-          <Ionicons name="add" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-      {skills.map((skill: any, index: number) => (
-        <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={{ flex: 1, color: theme.text }}>{skill.name}</Text>
-          <TouchableOpacity onPress={() => onChange({ skills: skills.filter((_: any, i: number) => i !== index) })}>
-            <Ionicons name="close-circle" size={24} color={theme.error || '#EF4444'} />
-          </TouchableOpacity>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function CertificationsEditor({ data, onChange, theme, t }: { data: any; onChange: (data: any) => void; theme: any; t: any }) {
-  const items = data.items || [];
-  const addItem = () => {
-    onChange({ items: [...items, { name: '', issuer: '', date: '', expiryDate: '' }] });
-  };
-  const updateItem = (index: number, updates: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], ...updates };
-    onChange({ items: newItems });
-  };
-  return (
-    <View>
-      {items.map((item: any, index: number) => (
-        <Card key={index} padding={16} margin={0} elevation="small" style={{ marginBottom: 12 }}>
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.name}
-            onChangeText={(text) => updateItem(index, { name: text })}
-            placeholder={t('cv.certification_name', { defaultValue: 'Certification Name' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <TextInput
-            style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, marginBottom: 12 }]}
-            value={item.issuer}
-            onChangeText={(text) => updateItem(index, { issuer: text })}
-            placeholder={t('cv.issuer', { defaultValue: 'Issuing Organization' })}
-            placeholderTextColor={theme.textSecondary}
-          />
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.date}
-              onChangeText={(text) => updateItem(index, { date: text })}
-              placeholder={t('cv.date', { defaultValue: 'Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-            <TextInput
-              style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-              value={item.expiryDate}
-              onChangeText={(text) => updateItem(index, { expiryDate: text })}
-              placeholder={t('cv.expiry_date', { defaultValue: 'Expiry Date' })}
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
-        </Card>
-      ))}
-      <TouchableOpacity
-        style={[createStyles(theme, false, { top: 0, bottom: 0 }).addSectionButton, { borderColor: theme.border }]}
-        onPress={addItem}
-      >
-        <Ionicons name="add" size={20} color={theme.primary} />
-        <Text style={{ color: theme.primary }}>{t('cv.add_certification', { defaultValue: 'Add Certification' })}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function LanguagesEditor({ data, onChange, theme, t }: { data: any; onChange: (data: any) => void; theme: any; t: any }) {
-  const languages = data.languages || [];
-  const [newLanguage, setNewLanguage] = useState('');
-  const addLanguage = () => {
-    if (newLanguage.trim()) {
-      onChange({ languages: [...languages, { name: newLanguage.trim(), proficiency: 'intermediate' }] });
-      setNewLanguage('');
-    }
-  };
-  return (
-    <View>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-        <TextInput
-          style={[createStyles(theme, false, { top: 0, bottom: 0 }).input, { flex: 1, color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }]}
-          value={newLanguage}
-          onChangeText={setNewLanguage}
-          placeholder={t('cv.language_name', { defaultValue: 'Language' })}
-          placeholderTextColor={theme.textSecondary}
-          onSubmitEditing={addLanguage}
-        />
-        <TouchableOpacity style={{ padding: 12, backgroundColor: theme.primary, borderRadius: 8 }} onPress={addLanguage}>
-          <Ionicons name="add" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-      {languages.map((lang: any, index: number) => (
-        <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={{ flex: 1, color: theme.text }}>{lang.name}</Text>
-          <TouchableOpacity onPress={() => onChange({ languages: languages.filter((_: any, i: number) => i !== index) })}>
-            <Ionicons name="close-circle" size={24} color={theme.error || '#EF4444'} />
-          </TouchableOpacity>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function getSectionTitle(type: CVSection['type'], t: any): string {
-  const titles: Record<CVSection['type'], string> = {
-    personal: t('cv.personal_info', { defaultValue: 'Personal Information' }),
-    experience: t('cv.experience', { defaultValue: 'Experience' }),
-    education: t('cv.education', { defaultValue: 'Education' }),
-    skills: t('cv.skills', { defaultValue: 'Skills' }),
-    certifications: t('cv.certifications', { defaultValue: 'Certifications' }),
-    languages: t('cv.languages', { defaultValue: 'Languages' }),
-  };
-  return titles[type];
-}
-
-function getDefaultSectionData(type: CVSection['type']): any {
-  switch (type) {
-    case 'experience':
-      return { items: [] };
-    case 'education':
-      return { items: [] };
-    case 'skills':
-      return { skills: [] };
-    case 'certifications':
-      return { items: [] };
-    case 'languages':
-      return { languages: [] };
-    default:
-      return {};
-  }
-}
-
-const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: theme.background,
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
   },
-  content: { 
-    padding: 16, 
+  headerRight: {
+    flexDirection: 'row',
+    gap: 12,
+    marginRight: 16,
+  },
+  saveText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  content: {
+    padding: 16,
     paddingTop: 8,
   },
-  section: { 
+  section: {
     marginBottom: 12,
   },
-  label: { 
-    color: theme.text, 
-    fontSize: 14, 
-    fontWeight: '600', 
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
     marginBottom: 8,
   },
-  input: { 
-    height: 44, 
-    paddingHorizontal: 12, 
-    borderRadius: 8, 
-    borderWidth: 1, 
+  input: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
     fontSize: 16,
   },
   addSectionButton: {
@@ -1056,127 +321,8 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     gap: 8,
     marginTop: 8,
   },
-  addSectionText: { 
-    fontSize: 16, 
-    fontWeight: '600',
-  },
-  previewContainer: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  previewContent: {
-    padding: 16,
-    paddingTop: 8,
-  },
-  previewPaper: {
-    padding: 24,
-    borderRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  previewHeader: {
-    marginBottom: 24,
-    borderBottomWidth: 2,
-    borderBottomColor: theme.primary,
-    paddingBottom: 16,
-  },
-  previewTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
-  },
-  previewSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  previewContact: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  previewContactItem: {
-    fontSize: 12,
-    color: '#666',
-  },
-  previewSection: {
-    marginBottom: 24,
-  },
-  previewSectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    paddingBottom: 8,
-  },
-  previewItem: {
-    marginBottom: 16,
-  },
-  previewItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  previewItemTitle: {
+  addSectionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  previewItemDate: {
-    fontSize: 12,
-    color: '#666',
-  },
-  previewItemCompany: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 4,
-  },
-  previewItemDescription: {
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  previewSkills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  previewSkillTag: {
-    backgroundColor: theme.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  previewSkillText: {
-    fontSize: 13,
-    color: theme.primary,
-    fontWeight: '500',
-  },
-  previewLanguages: {
-    gap: 8,
-  },
-  previewLanguageItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  previewLanguageName: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  previewLanguageLevel: {
-    fontSize: 12,
-    color: '#666',
   },
 });
-

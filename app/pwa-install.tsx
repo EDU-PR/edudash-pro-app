@@ -44,16 +44,18 @@ export default function PWAInstallPage() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-    const handler = (e: any) => {
+    const handler = (e: Event) => {
       try {
         e?.preventDefault?.(); // Prevent default browser install UI
-      } catch {}
+      } catch {
+        // Silent - preventDefault may not be available
+      }
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
-    (window as any).addEventListener?.('beforeinstallprompt', handler);
+    window.addEventListener('beforeinstallprompt', handler);
     return () => {
-      (window as any).removeEventListener?.('beforeinstallprompt', handler);
+      window.removeEventListener('beforeinstallprompt', handler);
     };
   }, []);
 
@@ -75,12 +77,14 @@ export default function PWAInstallPage() {
   const handleOpenApp = useCallback(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       // Try deep link first (if native app is installed)
-      (window as any).location.href = 'edudashpro://';
+      window.location.href = 'edudashpro://';
       // Fallback to dashboards after delay
       setTimeout(() => {
         try {
           router.replace('/screens');
-        } catch {}
+        } catch {
+          // Silent - navigation may fail
+        }
       }, 400);
     }
   }, [router]);

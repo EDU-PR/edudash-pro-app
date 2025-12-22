@@ -903,10 +903,17 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
     }
     
     try {
-      await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
+      const { error } = await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
+      if (error) {
+        console.error('Error clearing conversation:', error);
+        alert('Failed to clear conversation. You may only clear messages you sent.');
+        return;
+      }
       setMessages([]);
       setRefreshTrigger(prev => prev + 1);
+      alert('Conversation cleared successfully.');
     } catch (err) {
+      console.error('Error clearing conversation:', err);
       alert('Failed to clear conversation.');
     }
   };

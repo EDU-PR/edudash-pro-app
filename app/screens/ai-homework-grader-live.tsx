@@ -1,8 +1,7 @@
-// @ts-nocheck
 import React, { useRef, useState } from 'react'
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { IconSymbol } from '@/components/ui/IconSymbol'
-// import { HomeworkService } from '@/lib/services/homeworkService'
 import { getFeatureFlagsSync } from '@/lib/featureFlags'
 import { track } from '@/lib/analytics'
 import { getCombinedUsage } from '@/lib/ai/usage'
@@ -13,6 +12,31 @@ import { router } from 'expo-router'
 import { useGradingModels } from '@/hooks/useAIModelSelection'
 import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
+
+/** AI model option with optional notes for display */
+interface ModelOption {
+  id: string
+  name: string
+  provider: 'claude' | 'openai' | 'custom'
+  relativeCost: number
+  notes?: string
+}
+
+/** Parsed grading result from AI */
+interface ParsedResult {
+  score: number
+  feedback: string
+  suggestions: string[]
+  strengths: string[]
+  areasForImprovement: string[]
+}
+
+/** Usage counts for AI features */
+interface UsageCounts {
+  lesson_generation: number
+  grading_assistance: number
+  homework_help: number
+}
 export default function AIHomeworkGraderLive() {
   const { theme } = useTheme()
   const [assignmentTitle, setAssignmentTitle] = useState('Counting to 10')
@@ -21,10 +45,10 @@ export default function AIHomeworkGraderLive() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [pending, setPending] = useState(false)
   const [jsonBuffer, setJsonBuffer] = useState('')
-  const [parsed, setParsed] = useState<null | { score: number; feedback: string; suggestions: string[]; strengths: string[]; areasForImprovement: string[] }>(null)
-  const [usage, setUsage] = useState<{ lesson_generation: number; grading_assistance: number; homework_help: number }>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
-  const [models, setModels] = React.useState<Array<{ id: string; name: string; provider: 'claude' | 'openai' | 'custom'; relativeCost: number }>>([])
-  const [selectedModel, setSelectedModel] = React.useState<string>('')
+  const [parsed, setParsed] = useState<ParsedResult | null>(null)
+  const [usage, setUsage] = useState<UsageCounts>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const bufferRef = useRef('')
 
   const flags = getFeatureFlagsSync()
@@ -39,10 +63,12 @@ export default function AIHomeworkGraderLive() {
       setUsage(await getCombinedUsage())
       try {
         const limits = await getEffectiveLimits()
-        setModels(limits.modelOptions || [])
+        setModels((limits.modelOptions || []) as ModelOption[])
         const stored = await getPreferredModel('grading_assistance')
         setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku')
-      } catch { /* noop */ void 0; }
+      } catch {
+        // Silent failure - models will use default
+      }
     })()
   }, [])
 
@@ -118,11 +144,12 @@ export default function AIHomeworkGraderLive() {
       setPending(false)
       setUsage(await getCombinedUsage())
       track('edudash.ai.grader.ui_completed', { score: parsed?.score })
-    } catch (e: any) {
+    } catch (e: unknown) {
       setIsStreaming(false)
       setPending(false)
-      track('edudash.ai.grader.ui_failed', { error: e?.message })
-      toast.error(`Error: ${e?.message || 'Failed to start grading'}`)
+      const errorMessage = e instanceof Error ? e.message : 'Failed to start grading'
+      track('edudash.ai.grader.ui_failed', { error: errorMessage })
+      toast.error(`Error: ${errorMessage}`)
     }
   }
 
@@ -173,9 +200,9 @@ export default function AIHomeworkGraderLive() {
               <Text style={[styles.sectionTitle, { color: '#111827' }]}>Model</Text>
               <View style={[styles.inlineRow, { gap: 8, flexWrap: 'wrap' }]}>
                 {models.map(m => (
-                  <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* noop */ } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? '#8B5CF6' : '#E5E7EB', backgroundColor: selectedModel === m.id ? '#8B5CF6' : 'transparent' }}>
+                  <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? '#8B5CF6' : '#E5E7EB', backgroundColor: selectedModel === m.id ? '#8B5CF6' : 'transparent' }}>
                     <Text style={{ color: selectedModel === m.id ? '#fff' : '#111827' }}>
-                      {`${m.name} · x${m.relativeCost} · ${m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$'}${(m as any).notes ? ` · ${(m as any).notes}` : ''}`}
+                      {`${m.name} · x${m.relativeCost} · ${m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$'}${m.notes ? ` · ${m.notes}` : ''}`}
                     </Text>
                   </TouchableOpacity>
                 ))}

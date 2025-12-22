@@ -26,6 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { assertSupabase } from '@/lib/supabase';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
@@ -33,6 +34,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
+
+// KeepAwake tag for video calls
+const VIDEO_CALL_KEEP_AWAKE_TAG = 'active-video-call';
 
 // Note: Daily.co React Native SDK is conditionally imported
 let Daily: any = null;
@@ -207,6 +211,23 @@ export function WhatsAppStyleVideoCall({
       ringingTimeoutRef.current = null;
     }
   }, [callState]);
+
+  // Keep screen awake during video call
+  useEffect(() => {
+    const isCallActive = callState === 'connecting' || callState === 'ringing' || callState === 'connected';
+    
+    if (isOpen && isCallActive) {
+      console.log('[VideoCall] Activating KeepAwake for video call');
+      activateKeepAwakeAsync(VIDEO_CALL_KEEP_AWAKE_TAG).catch((err) => 
+        console.warn('[VideoCall] Failed to activate KeepAwake:', err)
+      );
+    }
+    
+    return () => {
+      console.log('[VideoCall] Deactivating KeepAwake');
+      deactivateKeepAwake(VIDEO_CALL_KEEP_AWAKE_TAG);
+    };
+  }, [isOpen, callState]);
 
   // Format duration as MM:SS or HH:MM:SS
   const formatDuration = (seconds: number): string => {

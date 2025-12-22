@@ -17,6 +17,7 @@ if (__DEV__) {
 // Initialize notification router for multi-account support
 import { setupNotificationRouter } from '../lib/NotificationRouter';
 import { StatusBar } from 'expo-status-bar';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Stack, router, usePathname } from 'expo-router';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import ToastProvider from '../components/ui/ToastProvider';
@@ -65,6 +66,26 @@ function LayoutContent() {
   // Force StatusBar re-render when theme changes
   useEffect(() => {
     setStatusBarKey((prev) => prev + 1);
+  }, [isDark]);
+  
+  // Configure Android navigation bar to match theme
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const configureNavigationBar = async () => {
+        try {
+          // Set navigation bar background color to match theme
+          await NavigationBar.setBackgroundColorAsync(isDark ? '#0a0a0f' : '#ffffff');
+          // Set button style (light buttons for dark bg, dark buttons for light bg)
+          await NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
+          // Set border color to match or be slightly different
+          await NavigationBar.setBorderColorAsync(isDark ? '#1a1a2e' : '#e5e7eb');
+        } catch (error) {
+          // Navigation bar API may not be available on all devices
+          console.log('NavigationBar setup skipped:', error);
+        }
+      };
+      configureNavigationBar();
+    }
   }, [isDark]);
   
   // FAB visibility logic
@@ -205,7 +226,8 @@ function RootLayoutContent() {
       try {
         const parsed = Linking.parse(url);
         const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
-        const host = typeof (parsed as any).hostname === 'string' ? String((parsed as any).hostname) : '';
+        // Expo Linking.parse() returns hostname on the parsed object
+        const host = typeof parsed.hostname === 'string' ? String(parsed.hostname) : '';
         const qp = (parsed.queryParams || {}) as Record<string, unknown>;
 
         const flow = String(qp.flow || '').toLowerCase();
@@ -218,7 +240,7 @@ function RootLayoutContent() {
             search.set(k, String(v));
           }
           const target = `/screens/payments/${paymentPath}${search.toString() ? `?${search.toString()}` : ''}`;
-          router.replace(target as any);
+          router.replace(target as `/${string}`);
           return;
         }
 
@@ -232,7 +254,7 @@ function RootLayoutContent() {
             search.set(k, String(v));
           }
           const target = `${normalized}${search.toString() ? `?${search.toString()}` : ''}`;
-          router.replace(target as any);
+          router.replace(target as `/${string}`);
         }
       } catch {
         // ignore
@@ -247,13 +269,12 @@ function RootLayoutContent() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     
-    const w = globalThis as any;
-    const n = w?.navigator;
+    const n = typeof navigator !== 'undefined' ? navigator : undefined;
     
     if (n?.serviceWorker) {
       n.serviceWorker
         .register('/sw.js')
-        .then((registration: any) => {
+        .then((registration: ServiceWorkerRegistration) => {
           console.log('[PWA] Service worker registered:', registration.scope);
         })
         .catch((error: Error) => {
@@ -280,7 +301,9 @@ function RootLayoutContent() {
     (async () => {
       try {
         const module = await import('../services/dash-ai/DashAICompat');
-        const DashClass = (module as any).DashAIAssistant || (module as any).default;
+        type DashModule = { DashAIAssistant?: { getInstance?: () => IDashAIAssistant }; default?: { getInstance?: () => IDashAIAssistant } };
+        const typedModule = module as DashModule;
+        const DashClass = typedModule.DashAIAssistant || typedModule.default;
         const dash: IDashAIAssistant | null = DashClass?.getInstance?.() || null;
         if (dash) {
           await dash.initialize();
@@ -292,7 +315,7 @@ function RootLayoutContent() {
             const { syncDashContext } = await import('../lib/agent/dashContextSync');
             const { getAgenticCapabilities } = await import('../lib/utils/agentic-mode');
             const { getCurrentProfile } = await import('../lib/sessionManager');
-            const profile = await getCurrentProfile().catch(() => null as any);
+            const profile = await getCurrentProfile().catch(() => null);
             const role = profile?.role as string | undefined;
             const caps = getAgenticCapabilities(role);
             await syncDashContext({ language: getCurrentLanguage(), traits: { agentic: caps, role: role || null } });

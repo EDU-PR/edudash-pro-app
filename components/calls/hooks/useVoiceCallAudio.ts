@@ -49,16 +49,18 @@ export function useVoiceCallAudio({
       
       try {
         if (isOwner && (callState === 'connecting' || callState === 'ringing')) {
-          // Caller: start with ringback
+          // Caller: start with ringback, use earpiece by default
           console.log('[VoiceCallAudio] Caller: Starting InCallManager with ringback');
           InCallManager.start({ media: 'audio', ringback: '_DEFAULT_' });
           InCallManager.setForceSpeakerphoneOn(false);
           audioInitializedRef.current = true;
         } else if (!isOwner && callState === 'connecting') {
-          // Callee: start audio without ringback  
-          console.log('[VoiceCallAudio] Callee: Starting InCallManager for audio');
+          // Callee: start audio with EARPIECE by default (like WhatsApp)
+          // User can toggle to speaker if needed
+          console.log('[VoiceCallAudio] Callee: Starting InCallManager with EARPIECE default');
           InCallManager.start({ media: 'audio' });
-          InCallManager.setForceSpeakerphoneOn(false);
+          InCallManager.setForceSpeakerphoneOn(false); // Earpiece for callees (WhatsApp-like)
+          setIsSpeakerEnabled(false); // Update state to reflect earpiece is on
           audioInitializedRef.current = true;
         }
       } catch (error) {
@@ -79,7 +81,7 @@ export function useVoiceCallAudio({
     
     setupAudio();
     stopRingback();
-  }, [callState, isOwner]);
+  }, [callState, isOwner, setIsSpeakerEnabled]);
 
   // Toggle speaker
   const toggleSpeaker = useCallback(() => {

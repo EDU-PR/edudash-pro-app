@@ -11,7 +11,7 @@ export default function SubscriptionUpgradeRedirect() {
     // Redirect to the actual subscription upgrade screen with all params preserved
     router.replace({
       pathname: '/screens/subscription-upgrade-post',
-      params: params as any
+      params: params as Record<string, string>
     });
   }, [params]);
 

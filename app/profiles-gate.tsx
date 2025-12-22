@@ -84,7 +84,7 @@ export default function ProfilesGateScreen() {
         try {
           // Set routing lock
           if (typeof window !== 'undefined') {
-            (window as any)[routingLock] = true;
+            (window as unknown as Record<string, boolean>)[routingLock] = true;
           }
           
           // Try to detect user role from legacy methods
@@ -105,7 +105,7 @@ export default function ProfilesGateScreen() {
             
             // Use timeout to prevent blocking UI
             setTimeout(() => {
-              router.replace(targetRoute as any);
+              router.replace(targetRoute as `/${string}`);
             }, 100);
             return;
           }
@@ -115,7 +115,7 @@ export default function ProfilesGateScreen() {
           // Clear routing lock after delay
           setTimeout(() => {
             if (typeof window !== 'undefined') {
-              delete (window as any)[routingLock];
+              delete (window as unknown as Record<string, unknown>)[routingLock];
             }
           }, 2000);
         }
@@ -217,13 +217,13 @@ export default function ProfilesGateScreen() {
       if (targetRoute && !navigationInProgressRef.current) {
         console.log('Profile gate: Routing to:', targetRoute);
         navigationInProgressRef.current = true;
-        router.replace(targetRoute as any);
+        router.replace(targetRoute as `/${string}`);
         return;
       }
       // Default fallback to sign-in
       if (!navigationInProgressRef.current) {
         navigationInProgressRef.current = true;
-        router.replace('/(auth)/sign-in' as any);
+        router.replace('/(auth)/sign-in' as `/${string}`);
       }
       return;
     } catch (error) {
@@ -352,7 +352,7 @@ export default function ProfilesGateScreen() {
             >
               <View style={styles.roleCardContent}>
                 <Ionicons 
-                  name={role.icon as any} 
+                  name={role.icon as keyof typeof Ionicons.glyphMap} 
                   size={32} 
                   color={selectedRole === role.value ? '#007AFF' : '#666'} 
                 />

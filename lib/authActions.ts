@@ -104,10 +104,12 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
     }
   } finally {
-    // Reset flag after a short delay
+    // Reset flag after a longer delay to ensure all async operations complete
+    // This prevents race conditions when immediately signing in with a new account
     setTimeout(() => {
       isSigningOut = false;
-    }, 100);
+      console.log('[authActions] Sign-out flag reset, ready for new sign-in');
+    }, 500);
   }
 }
 

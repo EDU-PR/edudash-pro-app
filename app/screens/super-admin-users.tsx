@@ -417,7 +417,7 @@ target_user_id: (user as any).auth_user_id,
           onPress: async () => {
             try {
               const { error } = await assertSupabase().auth.resetPasswordForEmail(user.email, {
-                redirectTo: 'https://edudashpro.com/reset-password',
+                redirectTo: 'https://edudashpro.org.za/reset-password',
               });
 
               if (error) {

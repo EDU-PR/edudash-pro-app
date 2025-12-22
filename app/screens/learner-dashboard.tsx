@@ -18,6 +18,7 @@ import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
 import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useOrganization } from '@/hooks/useOrganization';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 
 export default function LearnerDashboard() {
@@ -41,7 +42,7 @@ export default function LearnerDashboard() {
   const submissions = learnerDashboard.data?.submissions ?? [];
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   
   // Fetch organization details
   const { data: organization, isLoading: orgLoading } = useOrganization();

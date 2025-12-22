@@ -81,6 +81,7 @@ export class AudioModeCoordinator {
       playsInSilentMode: true,
       interruptionMode: 'doNotMix', // TTS shouldn't be mixed
       interruptionModeAndroid: 'doNotMix',
+      shouldPlayInBackground: true, // Required for FOREGROUND_SERVICE_MEDIA_PLAYBACK
       shouldRouteThroughEarpiece: false,
     },
     notification: {

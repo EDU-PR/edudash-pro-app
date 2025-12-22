@@ -34,6 +34,7 @@ export interface VoiceCallDailyOptions {
   userName?: string;
   isOwner: boolean;
   calleeId?: string;
+  isSpeakerEnabled: boolean;
   dailyRef: React.MutableRefObject<any>;
   callIdRef: React.MutableRefObject<string | null>;
   setCallState: (state: CallState) => void;
@@ -59,6 +60,7 @@ export function useVoiceCallDaily({
   userName,
   isOwner,
   calleeId,
+  isSpeakerEnabled,
   dailyRef,
   callIdRef,
   setCallState,
@@ -284,9 +286,27 @@ export function useVoiceCallDaily({
         daily.on('joined-meeting', async () => {
           console.log('[VoiceCallDaily] Joined meeting');
           
+          // CRITICAL: Ensure we subscribe to all tracks automatically
           try {
-            await daily.updateSendSettings({ audio: { isEnabled: true } });
+            await daily.setSubscribeToTracksAutomatically(true);
+            console.log('[VoiceCallDaily] Set auto-subscribe to tracks');
+          } catch (err) {
+            console.warn('[VoiceCallDaily] Failed to set auto-subscribe:', err);
+          }
+          
+          // CRITICAL: Explicitly enable receiving audio from all participants
+          try {
+            await daily.updateReceiveSettings({ '*': { audio: true, video: false } });
+            console.log('[VoiceCallDaily] Updated receive settings for audio');
+          } catch (err) {
+            console.warn('[VoiceCallDaily] Failed to update receive settings:', err);
+          }
+          
+          // Enable local audio using React Native compatible method
+          try {
+            await daily.setLocalAudio(true);
             setIsAudioEnabled(true);
+            console.log('[VoiceCallDaily] Local audio enabled on join');
           } catch (micError) {
             console.warn('[VoiceCallDaily] Failed to enable microphone on join:', micError);
           }
@@ -348,6 +368,75 @@ export function useVoiceCallDaily({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
         });
 
+        // Track remote audio - critical for hearing the other party
+        daily.on('track-started', async (event: any) => {
+          const { participant, track } = event || {};
+          
+          console.log('[VoiceCallDaily] Track started:', {
+            kind: track?.kind,
+            isLocal: participant?.local,
+            participantId: participant?.user_id,
+          });
+          
+          // Only care about remote audio tracks
+          if (participant?.local || track?.kind !== 'audio') {
+            return;
+          }
+          
+          console.log('[VoiceCallDaily] Remote audio track started - ensuring playback');
+          
+          // Immediately try to update receive settings to ensure audio is received
+          try {
+            if (dailyRef.current) {
+              await dailyRef.current.updateReceiveSettings({
+                [participant.session_id]: { audio: true },
+                '*': { audio: true, video: false },
+              });
+              console.log('[VoiceCallDaily] Updated receive settings for participant:', participant.session_id);
+            }
+          } catch (err) {
+            console.warn('[VoiceCallDaily] Failed to update receive settings:', err);
+          }
+          
+          // Verify all remote participants have playable audio after a short delay
+          setTimeout(() => {
+            if (!dailyRef.current) return;
+            
+            const participants = dailyRef.current.participants();
+            const remoteParticipants = Object.values(participants || {}).filter(
+              (p: any) => !p.local
+            );
+            
+            remoteParticipants.forEach(async (p: any) => {
+              const audioState = p.tracks?.audio?.state;
+              const audioBlocked = p.tracks?.audio?.blocked;
+              const audioOff = p.tracks?.audio?.off;
+              
+              console.log('[VoiceCallDaily] Remote participant audio state:', {
+                participantId: p.user_id,
+                sessionId: p.session_id,
+                audioState,
+                audioBlocked,
+                audioOff,
+                isSpeakerEnabled,
+              });
+              
+              // If audio is blocked or not playable, try to unblock
+              if (audioBlocked || (audioState && audioState !== 'playable' && audioState !== 'sendable')) {
+                console.warn('[VoiceCallDaily] Remote audio not playable - attempting to unblock');
+                try {
+                  await dailyRef.current.updateReceiveSettings({
+                    [p.session_id]: { audio: true },
+                  });
+                  console.log('[VoiceCallDaily] Unblocked audio for:', p.session_id);
+                } catch (err) {
+                  console.warn('[VoiceCallDaily] Failed to unblock audio:', err);
+                }
+              }
+            });
+          }, 300);
+        });
+
         // Android permissions
         if (Platform.OS === 'android') {
           try {
@@ -372,13 +461,24 @@ export function useVoiceCallDaily({
         console.log('[VoiceCallDaily] Joining room:', roomUrl);
         await daily.join({ url: roomUrl });
 
-        // Enable microphone after joining
+        // Enable microphone after joining using setLocalAudio (React Native compatible)
         try {
+          // First ensure input devices are set up
           await daily.setInputDevicesAsync({ audioSource: true });
-          await daily.updateSendSettings({ audio: { isEnabled: true } });
+          // Then enable local audio - this is the React Native compatible method
+          await daily.setLocalAudio(true);
           setIsAudioEnabled(true);
+          console.log('[VoiceCallDaily] Microphone enabled successfully');
         } catch (micError) {
           console.warn('[VoiceCallDaily] Failed to enable microphone:', micError);
+          // Try alternative method
+          try {
+            await daily.setLocalAudio(true);
+            setIsAudioEnabled(true);
+            console.log('[VoiceCallDaily] Microphone enabled via fallback');
+          } catch (fallbackError) {
+            console.warn('[VoiceCallDaily] Fallback mic enable also failed:', fallbackError);
+          }
         }
 
       } catch (err) {

@@ -2065,5 +2065,19 @@
     },
     "open_demo": "Open Demo →",
     "localhost_prefix": "localhost:8082"
+  },
+  "promo": {
+    "days_left": "days left",
+    "aftercare": {
+      "title": "2026 Aftercare Early Registration",
+      "title_short": "50% Off 2026 Aftercare Registration",
+      "deadline_short": "Pay before Dec 31 - Save R200!",
+      "description": "Register and pay before December 31, 2025 to secure your spot for 2026 at 50% off the registration fee.",
+      "savings": "Save R200.00!",
+      "feature1": "Secure your 2026 spot early",
+      "feature2": "Pay only R200 instead of R400",
+      "feature3": "Limited time offer - ends Dec 31",
+      "cta": "Register Now & Save R200"
+    }
   }
 }

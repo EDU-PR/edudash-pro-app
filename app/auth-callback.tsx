@@ -63,7 +63,11 @@ export default function AuthCallback() {
         
         const url = new URL(urlStr);
         const token_hash = url.searchParams.get('token_hash');
-        const type = url.searchParams.get('type') as any || 'magiclink';
+        const typeParam = url.searchParams.get('type');
+        // Valid OTP types for Supabase
+        type OtpType = 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email';
+        const validTypes: OtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'];
+        const type: OtpType = validTypes.includes(typeParam as OtpType) ? (typeParam as OtpType) : 'magiclink';
 
         if (token_hash) {
           const supabase = await assertSupabase();

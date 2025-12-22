@@ -1166,7 +1166,35 @@ function TeacherMessagesPage() {
   const handleDeleteThread = async () => {
     if (!selectedThreadId || !confirm('Are you sure you want to delete this conversation? This cannot be undone.')) return;
     try {
-      await supabase.from('message_threads').delete().eq('id', selectedThreadId);
+      // First delete all messages in the thread
+      const { error: messagesError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('thread_id', selectedThreadId);
+
+      if (messagesError) {
+        console.error('Error deleting messages:', messagesError);
+        // Continue anyway - messages deletion failure shouldn't block thread deletion
+      }
+
+      // Delete message_participants (non-fatal)
+      await supabase
+        .from('message_participants')
+        .delete()
+        .eq('thread_id', selectedThreadId);
+
+      // Then delete the thread itself
+      const { error: threadError } = await supabase
+        .from('message_threads')
+        .delete()
+        .eq('id', selectedThreadId);
+
+      if (threadError) {
+        console.error('Error deleting thread:', threadError);
+        alert('Failed to delete conversation. You may only delete conversations you created.');
+        return;
+      }
+
       setSelectedThreadId(null);
       setRefreshTrigger(prev => prev + 1);
       alert('Conversation deleted successfully.');
@@ -1179,10 +1207,21 @@ function TeacherMessagesPage() {
   const handleClearConversation = async () => {
     if (!selectedThreadId || !confirm('Are you sure you want to clear all messages in this conversation?')) return;
     try {
-      await supabase.from('messages').delete().eq('thread_id', selectedThreadId);
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('thread_id', selectedThreadId);
+
+      if (error) {
+        console.error('Error clearing conversation:', error);
+        alert('Failed to clear conversation. You may only clear messages you sent or in threads you created.');
+        return;
+      }
+
       // Clear local messages immediately
       setMessages([]);
       setRefreshTrigger(prev => prev + 1);
+      alert('Conversation cleared successfully.');
     } catch (err) {
       console.error('Error clearing conversation:', err);
       alert('Failed to clear conversation.');

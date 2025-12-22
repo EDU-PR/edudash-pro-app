@@ -34,6 +34,7 @@ interface NotificationRequest {
     | 'report_submitted_for_review'
     | 'report_approved'
     | 'report_rejected'
+    | 'incoming_call'
     | 'custom'
   preschool_id?: string
   user_ids?: string[]
@@ -49,6 +50,12 @@ interface NotificationRequest {
   invoice_id?: string
   report_id?: string
   rejection_reason?: string
+  // Call-related fields
+  call_id?: string
+  caller_id?: string
+  caller_name?: string
+  call_type?: 'voice' | 'video'
+  meeting_url?: string
   test?: boolean
   channel?: 'email' | 'push' | 'sms'
   target_user_id?: string
@@ -383,6 +390,24 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
       sound: 'default',
       priority: 'high',
       channelId: 'reports'
+    },
+    incoming_call: {
+      title: context.call_type === 'video' ? 'Incoming Video Call' : 'Incoming Voice Call',
+      body: context.caller_name 
+        ? `${context.caller_name} is calling...` 
+        : 'Incoming call...',
+      data: {
+        type: 'incoming_call',
+        call_id: context.call_id,
+        caller_id: context.caller_id,
+        caller_name: context.caller_name,
+        call_type: context.call_type || 'voice',
+        meeting_url: context.meeting_url,
+        screen: 'incoming-call'
+      },
+      sound: 'default',
+      priority: 'high',
+      channelId: 'calls'
     }
   }
 
@@ -403,6 +428,7 @@ async function getPushTokensForUsers(userIds: string[]): Promise<{ user_id: stri
     .from('push_devices')
     .select('user_id, expo_push_token, language')
     .in('user_id', userIds)
+    .eq('is_active', true)
     .order('updated_at', { ascending: false })
 
   if (error) {
@@ -893,6 +919,15 @@ async function getNotificationContext(request: NotificationRequest): Promise<any
             }
           }
         }
+        break
+
+      // Incoming call - context is passed directly from trigger
+      case 'incoming_call':
+        context.call_id = request.call_id
+        context.caller_id = request.caller_id
+        context.caller_name = request.caller_name
+        context.call_type = request.call_type || 'voice'
+        context.meeting_url = request.meeting_url
         break
     }
   } catch (error) {

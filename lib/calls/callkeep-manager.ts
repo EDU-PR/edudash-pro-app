@@ -9,9 +9,25 @@
  * - Wake screen for incoming calls
  * - Audio routing through system call UI
  * - Integrates with VoiceCallInterface and WhatsAppStyleIncomingCall
+ * - Event emitter for answer/end actions from native UI
  */
 
 import { Platform } from 'react-native';
+import { EventEmitter } from 'events';
+
+/**
+ * Events emitted by CallKeepManager
+ * - 'answerCall': User answered call from native UI (callUUID: string)
+ * - 'endCall': User ended call from native UI (callUUID: string)
+ * - 'muteCall': User toggled mute from native UI (callUUID: string, muted: boolean)
+ * - 'holdCall': User toggled hold from native UI (callUUID: string, hold: boolean)
+ */
+export interface CallKeepEvents {
+  answerCall: (callUUID: string) => void;
+  endCall: (callUUID: string) => void;
+  muteCall: (callUUID: string, muted: boolean) => void;
+  holdCall: (callUUID: string, hold: boolean) => void;
+}
 
 // Conditionally import CallKeep (may not be available in some environments)
 let RNCallKeep: any = null;
@@ -36,9 +52,15 @@ export interface CallKeepConfig {
   ringtoneSound?: string;
 }
 
-class CallKeepManager {
+class CallKeepManager extends EventEmitter {
   private isSetup = false;
   private activeCallId: string | null = null;
+  
+  constructor() {
+    super();
+    // Set max listeners to avoid warnings with multiple CallProvider instances
+    this.setMaxListeners(20);
+  }
   
   /**
    * Initialize CallKeep with app configuration
@@ -112,12 +134,16 @@ class CallKeepManager {
     if (!RNCallKeep) return;
     
     RNCallKeep.addEventListener('answerCall', ({ callUUID }: { callUUID: string }) => {
-      console.log('[CallKeepManager] Answer call:', callUUID);
-      // This is handled by the CallProvider's answerCall function
+      console.log('[CallKeepManager] Answer call from native UI:', callUUID);
+      // Emit event so CallProvider can handle the answer
+      this.emit('answerCall', callUUID);
     });
     
     RNCallKeep.addEventListener('endCall', ({ callUUID }: { callUUID: string }) => {
-      console.log('[CallKeepManager] End call:', callUUID);
+      console.log('[CallKeepManager] End call from native UI:', callUUID);
+      // Emit event so CallProvider can handle the end
+      this.emit('endCall', callUUID);
+      // Also end the call in CallKeep
       this.endCall(callUUID);
     });
     
@@ -126,11 +152,13 @@ class CallKeepManager {
     });
     
     RNCallKeep.addEventListener('didToggleHoldCallAction', ({ callUUID, hold }: { callUUID: string; hold: boolean }) => {
-      console.log('[CallKeepManager] Hold toggled:', callUUID, hold);
+      console.log('[CallKeepManager] Hold toggled from native UI:', callUUID, hold);
+      this.emit('holdCall', callUUID, hold);
     });
     
     RNCallKeep.addEventListener('didPerformSetMutedCallAction', ({ callUUID, muted }: { callUUID: string; muted: boolean }) => {
-      console.log('[CallKeepManager] Mute toggled:', callUUID, muted);
+      console.log('[CallKeepManager] Mute toggled from native UI:', callUUID, muted);
+      this.emit('muteCall', callUUID, muted);
     });
   }
   

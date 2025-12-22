@@ -71,3 +71,5 @@ temp/
 credentials.json
 .vercel
 .env*.local
+.env.eas.*
+env.local

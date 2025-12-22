@@ -10,6 +10,7 @@ import { DashboardHeader } from '@/components/org-admin/DashboardHeader';
 import { MetricsCards } from '@/components/org-admin/MetricsCards';
 import { QuickActionsGrid } from '@/components/org-admin/QuickActionsGrid';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 export default function OrgAdminDashboard() {
   const { t } = useTranslation();
@@ -22,7 +23,7 @@ export default function OrgAdminDashboard() {
   const navigationAttempted = useRef(false);
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;

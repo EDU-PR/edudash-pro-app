@@ -17,6 +17,7 @@ import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
+import { getPendingCall, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -159,10 +160,108 @@ export function CallProvider({ children }: CallProviderProps) {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       console.log('[CallProvider] App state changed:', appState, '->', nextAppState);
       setAppState(nextAppState);
+      
+      // When app comes to foreground, check for pending calls from HeadlessJS
+      if (nextAppState === 'active') {
+        checkPendingCall();
+      }
     });
 
     return () => subscription.remove();
   }, [appState, callsEnabled]);
+  
+  // Check for pending calls saved by HeadlessJS task
+  const checkPendingCall = useCallback(async () => {
+    try {
+      const pendingCall = await getPendingCall();
+      if (pendingCall) {
+        console.log('[CallProvider] Found pending call from HeadlessJS:', pendingCall.call_id);
+        
+        // Set as incoming call
+        setIncomingCall({
+          id: pendingCall.call_id,
+          call_id: pendingCall.call_id,
+          caller_id: pendingCall.caller_id,
+          callee_id: currentUserId || '',
+          call_type: pendingCall.call_type,
+          status: 'ringing',
+          caller_name: pendingCall.caller_name,
+          meeting_url: pendingCall.meeting_url,
+          started_at: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('[CallProvider] Error checking pending call:', error);
+    }
+  }, [currentUserId]);
+  
+  // Listen for CallKeep events (answer/end from native UI)
+  useEffect(() => {
+    if (!callsEnabled) return;
+    
+    // Handle answer from native call UI (lock screen)
+    const handleAnswerCall = async (callUUID: string) => {
+      console.log('[CallProvider] CallKeep answer event:', callUUID);
+      
+      // Find the matching incoming call
+      if (incomingCall?.call_id === callUUID) {
+        console.log('[CallProvider] Answering call from native UI');
+        await answerCall();
+      } else {
+        // Try to find call in database
+        const { data: call } = await getSupabase()
+          .from('active_calls')
+          .select('*')
+          .eq('call_id', callUUID)
+          .single();
+        
+        if (call) {
+          console.log('[CallProvider] Found call in DB, answering:', call.call_id);
+          setIncomingCall(call);
+          // Small delay to let state update
+          setTimeout(async () => {
+            setAnsweringCall(call);
+            setIsCallInterfaceOpen(true);
+            setIncomingCall(null);
+            setCallState('connecting');
+            await callKeepManager.reportConnected(call.call_id);
+          }, 100);
+        }
+      }
+    };
+    
+    // Handle end from native call UI (lock screen)
+    const handleEndCall = async (callUUID: string) => {
+      console.log('[CallProvider] CallKeep end event:', callUUID);
+      
+      // End the call if it matches current incoming/answering call
+      if (incomingCall?.call_id === callUUID) {
+        await rejectCall();
+      } else if (answeringCall?.call_id === callUUID) {
+        await endCall();
+      }
+    };
+    
+    // Handle mute from native call UI
+    const handleMuteCall = (callUUID: string, muted: boolean) => {
+      console.log('[CallProvider] CallKeep mute event:', callUUID, muted);
+      // This will be handled by VoiceCallInterface
+    };
+    
+    // Subscribe to CallKeep events
+    callKeepManager.on('answerCall', handleAnswerCall);
+    callKeepManager.on('endCall', handleEndCall);
+    callKeepManager.on('muteCall', handleMuteCall);
+    
+    // Check for pending calls on mount
+    checkPendingCall();
+    
+    return () => {
+      callKeepManager.off('answerCall', handleAnswerCall);
+      callKeepManager.off('endCall', handleEndCall);
+      callKeepManager.off('muteCall', handleMuteCall);
+    };
+  }, [callsEnabled, incomingCall, answeringCall, answerCall, rejectCall, endCall, checkPendingCall]);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {

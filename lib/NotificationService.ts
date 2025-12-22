@@ -171,48 +171,53 @@ class NotificationService {
   }
 
   /**
-   * Setup Android notification channels
+   * Setup Android notification channels with system sounds
+   * Each channel uses appropriate system notification/ringtone sounds
    */
   private async setupAndroidChannels(): Promise<void> {
     if (Platform.OS !== 'android') return;
 
-    // Default channel
+    // Default channel - standard system notification sound
     await Notifications.setNotificationChannelAsync('default', {
       name: 'General Notifications',
       description: 'General app notifications',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#00f5ff',
-      sound: 'default',
+      sound: 'default', // Uses system default notification sound
       enableLights: true,
       enableVibrate: true,
+      showBadge: true,
     });
 
-    // Urgent notifications
+    // Urgent notifications - high priority with distinct vibration
     await Notifications.setNotificationChannelAsync('urgent', {
       name: 'Urgent Notifications',
       description: 'Critical alerts that require immediate attention',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 200, 500],
+      vibrationPattern: [0, 500, 200, 500, 200, 500],
       lightColor: '#ff4444',
-      sound: 'default',
+      sound: 'default', // Uses system default (consider custom alarm sound)
       enableLights: true,
       enableVibrate: true,
+      showBadge: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
-    // Educational content
+    // Educational content - softer, less intrusive
     await Notifications.setNotificationChannelAsync('educational', {
       name: 'Educational Content',
       description: 'Learning activities and educational updates',
       importance: Notifications.AndroidImportance.DEFAULT,
-      vibrationPattern: [0, 250],
+      vibrationPattern: [0, 150],
       lightColor: '#00f5ff',
       sound: 'default',
       enableLights: true,
       enableVibrate: true,
+      showBadge: true,
     });
 
-    // Social/communication
+    // Social/communication - message-like notifications
     await Notifications.setNotificationChannelAsync('social', {
       name: 'Communication',
       description: 'Messages and communication from teachers/parents',
@@ -222,23 +227,52 @@ class NotificationService {
       sound: 'default',
       enableLights: true,
       enableVibrate: true,
+      showBadge: true,
     });
 
     // Incoming calls - highest priority for full-screen intent
+    // Uses MAX importance and bypasses DND for critical calls
     await Notifications.setNotificationChannelAsync('calls', {
       name: 'Incoming Calls',
       description: 'Voice and video call notifications',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 200, 500, 200, 500],
+      vibrationPattern: [0, 1000, 500, 1000, 500, 1000],
       lightColor: '#00f5ff',
-      sound: 'default',
+      sound: 'default', // System will use ringtone for call-like notifications
       enableLights: true,
       enableVibrate: true,
+      showBadge: false,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
     });
 
-    console.log('Android notification channels configured');
+    // Reminders channel - for scheduled tasks and homework due dates
+    await Notifications.setNotificationChannelAsync('reminders', {
+      name: 'Reminders',
+      description: 'Scheduled reminders for homework, events, and deadlines',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 400, 200, 400],
+      lightColor: '#f59e0b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Progress updates - learning milestones and achievements
+    await Notifications.setNotificationChannelAsync('progress', {
+      name: 'Progress Updates',
+      description: 'Learning milestones, achievements, and progress reports',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#8b5cf6',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    console.log('Android notification channels configured with 7 channels');
   }
 
   /**

@@ -16,6 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 interface ImportProgress {
   total: number;
@@ -26,7 +27,7 @@ interface ImportProgress {
 export default function DataImportScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const styles = createStyles(theme);

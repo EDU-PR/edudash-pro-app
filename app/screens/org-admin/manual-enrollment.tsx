@@ -19,11 +19,12 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPrograms } from '@/hooks/useOrgPrograms';
 import { useQuery } from '@tanstack/react-query';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 export default function ManualEnrollmentScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   const { data: programs } = useOrgPrograms();
   
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');

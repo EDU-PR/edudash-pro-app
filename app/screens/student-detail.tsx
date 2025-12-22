@@ -8,6 +8,8 @@
  * - View attendance and academic records
  * - Contact parent/guardian
  * - Financial records and fee management
+ * 
+ * Refactored to use shared components from components/student-detail/
  */
 
 import React, { useState, useEffect } from 'react';
@@ -18,13 +20,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Image,
-  Linking,
   RefreshControl,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,49 +28,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Picker } from '@react-native-picker/picker';
 
-interface StudentDetail {
-  id: string;
-  first_name: string;
-  last_name: string;
-  date_of_birth: string;
-  age_months: number;
-  age_years: number;
-  status: string;
-  enrollment_date: string;
-  preschool_id: string;
-  class_id: string | null;
-  parent_id: string | null;
-  guardian_id: string | null;
-  medical_conditions?: string;
-  allergies?: string;
-  emergency_contact?: string;
-  emergency_phone?: string;
-  profile_photo?: string;
-  // Related data
-  class_name?: string;
-  teacher_name?: string;
-  parent_name?: string;
-  parent_email?: string;
-  parent_phone?: string;
-  age_group_name?: string;
-  // Calculated fields
-  attendance_rate?: number;
-  last_attendance?: string;
-  outstanding_fees?: number;
-  payment_status?: 'current' | 'overdue' | 'pending';
-}
-
-interface Class {
-  id: string;
-  name: string;
-  grade_level: string;
-  teacher_id: string | null;
-  teacher_name?: string;
-  capacity: number;
-  current_enrollment: number;
-}
+// Shared components
+import {
+  StudentDetail,
+  Class,
+  Transaction,
+  calculateAge,
+  ProfileCard,
+  ClassInfoSection,
+  AcademicPerformanceSection,
+  ParentContactSection,
+  ProgressReportsSection,
+  FinancialStatusSection,
+  MedicalInfoSection,
+  ClassAssignmentModal,
+} from '@/components/student-detail';
 
 export default function StudentDetailScreen() {
   const { user, profile } = useAuth();
@@ -96,7 +65,7 @@ export default function StudentDetailScreen() {
   
   // Financial details state
   const [showFinancialDetails, setShowFinancialDetails] = useState(false);
-  const [childTransactions, setChildTransactions] = useState<any[]>([]);
+  const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
   
   // Role-based checks
   const isPrincipal = profile?.role === 'principal';
@@ -201,7 +170,7 @@ export default function StudentDetailScreen() {
         teacher_name: studentData.classes?.profiles ? `${studentData.classes.profiles.first_name} ${studentData.classes.profiles.last_name}` : undefined,
         parent_name: studentData.profiles ? `${studentData.profiles.first_name} ${studentData.profiles.last_name}` : undefined,
         parent_email: studentData.profiles?.email,
-        parent_phone: undefined, // profiles doesn't have phone directly
+        parent_phone: undefined,
         age_group_name: studentData.age_groups?.name,
         attendance_rate: attendanceRate,
         last_attendance: lastAttendance,
@@ -251,31 +220,11 @@ export default function StudentDetailScreen() {
     }
   };
 
-  const calculateAge = (dateOfBirth: string) => {
-    const birth = new Date(dateOfBirth);
-    const today = new Date();
-    const totalMonths = (today.getFullYear() - birth.getFullYear()) * 12 + 
-                       (today.getMonth() - birth.getMonth());
-    const years = Math.floor(totalMonths / 12);
-    return { months: totalMonths, years };
-  };
-
-  const formatAge = (ageMonths: number, ageYears: number) => {
-    if (ageYears < 2) {
-      return `${ageMonths} months`;
-    } else {
-      const remainingMonths = ageMonths % 12;
-      return remainingMonths > 0 
-        ? `${ageYears}y ${remainingMonths}m`
-        : `${ageYears} years`;
-    }
-  };
-
   const handleAssignClass = async () => {
     if (!selectedClassId || !student) return;
 
     try {
-const { error } = await assertSupabase()
+      const { error } = await assertSupabase()
         .from('students')
         .update({ class_id: selectedClassId })
         .eq('id', student.id);
@@ -287,51 +236,17 @@ const { error } = await assertSupabase()
 
       Alert.alert('Success', 'Student successfully assigned to class');
       setShowClassAssignment(false);
-      loadStudentData(); // Refresh data
+      loadStudentData();
     } catch {
       Alert.alert('Error', 'Failed to assign class');
     }
   };
 
-  const handleContactParent = (type: 'call' | 'email' | 'sms') => {
-    if (!student?.parent_phone && !student?.parent_email) {
-      Alert.alert('No Contact', 'No parent contact information available');
-      return;
-    }
-
-    switch (type) {
-      case 'call':
-        if (student.parent_phone) {
-          Linking.openURL(`tel:${student.parent_phone}`);
-        }
-        break;
-      case 'email':
-        if (student.parent_email) {
-          Linking.openURL(`mailto:${student.parent_email}`);
-        }
-        break;
-      case 'sms':
-        if (student.parent_phone) {
-          Linking.openURL(`sms:${student.parent_phone}`);
-        }
-        break;
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-ZA', {
-      style: 'currency',
-      currency: 'ZAR',
-    }).format(amount);
-  };
-
   const handleEditToggle = () => {
     if (editMode) {
-      // Canceling edit
       setEditMode(false);
       setEditedStudent({});
     } else {
-      // Enter edit mode
       setEditMode(true);
       setEditedStudent({
         first_name: student?.first_name,
@@ -370,7 +285,7 @@ const { error } = await assertSupabase()
       Alert.alert('Success', 'Student details updated successfully');
       setEditMode(false);
       setEditedStudent({});
-      loadStudentData(); // Refresh data
+      loadStudentData();
     } catch (error) {
       console.error('Error saving student:', error);
       Alert.alert('Error', 'Failed to save student details');
@@ -390,6 +305,7 @@ const { error } = await assertSupabase()
 
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
+  // Loading state
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
@@ -401,6 +317,7 @@ const { error } = await assertSupabase()
     );
   }
 
+  // Error state
   if (!student) {
     return (
       <SafeAreaView style={styles.container}>
@@ -443,382 +360,72 @@ const { error } = await assertSupabase()
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Student Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
-              {student.profile_photo ? (
-                <Image source={{ uri: student.profile_photo }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {student.first_name[0]}{student.last_name[0]}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.profileInfo}>
-              {editMode ? (
-                <View style={{ gap: 8 }}>
-                  <TextInput
-                    style={styles.input}
-                    value={editedStudent.first_name}
-                    onChangeText={(text) => setEditedStudent({ ...editedStudent, first_name: text })}
-                    placeholder="First Name"
-                    placeholderTextColor={theme.textSecondary}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={editedStudent.last_name}
-                    onChangeText={(text) => setEditedStudent({ ...editedStudent, last_name: text })}
-                    placeholder="Last Name"
-                    placeholderTextColor={theme.textSecondary}
-                  />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.studentName}>
-                    {student.first_name} {student.last_name}
-                  </Text>
-                  <Text style={styles.studentAge}>
-                    {formatAge(student.age_months, student.age_years)}
-                  </Text>
-                  {student.age_group_name && (
-                    <Text style={styles.ageGroup}>{student.age_group_name}</Text>
-                  )}
-                </>
-              )}
-            </View>
-            <View style={styles.statusBadge}>
-              <Text style={[styles.statusText, { color: student.status === 'active' ? '#10B981' : '#EF4444' }]}>
-                {student.status.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
+        {/* Profile Card */}
+        <ProfileCard
+          student={student}
+          theme={theme}
+          editMode={editMode}
+          editedStudent={editedStudent}
+          onEditChange={setEditedStudent}
+        />
 
         {/* Class Information */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Class Information</Text>
-            {classes.length > 0 && (
-              <TouchableOpacity onPress={() => setShowClassAssignment(true)}>
-                <Text style={styles.editText}>Assign Class</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          {student.class_name ? (
-            <View style={styles.classInfo}>
-              <Ionicons name="school" size={20} color="#007AFF" />
-              <View style={styles.classDetails}>
-                <Text style={styles.className}>{student.class_name}</Text>
-                {student.teacher_name && (
-                  <Text style={styles.teacherName}>Teacher: {student.teacher_name}</Text>
-                )}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.unassignedClass}>
-              <Ionicons name="alert-circle" size={20} color="#F59E0B" />
-              <Text style={styles.unassignedText}>Not assigned to any class</Text>
-              {classes.length > 0 && (
-                <TouchableOpacity 
-                  style={styles.assignButton}
-                  onPress={() => setShowClassAssignment(true)}
-                >
-                  <Text style={styles.assignButtonText}>Assign Class</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
+        <ClassInfoSection
+          student={student}
+          classes={classes}
+          theme={theme}
+          onAssignClass={() => setShowClassAssignment(true)}
+        />
 
-        {/* Attendance & Academic Performance */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Academic Performance</Text>
-          <View style={styles.performanceGrid}>
-            <View style={styles.performanceCard}>
-              <Text style={styles.performanceValue}>
-                {student.attendance_rate?.toFixed(1) || '0.0'}%
-              </Text>
-              <Text style={styles.performanceLabel}>Attendance Rate</Text>
-            </View>
-            <View style={styles.performanceCard}>
-              <Text style={styles.performanceValue}>
-                {student.last_attendance 
-                  ? new Date(student.last_attendance).toLocaleDateString()
-                  : 'N/A'
-                }
-              </Text>
-              <Text style={styles.performanceLabel}>Last Attendance</Text>
-            </View>
-          </View>
-        </View>
+        {/* Academic Performance */}
+        <AcademicPerformanceSection
+          student={student}
+          theme={theme}
+        />
 
         {/* Parent/Guardian Contact */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Parent/Guardian</Text>
-          {student.parent_name ? (
-            <View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.parentName}>{student.parent_name}</Text>
-                {student.parent_email && (
-                  <Text style={styles.contactDetail}>{student.parent_email}</Text>
-                )}
-                {student.parent_phone && (
-                  <Text style={styles.contactDetail}>{student.parent_phone}</Text>
-                )}
-              </View>
-              
-              <View style={styles.contactActions}>
-                <TouchableOpacity 
-                  style={styles.contactButton}
-                  onPress={() => handleContactParent('call')}
-                >
-                  <Ionicons name="call" size={20} color="#10B981" />
-                  <Text style={styles.contactButtonText}>Call</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.contactButton}
-                  onPress={() => handleContactParent('sms')}
-                >
-                  <Ionicons name="chatbubble" size={20} color="#007AFF" />
-                  <Text style={styles.contactButtonText}>SMS</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.contactButton}
-                  onPress={() => handleContactParent('email')}
-                >
-                  <Ionicons name="mail" size={20} color="#8B5CF6" />
-                  <Text style={styles.contactButtonText}>Email</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <Text style={styles.noContact}>No parent contact information</Text>
-          )}
-        </View>
+        <ParentContactSection
+          student={student}
+          theme={theme}
+        />
 
         {/* Progress Reports */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Academic Reports</Text>
-          <TouchableOpacity 
-            style={styles.progressReportButton}
-            onPress={() => {
-              if (isPrincipal) {
-                router.push('/screens/principal-report-review');
-              } else {
-                router.push(`/screens/progress-report-creator?student_id=${student.id}`);
-              }
-            }}
-          >
-            <View style={styles.progressReportContent}>
-              <View style={styles.progressReportIcon}>
-                <Ionicons name="document-text" size={24} color="#8B5CF6" />
-              </View>
-              <View style={styles.progressReportText}>
-                <Text style={styles.progressReportTitle}>
-                  {isPrincipal ? 'Review Progress Reports' : 'Create Progress Report'}
-                </Text>
-                <Text style={styles.progressReportSubtitle}>
-                  {isPrincipal ? 'View and approve student reports' : 'Send academic progress to parents'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-            </View>
-          </TouchableOpacity>
-        </View>
+        <ProgressReportsSection
+          student={student}
+          isPrincipal={isPrincipal}
+          theme={theme}
+        />
 
-        {/* Financial Information - Child Specific */}
-        <View style={styles.section}>
-          <TouchableOpacity 
-            style={styles.sectionHeader}
-            onPress={() => setShowFinancialDetails(!showFinancialDetails)}
-          >
-            <Text style={styles.sectionTitle}>Financial Status</Text>
-            <Ionicons 
-              name={showFinancialDetails ? 'chevron-up' : 'chevron-down'} 
-              size={20} 
-              color={theme.primary} 
-            />
-          </TouchableOpacity>
-          
-          <View style={styles.financialCard}>
-            <View style={styles.feeInfo}>
-              <Text style={styles.feeLabel}>Outstanding Fees</Text>
-              <Text style={[
-                styles.feeAmount,
-                { color: (student.outstanding_fees || 0) > 0 ? '#EF4444' : '#10B981' }
-              ]}>
-                {formatCurrency(student.outstanding_fees || 0)}
-              </Text>
-            </View>
-            <View style={[
-              styles.paymentStatus,
-              { backgroundColor: student.payment_status === 'current' ? '#10B981' : '#EF4444' }
-            ]}>
-              <Text style={styles.paymentStatusText}>
-                {student.payment_status === 'current' ? 'Up to Date' : 'Overdue'}
-              </Text>
-            </View>
-          </View>
+        {/* Financial Status */}
+        <FinancialStatusSection
+          student={student}
+          transactions={childTransactions}
+          showDetails={showFinancialDetails}
+          onToggleDetails={() => setShowFinancialDetails(!showFinancialDetails)}
+          theme={theme}
+        />
 
-          {/* Transaction History (Expandable) */}
-          {showFinancialDetails && (
-            <View style={styles.transactionHistory}>
-              <Text style={styles.transactionHistoryTitle}>Recent Transactions</Text>
-              {childTransactions.length > 0 ? (
-                childTransactions.map((transaction) => (
-                  <View key={transaction.id} style={styles.transactionItem}>
-                    <View style={styles.transactionLeft}>
-                      <Text style={styles.transactionType}>{transaction.type.replace('_', ' ')}</Text>
-                      <Text style={styles.transactionDate}>
-                        {new Date(transaction.created_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <Text style={[
-                      styles.transactionAmount,
-                      { color: transaction.type.includes('payment') ? '#10B981' : '#EF4444' }
-                    ]}>
-                      {transaction.type.includes('payment') ? '+' : '-'}
-                      {formatCurrency(Math.abs(transaction.amount))}
-                    </Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.noTransactions}>No transaction history</Text>
-              )}
-            </View>
-          )}
-        </View>
-
-        {/* Medical Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical & Emergency Information</Text>
-          {editMode ? (
-            <View style={{ gap: 12 }}>
-              <View>
-                <Text style={styles.fieldLabel}>Medical Conditions</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={editedStudent.medical_conditions || ''}
-                  onChangeText={(text) => setEditedStudent({ ...editedStudent, medical_conditions: text })}
-                  placeholder="Enter medical conditions..."
-                  placeholderTextColor={theme.textSecondary}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-              <View>
-                <Text style={styles.fieldLabel}>Allergies</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={editedStudent.allergies || ''}
-                  onChangeText={(text) => setEditedStudent({ ...editedStudent, allergies: text })}
-                  placeholder="Enter allergies..."
-                  placeholderTextColor={theme.textSecondary}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-              <View>
-                <Text style={styles.fieldLabel}>Emergency Contact Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedStudent.emergency_contact || ''}
-                  onChangeText={(text) => setEditedStudent({ ...editedStudent, emergency_contact: text })}
-                  placeholder="Emergency contact name..."
-                  placeholderTextColor={theme.textSecondary}
-                />
-              </View>
-              <View>
-                <Text style={styles.fieldLabel}>Emergency Contact Phone</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedStudent.emergency_phone || ''}
-                  onChangeText={(text) => setEditedStudent({ ...editedStudent, emergency_phone: text })}
-                  placeholder="Emergency phone number..."
-                  placeholderTextColor={theme.textSecondary}
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-          ) : (
-            <View style={{ gap: 12 }}>
-              {student.medical_conditions && (
-                <View style={styles.medicalItem}>
-                  <Text style={styles.medicalLabel}>Medical Conditions:</Text>
-                  <Text style={styles.medicalValue}>{student.medical_conditions}</Text>
-                </View>
-              )}
-              {student.allergies && (
-                <View style={styles.medicalItem}>
-                  <Text style={styles.medicalLabel}>Allergies:</Text>
-                  <Text style={styles.medicalValue}>{student.allergies}</Text>
-                </View>
-              )}
-              {student.emergency_contact && (
-                <View style={styles.medicalItem}>
-                  <Text style={styles.medicalLabel}>Emergency Contact:</Text>
-                  <Text style={styles.medicalValue}>{student.emergency_contact}</Text>
-                  {student.emergency_phone && (
-                    <Text style={styles.medicalValue}>{student.emergency_phone}</Text>
-                  )}
-                </View>
-              )}
-              {!student.medical_conditions && !student.allergies && !student.emergency_contact && (
-                <Text style={styles.noMedicalInfo}>No medical or emergency information</Text>
-              )}
-            </View>
-          )}
-        </View>
+        {/* Medical & Emergency Information */}
+        <MedicalInfoSection
+          student={student}
+          theme={theme}
+          editMode={editMode}
+          editedStudent={editedStudent}
+          onEditChange={setEditedStudent}
+        />
       </ScrollView>
 
       {/* Class Assignment Modal */}
-      <Modal
+      <ClassAssignmentModal
         visible={showClassAssignment}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowClassAssignment(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowClassAssignment(false)}>
-              <Text style={styles.modalCancel}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Assign Class</Text>
-            <TouchableOpacity onPress={handleAssignClass} disabled={!selectedClassId}>
-              <Text style={[
-                styles.modalSave,
-                { color: selectedClassId ? '#007AFF' : '#ccc' }
-              ]}>
-                Save
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.modalContent}>
-            <Text style={styles.pickerLabel}>Select a class for {student.first_name}:</Text>
-            <Picker
-              selectedValue={selectedClassId}
-              onValueChange={setSelectedClassId}
-              style={styles.picker}
-            >
-              <Picker.Item label="Select a class..." value="" />
-              {classes.map((cls) => (
-                <Picker.Item
-                  key={cls.id}
-                  label={`${cls.name} - ${cls.teacher_name || 'No teacher'} (${cls.current_enrollment}/${cls.capacity})`}
-                  value={cls.id}
-                />
-              ))}
-            </Picker>
-          </View>
-        </SafeAreaView>
-      </Modal>
+        student={student}
+        classes={classes}
+        selectedClassId={selectedClassId}
+        onSelectClass={setSelectedClassId}
+        onSave={handleAssignClass}
+        onClose={() => setShowClassAssignment(false)}
+        theme={theme}
+      />
     </SafeAreaView>
   );
 }
@@ -878,386 +485,5 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  profileCard: {
-    margin: 16,
-    backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: theme.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    marginRight: 16,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  studentName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  studentAge: {
-    fontSize: 16,
-    color: theme.textSecondary,
-    marginBottom: 4,
-  },
-  ageGroup: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  section: {
-    margin: 16,
-    backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: theme.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 16,
-  },
-  editText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  viewAllText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  classInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  classDetails: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  className: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 2,
-  },
-  teacherName: {
-    fontSize: 14,
-    color: theme.textSecondary,
-  },
-  unassignedClass: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  unassignedText: {
-    fontSize: 16,
-    color: '#F59E0B',
-    marginLeft: 8,
-    flex: 1,
-  },
-  assignButton: {
-    backgroundColor: theme.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  assignButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  performanceGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  performanceCard: {
-    flex: 1,
-    backgroundColor: theme.card,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  performanceValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  performanceLabel: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    textAlign: 'center',
-  },
-  contactInfo: {
-    marginBottom: 16,
-  },
-  parentName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 8,
-  },
-  contactDetail: {
-    fontSize: 16,
-    color: theme.textSecondary,
-    marginBottom: 4,
-  },
-  contactActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  contactButton: {
-    alignItems: 'center',
-    padding: 12,
-  },
-  contactButtonText: {
-    fontSize: 12,
-    color: theme.text,
-    marginTop: 4,
-  },
-  noContact: {
-    fontSize: 16,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  financialCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  feeInfo: {
-    flex: 1,
-  },
-  feeLabel: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    marginBottom: 4,
-  },
-  feeAmount: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  paymentStatus: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  paymentStatusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  medicalItem: {
-    marginBottom: 12,
-  },
-  medicalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  medicalValue: {
-    fontSize: 14,
-    color: theme.textSecondary,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: theme.card,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: theme.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  modalCancel: {
-    fontSize: 16,
-    color: theme.textSecondary,
-  },
-  modalSave: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16,
-  },
-  pickerLabel: {
-    fontSize: 16,
-    color: theme.text,
-    marginBottom: 16,
-  },
-  picker: {
-    backgroundColor: theme.surface,
-    borderRadius: 8,
-  },
-  progressReportButton: {
-    backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  progressReportContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressReportIcon: {
-    width: 48,
-    height: 48,
-    backgroundColor: theme.card,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  progressReportText: {
-    flex: 1,
-  },
-  progressReportTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  progressReportSubtitle: {
-    fontSize: 14,
-    color: theme.textSecondary,
-  },
-  // Edit mode styles
-  input: {
-    backgroundColor: theme.surface,
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: theme.text,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 6,
-  },
-  noMedicalInfo: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 16,
-  },
-  // Transaction history styles
-  transactionHistory: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: theme.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  transactionHistoryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 12,
-  },
-  transactionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  transactionLeft: {
-    flex: 1,
-  },
-  transactionType: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.text,
-    textTransform: 'capitalize',
-    marginBottom: 2,
-  },
-  transactionDate: {
-    fontSize: 12,
-    color: theme.textSecondary,
-  },
-  transactionAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  noTransactions: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    textAlign: 'center',
-    padding: 16,
-    fontStyle: 'italic',
   },
 });

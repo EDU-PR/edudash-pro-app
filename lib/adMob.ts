@@ -12,6 +12,7 @@ import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { log, warn, debug, error as logError } from '@/lib/debug';
+import Constants from 'expo-constants';
 
 /**
  * AdMob Test IDs for development - Google's official test IDs
@@ -31,23 +32,47 @@ const ADMOB_TEST_IDS = {
 };
 
 /**
- * Production AdMob IDs - TO BE CONFIGURED FOR PRODUCTION
- * TODO: Replace with actual production ad unit IDs when ready
+ * Production AdMob IDs - loaded from environment variables
+ * Set these in EAS secrets or .env:
+ * - ADMOB_BANNER_ANDROID / ADMOB_BANNER_IOS
+ * - ADMOB_INTERSTITIAL_ANDROID / ADMOB_INTERSTITIAL_IOS
+ * - ADMOB_REWARDED_ANDROID / ADMOB_REWARDED_IOS
  */
-// const PRODUCTION_IDS = {
-//   android: {
-//     banner: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-//     interstitial: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-//     rewarded: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-//   },
-//   ios: {
-//     banner: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', 
-//     interstitial: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-//     rewarded: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-//   },
-// };
+const getProductionIds = () => {
+  const extra = Constants.expoConfig?.extra || {};
+  return {
+    android: {
+      banner: extra.ADMOB_BANNER_ANDROID || process.env.ADMOB_BANNER_ANDROID || '',
+      interstitial: extra.ADMOB_INTERSTITIAL_ANDROID || process.env.ADMOB_INTERSTITIAL_ANDROID || '',
+      rewarded: extra.ADMOB_REWARDED_ANDROID || process.env.ADMOB_REWARDED_ANDROID || '',
+    },
+    ios: {
+      banner: extra.ADMOB_BANNER_IOS || process.env.ADMOB_BANNER_IOS || '',
+      interstitial: extra.ADMOB_INTERSTITIAL_IOS || process.env.ADMOB_INTERSTITIAL_IOS || '',
+      rewarded: extra.ADMOB_REWARDED_IOS || process.env.ADMOB_REWARDED_IOS || '',
+    },
+  };
+};
 
 let isInitialized = false;
+
+/**
+ * Check if we should use production ad IDs
+ * Uses production IDs when:
+ * 1. Not in development mode (__DEV__ is false)
+ * 2. admob_test_ids feature flag is false
+ * 3. Production IDs are configured
+ */
+function shouldUseProductionIds(): boolean {
+  // Always use test IDs in development
+  if (__DEV__) return false;
+  
+  const flags = getFeatureFlagsSync();
+  // Feature flag allows forcing test IDs in production for testing
+  if (flags.admob_test_ids) return false;
+  
+  return true;
+}
 
 /**
  * Get appropriate ad unit ID based on testing mode
@@ -55,7 +80,19 @@ let isInitialized = false;
 function getAdUnitId(adType: keyof typeof ADMOB_TEST_IDS.android): string {
   const platform = Platform.OS as 'android' | 'ios';
   
-  // Always use test IDs during development phase
+  if (shouldUseProductionIds()) {
+    const productionIds = getProductionIds();
+    const productionId = productionIds[platform]?.[adType];
+    
+    // Fall back to test IDs if production IDs aren't configured
+    if (productionId && productionId.startsWith('ca-app-pub-')) {
+      debug(`AdMob: Using production ${adType} ad ID`);
+      return productionId;
+    }
+    
+    warn(`AdMob: Production ${adType} ad ID not configured, falling back to test ID`);
+  }
+  
   return ADMOB_TEST_IDS[platform][adType];
 }
 
@@ -75,17 +112,20 @@ export async function initializeAdMob(): Promise<boolean> {
       return false;
     }
     
+    const useProductionAds = shouldUseProductionIds();
+    
     // Stub implementation - no actual AdMob calls yet
     isInitialized = true;
     
     track('edudash.ads.initialized', {
       platform: Platform.OS,
-      test_mode: flags.admob_test_ids,
+      test_mode: !useProductionAds,
+      production_mode: useProductionAds,
       android_only: flags.android_only_mode,
       stub_implementation: true,
     });
     
-    debug('AdMob stub initialized - ready for production implementation');
+    log(`AdMob initialized - ${useProductionAds ? 'PRODUCTION' : 'TEST'} mode`);
     return true;
     
   } catch (error) {

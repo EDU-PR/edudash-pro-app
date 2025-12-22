@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Clipboard from 'expo-clipboard';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 // AsyncStorage with web fallback
 let AsyncStorage: any = null;
@@ -41,7 +42,7 @@ const AUTO_SAVE_DELAY = 1500; // 1.5 seconds debounce
 export default function CreateProgramScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   const userId = user?.id || profile?.id;
   
   const [saving, setSaving] = useState(false);

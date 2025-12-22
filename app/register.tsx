@@ -32,12 +32,20 @@ async function fetchProgramByCode(programCode: string): Promise<ProgramInfo | nu
   if (!code) return null;
   const supabase = assertSupabase();
 
+  // RPC response type
+  interface ValidateProgramCodeResponse {
+    valid: boolean;
+    course?: { id: string; title: string; description?: string | null; course_code?: string };
+    organization?: { id: string; name: string; slug?: string | null };
+  }
+
   // Preferred: public RPC (works even when unauthenticated and RLS blocks direct SELECT)
   try {
     const { data, error } = await supabase.rpc('validate_program_code', { p_code: code });
-    if (!error && data && typeof data === 'object' && (data as any).valid) {
-      const course = (data as any).course;
-      const org = (data as any).organization;
+    const response = data as ValidateProgramCodeResponse | null;
+    if (!error && response?.valid) {
+      const course = response.course;
+      const org = response.organization;
       if (course?.id && course?.title) {
         return {
           id: String(course.id),
@@ -101,7 +109,7 @@ export default function PublicRegistrationScreen() {
       router.replace({
         pathname: '/screens/learner/enroll-by-program-code',
         params: { code: programCodeParam },
-      } as any);
+      } as { pathname: `/${string}`; params: Record<string, string> });
     }
   }, [authLoading, user, programCodeParam]);
 

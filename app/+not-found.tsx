@@ -5,13 +5,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
+/** Debug information for route not found */
+interface DebugInfo {
+  pathname: string;
+  segments: string[];
+  canGoBack: boolean;
+  userRole: string;
+  isAuthenticated: boolean;
+  windowLocation: string;
+  timestamp: string;
+}
+
 export default function NotFound() {
   const { t } = useTranslation();
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
   const { user, profile } = useAuth();
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   
   useEffect(() => {
@@ -69,7 +80,7 @@ export default function NotFound() {
         router.back();
       } else {
         const fallback = getSmartFallback();
-        router.replace(fallback as any);
+        router.replace(fallback as `/${string}`);
       }
     } catch (error) {
       console.error('Smart back navigation failed:', error);
@@ -79,7 +90,7 @@ export default function NotFound() {
 
   const handleGoToDashboard = () => {
     const fallback = getSmartFallback();
-    router.replace(fallback as any);
+    router.replace(fallback as `/${string}`);
   };
 
   return (

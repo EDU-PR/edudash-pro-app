@@ -86,7 +86,7 @@ export default function LandingHandler() {
               await assertSupabase().auth.signOut();
               // Small delay to show success message
               setTimeout(() => {
-                router.replace('/(auth)/sign-in' as any);
+                router.replace('/(auth)/sign-in' as `/${string}`);
               }, 1500);
               return;
             }
@@ -116,7 +116,7 @@ export default function LandingHandler() {
         if (flow === 'invite-parent' && inviteCode) {
           // Inside native app: navigate directly to parent registration with code
           if (!isWeb) {
-            router.replace(`/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}` as any);
+            router.replace(`/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}` as `/${string}`);
             return;
           }
           // On web: attempt to open app with deep link to parent registration
@@ -131,7 +131,7 @@ setMessage(t('invite.opening_parent_registration', { defaultValue: 'Opening the 
         // STUDENT/MEMBER INVITE
         if ((flow === 'invite-student' || flow === 'invite-member') && inviteCode) {
           if (!isWeb) {
-            router.replace(`/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}` as any);
+            router.replace(`/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}` as `/${string}`);
             return;
           }
 setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to join by code...' }));
@@ -155,7 +155,7 @@ setMessage(t('invite.opening_join_by_code', { defaultValue: 'Opening the app to 
           
           if (!isWeb) {
             // Inside app: route to payment return screen with all params
-            router.replace(path as any);
+            router.replace(path as `/${string}`);
             return;
           }
           // On web: try to open app with deep link

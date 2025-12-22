@@ -52,7 +52,8 @@ export default function Index() {
           if (initialUrl) {
             const parsed = Linking.parse(initialUrl);
             const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
-            const host = typeof (parsed as any).hostname === 'string' ? String((parsed as any).hostname) : '';
+            // Expo Linking.parse() returns hostname on the parsed object
+            const host = typeof parsed.hostname === 'string' ? String(parsed.hostname) : '';
             // Some Android intent flows treat the first segment as the URL host:
             // - `edudashpro://screens/payments/return?...` => host="screens", path="payments/return"
             // For robustness, reconstruct a full path when host is present.
@@ -75,7 +76,7 @@ export default function Index() {
               }
               const target = `${path}${search.toString() ? `?${search.toString()}` : ''}`;
               console.log('[Index] Detected initial deep link, routing to:', target);
-              router.replace(target as any);
+              router.replace(target as `/${string}`);
               return;
             }
           }

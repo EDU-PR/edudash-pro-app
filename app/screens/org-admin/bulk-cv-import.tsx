@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { extractOrganizationId } from '@/lib/tenant/compat';
 
 interface ImportProgress {
   total: number;
@@ -30,7 +31,7 @@ interface ImportProgress {
 export default function BulkCVImportScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = extractOrganizationId(profile);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const styles = createStyles(theme);

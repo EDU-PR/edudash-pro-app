@@ -5,9 +5,13 @@ import * as Localization from 'expo-localization'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 
-// Constant project ID for Expo push tokens (Android only scope for now)
-// Matches extra.eas.projectId in app.config.js
-const EXPO_PROJECT_ID = '81051af4-2468-4efa-a1f1-03d00f5c5688'
+// Get project ID from EAS config (matches extra.eas.projectId in app.json)
+// This ensures push tokens are registered for the correct Expo project
+const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc'
+
+// Token version - increment this to force all users to re-register tokens
+// This is useful when the project ID changes or token format updates
+const TOKEN_VERSION = 2
 
 // Show notifications while app is foregrounded (customize as needed)
 Notifications.setNotificationHandler({
@@ -138,7 +142,12 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         is_active: true,
         device_installation_id: installationId,
-        device_metadata: deviceMetadata,
+        device_metadata: {
+          ...deviceMetadata,
+          // Store token version and project ID for refresh detection
+          token_version: TOKEN_VERSION,
+          expo_project_id: EXPO_PROJECT_ID,
+        },
         language: normalizedLanguage,
         timezone: deviceMetadata.timezone,
         last_seen_at: new Date().toISOString(),
@@ -187,6 +196,131 @@ export async function deregisterPushDevice(supabase: any, user: any): Promise<vo
       .eq('device_installation_id', installationId)
   } catch (error) {
     console.debug('Push device deregistration failed:', error)
+  }
+}
+
+/**
+ * Force refresh push token for a user.
+ * This should be called:
+ * 1. When the app detects the stored token version is outdated
+ * 2. When the Expo project ID has changed
+ * 3. On app update after project configuration changes
+ * 
+ * Returns true if token was refreshed, false otherwise.
+ */
+export async function forceRefreshPushToken(supabase: any, user: any): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) {
+      return false
+    }
+
+    console.log('[Push Refresh] Force refreshing push token for user:', user.id)
+    
+    // Get a fresh token from Expo
+    const newToken = await registerForPushNotificationsAsync()
+    if (!newToken) {
+      console.log('[Push Refresh] Failed to get new token')
+      return false
+    }
+
+    const installationId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}`
+    
+    // Force update the token in database
+    const { error } = await supabase
+      .from('push_devices')
+      .upsert({
+        user_id: user.id,
+        expo_push_token: newToken,
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        is_active: true,
+        device_installation_id: installationId,
+        device_metadata: {
+          platform: Platform.OS,
+          brand: Device.brand,
+          model: Device.modelName,
+          osVersion: Device.osVersion,
+          appVersion: Constants.expoConfig?.version,
+          token_version: TOKEN_VERSION,
+          expo_project_id: EXPO_PROJECT_ID,
+          force_refreshed_at: new Date().toISOString(),
+        },
+        last_seen_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,device_installation_id'
+      })
+
+    if (error) {
+      console.error('[Push Refresh] Database error:', error)
+      return false
+    }
+
+    console.log('[Push Refresh] Token refreshed successfully')
+    return true
+  } catch (error) {
+    console.error('[Push Refresh] Error:', error)
+    return false
+  }
+}
+
+/**
+ * Check if the user's push token needs refreshing.
+ * This checks if the stored token version or project ID differs from current.
+ */
+export async function checkAndRefreshTokenIfNeeded(supabase: any, user: any): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) {
+      return false
+    }
+
+    const installationId = Constants.deviceId || Constants.sessionId
+    if (!installationId) {
+      // No stable device ID, just register fresh
+      await registerPushDevice(supabase, user)
+      return true
+    }
+
+    // Check current stored token metadata
+    const { data: existingDevice } = await supabase
+      .from('push_devices')
+      .select('device_metadata, expo_push_token')
+      .eq('user_id', user.id)
+      .eq('device_installation_id', installationId)
+      .eq('is_active', true)
+      .single()
+
+    if (!existingDevice) {
+      // No existing device, register new
+      console.log('[Push Check] No existing device found, registering new')
+      await registerPushDevice(supabase, user)
+      return true
+    }
+
+    const metadata = existingDevice.device_metadata || {}
+    const storedVersion = metadata.token_version || 1
+    const storedProjectId = metadata.expo_project_id
+
+    // Check if refresh is needed
+    const needsRefresh = 
+      storedVersion < TOKEN_VERSION || // Token version outdated
+      (storedProjectId && storedProjectId !== EXPO_PROJECT_ID) // Project ID changed
+
+    if (needsRefresh) {
+      console.log('[Push Check] Token refresh needed:', {
+        storedVersion,
+        currentVersion: TOKEN_VERSION,
+        storedProjectId,
+        currentProjectId: EXPO_PROJECT_ID,
+      })
+      return await forceRefreshPushToken(supabase, user)
+    }
+
+    console.log('[Push Check] Token is up to date')
+    return false
+  } catch (error) {
+    console.error('[Push Check] Error checking token:', error)
+    // On error, try to register anyway to be safe
+    await registerPushDevice(supabase, user)
+    return true
   }
 }
 
