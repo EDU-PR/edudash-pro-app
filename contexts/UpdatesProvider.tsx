@@ -43,33 +43,54 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Check for updates manually
   const checkForUpdates = async (): Promise<boolean> => {
+    // Log detailed update info for debugging
+    const updateInfo = {
+      isEnabled: Updates.isEnabled,
+      isDev: __DEV__,
+      channel: Updates.channel,
+      runtimeVersion: Updates.runtimeVersion,
+      updateId: Updates.updateId,
+      createdAt: Updates.createdAt,
+      isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+      releaseChannel: Updates.releaseChannel,
+      manifest: Updates.manifest,
+    };
+    
+    logger.info('[Updates] Update environment:', updateInfo);
+    console.log('[Updates] Full update info:', JSON.stringify(updateInfo, null, 2));
+    
     if (!Updates.isEnabled) {
-      logger.info('[Updates] Updates are disabled - skipping check');
+      logger.warn('[Updates] Updates are disabled - skipping check (likely development build)');
+      console.warn('[Updates] To enable OTA updates, set EXPO_PUBLIC_ENABLE_OTA_UPDATES=true and rebuild');
       return false;
     }
     
-    // Skip in development builds - Updates API not supported
-    if (__DEV__) {
-      logger.info('[Updates] Skipping check in development build');
-      return false;
-    }
-    
-    logger.info('[Updates] Manual update check initiated');
+    // Force allow updates in production builds (ignore __DEV__ flag)
+    const enableOTAUpdates = process.env.EXPO_PUBLIC_ENABLE_OTA_UPDATES === 'true';
+    logger.info('[Updates] Manual update check initiated (forceCheck=true, OTA_ENABLED=' + enableOTAUpdates + ')');
 
     try {
-      updateState({ isDownloading: true, updateError: null });
+      updateState({ isDownloading: true, updateError: null, lastCheckTime: new Date() });
+      console.log('[Updates] Checking for updates via expo-updates API...');
       logger.info('[Updates] Checking for updates...');
       
       const update = await Updates.checkForUpdateAsync();
+      console.log('[Updates] Update check result:', { 
+        isAvailable: update.isAvailable, 
+        manifestId: update.manifest?.id,
+        manifest: update.manifest 
+      });
       logger.info('[Updates] Update check result:', { isAvailable: update.isAvailable, manifest: update.manifest?.id });
       
       // Track update check
       trackOTAUpdateCheck(update);
       
       if (update.isAvailable) {
+        console.log('[Updates] ✅ Update available! Starting download...');
         logger.info('[Updates] Update available, starting download...');
         // Start downloading
         const result = await Updates.fetchUpdateAsync();
+        console.log('[Updates] ✅ Update downloaded successfully:', { isNew: result.isNew });
         logger.info('[Updates] Update downloaded:', { isNew: result.isNew });
         
         // Track update fetch
@@ -91,12 +112,14 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         
         return true;
       } else {
+        console.log('[Updates] ℹ️ No update available - already on latest version');
         logger.info('[Updates] No update available');
         updateState({ isDownloading: false, lastCheckTime: new Date() });
         return false;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to check for updates';
+      console.error('[Updates] ❌ Update check failed:', errorMessage, error);
       logger.warn('[Updates] Update check failed:', errorMessage, error);
       
       // Track error
@@ -195,14 +218,24 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Background update checking
   const backgroundCheck = useCallback(async () => {
+    // Log detailed update info for debugging
+    logger.info('[Updates] Background check - Update environment:', {
+      isEnabled: Updates.isEnabled,
+      isDev: __DEV__,
+      channel: Updates.channel,
+      runtimeVersion: Updates.runtimeVersion,
+      updateId: Updates.updateId,
+    });
+    
     if (!Updates.isEnabled) {
-      logger.info('[Updates] Updates disabled - skipping background check');
+      logger.info('[Updates] Updates disabled - skipping background check (likely development build)');
       return;
     }
     
-    // Skip in development builds - Updates API not supported
-    if (__DEV__) {
-      logger.info('[Updates] Skipping background check in development build');
+    // Allow OTA updates in preview/production builds even if __DEV__ is true
+    const enableOTAUpdates = process.env.EXPO_PUBLIC_ENABLE_OTA_UPDATES === 'true';
+    if (__DEV__ && !enableOTAUpdates) {
+      logger.info('[Updates] Skipping background check - development build without OTA enabled');
       return;
     }
 
