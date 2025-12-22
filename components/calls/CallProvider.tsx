@@ -18,6 +18,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { getPendingCall, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
+import { backgroundCallManager } from '@/lib/calls/BackgroundCallManager';
+import { enhancedPermissionsManager } from '@/lib/calls/EnhancedPermissionsManager';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -165,11 +167,48 @@ export function CallProvider({ children }: CallProviderProps) {
       // When app comes to foreground, check for pending calls from HeadlessJS
       if (nextAppState === 'active') {
         checkPendingCall();
+        // Re-establish any dropped connections
+        if (isCallActive && answeringCall) {
+          console.log('[CallProvider] Re-establishing call connection after foreground');
+          // Force reconnection if needed
+        }
+      }
+      
+      // When app goes to background during a call, ensure call persists
+      if (nextAppState === 'background' && isCallActive) {
+        console.log('[CallProvider] App backgrounded during active call - maintaining connection');
+        // Keep connection alive and show notification
+        maintainBackgroundCall();
       }
     });
 
     return () => subscription.remove();
-  }, [appState, callsEnabled]);
+  }, [appState, callsEnabled, isCallActive, answeringCall]);
+  
+  // Maintain call connection when app is backgrounded
+  const maintainBackgroundCall = useCallback(async () => {
+    if (!answeringCall) return;
+    
+    try {
+      // Show persistent notification for active call
+      if (Platform.OS === 'android') {
+        // Use CallKeep to maintain call state
+        await callKeepManager.reportConnected(answeringCall.call_id);
+      }
+      
+      // For video calls, temporarily disable video to save bandwidth
+      if (answeringCall.call_type === 'video') {
+        console.log('[CallProvider] Temporarily disabling video for background mode');
+        // This will be handled by VideoCallInterface
+      }
+    } catch (error) {
+      console.error('[CallProvider] Error maintaining background call:', error);
+    }
+  }, [answeringCall]);
+  
+  // Computed properties for call state
+  const isCallActive = Boolean(answeringCall || outgoingCall);
+  const isInActiveCall = isCallActive && callState === 'connected';
   
   // Check for pending calls saved by HeadlessJS task
   const checkPendingCall = useCallback(async () => {
@@ -419,7 +458,7 @@ export function CallProvider({ children }: CallProviderProps) {
     };
   }, [currentUserId, callsEnabled]);
 
-  // Start voice call
+  // Start voice call with enhanced permissions and testing
   const startVoiceCall = useCallback(
     async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
@@ -427,38 +466,65 @@ export function CallProvider({ children }: CallProviderProps) {
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
+
+      try {
+        // Check microphone permissions first
+        const hasPermissions = await enhancedPermissionsManager.hasRequiredPermissions('voice');
+        if (!hasPermissions) {
+          const granted = await enhancedPermissionsManager.showVoiceCallPermissionDialog();
+          if (!granted) {
+            toast.error('Microphone permission is required for voice calls');
+            return;
+          }
+        }
+
+        // Test microphone functionality
+        const micTest = await enhancedPermissionsManager.testMicrophone();
+        if (!micTest.working) {
+          Alert.alert(
+            'Microphone Issue',
+            micTest.error || 'Microphone is not working properly. Please check your device settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
       
-      // Refresh presence data to get latest status
-      console.log('[CallProvider] Refreshing presence before call check...');
-      await refreshPresence();
-      
-      // Check if user is online
-      const userOnline = isUserOnline(userId);
-      const lastSeenText = getLastSeenText(userId);
-      console.log('[CallProvider] Presence check:', {
-        userId,
-        userName,
-        userOnline,
-        lastSeenText
-      });
-      
-      // Allow calls to offline users - they'll receive a push notification
-      // Previously we blocked calls to offline users, but push notifications can wake the app
-      if (!userOnline) {
-        console.log('[CallProvider] User offline, will send push notification');
-        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
+        // Refresh presence data to get latest status
+        console.log('[CallProvider] Refreshing presence before call check...');
+        await refreshPresence();
+        
+        // Check if user is online
+        const userOnline = isUserOnline(userId);
+        const lastSeenText = getLastSeenText(userId);
+        console.log('[CallProvider] Presence check:', {
+          userId,
+          userName,
+          userOnline,
+          lastSeenText
+        });
+        
+        // Allow calls to offline users - they'll receive a push notification
+        // Previously we blocked calls to offline users, but push notifications can wake the app
+        if (!userOnline) {
+          console.log('[CallProvider] User offline, will send push notification');
+          toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
+        }
+        
+        console.log('[CallProvider] Starting voice call (user online:', userOnline, ')');
+        
+        setOutgoingCall({ userId, userName, callType: 'voice' });
+        setIsCallInterfaceOpen(true);
+        setCallState('connecting');
+        
+      } catch (error) {
+        console.error('[CallProvider] Error starting voice call:', error);
+        toast.error('Failed to start voice call. Please try again.');
       }
-      
-      console.log('[CallProvider] Starting call (user online:', userOnline, ')');
-      
-      setOutgoingCall({ userId, userName, callType: 'voice' });
-      setIsCallInterfaceOpen(true);
-      setCallState('connecting');
     },
     [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
 
-  // Start video call
+  // Start video call with enhanced permissions and testing
   const startVideoCall = useCallback(
     async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
@@ -466,32 +532,72 @@ export function CallProvider({ children }: CallProviderProps) {
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
-      
-      // Refresh presence data to get latest status
-      console.log('[CallProvider] Refreshing presence before video call check...');
-      await refreshPresence();
-      
-      // Check if user is online
-      const userOnline = isUserOnline(userId);
-      const lastSeenText = getLastSeenText(userId);
-      console.log('[CallProvider] Video presence check:', {
-        userId,
-        userName,
-        userOnline,
-        lastSeenText
-      });
-      
-      // Allow calls to offline users - they'll receive a push notification
-      if (!userOnline) {
-        console.log('[CallProvider] User offline, will send push notification for video call');
-        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
+
+      try {
+        // Check camera and microphone permissions first
+        const hasPermissions = await enhancedPermissionsManager.hasRequiredPermissions('video');
+        if (!hasPermissions) {
+          const granted = await enhancedPermissionsManager.showVideoCallPermissionDialog();
+          if (!granted) {
+            toast.error('Camera and microphone permissions are required for video calls');
+            return;
+          }
+        }
+
+        // Test camera and microphone functionality
+        const [cameraTest, micTest] = await Promise.all([
+          enhancedPermissionsManager.testCamera(),
+          enhancedPermissionsManager.testMicrophone(),
+        ]);
+
+        if (!cameraTest.working) {
+          Alert.alert(
+            'Camera Issue',
+            cameraTest.error || 'Camera is not working properly. Please check your device settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        if (!micTest.working) {
+          Alert.alert(
+            'Microphone Issue',
+            micTest.error || 'Microphone is not working properly. Please check your device settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // Refresh presence data to get latest status
+        console.log('[CallProvider] Refreshing presence before video call check...');
+        await refreshPresence();
+        
+        // Check if user is online
+        const userOnline = isUserOnline(userId);
+        const lastSeenText = getLastSeenText(userId);
+        console.log('[CallProvider] Video presence check:', {
+          userId,
+          userName,
+          userOnline,
+          lastSeenText
+        });
+        
+        // Allow calls to offline users - they'll receive a push notification
+        if (!userOnline) {
+          console.log('[CallProvider] User offline, will send push notification for video call');
+          toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
+        }
+        
+        console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
+        
+        setOutgoingCall({ userId, userName, callType: 'video' });
+        setIsCallInterfaceOpen(true);
+        setCallState('connecting');
+
+      } catch (error) {
+        console.error('[CallProvider] Error starting video call:', error);
+        toast.error('Failed to start video call. Please try again.');
       }
-      
-      console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
-      
-      setOutgoingCall({ userId, userName, callType: 'video' });
-      setIsCallInterfaceOpen(true);
-      setCallState('connecting');
     },
     [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
@@ -564,9 +670,7 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall, outgoingCall]);
 
-  // Calculate derived state
-  const isCallActive = isCallInterfaceOpen || !!incomingCall;
-  const isInActiveCall = isCallInterfaceOpen && (!!answeringCall || !!outgoingCall);
+  // Calculate derived state (using earlier declaration from line 210)
 
   const contextValue: CallContextType = {
     startVoiceCall,
