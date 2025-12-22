@@ -57,6 +57,7 @@ edudashpro-dev/
 *.md
 !README.md
 !SECURITY_NOTES.md
+!CODEBASE_REVIEW_SUMMARY.md
 !supabase/README.md
 !PAYMENT_INTEGRATIONS_CHECKLIST.md
 
