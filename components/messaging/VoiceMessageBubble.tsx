@@ -47,6 +47,7 @@ interface VoiceMessageBubbleProps {
   senderAvatar?: string;
   senderName?: string;
   isRead?: boolean;
+  onLongPress?: () => void;
 }
 
 export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
@@ -57,6 +58,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   senderAvatar,
   senderName,
   isRead = false,
+  onLongPress,
 }) => {
   const { theme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
@@ -336,7 +338,11 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
         </View>
       )}
       
-      <View style={styles.bubble}>
+      <Pressable 
+        style={styles.bubble}
+        onLongPress={onLongPress}
+        delayLongPress={300}
+      >
         {/* Play/Pause Button with Gradient */}
         <TouchableOpacity 
           onPress={handlePlayPause}
@@ -412,7 +418,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
             )}
           </View>
         </View>
-      </View>
+      </Pressable>
       
       {/* Spacer for own messages */}
       {isOwnMessage && <View style={{ width: 4 }} />}

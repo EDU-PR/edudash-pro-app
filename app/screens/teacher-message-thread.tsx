@@ -436,7 +436,28 @@ export default function TeacherMessageThreadScreen() {
           onChangeWallpaper={() => { setShowOptions(false); setShowWallpaper(true); }}
           onMuteNotifications={() => { setShowOptions(false); toast.success('Notifications muted'); }}
           onSearchInChat={() => { setShowOptions(false); toast.info('Coming soon', 'Search'); }}
-          onClearChat={() => { setShowOptions(false); toast.success('Chat cleared'); }}
+          onClearChat={async () => { 
+            setShowOptions(false);
+            try {
+              const { assertSupabase } = await import('@/lib/supabase');
+              const supabase = assertSupabase();
+              
+              if (!threadId) return;
+              
+              const { error } = await supabase
+                .from('messages')
+                .delete()
+                .eq('thread_id', threadId);
+              
+              if (error) throw error;
+              
+              refetch();
+              toast.success('Chat cleared');
+            } catch (error) {
+              console.error('[ClearChat] Error:', error);
+              toast.error('Failed to clear chat');
+            }
+          }}
           onBlockUser={() => { setShowOptions(false); toast.warn('User blocked'); }}
           onViewContact={() => { setShowOptions(false); toast.info(displayName, 'Contact'); }}
           onExportChat={() => { setShowOptions(false); toast.info('Coming soon', 'Export'); }}

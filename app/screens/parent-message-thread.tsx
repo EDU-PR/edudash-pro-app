@@ -405,17 +405,45 @@ export default function ParentMessageThreadScreen() {
   }, []);
 
   // Thread options handlers
-  const handleClearChat = useCallback(() => {
+  const handleClearChat = useCallback(async () => {
     Alert.alert(
       'Clear Chat',
       'This will delete all messages in this conversation. Are you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => console.log('Clear chat') }
+        { 
+          text: 'Clear', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              const { assertSupabase } = await import('@/lib/supabase');
+              const supabase = assertSupabase();
+              
+              // Delete all messages in this thread
+              const { error } = await supabase
+                .from('messages')
+                .delete()
+                .eq('thread_id', threadId);
+              
+              if (error) throw error;
+              
+              // Clear optimistic messages
+              setOptimisticMsgs([]);
+              
+              // Refetch to update UI
+              refetch();
+              
+              toast.success('Chat cleared', 'Success');
+            } catch (error) {
+              console.error('[ClearChat] Error:', error);
+              toast.error('Failed to clear chat', 'Error');
+            }
+          }
+        }
       ]
     );
     setShowOptionsMenu(false);
-  }, []);
+  }, [threadId, refetch]);
 
   const handleMuteNotifications = useCallback(() => {
     toast.info('Mute notifications feature coming soon', 'Notifications');

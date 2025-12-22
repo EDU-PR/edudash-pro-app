@@ -65,6 +65,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         timestamp={formatTime(msg.created_at)}
         senderName={!isOwn ? name : undefined}
         isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
+        onLongPress={onLongPress}
       />
     );
   }
