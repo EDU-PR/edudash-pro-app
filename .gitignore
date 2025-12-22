@@ -72,6 +72,9 @@ temp/
 *.backup
 *.backup.*
 *-backup.*
+*.old
+*.old.*
+*-old.*
 
 # Keystore - NEVER COMMIT
 *.jks
