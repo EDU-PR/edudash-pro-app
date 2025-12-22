@@ -64,12 +64,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         let t: Tier = 'free';
         let source: TierSource = 'unknown';
         const normalizeTier = (v: string): string => String(v || '').trim().toLowerCase().replace(/-/g, '_');
-        const knownTiers: Tier[] = ['free', 'parent_starter', 'parent_plus', 'starter', 'premium', 'enterprise', 'basic', 'pro'];
+        const knownTiers: Tier[] = ['free', 'parent_starter', 'parent_plus', 'starter', 'basic', 'premium', 'pro', 'enterprise'];
         const metaTierRaw = (user?.user_metadata as any)?.subscription_tier as string | undefined;
         const metaTier = metaTierRaw ? normalizeTier(metaTierRaw) : '';
+        console.log('[SubscriptionContext] User metadata tier:', metaTierRaw, '-> normalized:', metaTier);
         if (metaTier && knownTiers.includes(metaTier as Tier)) {
           t = metaTier as Tier;
           source = 'user';
+          console.log('[SubscriptionContext] Using metadata tier:', t);
         }
 
         // Try to detect org or school-owned subscription using schema
@@ -114,34 +116,43 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           if (mounted) {
             try {
               const supabase = assertSupabase();
-              const { data: usage } = await supabase
+              console.log('[SubscriptionContext] Fetching user_ai_usage for user:', user.id);
+              const { data: usage, error: usageError } = await supabase
                 .from('user_ai_usage')
                 .select('current_tier')
                 .eq('user_id', user.id)
                 .maybeSingle();
-              const { data: tierRow } = await supabase
+              
+              console.log('[SubscriptionContext] user_ai_usage result:', usage, 'error:', usageError);
+              
+              const { data: tierRow, error: tierError } = await supabase
                 .from('user_ai_tiers')
                 .select('tier')
                 .eq('user_id', user.id)
                 .maybeSingle();
+
+              console.log('[SubscriptionContext] user_ai_tiers result:', tierRow, 'error:', tierError);
 
               // Handle enum types - Supabase returns enums as strings, but ensure we convert properly
               const usageTier = (usage as any)?.current_tier;
               const tierRowTier = (tierRow as any)?.tier;
               const rawTier = usageTier || tierRowTier || '';
               
+              console.log('[SubscriptionContext] rawTier from DB:', rawTier);
+              
               // Convert to string and normalize (handles enum types, null, undefined)
               const aiTierStr = normalizeTier(String(rawTier || ''));
+              
+              console.log('[SubscriptionContext] Normalized tier:', aiTierStr, 'isKnown:', knownTiers.includes(aiTierStr as Tier));
               
               if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
                 t = aiTierStr as Tier;
                 source = 'user';
+                console.log('[SubscriptionContext] Set tier from DB:', t);
               }
             } catch (err) {
-              // Log error in dev for debugging
-              if (__DEV__) {
-                console.warn('[SubscriptionContext] Error reading user_ai_usage/user_ai_tiers:', err);
-              }
+              // Log error for debugging
+              console.warn('[SubscriptionContext] Error reading user_ai_usage/user_ai_tiers:', err);
             }
           }
 
@@ -214,6 +225,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         } catch {/* ignore */}
 
         if (mounted) {
+          console.log('[SubscriptionContext] FINAL tier result:', t, 'source:', source);
           setTier(t);
           setTierSource(source);
           setTierSourceDetail(source);

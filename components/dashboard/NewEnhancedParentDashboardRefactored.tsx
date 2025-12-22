@@ -86,8 +86,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
     // Refresh subscription data on dashboard mount to ensure tier is up-to-date
     // This handles cases where payment was completed but tier wasn't refreshed
+    console.log('[ParentDashboard] Mount - triggering subscription refresh, current tier:', tier, 'ready:', subscriptionReady);
     refreshSubscription();
-  }, [refreshSubscription]);
+  }, []);  // Only run on mount, not when tier changes to avoid loops
+
+  // Log tier changes for debugging
+  useEffect(() => {
+    console.log('[ParentDashboard] Tier updated:', tier, 'subscriptionReady:', subscriptionReady);
+  }, [tier, subscriptionReady]);
 
   // Update children state when dashboard data changes
   useEffect(() => {
