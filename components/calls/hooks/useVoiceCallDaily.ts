@@ -507,16 +507,19 @@ export function useVoiceCallDaily({
     };
   }, [isOpen, meetingUrl, userName, isOwner, calleeId]);
 
-  // Toggle microphone
+  // Toggle microphone - use setLocalAudio for reliable mute/unmute
   const toggleAudio = useCallback(async () => {
     if (!dailyRef.current) return;
     
     try {
-      const currentState = dailyRef.current.localAudio();
-      const newState = !currentState;
-      await dailyRef.current.updateSendSettings({ audio: { isEnabled: newState } });
+      // Get current mute state from localAudio()
+      const currentlyEnabled = dailyRef.current.localAudio();
+      const newState = !currentlyEnabled;
+      
+      // Use setLocalAudio instead of updateSendSettings for better reliability
+      await dailyRef.current.setLocalAudio(newState);
       setIsAudioEnabled(newState);
-      console.log('[VoiceCallDaily] Audio toggled:', newState);
+      console.log('[VoiceCallDaily] Audio toggled:', { was: currentlyEnabled, now: newState });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (err) {
       console.warn('[VoiceCallDaily] Toggle audio error:', err);

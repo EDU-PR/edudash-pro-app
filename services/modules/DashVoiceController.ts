@@ -2,7 +2,10 @@
  * DashVoiceController
  * 
  * Handles voice synthesis (TTS) for Dash AI Assistant responses.
- * Supports Azure TTS for SA languages via Edge Function with device TTS fallback.
+ * 
+ * Language routing strategy:
+ * - en-ZA, af-ZA, zu-ZA: Use native device TTS (excellent support on Android/iOS)
+ * - xh-ZA, nso-ZA, others: Use Azure TTS via Edge Function
  * 
  * Extracted from DashAIAssistant.ts as part of Phase 4 modularization.
  */
@@ -11,6 +14,12 @@ import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 import { voiceService } from '@/lib/voice/client';
 import type { DashMessage } from '@/services/dash-ai/types';
+
+// Languages with excellent native device TTS support (no Azure needed)
+const NATIVE_TTS_LANGUAGES = ['en', 'af', 'zu'];
+
+// Languages that need Azure TTS (poor or no native support)
+const AZURE_TTS_LANGUAGES = ['xh', 'nso'];
 
 export interface VoiceSettings {
   rate: number;
@@ -69,17 +78,50 @@ export class DashVoiceController {
       }
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
-      // Prefer Azure TTS for all supported locales; device TTS is last resort
+      const shortCode = this.mapLanguageCode(language);
+      
+      // Routing decision based on language support:
+      // - en, af, zu: Use native device TTS (excellent support)
+      // - xh, nso, others: Use Azure TTS (poor/no native support)
+      const useNativeTTS = NATIVE_TTS_LANGUAGES.includes(shortCode);
+      
+      console.log(`[DashVoiceController] TTS routing: language=${shortCode}, useNative=${useNativeTTS}`);
+      
+      if (useNativeTTS) {
+        // Use native device TTS for well-supported languages
+        try {
+          await this.speakWithDeviceTTS(normalizedText, {
+            ...voiceSettings,
+            language: this.mapToDeviceLocale(shortCode)
+          }, callbacks);
+          if (this.isSpeechAborted) callbacks?.onStopped?.();
+          return;
+        } catch (deviceError) {
+          console.warn('[DashVoiceController] Device TTS failed, trying Azure:', deviceError);
+        }
+      }
+      
+      // Use Azure TTS for xh, nso, or as fallback for failed device TTS
       try {
-        await this.speakWithAzureTTS(normalizedText, language, callbacks);
+        await this.speakWithAzureTTS(normalizedText, shortCode, callbacks);
         if (this.isSpeechAborted) callbacks?.onStopped?.();
         return;
       } catch (azureError) {
-        console.error('[DashVoiceController] Azure TTS failed, falling back:', azureError);
+        console.error('[DashVoiceController] Azure TTS failed:', azureError);
+        
+        // Final fallback: try device TTS even for Azure languages
+        if (!useNativeTTS) {
+          try {
+            await this.speakWithDeviceTTS(normalizedText, voiceSettings, callbacks);
+            return;
+          } catch (finalError) {
+            console.error('[DashVoiceController] All TTS methods failed');
+            callbacks?.onError?.(finalError);
+          }
+        } else {
+          callbacks?.onError?.(azureError);
+        }
       }
-      
-      // Device TTS fallback
-      await this.speakWithDeviceTTS(normalizedText, voiceSettings, callbacks);
     } catch (error) {
       console.error('[DashVoiceController] Failed to speak:', error);
       callbacks?.onError?.(error);
@@ -304,6 +346,17 @@ export class DashVoiceController {
       'ns': 'nso', 'st': 'nso', 'se': 'nso'
     };
     return mapping[normalized] || 'en';
+  }
+  
+  /** Map to device TTS locale (e.g., af -> af-ZA) for expo-speech */
+  private mapToDeviceLocale(code: string): string {
+    const c = (code || 'en').toLowerCase();
+    if (c === 'af') return 'af-ZA';
+    if (c === 'zu') return 'zu-ZA';
+    if (c === 'xh') return 'xh-ZA';
+    if (c === 'en') return 'en-ZA';
+    // For nso and others, use en-ZA as fallback for device
+    return 'en-ZA';
   }
   
   /** Map to Azure locale (e.g., af -> af-ZA) */

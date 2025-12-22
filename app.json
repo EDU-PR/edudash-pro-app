@@ -30,6 +30,10 @@
           "audio",
           "voip",
           "audio",
+          "voip",
+          "audio",
+          "voip",
+          "audio",
           "voip"
         ],
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition."
@@ -74,9 +78,33 @@
         "android.permission.CALL_PHONE",
         "android.permission.ANSWER_PHONE_CALLS",
         "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.BLUETOOTH",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.CALL_PHONE",
+        "android.permission.ANSWER_PHONE_CALLS",
+        "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.BIND_TELECOM_CONNECTION_SERVICE"
       ],
       "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -205,7 +233,7 @@
       "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
     },
     "updates": {
-      "url": "https://u.expo.dev/@dashpro/edudashpro"
+      "url": "https://u.expo.dev/7f8f6d60-a127-4cbc-ad34-c9d617aa2880"
     }
   }
 }

@@ -462,8 +462,20 @@ export function WhatsAppStyleVideoCall({
         dailyRef.current = daily;
 
         // Event listeners
-        daily.on('joined-meeting', () => {
+        daily.on('joined-meeting', async () => {
           console.log('[VideoCall] Joined meeting');
+          
+          // Explicitly enable camera and microphone after joining
+          try {
+            await daily.setLocalVideo(true);
+            await daily.setLocalAudio(true);
+            setIsVideoEnabled(true);
+            setIsAudioEnabled(true);
+            console.log('[VideoCall] Camera and mic enabled');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to enable camera/mic:', err);
+          }
+          
           // Don't set to connected yet if we're the caller waiting for the callee
           if (!isOwner || !calleeId) {
             // If answering a call or no callee, we're connected immediately
@@ -497,7 +509,28 @@ export function WhatsAppStyleVideoCall({
           updateParticipants();
         });
 
-        daily.on('participant-updated', () => {
+        daily.on('participant-updated', (event: any) => {
+          console.log('[VideoCall] Participant updated:', {
+            participant: event?.participant?.session_id,
+            videoState: event?.participant?.tracks?.video?.state,
+            audioState: event?.participant?.tracks?.audio?.state,
+          });
+          updateParticipants();
+        });
+        
+        daily.on('track-started', (event: any) => {
+          console.log('[VideoCall] Track started:', {
+            participant: event?.participant?.session_id,
+            track: event?.track?.kind,
+          });
+          updateParticipants();
+        });
+        
+        daily.on('track-stopped', (event: any) => {
+          console.log('[VideoCall] Track stopped:', {
+            participant: event?.participant?.session_id,
+            track: event?.track?.kind,
+          });
           updateParticipants();
         });
 
@@ -505,6 +538,11 @@ export function WhatsAppStyleVideoCall({
           console.error('[VideoCall] Error:', event);
           setError(event?.errorMsg || 'Call error');
           setCallState('failed');
+        });
+        
+        daily.on('camera-error', (event: any) => {
+          console.error('[VideoCall] Camera error:', event);
+          setIsVideoEnabled(false);
         });
 
         await daily.join({ url: roomUrl });
