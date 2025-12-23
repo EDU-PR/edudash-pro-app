@@ -277,7 +277,7 @@ class OfflineCacheService {
             }
           } catch (parseError) {
             // Skip corrupted cache entries - they'll be cleaned up on next write
-            console.warn(`Skipping corrupted cache entry: ${key}`);
+            console.debug(`[OfflineCache] Skipping corrupted cache entry: ${key}`);
           }
         }
 

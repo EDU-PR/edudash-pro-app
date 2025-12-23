@@ -343,10 +343,40 @@ serve(async (req: Request) => {
           const tierValue = String(planTier);
           const nowIso = new Date().toISOString();
 
+          // Parse billing frequency from custom_str4 to calculate correct expires_at
+          let billingFrequency = 'monthly';
+          try {
+            const parsed = JSON.parse(customData);
+            billingFrequency = parsed.billing || 'monthly';
+          } catch (e) {
+            console.warn('[PayFast ITN] Error parsing custom_str4 for billing:', e);
+          }
+
+          // Calculate subscription end date based on billing frequency
+          const expiresAt = new Date();
+          if (billingFrequency === 'annual') {
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          } else {
+            expiresAt.setMonth(expiresAt.getMonth() + 1);
+          }
+          const expiresAtIso = expiresAt.toISOString();
+
+          console.log('[PayFast ITN] User tier update:', {
+            userId: ownerId,
+            tier: tierValue,
+            billing: billingFrequency,
+            expiresAt: expiresAtIso,
+          });
+
           // Keep `user_ai_tiers` and `user_ai_usage.current_tier` in sync (this is what the app reads).
           const { error: tierUpdateError } = await supabase
             .from('user_ai_tiers')
-            .upsert({ user_id: ownerId, tier: tierValue, updated_at: nowIso } as any, { onConflict: 'user_id' });
+            .upsert({ 
+              user_id: ownerId, 
+              tier: tierValue, 
+              expires_at: expiresAtIso,
+              updated_at: nowIso 
+            } as any, { onConflict: 'user_id' });
           if (tierUpdateError) {
             console.error('[PayFast ITN] Failed to upsert user_ai_tiers:', tierUpdateError);
           }
@@ -356,6 +386,20 @@ serve(async (req: Request) => {
             .upsert({ user_id: ownerId, current_tier: tierValue, updated_at: nowIso } as any, { onConflict: 'user_id' });
           if (usageUpdateError) {
             console.error('[PayFast ITN] Failed to upsert user_ai_usage.current_tier:', usageUpdateError);
+          }
+
+          // Also update user_metadata.subscription_tier so JWT token reflects new tier on next login
+          try {
+            const { error: metaError } = await supabase.auth.admin.updateUserById(ownerId, {
+              user_metadata: { subscription_tier: tierValue }
+            });
+            if (metaError) {
+              console.error('[PayFast ITN] Failed to update user_metadata.subscription_tier:', metaError);
+            } else {
+              console.log('[PayFast ITN] Updated user_metadata.subscription_tier to:', tierValue);
+            }
+          } catch (metaErr) {
+            console.warn('[PayFast ITN] user_metadata update threw (non-fatal):', metaErr);
           }
         } catch (e) {
           console.error('[PayFast ITN] User-tier upsert threw (non-fatal):', e);

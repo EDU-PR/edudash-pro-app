@@ -23,6 +23,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import ToastProvider from '../components/ui/ToastProvider';
 import { QueryProvider } from '../lib/query/queryClient';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DashboardPreferencesProvider } from '../contexts/DashboardPreferencesContext';
 import { UpdatesProvider } from '../contexts/UpdatesProvider';
@@ -168,12 +169,13 @@ export default function RootLayout() {
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>
-            <UpdatesProvider>
-              <AppPreferencesProvider>
-                <NotificationProvider>
-                  <CallProvider>
-                    <OnboardingProvider>
-                      <DashboardPreferencesProvider>
+            <SubscriptionProvider>
+              <UpdatesProvider>
+                <AppPreferencesProvider>
+                  <NotificationProvider>
+                    <CallProvider>
+                      <OnboardingProvider>
+                        <DashboardPreferencesProvider>
                         <TermsProvider>
                           <ToastProvider>
                             <AlertProvider>
@@ -184,11 +186,12 @@ export default function RootLayout() {
                           </ToastProvider>
                         </TermsProvider>
                       </DashboardPreferencesProvider>
-                    </OnboardingProvider>
-                  </CallProvider>
-                </NotificationProvider>
-              </AppPreferencesProvider>
-            </UpdatesProvider>
+                      </OnboardingProvider>
+                    </CallProvider>
+                  </NotificationProvider>
+                </AppPreferencesProvider>
+              </UpdatesProvider>
+            </SubscriptionProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryProvider>

@@ -92,14 +92,16 @@ export default function AIHomeworkHelperScreen() {
     try {
       setAnswer('')
       track('edudash.ai.helper.started', { subject })
-      const text = await generate({
+      const response = await generate({
         question: question,
         subject,
         gradeLevel: 4,
         difficulty: 'medium',
         model: selectedModel,
       })
-      setAnswer(typeof text === 'string' ? text : String(text || ''))
+      // Extract text from HomeworkResult object
+      const responseText = response?.text || (typeof response === 'string' ? response : String(response || ''))
+      setAnswer(responseText)
       setUsage(await getCombinedUsage())
       track('edudash.ai.helper.completed', { subject })
     } catch (e: any) {
@@ -117,7 +119,7 @@ export default function AIHomeworkHelperScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]}>
       <ScreenHeader 
         title="AI Homework Helper" 
         subtitle="Child-safe, step-by-step guidance" 
@@ -129,21 +131,21 @@ export default function AIHomeworkHelperScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefreshHandler}
-            tintColor="#007AFF"
+            tintColor={theme.primary}
             title="Refreshing AI data..."
           />
         }
       >
 
         {!aiHelperEnabled && (
-          <Text style={styles.disabledBanner}>AI Homework Helper is currently disabled by feature flags or build configuration.</Text>
+          <Text style={[styles.disabledBanner, { color: theme.warning, backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>AI Homework Helper is currently disabled by feature flags or build configuration.</Text>
         )}
 
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           {/* Model selector */}
           {models.length > 0 && (
             <View style={{ marginBottom: 8 }}>
-              <Text style={styles.label}>Model</Text>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Model</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {models.map(m => {
                   const costIndicator = m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$';
@@ -151,8 +153,8 @@ export default function AIHomeworkHelperScreen() {
                   const modelText = `${m.name} · x${m.relativeCost} · ${costIndicator}${notes}`;
                   
                   return (
-                    <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'homework_help') } catch { /* noop */ void 0; } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? Colors.light.text : '#E5E7EB', backgroundColor: selectedModel === m.id ? Colors.light.text : 'transparent' }}>
-                      <Text style={{ color: selectedModel === m.id ? '#fff' : Colors.light.text }}>
+                    <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'homework_help') } catch { /* noop */ void 0; } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? theme.primary : theme.border, backgroundColor: selectedModel === m.id ? theme.primary : 'transparent' }}>
+                      <Text style={{ color: selectedModel === m.id ? '#fff' : theme.text, fontSize: 12 }}>
                         {modelText}
                       </Text>
                     </TouchableOpacity>
@@ -162,44 +164,44 @@ export default function AIHomeworkHelperScreen() {
             </View>
           )}
 
-          <Text style={styles.label}>Subject</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>Subject</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.surface, color: theme.text }]}
             value={subject}
             onChangeText={setSubject}
             placeholder="e.g., Mathematics"
-            placeholderTextColor={Colors.light.tabIconDefault}
+            placeholderTextColor={theme.textSecondary}
           />
 
-          <Text style={[styles.label, { marginTop: 12 }]}>Question / Problem</Text>
+          <Text style={[styles.label, { marginTop: 12, color: theme.textSecondary }]}>Question / Problem</Text>
           <TextInput
-            style={[styles.input, styles.textArea]}
+            style={[styles.input, styles.textArea, { borderColor: theme.border, backgroundColor: theme.surface, color: theme.text }]}
             value={question}
             onChangeText={setQuestion}
             placeholder="Paste or type the question here"
-            placeholderTextColor={Colors.light.tabIconDefault}
+            placeholderTextColor={theme.textSecondary}
             multiline
           />
 
-          <TouchableOpacity onPress={onAskAI} disabled={loading || pending || !aiHelperEnabled} style={[styles.button, (loading || pending || !aiHelperEnabled) && styles.buttonDisabled]}>
+          <TouchableOpacity onPress={onAskAI} disabled={loading || pending || !aiHelperEnabled} style={[styles.button, { backgroundColor: theme.primary }, (loading || pending || !aiHelperEnabled) && styles.buttonDisabled]}>
             {(loading || pending) ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Ask AI</Text>}
           </TouchableOpacity>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Response</Text>
-          <Text style={styles.usage}>Monthly usage (local/server): Helper {usage.homework_help}</Text>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Response</Text>
+          <Text style={[styles.usage, { color: theme.textSecondary }]}>Monthly usage (local/server): Helper {usage.homework_help}</Text>
           <QuotaBar feature="homework_help" planLimit={quotas.ai_requests} />
           {result?.__fallbackUsed && (
-            <View style={[styles.fallbackChip, { borderColor: '#E5E7EB', backgroundColor: theme.accent + '20' }]}>
+            <View style={[styles.fallbackChip, { borderColor: theme.border, backgroundColor: theme.accent + '20' }]}>
               <Ionicons name="information-circle" size={16} color={theme.accent} />
-              <Text style={{ color: Colors.light.tabIconDefault, fontSize: 12, marginLeft: 6 }}>Fallback used</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, marginLeft: 6 }}>Fallback used</Text>
             </View>
           )}
           {answer ? (
-            <Text style={styles.answer} selectable>{answer}</Text>
+            <Text style={[styles.answer, { color: theme.text }]} selectable>{answer}</Text>
           ) : (
-            <Text style={styles.placeholder}>No response yet. Enter a question and press "Ask AI".</Text>
+            <Text style={[styles.placeholder, { color: theme.textSecondary }]}>No response yet. Enter a question and press "Ask AI".</Text>
           )}
         </View>
       </ScrollView>
@@ -208,6 +210,7 @@ export default function AIHomeworkHelperScreen() {
 }
 
 function QuotaBar({ feature, planLimit }: { feature: 'lesson_generation' | 'grading_assistance' | 'homework_help'; planLimit?: number }) {
+  const { theme } = useTheme()
   const [status, setStatus] = React.useState<{ used: number; limit: number; remaining: number } | null>(null)
   React.useEffect(() => {
     let mounted = true
@@ -223,35 +226,35 @@ function QuotaBar({ feature, planLimit }: { feature: 'lesson_generation' | 'grad
     return () => { mounted = false }
   }, [feature, planLimit])
   if (!status) return null
-  if (status.limit === -1) return <Text style={{ color: Colors.light.tabIconDefault, marginBottom: 8 }}>Quota: Unlimited</Text>
+  if (status.limit === -1) return <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>Quota: Unlimited</Text>
   const pct = Math.max(0, Math.min(100, Math.round((status.used / Math.max(1, status.limit)) * 100)))
   return (
     <View style={{ marginTop: 4 }}>
-      <View style={{ height: 8, borderRadius: 4, backgroundColor: '#E5E7EB' }}>
-        <View style={{ width: `${pct}%`, height: 8, borderRadius: 4, backgroundColor: '#111827' }} />
+      <View style={{ height: 8, borderRadius: 4, backgroundColor: theme.border }}>
+        <View style={{ width: `${pct}%`, height: 8, borderRadius: 4, backgroundColor: theme.primary }} />
       </View>
-      <Text style={{ color: Colors.light.tabIconDefault, marginTop: 4, fontSize: 12 }}>Quota: {status.used}/{status.limit} used · {Math.max(0, status.limit - status.used)} remaining</Text>
+      <Text style={{ color: theme.textSecondary, marginTop: 4, fontSize: 12 }}>Quota: {status.used}/{status.limit} used · {Math.max(0, status.limit - status.used)} remaining</Text>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8fafc' },
+  root: { flex: 1 },
   container: { padding: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.light.text, marginBottom: 4 },
-  subtitle: { fontSize: 13, color: Colors.light.tabIconDefault, marginBottom: 12 },
-  disabledBanner: { color: '#b45309', backgroundColor: '#fef3c7', borderColor: '#f59e0b', borderWidth: StyleSheet.hairlineWidth, padding: 8, borderRadius: 8, marginBottom: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, borderColor: '#E5E7EB', borderWidth: StyleSheet.hairlineWidth, marginBottom: 12 },
-  label: { fontSize: 12, color: Colors.light.tabIconDefault, marginBottom: 6 },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: Colors.light.text },
+  title: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
+  subtitle: { fontSize: 13, marginBottom: 12 },
+  disabledBanner: { padding: 8, borderRadius: 8, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth },
+  card: { borderRadius: 12, padding: 12, borderWidth: StyleSheet.hairlineWidth, marginBottom: 12 },
+  label: { fontSize: 12, marginBottom: 6 },
+  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   textArea: { minHeight: 120 },
-  button: { marginTop: 12, backgroundColor: '#111827', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  button: { marginTop: 12, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontWeight: '700' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6, color: Colors.light.text },
-  usage: { fontSize: 12, color: Colors.light.tabIconDefault, marginBottom: 8 },
-  answer: { fontSize: 13, color: Colors.light.text, lineHeight: 19 },
-  placeholder: { fontSize: 13, color: Colors.light.tabIconDefault },
+  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+  usage: { fontSize: 12, marginBottom: 8 },
+  answer: { fontSize: 13, lineHeight: 19 },
+  placeholder: { fontSize: 13 },
   fallbackChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
 })
 

@@ -123,7 +123,6 @@ export default function SubscriptionUpgradePostScreen() {
                 expanded={expanded[plan.id] || false}
                 onToggleExpand={() => setExpanded(prev => ({ ...prev, [plan.id]: !prev[plan.id] }))}
                 isLaunchPromoActive={isLaunchPromoActive}
-                promoPercentOff={promoPercentOff}
               />
             ))}
           </View>

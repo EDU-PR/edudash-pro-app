@@ -462,6 +462,7 @@
     "upgrade_to_premium_description": "Unlock powerful features for your school:\n\n• Advanced Analytics & Dashboards\n• AI-Powered Insights & Recommendations\n• Custom Reports & Forecasting\n• Real-time Financial Tracking\n• Smart Performance Analytics\n\nTransform your school management today!",
     "learn_more": "Learn More",
     "upgrade_now": "Upgrade Now 🚀",
+    "upgrade_subtitle": "Get AI homework help, advanced insights, and priority support",
     "later": "Later",
     "whatsapp_not_configured": "School WhatsApp number not configured. Please contact support at support@edudashpro.org.za",
     "announcement_send_error": "Unable to send announcement. Please try again.",
@@ -1410,7 +1411,15 @@
     "all_read": "all read",
     "newAssignment": "New assignment: {{title}}",
     "gradePosted": "Grade posted for {{assignment}}",
-    "reminderDue": "Reminder: {{assignment}} is due tomorrow"
+    "reminderDue": "Reminder: {{assignment}} is due tomorrow",
+    "options": "Notification Options",
+    "optionsDesc": "Choose an action",
+    "markMessagesRead": "Clear Message Notifications",
+    "markMessagesReadConfirm": "This will remove all message notifications from the list.",
+    "clearCallNotifications": "Clear Call Notifications",
+    "clearCallNotificationsConfirm": "This will remove all call notifications from the list.",
+    "clearAll": "Clear All Notifications",
+    "clearAllConfirm": "This will remove all notifications from the list. This cannot be undone."
   },
   "errors": {
     "generic": "Something went wrong. Please try again.",

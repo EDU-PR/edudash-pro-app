@@ -223,52 +223,33 @@ async function clearStoredData(): Promise<void> {
  */
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
   try {
-    // Try both auth_user_id and id fields for compatibility
+    // Use profiles table (not deprecated users table)
+    // profiles.id = auth.users.id directly
     let profile = null;
     let profileError = null;
     
-    // First try with auth_user_id (the correct field)
-    const { data: profileByAuth, error: authError } = await assertSupabase()
-      .from('users')
+    const { data: profileData, error: fetchError } = await assertSupabase()
+      .from('profiles')
       .select(`
         id,
         email,
         role,
         first_name,
         last_name,
+        full_name,
         avatar_url,
         created_at,
         preschool_id,
+        organization_id,
         is_active
       `)
-      .eq('auth_user_id', userId)
+      .eq('id', userId)
       .maybeSingle();
       
-    if (!authError && profileByAuth) {
-      profile = profileByAuth;
+    if (!fetchError && profileData) {
+      profile = profileData;
     } else {
-      // Fallback to id field
-      const { data: profileById, error: idError } = await assertSupabase()
-        .from('users')
-        .select(`
-          id,
-          email,
-          role,
-          first_name,
-          last_name,
-          avatar_url,
-          created_at,
-          preschool_id,
-          is_active
-        `)
-        .eq('id', userId)
-        .maybeSingle();
-        
-      if (!idError && profileById) {
-        profile = profileById;
-      } else {
-        profileError = authError || idError;
-      }
+      profileError = fetchError;
     }
 
     if (profileError && !profile) {

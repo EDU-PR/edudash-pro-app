@@ -34,6 +34,65 @@ import { useMarkAnnouncementsSeen } from '@/hooks/useNotificationCount';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTIFICATIONS_LAST_SEEN_KEY = 'notifications_last_seen_at';
+const READ_NOTIFICATIONS_KEY = 'read_notifications';
+
+// Helper to get set of read notification IDs
+const getReadNotificationIds = async (userId: string): Promise<Set<string>> => {
+  try {
+    const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
+    const stored = await AsyncStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Set(parsed);
+    }
+  } catch (e) {
+    console.error('[getReadNotificationIds] Error:', e);
+  }
+  return new Set();
+};
+
+// Helper to mark a notification as read
+const markNotificationRead = async (userId: string, notificationId: string): Promise<void> => {
+  try {
+    const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
+    const existing = await getReadNotificationIds(userId);
+    existing.add(notificationId);
+    // Keep only last 500 entries to prevent infinite growth
+    const arr = Array.from(existing).slice(-500);
+    await AsyncStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {
+    console.error('[markNotificationRead] Error:', e);
+  }
+};
+
+// Helper to mark all notifications as read
+const markAllNotificationsRead = async (userId: string, notificationIds: string[]): Promise<void> => {
+  try {
+    const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
+    const existing = await getReadNotificationIds(userId);
+    notificationIds.forEach(id => existing.add(id));
+    const arr = Array.from(existing).slice(-500);
+    await AsyncStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {
+    console.error('[markAllNotificationsRead] Error:', e);
+  }
+};
+
+// Helper to delete notifications by type
+const deleteNotificationsByType = async (userId: string, notifications: Notification[], types: string[]): Promise<void> => {
+  try {
+    const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
+    const existing = await getReadNotificationIds(userId);
+    // Mark notifications of specified types as deleted by adding them to read set
+    notifications
+      .filter(n => types.includes(n.type))
+      .forEach(n => existing.add(n.id));
+    const arr = Array.from(existing).slice(-500);
+    await AsyncStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {
+    console.error('[deleteNotificationsByType] Error:', e);
+  }
+};
 
 interface Notification {
   id: string;
@@ -130,34 +189,83 @@ const NotificationItem: React.FC<{
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
   
+  // Enhanced styling for read/unread distinction
+  const isUnread = !notification.read;
+  const containerBg = isUnread 
+    ? theme.primary + '12' // Stronger unread background
+    : theme.surface;
+  const borderColor = isUnread ? theme.primary + '40' : 'transparent';
+  
   return (
     <TouchableOpacity 
       style={[
         itemStyles.container, 
-        { backgroundColor: notification.read ? theme.surface : theme.primary + '08' }
+        { 
+          backgroundColor: containerBg,
+          borderLeftWidth: isUnread ? 3 : 0,
+          borderLeftColor: isUnread ? theme.primary : 'transparent',
+          opacity: isUnread ? 1 : 0.75, // Slightly dim read notifications
+        }
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[itemStyles.iconContainer, { backgroundColor: iconConfig.bgColor }]}>
+      {/* Unread indicator - larger and more visible */}
+      {isUnread && (
+        <View style={[itemStyles.unreadIndicator, { backgroundColor: theme.primary }]} />
+      )}
+      
+      <View style={[
+        itemStyles.iconContainer, 
+        { 
+          backgroundColor: iconConfig.bgColor,
+          opacity: isUnread ? 1 : 0.7,
+        }
+      ]}>
         <Ionicons name={iconConfig.icon as keyof typeof Ionicons.glyphMap} size={22} color={iconConfig.color} />
       </View>
       
       <View style={itemStyles.content}>
         <View style={itemStyles.topRow}>
-          <Text style={[itemStyles.title, { color: theme.text, fontWeight: notification.read ? '500' : '700' }]} numberOfLines={1}>
+          <Text 
+            style={[
+              itemStyles.title, 
+              { 
+                color: theme.text, 
+                fontWeight: isUnread ? '700' : '400',
+                opacity: isUnread ? 1 : 0.8,
+              }
+            ]} 
+            numberOfLines={1}
+          >
             {notification.title}
           </Text>
-          <Text style={[itemStyles.time, { color: theme.textSecondary }]}>
+          <Text style={[
+            itemStyles.time, 
+            { 
+              color: isUnread ? theme.primary : theme.textSecondary,
+              fontWeight: isUnread ? '600' : '400',
+            }
+          ]}>
             {formatTime(notification.created_at)}
           </Text>
         </View>
-        <Text style={[itemStyles.body, { color: theme.textSecondary }]} numberOfLines={2}>
+        <Text 
+          style={[
+            itemStyles.body, 
+            { 
+              color: isUnread ? theme.text : theme.textSecondary,
+              fontWeight: isUnread ? '500' : '400',
+            }
+          ]} 
+          numberOfLines={2}
+        >
           {notification.body}
         </Text>
       </View>
       
-      {!notification.read && (
+      {/* Unread dot - larger and pulsing */}
+      {isUnread && (
         <View style={[itemStyles.unreadDot, { backgroundColor: theme.primary }]} />
       )}
     </TouchableOpacity>
@@ -175,6 +283,9 @@ const useNotifications = () => {
       
       const client = assertSupabase();
       
+      // Get set of read notification IDs from local storage
+      const readIds = await getReadNotificationIds(user.id);
+      
       // Try to fetch from notifications table if it exists
       try {
         const { data, error } = await client
@@ -185,7 +296,11 @@ const useNotifications = () => {
           .limit(50);
         
         if (!error && data) {
-          return data as Notification[];
+          // Mark as read if in our local read set
+          return data.map(n => ({
+            ...n,
+            read: n.read || readIds.has(n.id),
+          })) as Notification[];
         }
       } catch {
         // Table might not exist, fall back to composite notifications
@@ -201,7 +316,7 @@ const useNotifications = () => {
           .select(`
             id,
             updated_at,
-            message_participants!inner(user_id),
+            message_participants!inner(user_id, last_read_at),
             messages(content, created_at, sender:profiles!sender_id(first_name, last_name))
           `)
           .eq('message_participants.user_id', user.id)
@@ -215,13 +330,24 @@ const useNotifications = () => {
             const senderName = lastMessage.sender 
               ? `${lastMessage.sender.first_name} ${lastMessage.sender.last_name}`.trim()
               : 'Someone';
+            const notifId = `msg-${thread.id}`;
+            
+            // Check if message is read - either by last_read_at or local storage
+            const participant = Array.isArray(thread.message_participants) 
+              ? thread.message_participants[0] 
+              : thread.message_participants;
+            const lastReadAt = participant?.last_read_at;
+            const messageTime = new Date(lastMessage.created_at).getTime();
+            const readTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+            const isReadByDb = lastReadAt && readTime >= messageTime;
+            
             notifications.push({
-              id: `msg-${thread.id}`,
+              id: notifId,
               type: 'message',
               title: `New message from ${senderName}`,
               body: lastMessage.content?.substring(0, 100) || 'New message',
               data: { threadId: thread.id },
-              read: false,
+              read: isReadByDb || readIds.has(notifId),
               created_at: lastMessage.created_at,
               sender_name: senderName,
             });
@@ -237,7 +363,7 @@ const useNotifications = () => {
           .from('active_calls')
           .select('*, caller:profiles!caller_id(first_name, last_name)')
           .eq('callee_id', user.id)
-          .eq('status', 'missed')
+          .or('status.eq.missed,and(status.eq.ended,duration_seconds.is.null),and(status.eq.ended,duration_seconds.eq.0)')
           .order('started_at', { ascending: false })
           .limit(10);
         
@@ -245,13 +371,14 @@ const useNotifications = () => {
           const callerName = call.caller 
             ? `${call.caller.first_name} ${call.caller.last_name}`.trim()
             : 'Unknown';
+          const notifId = `call-${call.call_id}`;
           notifications.push({
-            id: `call-${call.call_id}`,
+            id: notifId,
             type: 'call',
-            title: `Missed ${call.call_type} call`,
-            body: `You missed a ${call.call_type} call from ${callerName}`,
+            title: `Missed ${call.call_type || 'voice'} call`,
+            body: `You missed a ${call.call_type || 'voice'} call from ${callerName}`,
             data: { callerId: call.caller_id, callType: call.call_type },
-            read: false,
+            read: readIds.has(notifId),
             created_at: call.started_at,
             sender_name: callerName,
           });
@@ -306,7 +433,41 @@ export default function NotificationsScreen() {
     setRefreshing(false);
   };
   
-  const handleNotificationPress = useCallback((notification: Notification) => {
+  // Mark a single notification as read
+  const handleMarkRead = useCallback(async (notificationId: string) => {
+    if (!user?.id) return;
+    
+    // Mark in local storage
+    await markNotificationRead(user.id, notificationId);
+    
+    // Invalidate query to refetch with updated read status
+    queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+  }, [user?.id, queryClient]);
+  
+  // Mark all as read
+  const handleMarkAllRead = useCallback(async () => {
+    if (!user?.id) return;
+    
+    const allIds = notifications.map(n => n.id);
+    await markAllNotificationsRead(user.id, allIds);
+    
+    markCallsSeen();
+    markAnnouncementsSeen();
+    
+    // Invalidate all related queries
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+    queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+    queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+  }, [user?.id, notifications, queryClient, markCallsSeen, markAnnouncementsSeen]);
+  
+  const handleNotificationPress = useCallback(async (notification: Notification) => {
+    // Mark as read first
+    if (user?.id && !notification.read) {
+      await markNotificationRead(user.id, notification.id);
+      queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+    }
+    
     // Navigate based on type
     switch (notification.type) {
       case 'message':
@@ -335,31 +496,15 @@ export default function NotificationsScreen() {
         // Stay on current screen
         break;
     }
-  }, []);
+  }, [user?.id, queryClient]);
   
-  const handleMarkAllRead = useCallback(() => {
-    alert.showConfirm(
-      t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }),
-      t('notifications.markAllReadConfirm', { defaultValue: 'Are you sure you want to mark all notifications as read?' }),
-      async () => {
-        // Mark all categories as seen
-        markCallsSeen();
-        markAnnouncementsSeen();
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
-        queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
-        queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
-      }
-    );
-  }, [alert, t, queryClient, markCallsSeen, markAnnouncementsSeen]);
-  
-  // Clear call history
-  const handleClearCalls = useCallback(async () => {
+  // Clear call notifications
+  const handleClearCallNotifications = useCallback(async () => {
     if (!user?.id) return;
     
     Alert.alert(
-      t('notifications.clearCalls', { defaultValue: 'Clear Call History' }),
-      t('notifications.clearCallsConfirm', { defaultValue: 'Are you sure you want to clear all call history?' }),
+      t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }),
+      t('notifications.clearCallNotificationsConfirm', { defaultValue: 'This will remove all call notifications from the list.' }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
@@ -367,41 +512,40 @@ export default function NotificationsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const client = assertSupabase();
-              await client
-                .from('active_calls')
-                .delete()
-                .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`);
-              
+              // Delete call notifications from the list
+              await deleteNotificationsByType(user.id, notifications, ['call']);
               markCallsSeen();
               await refetch();
-              queryClient.invalidateQueries({ queryKey: ['call-history'] });
+              queryClient.invalidateQueries({ queryKey: ['notifications'] });
               queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
             } catch (error) {
-              console.error('[ClearCalls] Error:', error);
+              console.error('[ClearCallNotifications] Error:', error);
               Alert.alert(t('common.error', { defaultValue: 'Error' }), t('notifications.clearError', { defaultValue: 'Failed to clear. Please try again.' }));
             }
           }
         }
       ]
     );
-  }, [user?.id, t, refetch, queryClient, markCallsSeen]);
+  }, [user?.id, t, refetch, queryClient, markCallsSeen, notifications]);
   
-  // Clear messages (mark all threads as read)
-  const handleClearMessages = useCallback(async () => {
+  // Mark all messages as read
+  const handleMarkMessagesRead = useCallback(async () => {
     if (!user?.id) return;
     
     Alert.alert(
-      t('notifications.clearMessages', { defaultValue: 'Mark Messages as Read' }),
-      t('notifications.clearMessagesConfirm', { defaultValue: 'Mark all message threads as read?' }),
+      t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }),
+      t('notifications.markMessagesReadConfirm', { defaultValue: 'This will remove all message notifications from the list.' }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
-          text: t('common.markRead', { defaultValue: 'Mark Read' }),
+          text: t('common.clear', { defaultValue: 'Clear' }),
           onPress: async () => {
             try {
+              // Delete message notifications
+              await deleteNotificationsByType(user.id, notifications, ['message']);
+              
+              // Also mark message threads as read in database
               const client = assertSupabase();
-              // Update last_read_at for all threads the user participates in
               await client
                 .from('message_participants')
                 .update({ last_read_at: new Date().toISOString() })
@@ -418,7 +562,7 @@ export default function NotificationsScreen() {
         }
       ]
     );
-  }, [user?.id, t, refetch, queryClient]);
+  }, [user?.id, t, refetch, queryClient, notifications]);
   
   const handleClearAll = useCallback(() => {
     alert.showConfirm(
@@ -504,26 +648,20 @@ export default function NotificationsScreen() {
               [
                 { 
                   text: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }), 
-                  onPress: () => {
-                    markCallsSeen();
-                    markAnnouncementsSeen();
-                    queryClient.invalidateQueries({ queryKey: ['notifications'] });
-                    queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
-                    queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
-                    queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
-                  }
+                  onPress: handleMarkAllRead
                 },
                 { 
-                  text: t('notifications.clearMessages', { defaultValue: 'Clear Messages' }), 
-                  onPress: handleClearMessages
-                },
-                { 
-                  text: t('notifications.clearCalls', { defaultValue: 'Clear Call History' }), 
-                  onPress: handleClearCalls,
+                  text: t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }), 
+                  onPress: handleMarkMessagesRead,
                   style: 'destructive'
                 },
                 { 
-                  text: t('notifications.clearAll', { defaultValue: 'Clear All' }), 
+                  text: t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }), 
+                  onPress: handleClearCallNotifications,
+                  style: 'destructive'
+                },
+                { 
+                  text: t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }), 
                   style: 'destructive', 
                   onPress: handleClearAll 
                 },
@@ -541,7 +679,7 @@ export default function NotificationsScreen() {
           <NotificationItem
             notification={item}
             onPress={() => handleNotificationPress(item)}
-            onMarkRead={() => {}}
+            onMarkRead={() => handleMarkRead(item.id)}
           />
         )}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
@@ -667,10 +805,25 @@ const itemStyles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  unreadIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+  },
   unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     marginLeft: 8,
+    // Add shadow/glow effect for unread dot
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });

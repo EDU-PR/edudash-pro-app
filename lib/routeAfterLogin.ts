@@ -16,6 +16,29 @@ type AsyncStorageType = {
 let AsyncStorage: AsyncStorageType = null;
 try { AsyncStorage = require('@react-native-async-storage/async-storage').default; } catch (e) { /* noop */ }
 
+// Module-level navigation lock (works on both web and React Native)
+const navigationLocks: Map<string, number> = new Map();
+const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
+
+function isNavigationLocked(userId: string): boolean {
+  const lockTime = navigationLocks.get(userId);
+  if (!lockTime) return false;
+  // Auto-expire old locks
+  if (Date.now() - lockTime > NAVIGATION_LOCK_TIMEOUT) {
+    navigationLocks.delete(userId);
+    return false;
+  }
+  return true;
+}
+
+function setNavigationLock(userId: string): void {
+  navigationLocks.set(userId, Date.now());
+}
+
+function clearNavigationLock(userId: string): void {
+  navigationLocks.delete(userId);
+}
+
 function normalizeRole(r?: string | null): string | null {
   if (!r) return null;
   const s = String(r).trim().toLowerCase();
@@ -94,6 +117,17 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       return;
     }
 
+    // EARLY CHECK: Prevent concurrent navigation attempts using module-level lock
+    // Check at the very start to avoid duplicate work (profile fetch, etc.)
+    if (isNavigationLocked(userId)) {
+      console.log('🚦 [ROUTE] Navigation already in progress for user (early check), skipping');
+      return;
+    }
+    
+    // Set navigation lock early to prevent concurrent calls from proceeding
+    setNavigationLock(userId);
+    console.log('🚦 [ROUTE] Navigation lock acquired early for user:', userId);
+
     // Fetch enhanced profile if not provided or if the provided profile is not enhanced
     let enhancedProfile = profile as any;
     const needsEnhanced = !enhancedProfile || typeof enhancedProfile.hasCapability !== 'function';
@@ -127,6 +161,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       });
       // Route to profiles-gate instead of sign-in to avoid redirect loop
       // User is authenticated but needs profile setup
+      clearNavigationLock(userId);
       router.replace('/profiles-gate');
       return;
     }
@@ -147,6 +182,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
               plan_tier: planTier,
               billing,
             });
+            clearNavigationLock(userId);
             router.replace({
               pathname: '/screens/subscription-setup' as any,
               params: { planId: String(planTier), billing, auto: '1' },
@@ -175,43 +211,27 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       has_params: !!route.params,
     });
 
-    // Prevent concurrent navigation attempts
-    const navLock = 'route_after_login_' + userId;
-    if (typeof window !== 'undefined' && (window as any)[navLock]) {
-      console.log('🚦 [ROUTE] Navigation already in progress, skipping');
-      return;
-    }
-    
-    // Set navigation lock and dashboard switching flag
+    // Also set window flags for backward compatibility (web only)
     if (typeof window !== 'undefined') {
-      (window as any)[navLock] = true;
       (window as any).dashboardSwitching = true;
     }
     
     // Navigate to determined route (with params if needed)
-    if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-      console.log('🚦 [ROUTE] Navigating to route:', route);
-    }
+    console.log('🚦 [ROUTE] Navigating to route:', route.path);
     
     try {
       // Use setTimeout to prevent blocking the UI thread
       setTimeout(() => {
         try {
           if (route.params) {
-            if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-              console.log('🚦 [ROUTE] Using router.replace with params:', { pathname: route.path, params: route.params });
-            }
+            console.log('🚦 [ROUTE] Using router.replace with params:', { pathname: route.path, params: route.params });
             router.replace({ pathname: route.path as any, params: route.params } as any);
           } else {
-            if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-              console.log('🚦 [ROUTE] Using router.replace without params:', route.path);
-            }
+            console.log('🚦 [ROUTE] Using router.replace without params:', route.path);
             router.replace(route.path as any);
           }
           
-          if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-            console.log('🚦 [ROUTE] router.replace call completed successfully');
-          }
+          console.log('🚦 [ROUTE] router.replace call completed successfully');
         } catch (navigationError) {
           console.error('🚦 [ROUTE] Navigation failed, falling back to profiles-gate:', navigationError);
           // Fallback to profile gate to ensure user can access the app
@@ -219,18 +239,19 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
         } finally {
           // Clear locks after navigation
           setTimeout(() => {
+            clearNavigationLock(userId);
             if (typeof window !== 'undefined') {
-              delete (window as any)[navLock];
               delete (window as any).dashboardSwitching;
             }
+            console.log('🚦 [ROUTE] Navigation lock cleared for user:', userId);
           }, 1000);
         }
       }, 50);
     } catch (error) {
       console.error('🚦 [ROUTE] Unexpected error during navigation setup:', error);
       // Clear locks on error
+      clearNavigationLock(userId);
       if (typeof window !== 'undefined') {
-        delete (window as any)[navLock];
         delete (window as any).dashboardSwitching;
       }
       throw error;
@@ -240,6 +261,11 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       userId: user?.id,
       error,
     });
+    
+    // Clear lock on error
+    if (user?.id) {
+      clearNavigationLock(user.id);
+    }
     
     // Fallback to safe route
     router.replace('/(auth)/sign-in');

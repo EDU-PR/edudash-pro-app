@@ -370,8 +370,9 @@ serve(async (req: Request) => {
     const basePrice = basePriceCents > 100 ? basePriceCents / 100 : basePriceCents;
     
     // Apply promotional pricing (if eligible)
-    // Promotions are time-bound “join window” + “promo duration” tracked in DB.
+    // Promotions are time-bound "join window" + "promo duration" tracked in DB.
     // The DB function also returns persisted promo pricing for users who joined within the window.
+    // NOTE: Annual billing does NOT get promo discount (already has 20% annual discount)
     const promoUserType = mapRoleToPromoUserType(requesterProfile.role);
     let finalPriceZAR = basePrice;
     let promoApplied = false;
@@ -383,6 +384,7 @@ serve(async (req: Request) => {
         p_tier: plan.tier,
         p_user_type: promoUserType,
         p_original_price: basePrice,
+        p_billing_frequency: input.billing || 'monthly',
       });
       if (!promoErr) {
         // PostgREST can return DECIMAL as number or string depending on config.
