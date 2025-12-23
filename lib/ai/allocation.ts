@@ -436,39 +436,17 @@ export async function canManageAllocations(userId: string, preschoolId: string):
   try {
     const client = assertSupabase();
     
-    // Determine if userId is auth.users.id (UUID v4) or public.users.id
-    // Most calls from client use auth.users.id, but some may use public.users.id
-    let publicUserId = userId;
-    let profile = null;
+    // Use profiles table (not deprecated users table)
+    // profiles.id = auth.users.id directly
+    const { data: profile, error: profileError } = await client
+      .from('profiles')
+      .select('id, role, preschool_id, organization_id')
+      .eq('id', userId)
+      .maybeSingle();
     
-    // First try direct lookup assuming userId is public.users.id
-    try {
-      const { data: directProfile } = await client
-        .from('users')
-        .select('id, role, preschool_id, organization_id')
-        .eq('id', userId)
-        .single();
-      
-      if (directProfile) {
-        profile = directProfile;
-        publicUserId = directProfile.id;
-      }
-    } catch (directError) {
-      // If direct lookup fails, try auth_user_id mapping
-      try {
-        const { data: mappedProfile } = await client
-          .from('users')
-          .select('id, role, preschool_id, organization_id')
-          .eq('auth_user_id', userId)
-          .single();
-        
-        if (mappedProfile) {
-          profile = mappedProfile;
-          publicUserId = mappedProfile.id;
-        }
-      } catch (mappingError) {
-        console.warn('Both direct and auth_user_id lookups failed:', { directError, mappingError });
-      }
+    if (profileError) {
+      console.warn('Profile lookup error:', profileError);
+      return false;
     }
 
     if (!profile) {

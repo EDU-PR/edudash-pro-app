@@ -228,12 +228,12 @@ serve(async (req: Request): Promise<Response> => {
     );
   }
 
-  // Get user profile for tier
+  // Get user profile for tier from profiles table (not deprecated users table)
   const { data: profile } = await supabaseAdmin
-    .from('users')
+    .from('profiles')
     .select('subscription_tier')
-    .eq('auth_user_id', user.id)
-    .single();
+    .eq('id', user.id)
+    .maybeSingle();
 
   const tier: SubscriptionTier = (profile?.subscription_tier?.toLowerCase() || 'free') as SubscriptionTier;
   const model = selectModelForTier(tier);

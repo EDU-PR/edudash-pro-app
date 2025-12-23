@@ -44,11 +44,10 @@ export function PlanCard({
   const isFree = rawPrice === 0;
   const isEnterprise = tierLower === 'enterprise';
 
-  // Launch promo for parent plans
-  const isParentPromoEligible =
-    isLaunchPromoActive() && isParentTier && !isFree && !isEnterprise && priceInRands > 0;
+  // Database stores BASE prices. Apply promo discount for display (monthly only).
+  const isParentPromoEligible = isLaunchPromoActive() && isParentTier && !isFree && !isEnterprise && priceInRands > 0 && !annual;
   const originalPriceInRands = priceInRands;
-  const promoPriceInRands = isParentPromoEligible ? originalPriceInRands * 0.5 : originalPriceInRands;
+  const promoPriceInRands = isParentPromoEligible ? priceInRands * 0.5 : priceInRands;
 
   const isRecommended =
     schoolType &&

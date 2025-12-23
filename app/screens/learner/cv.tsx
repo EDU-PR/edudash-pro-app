@@ -26,7 +26,7 @@ export default function LearnerCVScreen() {
           headerBackTitle: t('common.back', { defaultValue: 'Back' }),
           headerRight: () => (
             <TouchableOpacity
-              onPress={() => router.push('/screens/learner/cv-builder')}
+              onPress={() => router.push('/screens/learner/cv-builder-enhanced')}
               style={{ marginRight: 16 }}
             >
               <Ionicons name="add-circle-outline" size={28} color={theme.primary} />
@@ -55,7 +55,7 @@ export default function LearnerCVScreen() {
             title={t('learner.no_cvs', { defaultValue: 'No CVs Yet' })}
             description={t('learner.cv_prompt', { defaultValue: 'Create your professional CV to showcase your skills and experience' })}
             actionLabel={t('learner.create_cv', { defaultValue: 'Create CV' })}
-            onActionPress={() => router.push('/screens/learner/cv-builder')}
+            onActionPress={() => router.push('/screens/learner/cv-builder-enhanced')}
           />
         )}
 
@@ -89,7 +89,7 @@ export default function LearnerCVScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => router.push(`/screens/learner/cv-builder?id=${cv.id}`)}
+                  onPress={() => router.push(`/screens/learner/cv-builder-enhanced?id=${cv.id}`)}
                 >
                   <Ionicons name="create-outline" size={20} color={theme.textSecondary} />
                   <Text style={[styles.actionButtonText, { color: theme.textSecondary }]}>
@@ -105,7 +105,7 @@ export default function LearnerCVScreen() {
         {cvs && cvs.length > 0 && (
           <TouchableOpacity
             style={[styles.createButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.push('/screens/learner/cv-builder')}
+            onPress={() => router.push('/screens/learner/cv-builder-enhanced')}
           >
             <Ionicons name="add" size={24} color="#fff" />
             <Text style={styles.createButtonText}>

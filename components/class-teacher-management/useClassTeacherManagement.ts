@@ -123,18 +123,19 @@ export function useClassTeacherManagement({
 
       let teacherUsers: any[] = [];
       if (teacherAuthIds.length > 0) {
+        // Use profiles table (not deprecated users table)
         const { data: usersData } = await assertSupabase()
-          .from('users')
-          .select('id, auth_user_id, email, first_name, last_name, name, role, created_at')
-          .in('auth_user_id', teacherAuthIds);
+          .from('profiles')
+          .select('id, email, first_name, last_name, full_name, role, created_at')
+          .in('id', teacherAuthIds);
         teacherUsers = usersData || [];
       }
 
-      // Fallback: if membership is empty, try users table by preschool and role
+      // Fallback: if membership is empty, try profiles table by preschool and role
       if (teacherUsers.length === 0) {
         const { data: fallbackUsers } = await assertSupabase()
-          .from('users')
-          .select('id, auth_user_id, email, first_name, last_name, name, role, created_at')
+          .from('profiles')
+          .select('id, email, first_name, last_name, full_name, role, created_at')
           .eq('preschool_id', schoolId)
           .ilike('role', '%teacher%');
         teacherUsers = fallbackUsers || [];

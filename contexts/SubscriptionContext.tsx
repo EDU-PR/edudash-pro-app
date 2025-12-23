@@ -48,10 +48,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
     
+    console.log('[SubscriptionContext] useEffect triggered, refreshTrigger:', refreshTrigger);
+    
     // Add a small delay to prevent rapid successive calls
     const fetchSubscriptionData = async () => {
+      console.log('[SubscriptionContext] fetchSubscriptionData started');
       try {
         const { data: userRes, error: userError } = await assertSupabase().auth.getUser();
+        console.log('[SubscriptionContext] auth.getUser result:', userError ? 'ERROR' : 'SUCCESS', userRes?.user?.id);
         if (userError || !userRes.user) {
           if (mounted) setReady(true);
           return;
@@ -67,11 +71,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         const knownTiers: Tier[] = ['free', 'parent_starter', 'parent_plus', 'starter', 'basic', 'premium', 'pro', 'enterprise'];
         const metaTierRaw = (user?.user_metadata as any)?.subscription_tier as string | undefined;
         const metaTier = metaTierRaw ? normalizeTier(metaTierRaw) : '';
+        console.log('[SubscriptionContext] === TIER CHECK START ===');
+        console.log('[SubscriptionContext] User ID:', user.id);
         console.log('[SubscriptionContext] User metadata tier:', metaTierRaw, '-> normalized:', metaTier);
+        // Don't set tier from metadata yet - always check DB first for paid subscriptions
+        let metadataTier: Tier | null = null;
         if (metaTier && knownTiers.includes(metaTier as Tier)) {
-          t = metaTier as Tier;
-          source = 'user';
-          console.log('[SubscriptionContext] Using metadata tier:', t);
+          metadataTier = metaTier as Tier;
+          console.log('[SubscriptionContext] Found metadata tier (will use as fallback):', metadataTier);
         }
 
         // Try to detect org or school-owned subscription using schema
@@ -85,35 +92,33 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           schoolId = (user?.user_metadata as any)?.preschool_id;
           orgId = (user?.user_metadata as any)?.organization_id;
           
-          // If not in metadata, query profiles table (legacy) then users table (current)
+          // If not in metadata, query profiles table (current standard)
           if ((!schoolId || !orgId) && user.id) {
             try {
-              const { data: profileData } = await assertSupabase()
+              const { data: profileData, error: profileError } = await assertSupabase()
                 .from('profiles')
                 .select('preschool_id, organization_id')
                 .eq('id', user.id)
                 .maybeSingle();
+              
+              if (profileError) {
+                console.warn('[SubscriptionContext] Error querying profiles:', profileError);
+              }
+              
               if (profileData?.preschool_id) schoolId = profileData.preschool_id;
               if (profileData?.organization_id) orgId = profileData.organization_id;
-            } catch {/* ignore */}
-            
-            // Current schema commonly stores principals/teachers in users table with auth_user_id
-            if ((!schoolId || !orgId)) {
-              try {
-                const { data: userRow } = await assertSupabase()
-                  .from('users')
-                  .select('preschool_id, organization_id')
-                  .eq('auth_user_id', user.id)
-                  .maybeSingle();
-                if (userRow?.preschool_id) schoolId = userRow.preschool_id as any;
-                if (userRow?.organization_id) orgId = userRow.organization_id as any;
-              } catch {/* ignore */}
+              console.log('[SubscriptionContext] Profile data:', { schoolId, orgId });
+            } catch (profileErr) {
+              console.error('[SubscriptionContext] Exception querying profiles:', profileErr);
             }
           }
+          
+          console.log('[SubscriptionContext] Final org/school IDs:', { orgId, schoolId });
 
           // Check user-scoped tiers FIRST (parent subscriptions take precedence)
           // This ensures standalone users and users with personal subscriptions get the correct tier
           if (mounted) {
+            console.log('[SubscriptionContext] === CHECKING DATABASE ===');
             try {
               const supabase = assertSupabase();
               console.log('[SubscriptionContext] Fetching user_ai_usage for user:', user.id);
@@ -123,20 +128,39 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 .eq('user_id', user.id)
                 .maybeSingle();
               
-              console.log('[SubscriptionContext] user_ai_usage result:', usage, 'error:', usageError);
+              console.log('[SubscriptionContext] user_ai_usage result:', JSON.stringify(usage), 'error:', JSON.stringify(usageError));
               
               const { data: tierRow, error: tierError } = await supabase
                 .from('user_ai_tiers')
-                .select('tier')
+                .select('tier, expires_at')
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-              console.log('[SubscriptionContext] user_ai_tiers result:', tierRow, 'error:', tierError);
+              console.log('[SubscriptionContext] user_ai_tiers result:', JSON.stringify(tierRow), 'error:', JSON.stringify(tierError));
 
               // Handle enum types - Supabase returns enums as strings, but ensure we convert properly
               const usageTier = (usage as any)?.current_tier;
               const tierRowTier = (tierRow as any)?.tier;
-              const rawTier = usageTier || tierRowTier || '';
+              
+              console.log('[SubscriptionContext] usageTier:', usageTier, 'tierRowTier:', tierRowTier);
+              
+              // Prefer user_ai_tiers.tier if it's a paid tier, otherwise use user_ai_usage.current_tier
+              // This ensures PayFast webhook updates take precedence even if user_ai_usage was created with 'free'
+              const paidTiers = ['parent_starter', 'parent_plus', 'starter', 'basic', 'premium', 'pro', 'enterprise'];
+              let rawTier = '';
+              
+              // Check tierRowTier first (from user_ai_tiers - source of truth for subscriptions)
+              if (tierRowTier && paidTiers.includes(normalizeTier(String(tierRowTier)))) {
+                rawTier = tierRowTier;
+                console.log('[SubscriptionContext] Using user_ai_tiers.tier (paid):', rawTier);
+              } else if (usageTier && paidTiers.includes(normalizeTier(String(usageTier)))) {
+                rawTier = usageTier;
+                console.log('[SubscriptionContext] Using user_ai_usage.current_tier (paid):', rawTier);
+              } else {
+                // Fallback to whatever is available
+                rawTier = usageTier || tierRowTier || '';
+                console.log('[SubscriptionContext] Using fallback tier:', rawTier);
+              }
               
               console.log('[SubscriptionContext] rawTier from DB:', rawTier);
               
@@ -148,11 +172,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
                 t = aiTierStr as Tier;
                 source = 'user';
-                console.log('[SubscriptionContext] Set tier from DB:', t);
+                console.log('[SubscriptionContext] ✅ Set tier from DB:', t);
+              } else if (metadataTier) {
+                // Fallback to metadata if DB has no paid tier
+                t = metadataTier;
+                source = 'user';
+                console.log('[SubscriptionContext] ⚠️ Using metadata tier as fallback:', t);
               }
             } catch (err) {
               // Log error for debugging
-              console.warn('[SubscriptionContext] Error reading user_ai_usage/user_ai_tiers:', err);
+              console.error('[SubscriptionContext] ❌ Error reading user_ai_usage/user_ai_tiers:', err);
+              // If DB query failed, use metadata as fallback
+              if (metadataTier) {
+                t = metadataTier;
+                source = 'user';
+                console.log('[SubscriptionContext] Using metadata tier after DB error:', t);
+              }
             }
           }
 
@@ -222,7 +257,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             } catch {/* ignore */}
           }
 
-        } catch {/* ignore */}
+        } catch (outerError) {
+          console.error('[SubscriptionContext] ❌ Outer try-catch error:', outerError);
+        }
 
         if (mounted) {
           console.log('[SubscriptionContext] FINAL tier result:', t, 'source:', source);
@@ -242,8 +279,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       }
     };
     
-    // Throttle to prevent excessive calls
-    timeoutId = setTimeout(fetchSubscriptionData, 100);
+    // Run immediately on mount, no throttle delay needed
+    console.log('[SubscriptionContext] Scheduling fetchSubscriptionData...');
+    fetchSubscriptionData();
     
     return () => {
       mounted = false;

@@ -87,14 +87,15 @@ Deno.serve(async (req: Request) => {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) return bad('Invalid authentication', 401);
         
-        // Get user profile for preschool_id
+        // Get user profile for organization_id from profiles table (not deprecated users table)
         const { data: profile } = await supabase
-          .from('users')
-          .select('id, preschool_id')
-          .eq('auth_user_id', user.id)
+          .from('profiles')
+          .select('id, preschool_id, organization_id')
+          .eq('id', user.id)
           .maybeSingle();
         
-        if (!profile) return bad('User profile not found', 404);
+        // Don't fail if no profile - just log without org context (for standalone users)
+        const orgId = profile?.organization_id || profile?.preschool_id || null;
 
         // Resolve a valid ai_service_id for this model
         const aiServiceId = await resolveAiServiceId(supabase, event.model);
@@ -104,8 +105,8 @@ Deno.serve(async (req: Request) => {
           .from('ai_usage_logs')
           .insert({
             user_id: user.id, // auth.users id
-            preschool_id: profile.preschool_id,
-            organization_id: profile.preschool_id, // In this schema org == preschool
+            preschool_id: orgId,
+            organization_id: orgId,
             ai_service_id: aiServiceId || '00000000-0000-0000-0000-000000000000', // fallback to a dummy value but should resolve
             ai_model_used: event.model,
             service_type: event.feature,
@@ -151,14 +152,15 @@ Deno.serve(async (req: Request) => {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) return bad('Invalid authentication', 401);
         
-        // Get user profile for preschool_id
+        // Get user profile from profiles table (not deprecated users table)
         const { data: profile } = await supabase
-          .from('users')
-          .select('id, preschool_id')
-          .eq('auth_user_id', user.id)
+          .from('profiles')
+          .select('id, preschool_id, organization_id')
+          .eq('id', user.id)
           .maybeSingle();
         
-        if (!profile) return bad('User profile not found', 404);
+        // Don't fail if no profile - just use null for org context
+        const orgId = profile?.organization_id || profile?.preschool_id || null;
 
         // Resolve any service to use for bulk sync entries
         const aiServiceId = await resolveAiServiceId(supabase, 'bulk_sync');
@@ -168,8 +170,8 @@ Deno.serve(async (req: Request) => {
         for (let i = 0; i < count; i++) {
           logEntries.push({
             user_id: user.id, // auth.users id
-            preschool_id: profile.preschool_id,
-            organization_id: profile.preschool_id,
+            preschool_id: orgId,
+            organization_id: orgId,
             ai_service_id: aiServiceId || '00000000-0000-0000-0000-000000000000',
             ai_model_used: 'bulk_sync',
             service_type: feature,
@@ -379,15 +381,15 @@ Deno.serve(async (req: Request) => {
           return ok({ allocation: existing });
         }
 
-        // Fetch user for defaults
+        // Fetch user profile from profiles table (not deprecated users table)
         const { data: user, error: userErr } = await supabase
-          .from('users')
+          .from('profiles')
           .select('id, email, first_name, last_name, role')
           .eq('id', userId)
           .maybeSingle();
 
         if (userErr || !user) {
-          console.error('User fetch error in get_teacher_allocation:', userErr);
+          console.error('Profile fetch error in get_teacher_allocation:', userErr);
           return ok({ allocation: null });
         }
 
@@ -448,11 +450,11 @@ Deno.serve(async (req: Request) => {
         
         const supabase = createClient(supabaseUrl, supabaseKey);
         
-        // Fetch teachers from the users table
+        // Fetch teachers from the profiles table (not deprecated users table)
         const { data: teachers, error } = await supabase
-          .from('users')
-          .select('id, auth_user_id, email, role, first_name, last_name')
-          .eq('preschool_id', preschoolId)
+          .from('profiles')
+          .select('id, email, role, first_name, last_name')
+          .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`)
           .eq('role', 'teacher');
         
         if (error) {
@@ -464,7 +466,7 @@ Deno.serve(async (req: Request) => {
         const teacherAllocations = (teachers || []).map((teacher, index) => ({
           id: `alloc-${teacher.id}`,
           preschool_id: preschoolId,
-          user_id: teacher.auth_user_id || teacher.id,
+          user_id: teacher.id,
           teacher_id: teacher.id,
           teacher_name: `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.email?.split('@')[0] || 'Unknown Teacher',
           teacher_email: teacher.email,
@@ -520,14 +522,7 @@ Deno.serve(async (req: Request) => {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) return ok({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 });
         
-        // Get user profile
-        const { data: profile } = await supabase
-          .from('users')
-          .select('id, preschool_id')
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
-        
-        if (!profile) return ok({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 });
+        // Profile not needed for usage query - we query by user.id directly
         
         // Get current month's usage from ai_usage_logs
         const startOfMonth = new Date();

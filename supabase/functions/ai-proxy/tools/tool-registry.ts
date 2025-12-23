@@ -952,9 +952,9 @@ const toolExecutors: Record<string, (params: any, context: ToolContext) => Promi
     
     const { count: studentCount } = await studentsQuery
     
-    // Count teachers
+    // Count teachers from profiles table (not deprecated users table)
     const { count: teacherCount } = await supabaseAdmin
-      .from('users')
+      .from('profiles')
       .select('id', { count: 'exact', head: true })
       .eq('preschool_id', organizationId)
       .eq('role', 'teacher')

@@ -157,7 +157,7 @@ export async function canUseFeature(feature: AIQuotaFeature, count = 1): Promise
 
 /**
  * Check for teacher-specific quota allocation from principal
- * Returns null if no teacher allocation exists
+ * Returns null if no teacher allocation exists or user is not a teacher
  */
 export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<QuotaStatus | null> {
   try {
@@ -175,11 +175,11 @@ export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<
     
     console.log(`[Teacher Quota] User authenticated:`, user.id);
     
-    // Get user profile to find preschool
+    // Get user profile from profiles table (not deprecated users table)
     const { data: profile, error: profileError } = await client
-      .from('users')
-      .select('id, preschool_id, role')
-      .eq('auth_user_id', user.id)
+      .from('profiles')
+      .select('id, preschool_id, organization_id, role')
+      .eq('id', user.id)
       .maybeSingle()
     
     if (profileError) {
@@ -192,21 +192,30 @@ export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<
       return null;
     }
     
-    if (!profile.preschool_id) {
-      console.log(`[Teacher Quota] User not associated with any preschool`);
+    // Only check teacher allocation for teacher role
+    const isTeacher = profile.role === 'teacher' || profile.role === 'assistant_teacher'
+    if (!isTeacher) {
+      console.log(`[Teacher Quota] User is ${profile.role}, not a teacher - skipping teacher quota check`);
       return null;
     }
     
-    console.log(`[Teacher Quota] User profile found:`, {
+    // Use preschool_id or organization_id
+    const schoolId = profile.preschool_id || profile.organization_id
+    if (!schoolId) {
+      console.log(`[Teacher Quota] User not associated with any school/organization`);
+      return null;
+    }
+    
+    console.log(`[Teacher Quota] Teacher profile found:`, {
       userId: profile.id,
-      preschoolId: profile.preschool_id,
+      schoolId: schoolId,
       role: profile.role
     });
     
     // Ensure teacher allocation exists (create if needed)
     console.log(`[Teacher Quota] Ensuring allocation exists...`);
     const { getTeacherAllocation } = await import('@/lib/ai/allocation')
-    const allocation = await getTeacherAllocation(profile.preschool_id, profile.id)
+    const allocation = await getTeacherAllocation(schoolId, profile.id)
     
     if (!allocation) {
       console.log(`[Teacher Quota] Failed to create/find allocation`);

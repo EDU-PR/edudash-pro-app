@@ -284,6 +284,12 @@ export default function LearnerDashboard() {
                 subtitle: t('learner.showcase_work', { defaultValue: 'Showcase your work' }),
                 onPress: () => router.push('/screens/learner/portfolio'),
               },
+              {
+                icon: 'business-outline',
+                title: t('learner.join_organization', { defaultValue: 'Join Organization' }),
+                subtitle: t('learner.enter_org_code', { defaultValue: 'Enter organization code' }),
+                onPress: () => router.push('/screens/membership/join'),
+              },
             ]}
           />
         </View>
@@ -325,27 +331,27 @@ export default function LearnerDashboard() {
           </View>
         )}
 
-        {/* No Organization - Join Prompt (only show if user has no enrollments) */}
+        {/* No Organization - Create Membership Prompt (only show if user has no enrollments) */}
         {!orgId && enrollments.length === 0 && !isLoading && (
           <Card padding={32} margin={0} elevation="small" style={{ marginBottom: 24 }}>
             <View style={styles.empty}>
-              <Ionicons name="school-outline" size={64} color={theme.primary} />
-              <Text style={styles.emptyTitle}>{t('learner.join_organization', { defaultValue: 'Join a Program' })}</Text>
+              <Ionicons name="card-outline" size={64} color={theme.primary} />
+              <Text style={styles.emptyTitle}>{t('learner.create_membership', { defaultValue: 'Create Membership' })}</Text>
               <Text style={styles.emptyDescription}>
-                {t('learner.join_prompt', { defaultValue: 'Enter a program code to join an organization and start learning' })}
+                {t('learner.membership_prompt', { defaultValue: 'Join an organization to access programs, events, and receive your digital ID card' })}
               </Text>
               <TouchableOpacity
                 style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/screens/learner/enroll-by-program-code')}
+                onPress={() => router.push('/screens/membership/join')}
               >
-                <Text style={styles.primaryButtonText}>{t('learner.join_with_code', { defaultValue: 'Join with Program Code' })}</Text>
+                <Text style={styles.primaryButtonText}>{t('learner.join_with_code', { defaultValue: 'Join with Organization Code' })}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.border }]}
-                onPress={() => router.push('/screens/student-join-by-code')}
+                onPress={() => router.push('/screens/learner/enroll-by-program-code')}
               >
                 <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
-                  {t('learner.join_with_invite', { defaultValue: 'Join with Invitation Code' })}
+                  {t('learner.enroll_program', { defaultValue: 'Enroll in Program' })}
                 </Text>
               </TouchableOpacity>
             </View>

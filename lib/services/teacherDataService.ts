@@ -17,10 +17,11 @@ export class TeacherDataService {
     }
   ): Promise<{ success: boolean; assignment_id?: string; inserted_submissions?: number; error?: string }> {
     try {
+      // Use profiles table (not deprecated users table)
       const { data: teacherProfile, error: teacherError } = await assertSupabase()
-        .from('users')
+        .from('profiles')
         .select('id, preschool_id')
-        .eq('auth_user_id', teacherUserId)
+        .eq('id', teacherUserId)
         .maybeSingle()
 
       if (teacherError || !teacherProfile) {

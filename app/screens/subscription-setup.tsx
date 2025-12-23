@@ -641,13 +641,16 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
   const isFree = rawPrice === 0;
   const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
   
-  // Launch promo (parents): 50% off until Dec 31, 2025 (display only; checkout/webhook enforce pricing server-side)
+  // Database stores BASE prices. Apply promo discount for display (monthly only).
+  // Annual billing already has 20% annual discount, no additional promo.
   const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
   const isLaunchPromoActive = new Date() <= promoEndDate;
-  const tierNorm = tierLower.replace(/-/g, '_');
-  const isParentPromoEligible = isLaunchPromoActive && isParentTier && !isFree && !isEnterprise && priceInRands > 0;
+  const isParentPromoEligible = isLaunchPromoActive && isParentTier && !isFree && !isEnterprise && priceInRands > 0 && !annual;
+  
+  // Original price is the base price from DB
   const originalPriceInRands = priceInRands;
-  const promoPriceInRands = isParentPromoEligible ? originalPriceInRands * 0.5 : originalPriceInRands;
+  // Apply 50% promo for eligible monthly parent plans
+  const promoPriceInRands = isParentPromoEligible ? priceInRands * 0.5 : priceInRands;
   
   // Check if this plan is specifically optimized for the school type
   const isRecommended = schoolType && plan.school_types && 

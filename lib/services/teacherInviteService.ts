@@ -69,16 +69,16 @@ export class TeacherInviteService {
 
     // Ensure teacher profile linkage and active seat membership
     try {
-      // Attempt users table
+      // Use profiles table (not deprecated users table)
       const { data: existing } = await assertSupabase()
-        .from('users')
-        .select('id, auth_user_id, role, preschool_id')
-        .eq('auth_user_id', params.authUserId)
+        .from('profiles')
+        .select('id, role, preschool_id')
+        .eq('id', params.authUserId)
         .maybeSingle();
       if (existing) {
-        await assertSupabase().from('users').update({ role: 'teacher', preschool_id: invite.school_id }).eq('id', existing.id);
+        await assertSupabase().from('profiles').update({ role: 'teacher', preschool_id: invite.school_id }).eq('id', existing.id);
       } else {
-        // fallback to profiles table by id
+        // Create new profile if doesn't exist
         await assertSupabase()
           .from('profiles')
           .upsert({ id: params.authUserId, role: 'teacher', preschool_id: invite.school_id, email: params.email });

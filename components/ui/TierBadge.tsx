@@ -29,9 +29,9 @@ function getTierMeta(t?: string) {
     case 'enterprise': 
       return { label: 'Enterprise', color: '#DC2626' }
     case 'parent-starter': 
-      return { label: 'Parent Starter', color: '#06B6D4' }
+      return { label: 'Starter', color: '#06B6D4' }
     case 'parent-plus': 
-      return { label: 'Parent Plus', color: '#22C55E' }
+      return { label: 'Plus', color: '#22C55E' }
     case 'trial':
       return { label: 'Trial', color: '#F59E0B' }
     case 'free':

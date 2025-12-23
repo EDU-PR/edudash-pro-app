@@ -36,7 +36,6 @@ interface UseSubscriptionUpgradeReturn {
   reason: UpgradeReason;
   handleUpgrade: (planId: string) => Promise<void>;
   isLaunchPromoActive: boolean;
-  promoPercentOff: number;
 }
 
 export function useSubscriptionUpgrade({
@@ -55,8 +54,8 @@ export function useSubscriptionUpgrade({
   const [renderError, setRenderError] = useState<string | null>(null);
   
   const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
-  const promoPercentOff = 0.5;
   const isLaunchPromoActive = new Date() <= promoEndDate;
+  // Note: Database stores BASE prices. Promo (50% off) is applied at display time for monthly only.
 
   // Get reason with customization
   const reason = { ...(UPGRADE_REASONS[reasonKey] || DEFAULT_REASON) };
@@ -293,6 +292,5 @@ export function useSubscriptionUpgrade({
     reason,
     handleUpgrade,
     isLaunchPromoActive,
-    promoPercentOff,
   };
 }

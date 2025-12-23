@@ -204,24 +204,25 @@ export const fetchOrganizationViaMembership = async (
     return alternativeOrg.organization_id as string;
   }
 
-  // Try users table (preschool_id field)
+  // Try profiles table (not deprecated users table)
   try {
-    const { data: selfUser, error: selfErr } = await client
-      .from('users')
-      .select('id, auth_user_id, preschool_id, role')
-      .eq('auth_user_id', authUserId)
+    const { data: selfProfile, error: selfErr } = await client
+      .from('profiles')
+      .select('id, preschool_id, organization_id, role')
+      .eq('id', authUserId)
       .maybeSingle();
 
     if (selfErr) {
-      warn('Self users row lookup error:', selfErr?.message);
+      warn('Profile row lookup error:', selfErr?.message);
     }
 
-    if (selfUser?.preschool_id) {
-      log('✅ Resolved organization from self users row (preschool_id)');
-      return selfUser.preschool_id as string;
+    const orgId = selfProfile?.organization_id || selfProfile?.preschool_id;
+    if (orgId) {
+      log('✅ Resolved organization from profile (preschool_id/organization_id)');
+      return orgId as string;
     }
   } catch (e) {
-    warn('Self users row lookup threw:', e);
+    warn('Profile row lookup threw:', e);
   }
 
   return null;

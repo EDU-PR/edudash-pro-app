@@ -432,15 +432,23 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         >
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
-              <MetricCard
-                key={action.id}
-                title={action.title}
-                value=""
-                icon={action.icon}
-                color={action.color}
-                size="small"
-                onPress={() => !action.disabled && handleQuickAction(action.id)}
-              />
+              <View key={action.id} style={action.disabled ? { opacity: 0.5 } : undefined}>
+                <MetricCard
+                  title={action.disabled ? `${action.title} 🔒` : action.title}
+                  value=""
+                  icon={action.icon}
+                  color={action.disabled ? theme.textSecondary : action.color}
+                  size="small"
+                  onPress={() => {
+                    if (action.disabled) {
+                      // Show upgrade modal for locked features
+                      router.push('/screens/subscription-setup' as any);
+                    } else {
+                      handleQuickAction(action.id);
+                    }
+                  }}
+                />
+              </View>
             ))}
           </View>
         </CollapsibleSection>

@@ -225,12 +225,12 @@ export async function canManageAllocationsDirect(userId: string, preschoolId: st
   try {
     const client = assertSupabase();
     
-    // Get user's profile and role
+    // Get user's profile and role from profiles table (not deprecated users table)
     const { data: profile, error } = await client
-      .from('users')
+      .from('profiles')
       .select('role, preschool_id')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (error || !profile) {
       console.warn('User profile not found:', error);
@@ -280,12 +280,12 @@ export async function allocateAIQuotasDirect(
       return { success: false, error: 'Authentication required' };
     }
 
-    // Get teacher details
+    // Get teacher details from profiles table (not deprecated users table)
     const { data: teacher, error: teacherError } = await client
-      .from('users')
+      .from('profiles')
       .select('id, first_name, last_name, email, role')
       .eq('id', teacherId)
-      .single();
+      .maybeSingle();
 
     if (teacherError || !teacher) {
       return { success: false, error: 'Teacher not found' };
@@ -641,12 +641,12 @@ export async function ensureTeacherAllocation(preschoolId: string, userId: strin
       };
     }
     
-    // Get user details to create allocation
+    // Get user details from profiles table (not deprecated users table)
     const { data: user } = await client
-      .from('users')
+      .from('profiles')
       .select('id, first_name, last_name, email, role')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     
     if (!user) {
       console.warn('User not found for allocation creation:', userId);

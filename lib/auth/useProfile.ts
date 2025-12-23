@@ -47,22 +47,22 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
       return null;
     }
     
-    // Fetch profile with preschool details
-    // Try different query approaches for compatibility
+    // Fetch profile with preschool details from profiles table (not deprecated users table)
+    // profiles.id = auth.users.id directly
     let profile = null;
     let profileError = null;
     
-    // First try with auth_user_id field
     try {
       const { data, error } = await client
-        .from('users')
+        .from('profiles')
         .select(`
           id,
-          auth_user_id,
           preschool_id,
+          organization_id,
           role,
           first_name,
           last_name,
+          full_name,
           email,
           phone,
           avatar_url,
@@ -79,7 +79,7 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
             plan_tier
           )
         `)
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
       
       if (!error && data) {
@@ -87,51 +87,8 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
       } else {
         profileError = error;
       }
-    } catch (authUserIdError) {
-      profileError = authUserIdError;
-    }
-    
-    // Fallback: try with id field directly
-    if (!profile) {
-      try {
-        const { data, error } = await client
-          .from('users')
-          .select(`
-            id,
-            preschool_id,
-            role,
-            first_name,
-            last_name,
-            email,
-            phone,
-            avatar_url,
-            is_active,
-            created_at,
-            updated_at,
-            preschool:preschools!left(
-              id,
-              name,
-              subscription_tier
-            ),
-            organization:organizations!left(
-              id,
-              plan_tier
-            )
-          `)
-          .eq('id', user.id)
-          .maybeSingle();
-        
-        if (!error && data) {
-          profile = data;
-          profileError = null;
-        } else if (!profileError) {
-          profileError = error;
-        }
-      } catch (idError) {
-        if (!profileError) {
-          profileError = idError;
-        }
-      }
+    } catch (fetchError) {
+      profileError = fetchError;
     }
     
     if (profileError) {
@@ -147,8 +104,8 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
       // Normalize the profile data
       const normalizedProfile = {
         ...profile,
-        name: profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null,
-        auth_user_id: profile.auth_user_id || profile.id,
+        name: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null,
+        auth_user_id: profile.id, // profiles.id = auth.users.id
         preschool: profile.preschool ? {
           ...profile.preschool,
           subscription_tier: tier  // Use resolved tier

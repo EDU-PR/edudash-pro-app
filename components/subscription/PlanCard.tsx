@@ -15,7 +15,6 @@ interface PlanCardProps {
   expanded: boolean;
   onToggleExpand: () => void;
   isLaunchPromoActive: boolean;
-  promoPercentOff: number;
 }
 
 export function PlanCard({
@@ -27,7 +26,6 @@ export function PlanCard({
   expanded,
   onToggleExpand,
   isLaunchPromoActive,
-  promoPercentOff,
 }: PlanCardProps) {
   const planColor = getPlanColor(plan.tier);
   const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
@@ -37,10 +35,13 @@ export function PlanCard({
   
   const tierNorm = normalizeTier(plan.tier);
   const isParentTier = tierNorm === 'parent_starter' || tierNorm === 'parent_plus';
-  const isPromoEligible = isLaunchPromoActive && isParentTier && monthlyPriceInRands > 0;
+  const isPromoEligible = isLaunchPromoActive && isParentTier && monthlyPriceInRands > 0 && !annual;
   
-  const displayMonthlyPrice = isPromoEligible ? monthlyPriceInRands * promoPercentOff : monthlyPriceInRands;
-  const displayAnnualPrice = isPromoEligible && annualPriceInRands > 0 ? annualPriceInRands * promoPercentOff : annualPriceInRands;
+  // Database stores BASE prices. Apply 50% promo for monthly parent plans only.
+  // Annual billing already has 20% annual discount built in, no additional promo.
+  const displayMonthlyPrice = isPromoEligible ? monthlyPriceInRands * 0.5 : monthlyPriceInRands;
+  const displayAnnualPrice = annualPriceInRands; // No promo on annual
+  const originalMonthlyPrice = monthlyPriceInRands; // For strikethrough display
   
   const monthlyTotal = monthlyPriceInRands * 12;
   const savings = annual && annualPriceInRands > 0 && monthlyTotal > annualPriceInRands
