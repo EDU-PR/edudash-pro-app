@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -26,7 +26,6 @@ export default function LearnerDashboard() {
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
   const { tier, ready: subscriptionReady, tierSource } = useSubscription();
-  const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => createStyles(theme, isDark), [theme, isDark]);
   
   // State for mobile nav drawer
@@ -119,10 +118,9 @@ export default function LearnerDashboard() {
         }} 
       />
       {/* Custom Header with Hamburger Menu - ALWAYS VISIBLE */}
-      {/* DEBUG: If you see this comment, the learner-dashboard.tsx file is loading */}
       <View style={[styles.customHeader, { 
         backgroundColor: theme.background,
-        paddingTop: Math.max(insets.top, 8),
+        paddingTop: 4,
         borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
         borderBottomWidth: isDark ? 2 : 1.5,
       }]}>
