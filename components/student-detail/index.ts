@@ -3,8 +3,7 @@
  * Shared components for the student detail screen
  */
 
-export type { StudentDetail, Class, Transaction } from './types';
-export { formatAge, formatCurrency, calculateAge } from './types';
+export { StudentDetail, Class, Transaction, formatAge, formatCurrency, calculateAge } from './types';
 export { ProfileCard } from './ProfileCard';
 export { ClassInfoSection } from './ClassInfoSection';
 export { AcademicPerformanceSection } from './AcademicPerformanceSection';

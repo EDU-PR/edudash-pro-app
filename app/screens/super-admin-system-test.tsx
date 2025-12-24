@@ -360,9 +360,9 @@ export default function SuperAdminSystemTestScreen() {
 
         case 'rls_policies_check':
           try {
-            // Test RLS by trying to access profiles table directly
+            // Test RLS by trying to access users table directly
             const { data, error } = await assertSupabase()
-              .from('profiles')
+              .from('users')
               .select('count')
               .single();
 
@@ -376,7 +376,7 @@ export default function SuperAdminSystemTestScreen() {
               status: rlsWorking ? 'passed' : 'failed',
               duration: Date.now() - startTime,
               details: { 
-                can_query_profiles: !error,
+                can_query_users: !error,
                 rls_active: rlsWorking,
                 error_message: error?.message || null
               }

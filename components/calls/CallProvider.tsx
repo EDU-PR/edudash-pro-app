@@ -13,14 +13,12 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
+import { AppState, AppStateStatus, Platform, Alert, Vibration } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
-import { getPendingCall, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
-import { backgroundCallManager } from '@/lib/calls/BackgroundCallManager';
-import { enhancedPermissionsManager } from '@/lib/calls/EnhancedPermissionsManager';
-import { badgeManager } from '@/lib/NotificationBadgeManager';
+import { getPendingCall, cancelIncomingCallNotification, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -106,10 +104,6 @@ export function CallProvider({ children }: CallProviderProps) {
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
   
-  // Computed properties for call state - declare early so useEffects can reference them
-  const isCallActive = Boolean(answeringCall || outgoingCall);
-  const isInActiveCall = isCallActive && callState === 'connected';
-  
   // Track presence for online/offline detection.
   // The hook itself is always called (to satisfy React's rules-of-hooks),
   // but we only use the presence data when the calls feature is enabled.
@@ -172,44 +166,11 @@ export function CallProvider({ children }: CallProviderProps) {
       // When app comes to foreground, check for pending calls from HeadlessJS
       if (nextAppState === 'active') {
         checkPendingCall();
-        // Re-establish any dropped connections
-        if (isCallActive && answeringCall) {
-          console.log('[CallProvider] Re-establishing call connection after foreground');
-          // Force reconnection if needed
-        }
-      }
-      
-      // When app goes to background during a call, ensure call persists
-      if (nextAppState === 'background' && isCallActive) {
-        console.log('[CallProvider] App backgrounded during active call - maintaining connection');
-        // Keep connection alive and show notification
-        maintainBackgroundCall();
       }
     });
 
     return () => subscription.remove();
-  }, [appState, callsEnabled, isCallActive, answeringCall]);
-  
-  // Maintain call connection when app is backgrounded
-  const maintainBackgroundCall = useCallback(async () => {
-    if (!answeringCall) return;
-    
-    try {
-      // Show persistent notification for active call
-      if (Platform.OS === 'android') {
-        // Use CallKeep to maintain call state
-        await callKeepManager.reportConnected(answeringCall.call_id);
-      }
-      
-      // For video calls, temporarily disable video to save bandwidth
-      if (answeringCall.call_type === 'video') {
-        console.log('[CallProvider] Temporarily disabling video for background mode');
-        // This will be handled by VideoCallInterface
-      }
-    } catch (error) {
-      console.error('[CallProvider] Error maintaining background call:', error);
-    }
-  }, [answeringCall]);
+  }, [appState, callsEnabled]);
   
   // Check for pending calls saved by HeadlessJS task
   const checkPendingCall = useCallback(async () => {
@@ -235,70 +196,6 @@ export function CallProvider({ children }: CallProviderProps) {
       console.error('[CallProvider] Error checking pending call:', error);
     }
   }, [currentUserId]);
-
-  // Answer incoming call - declared early for use in effects
-  const answerCall = useCallback(async () => {
-    if (!incomingCall) return;
-    console.log('[CallProvider] ✅ Answering call:', {
-      callId: incomingCall.call_id,
-      meetingUrl: incomingCall.meeting_url,
-      callerName: incomingCall.caller_name,
-    });
-    
-    // Report to CallKeep that call is being answered
-    await callKeepManager.reportConnected(incomingCall.call_id);
-    
-    // Clear missed calls badge since user is answering
-    await badgeManager.clearMissedCalls();
-    
-    setAnsweringCall(incomingCall);
-    setIsCallInterfaceOpen(true);
-    setIncomingCall(null);
-    setCallState('connecting');
-  }, [incomingCall]);
-
-  // Reject incoming call - declared early for use in effects
-  const rejectCall = useCallback(async () => {
-    if (!incomingCall) return;
-    console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
-
-    // End call in CallKeep
-    await callKeepManager.endCall(incomingCall.call_id);
-
-    await getSupabase()
-      .from('active_calls')
-      .update({ status: 'rejected' })
-      .eq('call_id', incomingCall.call_id);
-
-    setIncomingCall(null);
-    setCallState('idle');
-  }, [incomingCall]);
-
-  // End current call - declared early for use in effects
-  const endCall = useCallback(async () => {
-    const callId = answeringCall?.call_id || outgoingCall?.userId;
-    console.log('[CallProvider] Ending call:', callId);
-
-    // End call in CallKeep
-    if (callId) {
-      await callKeepManager.endCall(callId);
-    }
-
-    if (answeringCall?.call_id) {
-      await getSupabase()
-        .from('active_calls')
-        .update({ status: 'ended' })
-        .eq('call_id', answeringCall.call_id);
-    }
-
-    setIsCallInterfaceOpen(false);
-    setOutgoingCall(null);
-    setAnsweringCall(null);
-    setCallState('ended');
-
-    // Reset state after a short delay
-    setTimeout(() => setCallState('idle'), 1000);
-  }, [answeringCall, outgoingCall]);
   
   // Listen for CallKeep events (answer/end from native UI)
   useEffect(() => {
@@ -368,31 +265,84 @@ export function CallProvider({ children }: CallProviderProps) {
     };
   }, [callsEnabled, incomingCall, answeringCall, answerCall, rejectCall, endCall, checkPendingCall]);
 
-  // Handle notification actions from background call manager
-  // This handles "End Call" and "Return to Call" buttons in the notification shade
+  // Listen for notification responses (Answer/Decline from notification drawer)
   useEffect(() => {
     if (!callsEnabled) return;
     
-    // Set up callback for "End Call" button in notification
-    backgroundCallManager.onEndCallFromNotification = async () => {
-      console.log('[CallProvider] End call from notification shade');
-      if (answeringCall) {
-        await endCall();
+    const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
+      const data = response.notification.request.content.data;
+      
+      // Only handle incoming call notifications
+      if (data?.type !== 'incoming_call') return;
+      
+      const actionId = response.actionIdentifier;
+      const callId = data.call_id as string;
+      
+      console.log('[CallProvider] Notification action received:', { actionId, callId });
+      
+      // Cancel vibration immediately
+      Vibration.cancel();
+      
+      // Cancel the notification
+      await cancelIncomingCallNotification(callId);
+      await Notifications.setBadgeCountAsync(0);
+      
+      if (actionId === 'ANSWER' || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
+        // User tapped Answer or the notification itself
+        console.log('[CallProvider] Answering call from notification:', callId);
+        
+        // Check if we have this as the current incoming call
+        if (incomingCall?.call_id === callId) {
+          answerCall();
+        } else {
+          // Try to fetch call from DB and set it up
+          const { data: call } = await getSupabase()
+            .from('active_calls')
+            .select('*')
+            .eq('call_id', callId)
+            .single();
+          
+          if (call) {
+            // Fetch caller name
+            const { data: profile } = await getSupabase()
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', call.caller_id)
+              .single();
+            
+            const callerName = profile
+              ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
+              : data.caller_name as string || 'Unknown';
+            
+            const activeCall: ActiveCall = {
+              ...call,
+              caller_name: callerName,
+              meeting_url: call.meeting_url || data.meeting_url as string,
+            };
+            
+            setAnsweringCall(activeCall);
+            setIsCallInterfaceOpen(true);
+            setCallState('connecting');
+          }
+        }
+      } else if (actionId === 'DECLINE') {
+        // User tapped Decline
+        console.log('[CallProvider] Declining call from notification:', callId);
+        
+        if (incomingCall?.call_id === callId) {
+          rejectCall();
+        } else {
+          // Update call status in DB
+          await getSupabase()
+            .from('active_calls')
+            .update({ status: 'rejected', ended_at: new Date().toISOString() })
+            .eq('call_id', callId);
+        }
       }
-    };
+    });
     
-    // Set up callback for "Return to Call" button (app already opens)
-    backgroundCallManager.onReturnToCallFromNotification = () => {
-      console.log('[CallProvider] Return to call from notification shade');
-      // App is already opened to foreground by the notification action
-      // The call interface should already be visible via answeringCall state
-    };
-    
-    return () => {
-      backgroundCallManager.onEndCallFromNotification = undefined;
-      backgroundCallManager.onReturnToCallFromNotification = undefined;
-    };
-  }, [callsEnabled, answeringCall, endCall]);
+    return () => subscription.remove();
+  }, [callsEnabled, incomingCall, answerCall, rejectCall]);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {
@@ -481,15 +431,12 @@ export function CallProvider({ children }: CallProviderProps) {
             call.status === 'rejected' ||
             call.status === 'missed'
           ) {
+            // Cancel notification and vibration when call ends for any reason
+            await cancelIncomingCallNotification(call.call_id);
+            await Notifications.setBadgeCountAsync(0);
+            Vibration.cancel();
+            
             if (incomingCall?.call_id === call.call_id) {
-              // If call was missed, show notification and update badge
-              if (call.status === 'missed') {
-                await backgroundCallManager.showMissedCallNotification(
-                  incomingCall.caller_name || 'Unknown',
-                  incomingCall.call_type || 'voice'
-                );
-              }
-              
               setIncomingCall(null);
               setCallState('ended');
             }
@@ -557,7 +504,7 @@ export function CallProvider({ children }: CallProviderProps) {
     };
   }, [currentUserId, callsEnabled]);
 
-  // Start voice call with enhanced permissions and testing
+  // Start voice call
   const startVoiceCall = useCallback(
     async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
@@ -565,65 +512,38 @@ export function CallProvider({ children }: CallProviderProps) {
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
-
-      try {
-        // Check microphone permissions first
-        const hasPermissions = await enhancedPermissionsManager.hasRequiredPermissions('voice');
-        if (!hasPermissions) {
-          const granted = await enhancedPermissionsManager.showVoiceCallPermissionDialog();
-          if (!granted) {
-            toast.error('Microphone permission is required for voice calls');
-            return;
-          }
-        }
-
-        // Test microphone functionality
-        const micTest = await enhancedPermissionsManager.testMicrophone();
-        if (!micTest.working) {
-          Alert.alert(
-            'Microphone Issue',
-            micTest.error || 'Microphone is not working properly. Please check your device settings.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
       
-        // Refresh presence data to get latest status
-        console.log('[CallProvider] Refreshing presence before call check...');
-        await refreshPresence();
-        
-        // Check if user is online
-        const userOnline = isUserOnline(userId);
-        const lastSeenText = getLastSeenText(userId);
-        console.log('[CallProvider] Presence check:', {
-          userId,
-          userName,
-          userOnline,
-          lastSeenText
-        });
-        
-        // Allow calls to offline users - they'll receive a push notification
-        // Previously we blocked calls to offline users, but push notifications can wake the app
-        if (!userOnline) {
-          console.log('[CallProvider] User offline, will send push notification');
-          toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
-        }
-        
-        console.log('[CallProvider] Starting voice call (user online:', userOnline, ')');
-        
-        setOutgoingCall({ userId, userName, callType: 'voice' });
-        setIsCallInterfaceOpen(true);
-        setCallState('connecting');
-        
-      } catch (error) {
-        console.error('[CallProvider] Error starting voice call:', error);
-        toast.error('Failed to start voice call. Please try again.');
+      // Refresh presence data to get latest status
+      console.log('[CallProvider] Refreshing presence before call check...');
+      await refreshPresence();
+      
+      // Check if user is online
+      const userOnline = isUserOnline(userId);
+      const lastSeenText = getLastSeenText(userId);
+      console.log('[CallProvider] Presence check:', {
+        userId,
+        userName,
+        userOnline,
+        lastSeenText
+      });
+      
+      // Allow calls to offline users - they'll receive a push notification
+      // Previously we blocked calls to offline users, but push notifications can wake the app
+      if (!userOnline) {
+        console.log('[CallProvider] User offline, will send push notification');
+        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
       }
+      
+      console.log('[CallProvider] Starting call (user online:', userOnline, ')');
+      
+      setOutgoingCall({ userId, userName, callType: 'voice' });
+      setIsCallInterfaceOpen(true);
+      setCallState('connecting');
     },
     [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
 
-  // Start video call with enhanced permissions and testing
+  // Start video call
   const startVideoCall = useCallback(
     async (userId: string, userName?: string) => {
       if (!currentUserId || !callsEnabled) {
@@ -631,75 +551,106 @@ export function CallProvider({ children }: CallProviderProps) {
         Alert.alert('Unable to Call', 'Please sign in and ensure calls are enabled.');
         return;
       }
-
-      try {
-        // Check camera and microphone permissions first
-        const hasPermissions = await enhancedPermissionsManager.hasRequiredPermissions('video');
-        if (!hasPermissions) {
-          const granted = await enhancedPermissionsManager.showVideoCallPermissionDialog();
-          if (!granted) {
-            toast.error('Camera and microphone permissions are required for video calls');
-            return;
-          }
-        }
-
-        // Test camera and microphone functionality
-        const [cameraTest, micTest] = await Promise.all([
-          enhancedPermissionsManager.testCamera(),
-          enhancedPermissionsManager.testMicrophone(),
-        ]);
-
-        if (!cameraTest.working) {
-          Alert.alert(
-            'Camera Issue',
-            cameraTest.error || 'Camera is not working properly. Please check your device settings.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-
-        if (!micTest.working) {
-          Alert.alert(
-            'Microphone Issue',
-            micTest.error || 'Microphone is not working properly. Please check your device settings.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-        
-        // Refresh presence data to get latest status
-        console.log('[CallProvider] Refreshing presence before video call check...');
-        await refreshPresence();
-        
-        // Check if user is online
-        const userOnline = isUserOnline(userId);
-        const lastSeenText = getLastSeenText(userId);
-        console.log('[CallProvider] Video presence check:', {
-          userId,
-          userName,
-          userOnline,
-          lastSeenText
-        });
-        
-        // Allow calls to offline users - they'll receive a push notification
-        if (!userOnline) {
-          console.log('[CallProvider] User offline, will send push notification for video call');
-          toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
-        }
-        
-        console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
-        
-        setOutgoingCall({ userId, userName, callType: 'video' });
-        setIsCallInterfaceOpen(true);
-        setCallState('connecting');
-
-      } catch (error) {
-        console.error('[CallProvider] Error starting video call:', error);
-        toast.error('Failed to start video call. Please try again.');
+      
+      // Refresh presence data to get latest status
+      console.log('[CallProvider] Refreshing presence before video call check...');
+      await refreshPresence();
+      
+      // Check if user is online
+      const userOnline = isUserOnline(userId);
+      const lastSeenText = getLastSeenText(userId);
+      console.log('[CallProvider] Video presence check:', {
+        userId,
+        userName,
+        userOnline,
+        lastSeenText
+      });
+      
+      // Allow calls to offline users - they'll receive a push notification
+      if (!userOnline) {
+        console.log('[CallProvider] User offline, will send push notification for video call');
+        toast.info(`${userName || 'User'} appears offline. They'll receive a notification.`);
       }
+      
+      console.log('[CallProvider] Starting video call (user online:', userOnline, ')');
+      
+      setOutgoingCall({ userId, userName, callType: 'video' });
+      setIsCallInterfaceOpen(true);
+      setCallState('connecting');
     },
     [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
+
+  // Answer incoming call
+  const answerCall = useCallback(async () => {
+    if (!incomingCall) return;
+    console.log('[CallProvider] ✅ Answering call:', {
+      callId: incomingCall.call_id,
+      meetingUrl: incomingCall.meeting_url,
+      callerName: incomingCall.caller_name,
+    });
+    
+    // Cancel notification and vibration
+    await cancelIncomingCallNotification(incomingCall.call_id);
+    await Notifications.setBadgeCountAsync(0);
+    Vibration.cancel();
+    
+    // Report to CallKeep that call is being answered
+    await callKeepManager.reportConnected(incomingCall.call_id);
+    
+    setAnsweringCall(incomingCall);
+    setIsCallInterfaceOpen(true);
+    setIncomingCall(null);
+    setCallState('connecting');
+  }, [incomingCall]);
+
+  // Reject incoming call
+  const rejectCall = useCallback(async () => {
+    if (!incomingCall) return;
+    console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
+
+    // Cancel notification and vibration
+    await cancelIncomingCallNotification(incomingCall.call_id);
+    await Notifications.setBadgeCountAsync(0);
+    Vibration.cancel();
+
+    // End call in CallKeep
+    await callKeepManager.endCall(incomingCall.call_id);
+
+    await getSupabase()
+      .from('active_calls')
+      .update({ status: 'rejected' })
+      .eq('call_id', incomingCall.call_id);
+
+    setIncomingCall(null);
+    setCallState('idle');
+  }, [incomingCall]);
+
+  // End current call
+  const endCall = useCallback(async () => {
+    const callId = answeringCall?.call_id || outgoingCall?.userId;
+    console.log('[CallProvider] Ending call:', callId);
+
+    // End call in CallKeep
+    if (callId) {
+      await callKeepManager.endCall(callId);
+    }
+
+    if (answeringCall?.call_id) {
+      await getSupabase()
+        .from('active_calls')
+        .update({ status: 'ended' })
+        .eq('call_id', answeringCall.call_id);
+    }
+
+    setIsCallInterfaceOpen(false);
+    setOutgoingCall(null);
+    setAnsweringCall(null);
+    setCallState('ended');
+
+    // Reset state after a short delay
+    setTimeout(() => setCallState('idle'), 1000);
+  }, [answeringCall, outgoingCall]);
 
   // Return to active call (for minimized calls)
   const returnToCall = useCallback(() => {
@@ -708,7 +659,9 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall, outgoingCall]);
 
-  // Note: answerCall, rejectCall, endCall are now declared earlier for use in effects
+  // Calculate derived state
+  const isCallActive = isCallInterfaceOpen || !!incomingCall;
+  const isInActiveCall = isCallInterfaceOpen && (!!answeringCall || !!outgoingCall);
 
   const contextValue: CallContextType = {
     startVoiceCall,

@@ -8,15 +8,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  AppState,
-  AppStateStatus,
   Dimensions,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   Platform,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
@@ -71,87 +68,11 @@ export function VideoCallInterface({
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
-  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
-  const [isInBackgroundMode, setIsInBackgroundMode] = useState(false);
-  const [originalVideoState, setOriginalVideoState] = useState(true);
 
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  // Monitor app state for background video handling
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      console.log('[VideoCall] App state changed:', appState, '->', nextAppState);
-      setAppState(nextAppState);
-      
-      if (nextAppState === 'background' && dailyRef.current && callState === 'connected') {
-        // App is going to background during active video call
-        handleBackgroundMode();
-      } else if (nextAppState === 'active' && isInBackgroundMode && dailyRef.current) {
-        // App coming back to foreground
-        handleForegroundMode();
-      }
-    });
-    
-    return () => subscription.remove();
-  }, [appState, callState, isInBackgroundMode]);
-  
-  // Handle background mode for video calls
-  const handleBackgroundMode = useCallback(async () => {
-    if (!dailyRef.current) return;
-    
-    try {
-      console.log('[VideoCall] Entering background mode - preserving audio, managing video');
-      
-      // Store current video state
-      setOriginalVideoState(isVideoEnabled);
-      setIsInBackgroundMode(true);
-      
-      // For bandwidth conservation, temporarily disable video when backgrounded
-      if (isVideoEnabled) {
-        await dailyRef.current.setLocalVideo(false);
-        console.log('[VideoCall] Video disabled for background mode');
-      }
-      
-      // Keep audio enabled for continued conversation
-      // Daily.co handles audio routing automatically
-      
-    } catch (error) {
-      console.error('[VideoCall] Error handling background mode:', error);
-    }
-  }, [isVideoEnabled]);
-  
-  // Handle returning to foreground mode
-  const handleForegroundMode = useCallback(async () => {
-    if (!dailyRef.current) return;
-    
-    try {
-      console.log('[VideoCall] Returning to foreground mode - restoring video');
-      setIsInBackgroundMode(false);
-      
-      // Restore original video state
-      if (originalVideoState) {
-        await dailyRef.current.setLocalVideo(true);
-        setIsVideoEnabled(true);
-        console.log('[VideoCall] Video restored from background mode');
-      }
-      
-      // Ensure camera is still accessible
-      const devices = await dailyRef.current.getInputDevices();
-      if (devices.camera && devices.camera.length > 0) {
-        console.log('[VideoCall] Camera devices available:', devices.camera.length);
-      } else {
-        console.warn('[VideoCall] No camera devices available after foreground');
-        setError('Camera not available. Please check permissions.');
-      }
-      
-    } catch (error) {
-      console.error('[VideoCall] Error handling foreground mode:', error);
-      setError('Failed to restore video. Please check camera permissions.');
-    }
-  }, [originalVideoState]);
 
   // Update callIdRef when prop changes
   useEffect(() => {
@@ -450,60 +371,27 @@ export function VideoCallInterface({
     }
   }, [isAudioEnabled]);
 
-  // Toggle camera with proper permissions check
+  // Toggle camera
   const toggleVideo = useCallback(async () => {
     if (!dailyRef.current) return;
     try {
-      // Check camera permissions before enabling video
-      if (!isVideoEnabled) {
-        const devices = await dailyRef.current.getInputDevices();
-        if (!devices.camera || devices.camera.length === 0) {
-          Alert.alert(
-            'Camera Not Available',
-            'No camera devices found. Please check your camera permissions and try again.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-      }
-      
       await dailyRef.current.setLocalVideo(!isVideoEnabled);
       setIsVideoEnabled(!isVideoEnabled);
-      
-      // Update original state if we're not in background mode
-      if (!isInBackgroundMode) {
-        setOriginalVideoState(!isVideoEnabled);
-      }
-      
-      console.log(`[VideoCall] Video ${!isVideoEnabled ? 'enabled' : 'disabled'}`);
     } catch (err) {
       console.error('[VideoCall] Toggle video error:', err);
-      setError('Failed to toggle camera. Please check permissions.');
     }
-  }, [isVideoEnabled, isInBackgroundMode]);
+  }, [isVideoEnabled]);
 
-  // Flip camera with error handling
+  // Flip camera
   const flipCamera = useCallback(async () => {
-    if (!dailyRef.current || !isVideoEnabled) return;
+    if (!dailyRef.current) return;
     try {
-      const devices = await dailyRef.current.getInputDevices();
-      if (!devices.camera || devices.camera.length < 2) {
-        Alert.alert(
-          'Camera Switch Not Available',
-          'Multiple cameras not found. This feature requires front and back cameras.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-      
       await dailyRef.current.cycleCamera();
       setIsFrontCamera(!isFrontCamera);
-      console.log(`[VideoCall] Switched to ${!isFrontCamera ? 'front' : 'back'} camera`);
     } catch (err) {
       console.error('[VideoCall] Flip camera error:', err);
-      setError('Failed to switch camera.');
     }
-  }, [isFrontCamera, isVideoEnabled]);
+  }, [isFrontCamera]);
 
   // End call
   const handleEndCall = useCallback(async () => {

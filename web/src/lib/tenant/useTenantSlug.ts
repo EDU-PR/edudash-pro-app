@@ -39,12 +39,22 @@ export function useTenantSlug(userId: string | undefined): TenantSlugResult {
       // Get preschool_id from profiles (organization columns don't exist)
       const { data: prof } = await supabase
         .from("profiles")
-        .select("preschool_id, organization_id")
+        .select("preschool_id")
         .eq("id", userId)
         .maybeSingle();
 
-      // Get preschool ID from profile
-      let preschoolId = prof?.preschool_id || prof?.organization_id as string | undefined;
+      // Fallback to preschool
+      let preschoolId = prof?.preschool_id as string | undefined;
+      if (!preschoolId) {
+        // Try users table to find internal mapping
+        const { data: me } = await supabase
+          .from("users")
+          .select("preschool_id")
+          .eq("auth_user_id", userId)
+          .maybeSingle();
+
+        preschoolId = me?.preschool_id;
+      }
 
       if (preschoolId) {
         const { data: school } = await supabase

@@ -53,25 +53,6 @@ export interface SubscriptionStatusCardProps {
 }
 
 /**
- * Format tier name for display
- * Removes role prefixes (parent_, learner_, etc.) and capitalizes each word
- */
-function formatTierName(tier: string): string {
-  // Remove common role prefixes
-  const cleanTier = tier
-    .replace(/^parent_/i, '')
-    .replace(/^learner_/i, '')
-    .replace(/^teacher_/i, '')
-    .replace(/_/g, ' ');
-  
-  // Capitalize each word
-  return cleanTier
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
-
-/**
  * Format date for display
  */
 function formatDate(dateString: string): string {
@@ -312,7 +293,7 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
                 </Text>
               </View>
               <Text style={[styles.freeTierText, { color: theme.textSecondary, marginTop: 8 }]}>
-                Your {formatTierName(tier)} subscription is active.
+                Your {tier.replace('_', ' ')} subscription is active.
               </Text>
             </View>
           )
@@ -320,6 +301,24 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
           <Text style={[styles.freeTierText, { color: theme.textSecondary }]}>
             You're on the free plan with limited AI features.
           </Text>
+        )}
+        
+        {/* Upgrade CTA for free tier */}
+        {showUpgradeCTA && isFreeTier && (
+          <TouchableOpacity
+            style={[styles.upgradeButton, { backgroundColor: theme.primary }]}
+            onPress={handleUpgradePress}
+          >
+            <LinearGradient
+              colors={[theme.primary, '#7C3AED']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.upgradeGradient}
+            >
+              <Ionicons name="sparkles" size={18} color="#fff" />
+              <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         )}
         
         {/* Cancel option for paid tiers */}
@@ -397,45 +396,29 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
         </View>
       )}
       
-      {/* Upgrade/Refresh Button - Show upgrade CTA based on tier */}
-      {isFreeTier ? (
-        <TouchableOpacity
-          style={[styles.upgradeSmallButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpgradePress}
-        >
-          <Ionicons name="sparkles" size={14} color="#fff" />
-          <Text style={styles.upgradeSmallText}>Upgrade</Text>
-        </TouchableOpacity>
-      ) : tier === 'parent_starter' || tier === 'starter' ? (
-        <TouchableOpacity
-          style={[styles.upgradeSmallButton, { backgroundColor: theme.primary }]}
-          onPress={handleUpgradePress}
-        >
-          <Ionicons name="arrow-up-circle" size={14} color="#fff" />
-          <Text style={styles.upgradeSmallText}>Upgrade to Plus</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={[styles.refreshButton, { borderColor: theme.border }]}
-          onPress={() => {
-            refreshTier();
-            refreshSubscription();
-            fetchPaymentHistory();
-          }}
-        >
-          <Ionicons name="refresh" size={14} color={theme.textSecondary} />
-          <Text style={[styles.refreshText, { color: theme.textSecondary }]}>Refresh</Text>
-        </TouchableOpacity>
-      )}
+      {/* Refresh Button */}
+      <TouchableOpacity
+        style={[styles.refreshButton, { borderColor: theme.border }]}
+        onPress={() => {
+          refreshTier();
+          refreshSubscription();
+          fetchPaymentHistory();
+        }}
+      >
+        <Ionicons name="refresh" size={16} color={theme.textSecondary} />
+        <Text style={[styles.refreshText, { color: theme.textSecondary }]}>
+          Refresh
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
-    padding: 14,
-    marginVertical: 4,
+    borderRadius: 16,
+    padding: 20,
+    marginVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -443,21 +426,21 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   planSection: {
-    marginBottom: 12,
+    marginBottom: 20,
   },
   planHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
   },
   planDetails: {
-    gap: 4,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 16,
   },
   planDetailRow: {
     flexDirection: 'row',
@@ -468,9 +451,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   freeTierText: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
   },
   upgradeButton: {
     borderRadius: 12,
@@ -565,29 +548,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
     borderWidth: 1,
     borderRadius: 8,
-    paddingVertical: 6,
-    marginTop: 8,
+    paddingVertical: 8,
+    marginTop: 16,
   },
   refreshText: {
-    fontSize: 12,
-  },
-  upgradeSmallButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  upgradeSmallText: {
-    color: '#fff',
     fontSize: 13,
-    fontWeight: '600',
   },
 });
 

@@ -219,9 +219,9 @@ export class AIInsightsService {
   private static async analyzeTeacherPerformance(schoolId: string): Promise<AIInsight | null> {
     try {
       const { data: teachers, count: totalTeachers } = await supabase!
-        .from('profiles')
+        .from('users')
         .select('id, role')
-        .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
+        .eq('preschool_id', schoolId)
         .eq('role', 'teacher');
       
       const { count: totalStudents } = await supabase!

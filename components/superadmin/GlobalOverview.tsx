@@ -82,7 +82,7 @@ const GlobalOverview: React.FC<GlobalOverviewProps> = ({ loading, setLoading }) 
       
       // Get total users count
       const { data: users } = await assertSupabase()
-        .from('profiles')
+        .from('users')
         .select('id')
         .limit(1000); // Limit for performance
       

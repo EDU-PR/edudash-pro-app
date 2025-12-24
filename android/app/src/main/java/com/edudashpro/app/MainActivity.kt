@@ -3,6 +3,8 @@ import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
+import android.app.KeyguardManager
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -20,6 +22,23 @@ class MainActivity : ReactActivity() {
     // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
     SplashScreenManager.registerOnActivity(this)
     // @generated end expo-splashscreen
+    
+    // Enable showing over lock screen for incoming calls
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+      setShowWhenLocked(true)
+      setTurnScreenOn(true)
+      val keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+      keyguardManager.requestDismissKeyguard(this, null)
+    } else {
+      @Suppress("DEPRECATION")
+      window.addFlags(
+        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+      )
+    }
+    
     super.onCreate(null)
   }
 

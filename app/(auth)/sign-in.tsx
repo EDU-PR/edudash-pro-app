@@ -779,11 +779,9 @@ return (
 
             <GradientButton
               label={loading ? t('auth.sign_in.signing_in', { defaultValue: 'Signing In...' }) : t('auth.sign_in.cta', { defaultValue: 'Sign In' })}
-              onPress={handleSignIn}
+              onPress={() => { if (!loading) handleSignIn(); }}
               variant="indigo"
               size="lg"
-              loading={loading}
-              disabled={loading}
             />
 
             {/* Google Sign-In */}

@@ -60,19 +60,19 @@ export default function PrincipalParentsScreen() {
         return;
       }
 
-      // 2) Fetch parent profiles by id (profiles.id = auth_user_id)
+      // 2) Fetch parent profiles by auth_user_id
       const { data: users, error: usersErr } = await assertSupabase()
-        .from('profiles')
-        .select('id, first_name, last_name, email, phone')
-        .in('id', ids);
+        .from('users')
+        .select('auth_user_id, name, email, phone')
+        .in('auth_user_id', ids);
       if (usersErr) throw usersErr;
 
       const merged: ParentRow[] = (users || []).map((u: any) => ({
-        auth_user_id: u.id,
-        name: u.first_name ? `${u.first_name} ${u.last_name || ''}`.trim() : null,
+        auth_user_id: u.auth_user_id,
+        name: u.name,
         email: u.email,
         phone: u.phone,
-        children: idToChildren[u.id] || [],
+        children: idToChildren[u.auth_user_id] || [],
       }));
 
       // Sort by name/email

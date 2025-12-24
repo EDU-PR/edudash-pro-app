@@ -108,21 +108,21 @@ export function RoleBasedHeader({
         }
       }
 
-      // If still not found, try profiles table again with different field (fallback)
+      // If still not found, try users table (fallback)
       if (!url) {
         try {
-          const { data: profileData } = await assertSupabase()
-            .from('profiles')
+          const { data: userData } = await assertSupabase()
+            .from('users')
             .select('avatar_url')
-            .eq('id', user.id)
+            .eq('auth_user_id', user.id)
             .maybeSingle();
           
-          if (profileData?.avatar_url) {
-            url = profileData.avatar_url;
-            console.log('✓ Avatar loaded from profiles table fallback:', url);
+          if (userData?.avatar_url) {
+            url = userData.avatar_url;
+            console.log('✓ Avatar loaded from users table:', url);
           }
         } catch (error) {
-          console.debug('Failed to load avatar from profiles fallback:', error);
+          console.debug('Failed to load avatar from users:', error);
         }
       }
       

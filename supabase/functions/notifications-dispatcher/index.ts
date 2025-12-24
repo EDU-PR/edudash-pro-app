@@ -87,6 +87,11 @@ interface ExpoNotification {
   ttl?: number
   expiration?: number
   channelId?: string
+  // Android-specific options for background handling
+  _contentAvailable?: boolean // Silent notification to wake app
+  categoryId?: string
+  // iOS-specific options
+  mutableContent?: boolean
 }
 
 interface NotificationTemplate {
@@ -96,6 +101,9 @@ interface NotificationTemplate {
   sound?: 'default' | null
   priority?: 'default' | 'normal' | 'high'
   channelId?: string
+  // Special options for calls
+  _contentAvailable?: boolean
+  categoryId?: string
 }
 
 /**
@@ -392,7 +400,7 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
       channelId: 'reports'
     },
     incoming_call: {
-      title: context.call_type === 'video' ? 'Incoming Video Call' : 'Incoming Voice Call',
+      title: context.call_type === 'video' ? '📹 Incoming Video Call' : '📞 Incoming Voice Call',
       body: context.caller_name 
         ? `${context.caller_name} is calling...` 
         : 'Incoming call...',
@@ -407,7 +415,9 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
       },
       sound: 'default',
       priority: 'high',
-      channelId: 'calls'
+      channelId: 'incoming-calls', // Match the channel we create in CallHeadlessTask
+      _contentAvailable: true, // Wake app in background (iOS) / triggers data handling (Android)
+      categoryId: 'incoming_call' // For action buttons
     }
   }
 
@@ -1326,6 +1336,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
       priority: template.priority,
       channelId: template.channelId,
       ttl: 86400, // 24 hours
+      // Special options for incoming calls - triggers background handler
+      ...(template._contentAvailable && { _contentAvailable: true }),
+      ...(template.categoryId && { categoryId: template.categoryId }),
     }))
 
     // Send notifications

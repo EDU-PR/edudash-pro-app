@@ -36,7 +36,6 @@ interface UseSubscriptionUpgradeReturn {
   reason: UpgradeReason;
   handleUpgrade: (planId: string) => Promise<void>;
   isLaunchPromoActive: boolean;
-  promoPercentOff: number;
 }
 
 export function useSubscriptionUpgrade({
@@ -293,6 +292,5 @@ export function useSubscriptionUpgrade({
     reason,
     handleUpgrade,
     isLaunchPromoActive,
-    promoPercentOff: isLaunchPromoActive ? 50 : 0,
   };
 }

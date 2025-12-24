@@ -355,22 +355,8 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/super-admin-dashboard' };
     
     case 'admin':
-      // Check if user is CEO of Soil of Africa organization
-      console.log('[ROUTE DEBUG] Admin routing - checking for CEO membership');
-      if (profile.organization_id) {
-        // Check organization_members for CEO/national_admin member_type
-        const memberType = (profile as any)?.organization_membership?.member_type;
-        
-        console.log('[ROUTE DEBUG] Member type:', memberType);
-        
-        if (memberType === 'national_admin' || memberType === 'ceo') {
-          console.log('[ROUTE DEBUG] CEO/national_admin detected - routing to membership CEO dashboard');
-          return { path: '/screens/membership/ceo-dashboard' };
-        }
-      }
-      
-      // Regular organization admins go to org-admin-dashboard
-      console.log('[ROUTE DEBUG] Regular organization admin - routing to org-admin-dashboard');
+      // Organization admins (Skills Development, Tertiary, Other) always go to org-admin-dashboard
+      console.log('[ROUTE DEBUG] Organization admin routing - organization_id:', profile.organization_id);
       return { path: '/screens/org-admin-dashboard' };
     
     case 'principal_admin':

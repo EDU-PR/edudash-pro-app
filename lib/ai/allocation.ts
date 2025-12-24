@@ -467,6 +467,7 @@ export async function canManageAllocations(userId: string, preschoolId: string):
     
     console.log('canManageAllocations check:', { 
       userId, 
+      publicUserId, 
       role: profile.role, 
       normalizedRole, 
       userSchoolId, 

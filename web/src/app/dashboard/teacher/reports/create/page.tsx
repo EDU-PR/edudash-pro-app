@@ -244,13 +244,13 @@ function CreateReportPageContent() {
           return;
         }
 
-        // Get parent info (profiles.id can be used if parent_id references auth user id)
+        // Get parent info
         let parentEmail = '';
         let parentName = 'Parent';
         
         if (data?.parent_id) {
           const { data: parent } = await supabase
-            .from('profiles')
+            .from('users')
             .select('email, first_name, last_name')
             .eq('id', data.parent_id)
             .maybeSingle();

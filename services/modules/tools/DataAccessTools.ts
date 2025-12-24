@@ -360,9 +360,9 @@ export function registerDataAccessTools(register: (tool: AgentTool) => void): vo
         const { count: studentCount } = await studentsQuery;
 
         const { count: teacherCount } = await supabase
-          .from('profiles')
+          .from('users')
           .select('id', { count: 'exact', head: true })
-          .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`)
+          .eq('preschool_id', orgId)
           .eq('role', 'teacher');
 
         const { count: classCount } = await supabase

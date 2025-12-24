@@ -52,7 +52,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       updateId: Updates.updateId,
       createdAt: Updates.createdAt,
       isEmbeddedLaunch: Updates.isEmbeddedLaunch,
-      // Note: releaseChannel is deprecated, using channel instead
+      releaseChannel: Updates.releaseChannel,
       manifest: Updates.manifest,
     };
     

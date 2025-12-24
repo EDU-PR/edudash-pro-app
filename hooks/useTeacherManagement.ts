@@ -352,17 +352,16 @@ export function useTeacherManagement(
       
       // Fallback when RPC not available or school has no coordinates
       const base = assertSupabase()
-        .from('profiles')
-        .select('id, email, first_name, last_name, phone, city, postal_code, role, is_active, preschool_id, organization_id')
+        .from('users')
+        .select('id, auth_user_id, email, name, phone, city, postal_code, role, is_active, preschool_id')
         .eq('role', 'teacher')
         .eq('is_active', true)
         .is('preschool_id', null)
-        .is('organization_id', null)
         .limit(100);
       let query = base;
       if (hiringSearch && hiringSearch.trim().length > 0) {
         const term = hiringSearch.trim();
-        query = query.or(`city.ilike.%${term}%,postal_code.ilike.%${term}%,email.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`);
+        query = query.or(`city.ilike.%${term}%,postal_code.ilike.%${term}%,email.ilike.%${term}%,name.ilike.%${term}%`);
       }
       const { data, error } = await query;
       if (error) {
@@ -371,7 +370,7 @@ export function useTeacherManagement(
       } else {
         const fallbackList = (data || []).map((u: Record<string, unknown>) => ({
           id: u.id as string,
-          name: u.first_name ? `${u.first_name} ${u.last_name || ''}`.trim() : (u.email as string) || 'Teacher',
+          name: (u.name as string) || (u.email as string) || 'Teacher',
           email: u.email as string,
           phone: u.phone as string | undefined,
           home_city: (u.city as string) || null,

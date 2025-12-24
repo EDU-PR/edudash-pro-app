@@ -76,15 +76,14 @@ export default function StudentDetailScreen() {
     try {
       setLoading(true);
 
-      // Get user's preschool (profiles.id = auth_user_id)
+      // Get user's preschool
       const { data: userProfile } = await assertSupabase()
-        .from('profiles')
-        .select('preschool_id, organization_id, role')
-        .eq('id', user.id)
+        .from('users')
+        .select('preschool_id, role')
+        .eq('auth_user_id', user.id)
         .single();
 
-      const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
-      if (!schoolId) {
+      if (!userProfile?.preschool_id) {
         Alert.alert('Error', 'No school assigned to your account');
         return;
       }

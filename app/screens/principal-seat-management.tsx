@@ -136,17 +136,17 @@ export default function PrincipalSeatManagementScreen() {
       // Use profiles.id (auth user ID) for RPC calls - RPC function expects this
       let teacherList: { id: string; email: string; hasSeat: boolean }[] = (profs || []).map((p: any) => ({ id: p.id, email: p.email, hasSeat: false }));
 
-      // If none found (schema variance), fall back to profiles table
+      // If none found (schema variance), fall back to users table by auth_user_id
       if ((!teacherList || teacherList.length === 0)) {
         try {
-          const { data: profileUsers } = await assertSupabase()
-            .from('profiles')
-            .select('id, email, role, preschool_id, organization_id')
-            .or(`preschool_id.eq.${effectiveSchoolId},organization_id.eq.${effectiveSchoolId}`)
+          const { data: users } = await assertSupabase()
+            .from('users')
+            .select('auth_user_id, email, role, preschool_id')
+            .eq('preschool_id', effectiveSchoolId)
             .eq('role', 'teacher');
-          teacherList = (profileUsers || []).map((u: any) => ({ id: u.id, email: u.email, hasSeat: false }));
+          teacherList = (users || []).map((u: any) => ({ id: u.auth_user_id || u.id, email: u.email, hasSeat: false }));
         } catch (fallbackErr) {
-          console.debug('Fallback profiles query failed:', fallbackErr);
+          console.debug('Fallback users query failed:', fallbackErr);
         }
       }
 
@@ -192,9 +192,9 @@ export default function PrincipalSeatManagementScreen() {
         return (data as any).id as string; // This is the auth user ID
       }
       
-      // Fallback to profiles table
-      const { data: u } = await assertSupabase().from('profiles').select('id,email').eq('email', email).maybeSingle();
-      if (u && (u as any).id) return (u as any).id as string;
+      // Fallback to users table and get auth_user_id
+      const { data: u } = await assertSupabase().from('users').select('auth_user_id,email').eq('email', email).maybeSingle();
+      if (u && (u as any).auth_user_id) return (u as any).auth_user_id as string;
       
       return null;
     } catch { return null; }

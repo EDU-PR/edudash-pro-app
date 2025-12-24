@@ -69,16 +69,16 @@ export default function TeacherProfileCompletionScreen() {
       const authId = authData.user?.id;
       if (!authId) throw new Error('No authenticated user');
 
-      // 1) profiles: upsert by id (which equals auth_user_id)
-      const { data: existingProfile, error: profileSelErr } = await supa
-        .from('profiles')
+      // 1) users: upsert by auth_user_id
+      const { data: existingUser, error: userSelErr } = await supa
+        .from('users')
         .select('id')
-        .eq('id', authId)
+        .eq('auth_user_id', authId)
         .maybeSingle();
-      if (profileSelErr) throw profileSelErr;
+      if (userSelErr) throw userSelErr;
 
-      const profilesPayload: any = {
-        id: authId,
+      const usersPayload: any = {
+        auth_user_id: authId,
         email: profile?.email || null,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -104,17 +104,20 @@ export default function TeacherProfileCompletionScreen() {
         role: 'teacher',
       };
 
-      if (existingProfile?.id) {
-        const { error: profileUpdateErr } = await supa.from('profiles').update(profilesPayload).eq('id', authId);
-        if (profileUpdateErr) throw profileUpdateErr;
+      let userId = existingUser?.id as string | undefined;
+      if (existingUser?.id) {
+        const { error: userUpdateErr } = await supa.from('users').update(usersPayload).eq('id', existingUser.id);
+        if (userUpdateErr) throw userUpdateErr;
       } else {
-        const { error: profileInsertErr } = await supa
-          .from('profiles')
-          .insert(profilesPayload);
-        if (profileInsertErr) throw profileInsertErr;
+        const { data: insertedUser, error: userInsertErr } = await supa
+          .from('users')
+          .insert(usersPayload)
+          .select('id')
+          .single();
+        if (userInsertErr) throw userInsertErr;
+        userId = insertedUser?.id;
       }
 
-      // 2) teachers: upsert by auth_user_id
       // 2) teachers: upsert by auth_user_id
       const { data: existingTeacher, error: teacherSelErr } = await supa
         .from('teachers')
@@ -126,7 +129,7 @@ export default function TeacherProfileCompletionScreen() {
       const subjectSpec = subjectsTaught ? parseCsv(subjectsTaught).join(', ') : null;
       const teacherPayload: any = {
         auth_user_id: authId,
-        user_id: authId,  // Use auth_user_id directly since profiles.id = auth_user_id
+        user_id: userId || null,
         preschool_id: profile?.organization_id || null,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -145,7 +148,15 @@ export default function TeacherProfileCompletionScreen() {
         if (teacherInsertErr) throw teacherInsertErr;
       }
 
-      // Profile already updated above via profiles table upsert
+      // 3) profiles: keep basic info in sync
+      if (profile?.id) {
+        const { error: profErr } = await supa
+          .from('profiles')
+          .update({ first_name: firstName.trim(), last_name: lastName.trim(), phone: phone || null })
+          .eq('id', profile.id);
+        if (profErr) throw profErr;
+      }
+
       Alert.alert('Saved', 'Your profile has been updated.');
     } catch (e: any) {
       console.error('Teacher profile save error:', e);

@@ -51,9 +51,9 @@ async function getCurrentUserId(): Promise<string | null> {
 async function getUserDisplayName(userId: string): Promise<string> {
   try {
     const { data } = await assertSupabase()
-      .from('profiles')
+      .from('users')
       .select('first_name, last_name, email')
-      .eq('id', userId)
+      .eq('auth_user_id', userId)
       .maybeSingle();
     
     if (data?.first_name) {

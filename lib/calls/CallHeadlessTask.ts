@@ -7,19 +7,22 @@
  * Flow:
  * 1. FCM data message arrives with type: 'incoming_call'
  * 2. Android wakes up the app headlessly (no UI)
- * 3. This task runs and displays CallKeep incoming call screen
- * 4. User sees native call UI and can answer/decline
+ * 3. This task runs and displays:
+ *    a. CallKeep native call screen (if available)
+ *    b. High-priority notification with full-screen intent (fallback)
+ * 4. User sees call UI and can answer/decline
  * 5. If answered, app opens and CallProvider handles the rest
  */
 
-import { AppRegistry, Platform } from 'react-native';
+import { AppRegistry, Platform, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 
 // Conditionally import CallKeep
 let RNCallKeep: any = null;
 try {
   RNCallKeep = require('react-native-callkeep').default;
-} catch {
+} catch (error) {
   console.warn('[CallHeadlessTask] react-native-callkeep not available');
 }
 
@@ -27,10 +30,13 @@ try {
 let messaging: any = null;
 try {
   messaging = require('@react-native-firebase/messaging').default;
-} catch {
+} catch (error) {
   // Firebase messaging not available - will use Expo notifications fallback
   console.warn('[CallHeadlessTask] Firebase messaging not available');
 }
+
+// Ringtone vibration pattern (mimics phone call)
+const RINGTONE_VIBRATION_PATTERN = [0, 1000, 500, 1000, 500, 1000, 500, 1000, 500, 1000];
 
 export interface IncomingCallData {
   type: 'incoming_call';
@@ -98,7 +104,7 @@ async function setupCallKeepHeadless(): Promise<boolean> {
   }
   
   try {
-    const options = {
+    await RNCallKeep.setup({
       ios: {
         appName: 'EduDash Pro',
         imageName: 'AppIcon',
@@ -114,36 +120,155 @@ async function setupCallKeepHeadless(): Promise<boolean> {
         okButton: 'OK',
         imageName: 'ic_launcher',
         additionalPermissions: [],
-        selfManaged: true, // Important for Android 11+
+        selfManaged: true,
         foregroundService: {
           channelId: 'com.edudashpro.app.calls',
           channelName: 'Voice & Video Calls',
           notificationTitle: 'EduDash Call in progress',
           notificationIcon: 'ic_launcher',
         },
-        // Enable wake screen for incoming calls
-        wakeScreen: true,
-        useFullScreenIntent: true,
-        turnScreenOn: true,
-        showWhenLocked: true,
       },
-    };
-    
-    await RNCallKeep.setup(options);
-    
-    // Request phone account permission for Android
-    if (Platform.OS === 'android') {
-      const hasPermission = await RNCallKeep.checkPhoneAccountPermission();
-      if (!hasPermission) {
-        await RNCallKeep.requestPhoneAccountPermission();
-      }
-    }
+    });
     
     console.log('[CallHeadlessTask] CallKeep setup complete');
     return true;
   } catch (error) {
     console.error('[CallHeadlessTask] CallKeep setup failed:', error);
     return false;
+  }
+}
+
+/**
+ * Setup notification channel for incoming calls (Android)
+ * Must be called before showing notifications
+ */
+async function setupIncomingCallChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  
+  try {
+    await Notifications.setNotificationChannelAsync('incoming-calls', {
+      name: 'Incoming Calls',
+      description: 'Voice and video call notifications - high priority with ringtone',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: RINGTONE_VIBRATION_PATTERN,
+      lightColor: '#00f5ff',
+      sound: 'default', // Uses system ringtone at MAX importance
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    });
+    
+    // Setup notification category with answer/decline actions
+    await Notifications.setNotificationCategoryAsync('incoming_call', [
+      {
+        identifier: 'ANSWER',
+        buttonTitle: 'Answer',
+        options: {
+          opensAppToForeground: true,
+          isAuthenticationRequired: false,
+        },
+      },
+      {
+        identifier: 'DECLINE',
+        buttonTitle: 'Decline',
+        options: {
+          opensAppToForeground: false,
+          isAuthenticationRequired: false,
+          isDestructive: true,
+        },
+      },
+    ]);
+    
+    console.log('[CallHeadlessTask] Incoming call notification channel created');
+  } catch (error) {
+    console.error('[CallHeadlessTask] Failed to setup incoming call channel:', error);
+  }
+}
+
+/**
+ * Show high-priority notification for incoming call (fallback when CallKeep fails)
+ * This notification:
+ * - Shows on lock screen
+ * - Uses ringtone/vibration
+ * - Has Answer/Decline action buttons
+ * - Bypasses Do Not Disturb
+ */
+async function showIncomingCallNotification(callData: IncomingCallData): Promise<void> {
+  try {
+    // Ensure channel exists
+    await setupIncomingCallChannel();
+    
+    const callTypeEmoji = callData.call_type === 'video' ? '📹' : '📞';
+    const callTypeText = callData.call_type === 'video' ? 'Video Call' : 'Voice Call';
+    
+    // Schedule the notification immediately with highest priority
+    await Notifications.scheduleNotificationAsync({
+      identifier: `incoming-call-${callData.call_id}`,
+      content: {
+        title: `${callTypeEmoji} Incoming ${callTypeText}`,
+        body: `${callData.caller_name} is calling...`,
+        subtitle: 'EduDash Pro',
+        categoryIdentifier: 'incoming_call',
+        data: {
+          type: 'incoming_call',
+          call_id: callData.call_id,
+          caller_id: callData.caller_id,
+          caller_name: callData.caller_name,
+          call_type: callData.call_type,
+          meeting_url: callData.meeting_url,
+          forceShow: true, // Force show even when app is foregrounded
+        },
+        sound: 'default',
+        // Android-specific for incoming call notification
+        ...(Platform.OS === 'android' && {
+          channelId: 'incoming-calls',
+          priority: 'max',
+          sticky: true, // Don't auto-dismiss
+          autoDismiss: false,
+          color: '#00f5ff',
+          // Full-screen intent opens the app directly
+          badge: 1,
+        }),
+        // iOS-specific
+        ...(Platform.OS === 'ios' && {
+          interruptionLevel: 'critical',
+        }),
+      },
+      trigger: null, // Show immediately
+    });
+    
+    // Start continuous vibration to simulate ringtone (30 seconds)
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(RINGTONE_VIBRATION_PATTERN, true); // true = repeat
+      
+      // Stop vibration after 30 seconds if not answered
+      setTimeout(() => {
+        Vibration.cancel();
+      }, 30000);
+    }
+    
+    // Update badge count
+    await Notifications.setBadgeCountAsync(1);
+    
+    console.log('[CallHeadlessTask] Incoming call notification shown:', callData.call_id);
+  } catch (error) {
+    console.error('[CallHeadlessTask] Failed to show incoming call notification:', error);
+  }
+}
+
+/**
+ * Cancel incoming call notification
+ */
+export async function cancelIncomingCallNotification(callId: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(`incoming-call-${callId}`);
+    await Notifications.dismissNotificationAsync(`incoming-call-${callId}`);
+    Vibration.cancel();
+    console.log('[CallHeadlessTask] Incoming call notification cancelled:', callId);
+  } catch (error) {
+    console.error('[CallHeadlessTask] Failed to cancel incoming call notification:', error);
   }
 }
 
@@ -179,7 +304,12 @@ async function CallHeadlessTask(remoteMessage: any): Promise<void> {
   // Save call data for when the app opens
   await savePendingCall(callData);
   
-  // Setup and display CallKeep incoming call screen
+  // ALWAYS show notification first - this works reliably in background
+  // This ensures user sees the call even if CallKeep fails
+  await showIncomingCallNotification(callData);
+  
+  // Also try CallKeep for native call UI (lock screen experience)
+  // CallKeep provides better UX but isn't always reliable
   const setupSuccess = await setupCallKeepHeadless();
   
   if (setupSuccess && RNCallKeep) {
@@ -192,82 +322,12 @@ async function CallHeadlessTask(remoteMessage: any): Promise<void> {
         callData.call_type === 'video'
       );
       
-      console.log('[CallHeadlessTask] Incoming call displayed via CallKeep');
+      console.log('[CallHeadlessTask] Incoming call also displayed via CallKeep');
     } catch (error) {
-      console.error('[CallHeadlessTask] Failed to display incoming call:', error);
+      console.error('[CallHeadlessTask] CallKeep display failed (notification fallback active):', error);
     }
-  }
-  
-  // Set up a timeout to show missed call notification if not answered
-  setTimeout(async () => {
-    // Check if call is still pending (not answered)
-    const pendingCall = await AsyncStorage.getItem(PENDING_CALL_KEY);
-    if (pendingCall) {
-      const callInfo = JSON.parse(pendingCall);
-      if (callInfo.call_id === callData.call_id) {
-        // Call was not answered - show missed call notification
-        await showMissedCallNotificationHeadless(callData.caller_name, callData.call_type);
-        // Clear the pending call
-        await AsyncStorage.removeItem(PENDING_CALL_KEY);
-      }
-    }
-  }, 30000); // 30 seconds timeout
-}
-
-/**
- * Show missed call notification when app is killed/backgrounded
- * Includes badge update (red dot on app icon)
- * Shows on lock screen
- */
-async function showMissedCallNotificationHeadless(
-  callerName: string, 
-  callType: 'voice' | 'video'
-): Promise<void> {
-  try {
-    // Dynamically import expo-notifications
-    const Notifications = await import('expo-notifications');
-    const { badgeManager } = await import('../NotificationBadgeManager');
-    
-    const callTypeIcon = callType === 'video' ? '📹' : '📞';
-    const timestamp = new Date().toLocaleTimeString('en-ZA', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-
-    // Update badge count (red dot on app icon)
-    await badgeManager.addMissedCall();
-    const totalBadge = badgeManager.getTotalBadgeCount();
-
-    // Schedule notification - shows on lock screen and notification shade
-    await Notifications.scheduleNotificationAsync({
-      identifier: `missed-call-headless-${Date.now()}`,
-      content: {
-        title: `${callTypeIcon} Missed Call`,
-        body: `${callerName} • ${timestamp}`,
-        data: { 
-          type: 'missed_call', 
-          callerName,
-          callType,
-          timestamp: Date.now(),
-        },
-        // Android: Show on lock screen with badge
-        ...(Platform.OS === 'android' && {
-          channelId: 'missed-calls', // Use dedicated missed calls channel
-          priority: 'high' as const,
-          vibrate: [0, 250, 250, 250],
-          color: '#EF4444', // Red for missed call
-        }),
-        // iOS: Update badge
-        ...(Platform.OS === 'ios' && {
-          badge: totalBadge,
-        }),
-      },
-      trigger: null,
-    });
-
-    console.log('[CallHeadlessTask] Missed call notification shown for:', callerName, 'badge:', totalBadge);
-  } catch (error) {
-    console.error('[CallHeadlessTask] Failed to show missed call notification:', error);
+  } else {
+    console.log('[CallHeadlessTask] CallKeep not available, using notification only');
   }
 }
 

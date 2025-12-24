@@ -50,7 +50,7 @@ export default function PWAInstallPage() {
       } catch {
         // Silent - preventDefault may not be available
       }
-      setDeferredPrompt(e as unknown as BeforeInstallPromptEvent);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
     window.addEventListener('beforeinstallprompt', handler);

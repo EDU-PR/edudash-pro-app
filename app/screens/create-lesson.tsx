@@ -43,15 +43,13 @@ export default function CreateLessonScreen() {
       setSaving(true)
       const { data: auth } = await assertSupabase().auth.getUser()
       const authUserId = auth?.user?.id || ''
-      // profiles.id = auth_user_id
-      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('id', authUserId).maybeSingle()
+      const { data: profile } = await assertSupabase().from('users').select('id,preschool_id').eq('auth_user_id', authUserId).maybeSingle()
       if (!profile) { Alert.alert('Not signed in', 'No user profile.'); return }
-      const schoolId = profile.preschool_id || profile.organization_id;
 
       const res = await LessonGeneratorService.saveGeneratedLesson({
         lesson: { title, description, content: { sections: [{ title: 'Overview', content: description }] } },
         teacherId: profile.id,
-        preschoolId: schoolId,
+        preschoolId: profile.preschool_id,
         ageGroupId: 'n/a',
         categoryId: catId,
         template: { duration: parseInt(duration) || 30, complexity },

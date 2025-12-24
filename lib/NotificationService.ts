@@ -37,13 +37,19 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     console.log('Notification received:', notification);
     
+    const data = notification.request.content.data;
+    
+    // Always show incoming call notifications (high priority)
+    const isIncomingCall = data?.type === 'incoming_call';
+    
     // Determine if we should show the notification when app is in foreground
-    const shouldShow = notification.request.content.data?.forceShow === true;
+    const shouldShow = isIncomingCall || data?.forceShow === true;
     
     return {
       shouldShowAlert: shouldShow,
-      shouldPlaySound: true,
+      shouldPlaySound: shouldShow,
       shouldSetBadge: true,
+      priority: isIncomingCall ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.DEFAULT,
     };
   },
 });

@@ -262,11 +262,11 @@ export const useProgressReportForm = ({ studentId, profile }: UseProgressReportF
         return;
       }
 
-      // Try to get parent information (profiles.id = auth_user_id or students.parent_id)
+      // Try to get parent information
       let parentData = null;
       if (data.parent_id) {
         const { data: parent } = await supabase
-          .from('profiles')
+          .from('users')
           .select('email, first_name, last_name')
           .eq('id', data.parent_id)
           .maybeSingle();
@@ -276,7 +276,7 @@ export const useProgressReportForm = ({ studentId, profile }: UseProgressReportF
       // If no parent, try guardian
       if (!parentData && data.guardian_id) {
         const { data: guardian } = await supabase
-          .from('profiles')
+          .from('users')
           .select('email, first_name, last_name')
           .eq('id', data.guardian_id)
           .maybeSingle();

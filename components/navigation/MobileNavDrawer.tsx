@@ -37,23 +37,7 @@ interface MobileNavDrawerProps {
 }
 
 // Default nav items by role
-const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
-  // Check if user is CEO (member_type from organization membership)
-  if (memberType === 'ceo' || memberType === 'chief_executive_officer') {
-    return [
-      { id: 'home', label: 'CEO Dashboard', icon: 'business', route: '/screens/membership/ceo-dashboard' },
-      { id: 'regional', label: 'Regional Managers', icon: 'people', route: '/screens/membership/regional-managers' },
-      { id: 'members', label: 'All Members', icon: 'person-circle', route: '/screens/membership/members' },
-      { id: 'finance', label: 'Financial Reports', icon: 'trending-up', route: '/screens/membership/finance' },
-      { id: 'analytics', label: 'Analytics', icon: 'analytics', route: '/screens/membership/analytics' },
-      { id: 'strategy', label: 'Strategic Plan', icon: 'bulb', route: '/screens/membership/strategy' },
-      { id: 'governance', label: 'Governance', icon: 'shield-checkmark', route: '/screens/membership/governance' },
-      { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
-      { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
-      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
-    ];
-  }
-  
+const getDefaultNavItems = (role: string): NavItem[] => {
   switch (role) {
     case 'teacher':
       return [
@@ -133,9 +117,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
   const userRole = (profile?.role as string) || 'parent';
-  // Get member_type from organization_membership for CEO detection
-  const memberType = profile?.organization_membership?.member_type;
-  const items = navItems || getDefaultNavItems(userRole, memberType);
+  const items = navItems || getDefaultNavItems(userRole);
 
   useEffect(() => {
     if (isOpen) {

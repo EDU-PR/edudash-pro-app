@@ -127,31 +127,30 @@ export function usePettyCash() {
     try {
       setLoading(true);
 
-      // Get user's preschool (profiles.id = auth_user_id)
+      // Get user's preschool
       const { data: userProfile } = await assertSupabase()
-        .from('profiles')
-        .select('preschool_id, organization_id')
-        .eq('id', user.id)
+        .from('users')
+        .select('preschool_id')
+        .eq('auth_user_id', user.id)
         .single();
 
-      const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
-      if (!schoolId) {
+      if (!userProfile?.preschool_id) {
         Alert.alert(t('common.error'), t('petty_cash.error_no_school'));
         return;
       }
 
-      setPreschoolId(schoolId);
+      setPreschoolId(userProfile.preschool_id);
 
       // Ensure petty cash account exists
       try {
         const { data: ensuredId } = await assertSupabase()
-          .rpc('ensure_petty_cash_account', { school_uuid: schoolId });
+          .rpc('ensure_petty_cash_account', { school_uuid: userProfile.preschool_id });
         if (ensuredId) setAccountId(String(ensuredId));
       } catch {
         const { data: acct } = await assertSupabase()
           .from('petty_cash_accounts')
           .select('id')
-          .eq('school_id', schoolId)
+          .eq('school_id', userProfile.preschool_id)
           .eq('is_active', true)
           .maybeSingle();
         if (acct?.id) setAccountId(String(acct.id));
@@ -161,7 +160,7 @@ export function usePettyCash() {
       const { data: transactionsData, error: transError } = await assertSupabase()
         .from('petty_cash_transactions')
         .select('*')
-        .eq('school_id', schoolId)
+        .eq('school_id', userProfile.preschool_id)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -395,9 +394,9 @@ export function usePettyCash() {
   const canDelete = async (): Promise<boolean> => {
     try {
       const { data } = await assertSupabase()
-        .from('profiles')
+        .from('users')
         .select('role')
-        .eq('id', user?.id)
+        .eq('auth_user_id', user?.id)
         .single();
       return data?.role === 'principal_admin';
     } catch {

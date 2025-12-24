@@ -21,7 +21,7 @@ export default function PremiumFeatureModal() {
       featureName={params.featureName || 'Premium Feature'}
       description={params.description || 'This feature requires a premium subscription.'}
       screen={params.screen || 'unknown'}
-      icon={(params.icon || 'star') as any}
+      icon={params.icon || 'star'}
       variant="fullscreen"
     />
   );

@@ -64,16 +64,25 @@ export function useTeacherSchool(): TeacherSchool {
         if (!schoolId) {
           const supabase = assertSupabase();
           
-          // Try profiles table first (profiles.id = auth_user_id)
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('id, preschool_id, organization_id')
-            .eq('id', user.id)
+          // Try users table first
+          const { data: userData } = await supabase
+            .from('users')
+            .select('id, preschool_id')
+            .eq('auth_user_id', user.id)
             .maybeSingle();
           
-          if (profileData?.preschool_id || profileData?.organization_id) {
-            schoolId = profileData.preschool_id || profileData.organization_id;
-            teacherId = profileData.id;
+          if (userData?.preschool_id) {
+            schoolId = userData.preschool_id;
+            teacherId = userData.id;
+          } else {
+            // Fall back to profiles table
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('id, preschool_id, organization_id')
+              .eq('id', user.id)
+              .maybeSingle();
+            
+            schoolId = profileData?.preschool_id || profileData?.organization_id;
           }
         }
         

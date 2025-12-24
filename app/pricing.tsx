@@ -336,7 +336,7 @@ export default function PricingScreen() {
                     // Map school plan keys
                     if (plan.key === 'starter') planId = 'school_starter';
                     if (plan.key === 'premium') planId = 'school_premium';
-                    navigateTo.subscriptionSetup({ planId, billing: annual ? 'annual' : 'monthly', auto: true });
+                    navigateTo.subscriptionSetup({ planId, billing: annual ? 'annual' : 'monthly', auto: '1' });
                   }}
                 />
               </View>

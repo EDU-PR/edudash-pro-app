@@ -1,6 +1,6 @@
 import React from 'react';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
-import { Text, Pressable, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -18,8 +18,6 @@ interface GradientButtonProps {
   textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
   testID?: string;
-  loading?: boolean;
-  disabled?: boolean;
 }
 
 /**
@@ -36,8 +34,6 @@ export function GradientButton({
   textStyle,
   accessibilityLabel,
   testID,
-  loading = false,
-  disabled = false,
 }: GradientButtonProps) {
   const scale = useSharedValue(1);
   
@@ -55,17 +51,14 @@ export function GradientButton({
     lg: { paddingHorizontal: 32, paddingVertical: 16, fontSize: 18 },
   }[size];
   
-  const isDisabled = disabled || loading;
-  
   return (
-    <Animated.View style={[styles.container, animatedStyle, isDisabled && styles.disabled, style]}>
+    <Animated.View style={[styles.container, animatedStyle, style]}>
       <Pressable
-        onPress={isDisabled ? undefined : onPress}
-        onPressIn={() => { if (!isDisabled) scale.value = 0.98; }}
+        onPress={onPress}
+        onPressIn={() => { scale.value = 0.98; }}
         onPressOut={() => { scale.value = 1; }}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel || label}
-        accessibilityState={{ disabled: isDisabled }}
         testID={testID}
         style={styles.pressable}
       >
@@ -81,18 +74,9 @@ export function GradientButton({
             },
           ]}
         >
-          <View style={styles.content}>
-            {loading && (
-              <ActivityIndicator 
-                size="small" 
-                color={marketingTokens.colors.fg.inverse} 
-                style={styles.spinner}
-              />
-            )}
-            <Text style={[styles.text, { fontSize: sizeStyles.fontSize }, textStyle]}>
-              {label}
-            </Text>
-          </View>
+          <Text style={[styles.text, { fontSize: sizeStyles.fontSize }, textStyle]}>
+            {label}
+          </Text>
         </LinearGradient>
       </Pressable>
     </Animated.View>
@@ -107,23 +91,12 @@ const styles = StyleSheet.create({
     minHeight: 44,
     minWidth: 44,
   },
-  disabled: {
-    opacity: 0.7,
-  },
   pressable: {
     width: '100%',
   },
   gradient: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  spinner: {
-    marginRight: 8,
   },
   text: {
     color: marketingTokens.colors.fg.inverse,

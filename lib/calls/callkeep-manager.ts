@@ -102,12 +102,6 @@ class CallKeepManager extends EventEmitter {
             notificationTitle: 'EduDash Call in progress',
             notificationIcon: 'ic_launcher',
           },
-          // Enhanced wake screen functionality
-          wakeScreen: true,
-          useFullScreenIntent: true,
-          turnScreenOn: true,
-          showWhenLocked: true,
-          disableKeyguard: true,
         },
       };
       
