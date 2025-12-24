@@ -8,7 +8,7 @@
  * - School announcements
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
-  Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,22 +80,6 @@ const markAllNotificationsRead = async (userId: string, notificationIds: string[
   }
 };
 
-// Helper to delete notifications by type
-const deleteNotificationsByType = async (userId: string, notifications: Notification[], types: string[]): Promise<void> => {
-  try {
-    const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
-    const existing = await getReadNotificationIds(userId);
-    // Mark notifications of specified types as deleted by adding them to read set
-    notifications
-      .filter(n => types.includes(n.type))
-      .forEach(n => existing.add(n.id));
-    const arr = Array.from(existing).slice(-500);
-    await AsyncStorage.setItem(key, JSON.stringify(arr));
-  } catch (e) {
-    console.error('[deleteNotificationsByType] Error:', e);
-  }
-};
-
 interface Notification {
   id: string;
   type: 'message' | 'call' | 'announcement' | 'system' | 'homework' | 'grade';
@@ -104,6 +90,137 @@ interface Notification {
   created_at: string;
   sender_name?: string;
 }
+
+// Dropdown Menu Component
+interface DropdownMenuItem {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  destructive?: boolean;
+}
+
+const DropdownMenu: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  items: DropdownMenuItem[];
+  anchorPosition?: { top: number; right: number };
+}> = ({ visible, onClose, items, anchorPosition }) => {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, fadeAnim, scaleAnim]);
+  
+  if (!visible) return null;
+  
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      onRequestClose={onClose}
+    >
+      <Pressable style={dropdownStyles.overlay} onPress={onClose}>
+        <Animated.View 
+          style={[
+            dropdownStyles.menu,
+            { 
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              top: anchorPosition?.top || (insets.top + 60),
+              right: anchorPosition?.right || 16,
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            }
+          ]}
+        >
+          {items.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                dropdownStyles.menuItem,
+                index < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+              ]}
+              onPress={() => {
+                onClose();
+                // Small delay to let menu close smoothly
+                setTimeout(item.onPress, 100);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={item.icon} 
+                size={20} 
+                color={item.destructive ? theme.error : theme.text} 
+              />
+              <Text 
+                style={[
+                  dropdownStyles.menuItemText, 
+                  { color: item.destructive ? theme.error : theme.text }
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+};
+
+const dropdownStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  menu: {
+    position: 'absolute',
+    minWidth: 200,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+});
 
 // Custom Header Component
 const ScreenHeader: React.FC<{
@@ -402,9 +519,9 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const alert = useAlert();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   
   const { data: notifications = [], isLoading, refetch } = useNotifications();
   
@@ -498,101 +615,36 @@ export default function NotificationsScreen() {
     }
   }, [user?.id, queryClient]);
   
-  // Clear call notifications
-  const handleClearCallNotifications = useCallback(async () => {
+  const handleClearAll = useCallback(async () => {
     if (!user?.id) return;
     
-    Alert.alert(
-      t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }),
-      t('notifications.clearCallNotificationsConfirm', { defaultValue: 'This will remove all call notifications from the list.' }),
-      [
-        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-        {
-          text: t('common.clear', { defaultValue: 'Clear' }),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Delete call notifications from the list
-              await deleteNotificationsByType(user.id, notifications, ['call']);
-              markCallsSeen();
-              await refetch();
-              queryClient.invalidateQueries({ queryKey: ['notifications'] });
-              queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
-            } catch (error) {
-              console.error('[ClearCallNotifications] Error:', error);
-              Alert.alert(t('common.error', { defaultValue: 'Error' }), t('notifications.clearError', { defaultValue: 'Failed to clear. Please try again.' }));
-            }
-          }
-        }
-      ]
-    );
-  }, [user?.id, t, refetch, queryClient, markCallsSeen, notifications]);
-  
-  // Mark all messages as read
-  const handleMarkMessagesRead = useCallback(async () => {
-    if (!user?.id) return;
-    
-    Alert.alert(
-      t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }),
-      t('notifications.markMessagesReadConfirm', { defaultValue: 'This will remove all message notifications from the list.' }),
-      [
-        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-        {
-          text: t('common.clear', { defaultValue: 'Clear' }),
-          onPress: async () => {
-            try {
-              // Delete message notifications
-              await deleteNotificationsByType(user.id, notifications, ['message']);
-              
-              // Also mark message threads as read in database
-              const client = assertSupabase();
-              await client
-                .from('message_participants')
-                .update({ last_read_at: new Date().toISOString() })
-                .eq('user_id', user.id);
-              
-              await refetch();
-              queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
-              queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
-            } catch (error) {
-              console.error('[ClearMessages] Error:', error);
-              Alert.alert(t('common.error', { defaultValue: 'Error' }), t('notifications.clearError', { defaultValue: 'Failed to clear. Please try again.' }));
-            }
-          }
-        }
-      ]
-    );
-  }, [user?.id, t, refetch, queryClient, notifications]);
-  
-  const handleClearAll = useCallback(() => {
-    alert.showConfirm(
-      t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }),
-      t('notifications.clearAllConfirm', { defaultValue: 'Are you sure you want to clear all notifications? This cannot be undone.' }),
-      async () => {
-        // Mark all as read/seen
-        markCallsSeen();
-        markAnnouncementsSeen();
-        
-        // Update message read status
-        if (user?.id) {
-          try {
-            const client = assertSupabase();
-            await client
-              .from('message_participants')
-              .update({ last_read_at: new Date().toISOString() })
-              .eq('user_id', user.id);
-          } catch (error) {
-            console.error('[ClearAll] Error updating messages:', error);
-          }
-        }
-        
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-        queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
-        queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
-        queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
-      }
-    );
-  }, [alert, t, queryClient, user?.id, markCallsSeen, markAnnouncementsSeen]);
+    try {
+      // Mark all notification IDs as read/deleted in local storage
+      const allIds = notifications.map(n => n.id);
+      await markAllNotificationsRead(user.id, allIds);
+      
+      // Mark calls and announcements as seen
+      markCallsSeen();
+      markAnnouncementsSeen();
+      
+      // Update message read status in database
+      const client = assertSupabase();
+      await client
+        .from('message_participants')
+        .update({ last_read_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      
+      // Invalidate all related queries to refresh the UI
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
+      queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+    } catch (error) {
+      console.error('[ClearAll] Error:', error);
+    }
+  }, [user?.id, notifications, queryClient, markCallsSeen, markAnnouncementsSeen, refetch]);
   
   // Loading state
   if (isLoading) {
@@ -641,35 +693,27 @@ export default function NotificationsScreen() {
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
         rightAction={{
           icon: 'ellipsis-vertical',
-          onPress: () => {
-            Alert.alert(
-              t('notifications.options', { defaultValue: 'Notification Options' }),
-              t('notifications.optionsDesc', { defaultValue: 'Choose an action' }),
-              [
-                { 
-                  text: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }), 
-                  onPress: handleMarkAllRead
-                },
-                { 
-                  text: t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }), 
-                  onPress: handleMarkMessagesRead,
-                  style: 'destructive'
-                },
-                { 
-                  text: t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }), 
-                  onPress: handleClearCallNotifications,
-                  style: 'destructive'
-                },
-                { 
-                  text: t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }), 
-                  style: 'destructive', 
-                  onPress: handleClearAll 
-                },
-                { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-              ]
-            );
-          }
+          onPress: () => setMenuVisible(true),
         }}
+      />
+      
+      {/* Dropdown Menu */}
+      <DropdownMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        items={[
+          {
+            label: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }),
+            icon: 'checkmark-done-outline',
+            onPress: handleMarkAllRead,
+          },
+          {
+            label: t('notifications.clearAll', { defaultValue: 'Clear All' }),
+            icon: 'trash-outline',
+            onPress: handleClearAll,
+            destructive: true,
+          },
+        ]}
       />
       
       <FlatList
