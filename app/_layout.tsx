@@ -40,6 +40,7 @@ import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
 // GlobalUpdateBanner removed - using system notifications instead
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
+import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
 
 // Extracted utilities and hooks (WARP.md refactoring)
@@ -175,6 +176,7 @@ export default function RootLayout() {
                   <NotificationProvider>
                     <CallProvider>
                       <OnboardingProvider>
+                        <OrganizationBrandingProvider>
                         <DashboardPreferencesProvider>
                         <TermsProvider>
                           <ToastProvider>
@@ -186,6 +188,7 @@ export default function RootLayout() {
                           </ToastProvider>
                         </TermsProvider>
                       </DashboardPreferencesProvider>
+                      </OrganizationBrandingProvider>
                       </OnboardingProvider>
                     </CallProvider>
                   </NotificationProvider>

@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -246,6 +247,7 @@ export default function AddMemberScreen() {
         }}
       />
 
+      <DashboardWallpaperBackground>
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -612,6 +614,7 @@ export default function AddMemberScreen() {
         formData.membership_status,
         (v) => updateField('membership_status', v as 'active' | 'pending' | 'suspended')
       )}
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }

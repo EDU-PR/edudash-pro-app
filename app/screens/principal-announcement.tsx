@@ -31,14 +31,15 @@ export default function PrincipalAnnouncementScreen() {
       if (!authUserId) { Alert.alert('Error', 'Not signed in'); return }
 
       // Resolve teacher/user record to get preschool (school) id
-      let preschoolId: string | undefined = (profile as any)?.preschool_id
+      let preschoolId: string | undefined = (profile as any)?.preschool_id || (profile as any)?.organization_id;
       if (!preschoolId) {
-        const { data: userRow } = await assertSupabase()
-          .from('users')
-          .select('preschool_id')
-          .eq('auth_user_id', authUserId)
+        // profiles.id = auth_user_id
+        const { data: profileRow } = await assertSupabase()
+          .from('profiles')
+          .select('preschool_id, organization_id')
+          .eq('id', authUserId)
           .maybeSingle()
-        preschoolId = userRow?.preschool_id
+        preschoolId = profileRow?.preschool_id || profileRow?.organization_id;
       }
       if (!preschoolId) { Alert.alert('Error', 'No school found for your profile'); return }
 

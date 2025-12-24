@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -418,6 +419,7 @@ export default function ResourceHubScreen() {
         }}
       />
 
+      <DashboardWallpaperBackground>
       <FlatList
         data={filteredResources}
         renderItem={renderResourceItem}
@@ -446,6 +448,7 @@ export default function ResourceHubScreen() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }

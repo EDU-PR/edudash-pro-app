@@ -197,6 +197,78 @@ async function CallHeadlessTask(remoteMessage: any): Promise<void> {
       console.error('[CallHeadlessTask] Failed to display incoming call:', error);
     }
   }
+  
+  // Set up a timeout to show missed call notification if not answered
+  setTimeout(async () => {
+    // Check if call is still pending (not answered)
+    const pendingCall = await AsyncStorage.getItem(PENDING_CALL_KEY);
+    if (pendingCall) {
+      const callInfo = JSON.parse(pendingCall);
+      if (callInfo.call_id === callData.call_id) {
+        // Call was not answered - show missed call notification
+        await showMissedCallNotificationHeadless(callData.caller_name, callData.call_type);
+        // Clear the pending call
+        await AsyncStorage.removeItem(PENDING_CALL_KEY);
+      }
+    }
+  }, 30000); // 30 seconds timeout
+}
+
+/**
+ * Show missed call notification when app is killed/backgrounded
+ * Includes badge update (red dot on app icon)
+ * Shows on lock screen
+ */
+async function showMissedCallNotificationHeadless(
+  callerName: string, 
+  callType: 'voice' | 'video'
+): Promise<void> {
+  try {
+    // Dynamically import expo-notifications
+    const Notifications = await import('expo-notifications');
+    const { badgeManager } = await import('../NotificationBadgeManager');
+    
+    const callTypeIcon = callType === 'video' ? '📹' : '📞';
+    const timestamp = new Date().toLocaleTimeString('en-ZA', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+
+    // Update badge count (red dot on app icon)
+    await badgeManager.addMissedCall();
+    const totalBadge = badgeManager.getTotalBadgeCount();
+
+    // Schedule notification - shows on lock screen and notification shade
+    await Notifications.scheduleNotificationAsync({
+      identifier: `missed-call-headless-${Date.now()}`,
+      content: {
+        title: `${callTypeIcon} Missed Call`,
+        body: `${callerName} • ${timestamp}`,
+        data: { 
+          type: 'missed_call', 
+          callerName,
+          callType,
+          timestamp: Date.now(),
+        },
+        // Android: Show on lock screen with badge
+        ...(Platform.OS === 'android' && {
+          channelId: 'missed-calls', // Use dedicated missed calls channel
+          priority: 'high' as const,
+          vibrate: [0, 250, 250, 250],
+          color: '#EF4444', // Red for missed call
+        }),
+        // iOS: Update badge
+        ...(Platform.OS === 'ios' && {
+          badge: totalBadge,
+        }),
+      },
+      trigger: null,
+    });
+
+    console.log('[CallHeadlessTask] Missed call notification shown for:', callerName, 'badge:', totalBadge);
+  } catch (error) {
+    console.error('[CallHeadlessTask] Failed to show missed call notification:', error);
+  }
 }
 
 /**

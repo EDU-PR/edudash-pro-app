@@ -259,14 +259,14 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
             };
           }
 
-          // Get parent user ID
-          const { data: parentUser } = await client
-            .from('users')
+          // Get parent user ID (profiles.id = auth_user_id)
+          const { data: parentProfile } = await client
+            .from('profiles')
             .select('id')
-            .eq('auth_user_id', authUser.user.id)
+            .eq('id', authUser.user.id)
             .single();
 
-          if (!parentUser) {
+          if (!parentProfile) {
             return {
               success: false,
               error: 'Parent user not found'
@@ -280,7 +280,7 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
               title: args.title,
               description: args.description || '',
               due_date: args.due_date,
-              assigned_to: parentUser.id,
+              assigned_to: parentProfile.id,
               status: 'pending',
               priority: args.priority || 'medium',
               metadata: {

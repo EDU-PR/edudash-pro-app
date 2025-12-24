@@ -3,7 +3,7 @@
  * Shared components for WhatsApp-style chat interfaces
  */
 
-export { Message, MessageStatus, MessageBubbleProps, ReplyPreviewProps } from './types';
+export type { Message, MessageStatus } from './types';
 export { formatTime, getDateSeparatorLabel, getDateKey, isVoiceNote, getVoiceNoteDuration } from './utils';
 export { DateSeparator } from './DateSeparator';
 export { MessageTicks } from './MessageTicks';

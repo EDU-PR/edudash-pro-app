@@ -13,12 +13,13 @@ import {
   FlatList,
   RefreshControl,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -386,16 +387,16 @@ export default function FinanceScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Stack.Screen
-        options={{
-          title: 'Finance',
-          headerRight: () => (
-            <TouchableOpacity style={styles.headerButton}>
-              <Ionicons name="download-outline" size={24} color={theme.primary} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      <DashboardWallpaperBackground>
+        <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+          <View style={styles.headerLeft}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Finance</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Financial Reports</Text>
+        </View>
+        <TouchableOpacity style={styles.headerButton}>
+          <Ionicons name="download-outline" size={24} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
 
       {/* Tab Switcher */}
       <View style={[styles.tabBar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -429,6 +430,7 @@ export default function FinanceScreen() {
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'payments' && renderPaymentsList()}
       {activeTab === 'invoices' && renderPaymentsList()} {/* Would be invoices list */}
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }
@@ -437,8 +439,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // Custom Header
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
   headerButton: {
-    marginRight: 16,
+    padding: 4,
   },
   
   // Tab Bar

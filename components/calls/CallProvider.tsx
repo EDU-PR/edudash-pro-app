@@ -20,6 +20,7 @@ import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { getPendingCall, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
 import { backgroundCallManager } from '@/lib/calls/BackgroundCallManager';
 import { enhancedPermissionsManager } from '@/lib/calls/EnhancedPermissionsManager';
+import { badgeManager } from '@/lib/NotificationBadgeManager';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -104,6 +105,10 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
+  
+  // Computed properties for call state - declare early so useEffects can reference them
+  const isCallActive = Boolean(answeringCall || outgoingCall);
+  const isInActiveCall = isCallActive && callState === 'connected';
   
   // Track presence for online/offline detection.
   // The hook itself is always called (to satisfy React's rules-of-hooks),
@@ -206,10 +211,6 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall]);
   
-  // Computed properties for call state
-  const isCallActive = Boolean(answeringCall || outgoingCall);
-  const isInActiveCall = isCallActive && callState === 'connected';
-  
   // Check for pending calls saved by HeadlessJS task
   const checkPendingCall = useCallback(async () => {
     try {
@@ -234,6 +235,70 @@ export function CallProvider({ children }: CallProviderProps) {
       console.error('[CallProvider] Error checking pending call:', error);
     }
   }, [currentUserId]);
+
+  // Answer incoming call - declared early for use in effects
+  const answerCall = useCallback(async () => {
+    if (!incomingCall) return;
+    console.log('[CallProvider] ✅ Answering call:', {
+      callId: incomingCall.call_id,
+      meetingUrl: incomingCall.meeting_url,
+      callerName: incomingCall.caller_name,
+    });
+    
+    // Report to CallKeep that call is being answered
+    await callKeepManager.reportConnected(incomingCall.call_id);
+    
+    // Clear missed calls badge since user is answering
+    await badgeManager.clearMissedCalls();
+    
+    setAnsweringCall(incomingCall);
+    setIsCallInterfaceOpen(true);
+    setIncomingCall(null);
+    setCallState('connecting');
+  }, [incomingCall]);
+
+  // Reject incoming call - declared early for use in effects
+  const rejectCall = useCallback(async () => {
+    if (!incomingCall) return;
+    console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
+
+    // End call in CallKeep
+    await callKeepManager.endCall(incomingCall.call_id);
+
+    await getSupabase()
+      .from('active_calls')
+      .update({ status: 'rejected' })
+      .eq('call_id', incomingCall.call_id);
+
+    setIncomingCall(null);
+    setCallState('idle');
+  }, [incomingCall]);
+
+  // End current call - declared early for use in effects
+  const endCall = useCallback(async () => {
+    const callId = answeringCall?.call_id || outgoingCall?.userId;
+    console.log('[CallProvider] Ending call:', callId);
+
+    // End call in CallKeep
+    if (callId) {
+      await callKeepManager.endCall(callId);
+    }
+
+    if (answeringCall?.call_id) {
+      await getSupabase()
+        .from('active_calls')
+        .update({ status: 'ended' })
+        .eq('call_id', answeringCall.call_id);
+    }
+
+    setIsCallInterfaceOpen(false);
+    setOutgoingCall(null);
+    setAnsweringCall(null);
+    setCallState('ended');
+
+    // Reset state after a short delay
+    setTimeout(() => setCallState('idle'), 1000);
+  }, [answeringCall, outgoingCall]);
   
   // Listen for CallKeep events (answer/end from native UI)
   useEffect(() => {
@@ -302,6 +367,32 @@ export function CallProvider({ children }: CallProviderProps) {
       callKeepManager.off('muteCall', handleMuteCall);
     };
   }, [callsEnabled, incomingCall, answeringCall, answerCall, rejectCall, endCall, checkPendingCall]);
+
+  // Handle notification actions from background call manager
+  // This handles "End Call" and "Return to Call" buttons in the notification shade
+  useEffect(() => {
+    if (!callsEnabled) return;
+    
+    // Set up callback for "End Call" button in notification
+    backgroundCallManager.onEndCallFromNotification = async () => {
+      console.log('[CallProvider] End call from notification shade');
+      if (answeringCall) {
+        await endCall();
+      }
+    };
+    
+    // Set up callback for "Return to Call" button (app already opens)
+    backgroundCallManager.onReturnToCallFromNotification = () => {
+      console.log('[CallProvider] Return to call from notification shade');
+      // App is already opened to foreground by the notification action
+      // The call interface should already be visible via answeringCall state
+    };
+    
+    return () => {
+      backgroundCallManager.onEndCallFromNotification = undefined;
+      backgroundCallManager.onReturnToCallFromNotification = undefined;
+    };
+  }, [callsEnabled, answeringCall, endCall]);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {
@@ -382,7 +473,7 @@ export function CallProvider({ children }: CallProviderProps) {
           table: 'active_calls',
           filter: `callee_id=eq.${currentUserId}`,
         },
-        (payload: { new: ActiveCall }) => {
+        async (payload: { new: ActiveCall }) => {
           console.log('[CallProvider] ✅ Incoming call UPDATE detected:', payload.new);
           const call = payload.new;
           if (
@@ -391,6 +482,14 @@ export function CallProvider({ children }: CallProviderProps) {
             call.status === 'missed'
           ) {
             if (incomingCall?.call_id === call.call_id) {
+              // If call was missed, show notification and update badge
+              if (call.status === 'missed') {
+                await backgroundCallManager.showMissedCallNotification(
+                  incomingCall.caller_name || 'Unknown',
+                  incomingCall.call_type || 'voice'
+                );
+              }
+              
               setIncomingCall(null);
               setCallState('ended');
             }
@@ -602,67 +701,6 @@ export function CallProvider({ children }: CallProviderProps) {
     [currentUserId, callsEnabled, isUserOnline, getLastSeenText, refreshPresence]
   );
 
-  // Answer incoming call
-  const answerCall = useCallback(async () => {
-    if (!incomingCall) return;
-    console.log('[CallProvider] ✅ Answering call:', {
-      callId: incomingCall.call_id,
-      meetingUrl: incomingCall.meeting_url,
-      callerName: incomingCall.caller_name,
-    });
-    
-    // Report to CallKeep that call is being answered
-    await callKeepManager.reportConnected(incomingCall.call_id);
-    
-    setAnsweringCall(incomingCall);
-    setIsCallInterfaceOpen(true);
-    setIncomingCall(null);
-    setCallState('connecting');
-  }, [incomingCall]);
-
-  // Reject incoming call
-  const rejectCall = useCallback(async () => {
-    if (!incomingCall) return;
-    console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
-
-    // End call in CallKeep
-    await callKeepManager.endCall(incomingCall.call_id);
-
-    await getSupabase()
-      .from('active_calls')
-      .update({ status: 'rejected' })
-      .eq('call_id', incomingCall.call_id);
-
-    setIncomingCall(null);
-    setCallState('idle');
-  }, [incomingCall]);
-
-  // End current call
-  const endCall = useCallback(async () => {
-    const callId = answeringCall?.call_id || outgoingCall?.userId;
-    console.log('[CallProvider] Ending call:', callId);
-
-    // End call in CallKeep
-    if (callId) {
-      await callKeepManager.endCall(callId);
-    }
-
-    if (answeringCall?.call_id) {
-      await getSupabase()
-        .from('active_calls')
-        .update({ status: 'ended' })
-        .eq('call_id', answeringCall.call_id);
-    }
-
-    setIsCallInterfaceOpen(false);
-    setOutgoingCall(null);
-    setAnsweringCall(null);
-    setCallState('ended');
-
-    // Reset state after a short delay
-    setTimeout(() => setCallState('idle'), 1000);
-  }, [answeringCall, outgoingCall]);
-
   // Return to active call (for minimized calls)
   const returnToCall = useCallback(() => {
     if (answeringCall || outgoingCall) {
@@ -670,7 +708,7 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall, outgoingCall]);
 
-  // Calculate derived state (using earlier declaration from line 210)
+  // Note: answerCall, rejectCall, endCall are now declared earlier for use in effects
 
   const contextValue: CallContextType = {
     startVoiceCall,

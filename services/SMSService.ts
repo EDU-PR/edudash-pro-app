@@ -537,7 +537,7 @@ export class SMSService implements ISMSService {
     // Find parent for this phone number
     const { data: parent } = await supabase
       .from('parents')
-      .select('id, full_name, preschool_id')
+      .select('id, first_name, last_name, preschool_id')
       .eq('phone_number', from)
       .single();
 
@@ -548,7 +548,8 @@ export class SMSService implements ISMSService {
 
     // Create message in WhatsApp inbox (or create new inbox table for SMS)
     // This allows teachers to see and respond to parent SMS
-    console.log(`[SMS] Forwarding message from ${parent.full_name} to inbox:`, body);
+    const parentName = [parent.first_name, parent.last_name].filter(Boolean).join(' ') || 'Unknown';
+    console.log(`[SMS] Forwarding message from ${parentName} to inbox:`, body);
 
     // TODO: Integrate with existing message/inbox system
   }

@@ -58,6 +58,15 @@
 
 ## WARP.md Standards (NON-NEGOTIABLE)
 
+### ⚠️ CRITICAL: Modular Code Requirements (ENFORCED ON ALL NEW CODE)
+**Before creating or modifying ANY file, you MUST:**
+1. Check if the resulting file will exceed size limits
+2. If yes, split into multiple files BEFORE writing code
+3. Never create a single file that violates these limits - plan the split upfront
+4. When adding to existing files, check current line count first and split if needed
+
+**This is NON-NEGOTIABLE. Violations create technical debt and merge conflicts.**
+
 ### Database Operations
 - **NEVER** use `supabase start` or local Docker instances
 - **NEVER** execute SQL directly via Supabase Dashboard
@@ -73,6 +82,31 @@
 - Hooks: ≤200 lines
 - Type definitions: ≤300 lines (except auto-generated)
 - StyleSheet definitions: Use separate `styles.ts` for components >200 lines
+
+**⚠️ BEFORE writing new code, calculate expected lines and split proactively!**
+
+### Mandatory File Splitting Workflow
+When creating new features:
+1. **Estimate size** - Will this exceed limits? If unsure, assume yes.
+2. **Plan structure first** - Define file breakdown before writing code
+3. **Create index files** - Use barrel exports for clean imports
+4. **Extract early** - Don't wait until file is too large
+
+```
+# Good: Plan modular structure upfront
+components/membership/
+  ├── index.ts              # Barrel exports
+  ├── MemberCard.tsx        # ~150 lines
+  ├── MemberList.tsx        # ~200 lines
+  ├── MemberFilters.tsx     # ~100 lines
+  ├── hooks/
+  │   ├── useMembersList.ts # ~150 lines
+  │   └── useMemberDetail.ts# ~100 lines
+  └── types.ts              # ~80 lines
+
+# Bad: Single monolithic file
+components/membership/MembershipScreen.tsx  # 800+ lines ❌
+```
 
 ### When to Split Files
 Split immediately if ANY apply:

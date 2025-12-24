@@ -40,11 +40,11 @@ export default function ParentChildrenScreen() {
       if (user?.id) {
         const client = assertSupabase();
         
-        // Get user's internal ID and preschool
+        // Get user's internal ID and preschool (profiles.id = auth_user_id)
         const { data: me } = await client
-          .from('users')
-          .select('id, preschool_id')
-          .eq('auth_user_id', user.id)
+          .from('profiles')
+          .select('id, preschool_id, organization_id')
+          .eq('id', user.id)
           .maybeSingle();
         
         if (me?.id) {

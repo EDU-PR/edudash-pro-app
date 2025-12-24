@@ -113,11 +113,13 @@ export default function AILessonGeneratorScreen() {
     try {
       setSaving(true);
       const { data: auth } = await assertSupabase().auth.getUser();
-      const { data: profile } = await assertSupabase().from('users').select('id,preschool_id').eq('auth_user_id', auth?.user?.id || '').maybeSingle();
+      // profiles.id = auth_user_id
+      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('id', auth?.user?.id || '').maybeSingle();
       if (!profile) { toast.error('Not signed in'); return; }
+      const schoolId = profile.preschool_id || profile.organization_id;
       const categoryId = categoriesQuery.data?.[0]?.id;
       if (!categoryId) { toast.warn('Create a category first'); return; }
-      const res = await LessonGeneratorService.saveGeneratedLesson({ lesson: generated, teacherId: profile.id, preschoolId: profile.preschool_id, ageGroupId: 'n/a', categoryId, template: { duration: 30, complexity: 'moderate' }, isPublished: true });
+      const res = await LessonGeneratorService.saveGeneratedLesson({ lesson: generated, teacherId: profile.id, preschoolId: schoolId, ageGroupId: 'n/a', categoryId, template: { duration: 30, complexity: 'moderate' }, isPublished: true });
       if (!res.success) { toast.error(`Save failed: ${res.error || 'Unknown error'}`); return; }
       toast.success(`Lesson saved (id ${res.lessonId})`);
     } catch (e: unknown) { toast.error(`Save error: ${e instanceof Error ? e.message : 'Failed'}`); }

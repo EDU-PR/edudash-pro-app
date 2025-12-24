@@ -25,7 +25,7 @@ export interface OrganizationMember {
   profile_id?: string;
   
   member_number: string;
-  member_type: 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' | 'regional_manager' | 'national_admin';
+  member_type: 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' | 'regional_manager' | 'national_admin' | 'ceo' | 'executive' | 'board_member' | 'volunteer';
   
   first_name: string;
   last_name: string;
@@ -37,8 +37,15 @@ export interface OrganizationMember {
   email?: string;
   phone?: string;
   physical_address?: string;
+  address_line1?: string;
+  address_line2?: string;
   city?: string;
   province?: string;
+  postal_code?: string;
+  
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  notes?: string;
   
   membership_tier: 'standard' | 'premium' | 'vip' | 'honorary';
   membership_status: 'pending' | 'active' | 'suspended' | 'expired' | 'cancelled';
@@ -151,6 +158,10 @@ export const MEMBER_TYPE_LABELS: Record<string, string> = {
   admin: 'Administrator',
   regional_manager: 'Regional Manager',
   national_admin: 'National Administrator',
+  ceo: 'Chief Executive Officer',
+  executive: 'Executive',
+  board_member: 'Board Member',
+  volunteer: 'Volunteer',
 };
 
 export const MEMBERSHIP_TIER_LABELS: Record<string, string> = {

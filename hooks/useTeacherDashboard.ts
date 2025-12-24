@@ -77,25 +77,32 @@ export const useTeacherDashboard = () => {
         throw new Error('Authentication session invalid');
       }
 
-      // Fetch teacher user row from public.users
-      const { data: teacherUser, error: teacherError } = await supabase
-        .from('users')
-        .select('id, auth_user_id, preschool_id, first_name, last_name, role')
-        .eq('auth_user_id', user.id)
+      // Fetch teacher profile from public.profiles (profiles.id = auth_user_id)
+      const { data: teacherProfile, error: teacherError } = await supabase
+        .from('profiles')
+        .select('id, preschool_id, organization_id, first_name, last_name, role')
+        .eq('id', user.id)
         .maybeSingle();
 
       if (teacherError) {
-        logError('Teacher user fetch error:', teacherError);
+        logError('Teacher profile fetch error:', teacherError);
       }
 
       // Resolve teacher organization and role with robust fallbacks
-      let resolvedTeacherUser: Record<string, unknown> | null = teacherUser || null;
+      let resolvedTeacherUser: Record<string, unknown> | null = teacherProfile ? {
+        id: teacherProfile.id,
+        auth_user_id: teacherProfile.id,
+        preschool_id: teacherProfile.preschool_id || teacherProfile.organization_id,
+        first_name: teacherProfile.first_name,
+        last_name: teacherProfile.last_name,
+        role: teacherProfile.role,
+      } : null;
       
-      log('👨‍🏫 Initial teacher user:', { 
-        teacherUser: teacherUser ? { id: teacherUser.id, preschool_id: teacherUser.preschool_id, role: teacherUser.role } : null 
+      log('👨‍🏫 Initial teacher profile:', { 
+        teacherProfile: teacherProfile ? { id: teacherProfile.id, preschool_id: teacherProfile.preschool_id, role: teacherProfile.role } : null 
       });
       
-      if (!resolvedTeacherUser || !resolvedTeacherUser.preschool_id || !(String(resolvedTeacherUser.role || '').toLowerCase().includes('teacher'))) {
+      if (!resolvedTeacherUser || (!resolvedTeacherUser.preschool_id && !teacherProfile?.organization_id) || !(String(resolvedTeacherUser.role || '').toLowerCase().includes('teacher'))) {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
           .select('id, preschool_id, role, first_name, last_name, organization_id')
@@ -111,12 +118,12 @@ export const useTeacherDashboard = () => {
           const roleStr = String((prof as Record<string, unknown>).role || '').toLowerCase();
           if (!resolvedTeacherUser || roleStr.includes('teacher')) {
             resolvedTeacherUser = {
-              id: teacherUser?.id || user.id,
+              id: teacherProfile?.id || user.id,
               auth_user_id: user.id,
-              preschool_id: (prof as Record<string, unknown>).preschool_id || (prof as Record<string, unknown>).organization_id || teacherUser?.preschool_id || null,
-              first_name: (prof as Record<string, unknown>).first_name || teacherUser?.first_name || null,
-              last_name: (prof as Record<string, unknown>).last_name || teacherUser?.last_name || null,
-              role: (prof as Record<string, unknown>).role || teacherUser?.role || 'teacher'
+              preschool_id: (prof as Record<string, unknown>).preschool_id || (prof as Record<string, unknown>).organization_id || teacherProfile?.preschool_id || teacherProfile?.organization_id || null,
+              first_name: (prof as Record<string, unknown>).first_name || teacherProfile?.first_name || null,
+              last_name: (prof as Record<string, unknown>).last_name || teacherProfile?.last_name || null,
+              role: (prof as Record<string, unknown>).role || teacherProfile?.role || 'teacher'
             };
           }
         }

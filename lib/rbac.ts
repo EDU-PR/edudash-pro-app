@@ -343,6 +343,7 @@ export interface EnhancedUserProfile extends UserProfile {
     seat_status: SeatStatus;
     invited_by?: string;
     joined_at: string;
+    member_type?: string; // Member type (e.g., 'ceo', 'national_admin', 'regional_manager', 'staff')
   };
   
   // Complete capabilities list
@@ -437,6 +438,7 @@ export function createEnhancedProfile(
       seat_status: orgMembership.seat_status || 'inactive',
       invited_by: orgMembership.invited_by,
       joined_at: orgMembership.created_at,
+      member_type: orgMembership.member_type, // Member type (ceo, national_admin, regional_manager, staff, etc.)
     };
   }
   
@@ -831,6 +833,13 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       (isUuid(String(sessionMeta.school_id || '')) ? undefined : sessionMeta.school_id);
     let resolvedOrgId: string | null = null;
 
+    debug('[Profile] Organization identifier sources:', {
+      preschool_id: (profile as any)?.preschool_id,
+      organization_id: (profile as any)?.organization_id,
+      tenant_slug: (profile as any)?.tenant_slug,
+      orgIdentifierRaw,
+    });
+
     if (orgIdentifierRaw) {
       try {
         if (isUuid(orgIdentifierRaw)) {
@@ -895,14 +904,27 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       }
     }
 
+    debug('[Profile] Resolved organization ID:', resolvedOrgId);
+
     // If we have a resolved ID, attempt to get membership details
     if (resolvedOrgId) {
       try {
-        const { data: memberData } = await assertSupabase()
+        debug('[Profile] Calling get_my_org_member RPC for org:', resolvedOrgId);
+        const { data: memberData, error: memberError } = await assertSupabase()
           .rpc('get_my_org_member', { p_org_id: resolvedOrgId as any })
-          .single();
+          .maybeSingle();
+        
+        debug('[Profile] get_my_org_member result:', { memberData, memberError });
+        
+        if (memberError) {
+          debug('[Profile] get_my_org_member error:', memberError);
+        }
+        
         if (memberData) {
           orgMember = memberData as any;
+          debug('[Profile] orgMember set with member_type:', (memberData as any)?.member_type);
+        } else {
+          debug('[Profile] No membership data returned from get_my_org_member');
         }
       } catch (e) {
         debug('get_my_org_member RPC failed', e);
@@ -955,6 +977,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       seat_status: orgMember?.seat_status || 'active',
       invited_by: orgMember?.invited_by,
       created_at: orgMember?.created_at,
+      member_type: orgMember?.member_type, // Member type (ceo, national_admin, regional_manager, etc.)
     });
     
     // Track profile fetch for analytics with security monitoring

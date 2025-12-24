@@ -150,13 +150,14 @@ export function useParentDashboardData() {
         let studentsData: any[] = [];
         
         try {
+          // profiles.id = auth_user_id
           const { data: me } = await client
-            .from('users')
-            .select('id, preschool_id')
-            .eq('auth_user_id', user.id)
+            .from('profiles')
+            .select('id, preschool_id, organization_id')
+            .eq('id', user.id)
             .single();
           const internalUserId = me?.id;
-          const mySchoolId = me?.preschool_id || (profile as any)?.organization_id || null;
+          const mySchoolId = me?.preschool_id || me?.organization_id || (profile as any)?.organization_id || null;
 
           const { data: directChildren } = internalUserId ? await client
             .from('students')

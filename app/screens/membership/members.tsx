@@ -1,8 +1,9 @@
 /**
  * Members List Screen
  * Searchable, filterable list of all organization members
+ * Connected to Supabase organization_members table
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -13,12 +14,15 @@ import {
   RefreshControl,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { useMembersList } from '@/hooks/membership/useMembersList';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { 
   OrganizationMember, 
   MEMBER_TYPE_LABELS, 
@@ -27,109 +31,6 @@ import {
 } from '@/components/membership/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Mock data
-const MOCK_MEMBERS: OrganizationMember[] = [
-  {
-    id: '1',
-    organization_id: 'org1',
-    region_id: 'reg1',
-    member_number: 'SOA-GP-24-00001',
-    member_type: 'learner',
-    first_name: 'Thabo',
-    last_name: 'Mokoena',
-    email: 'thabo.mokoena@email.com',
-    phone: '+27 82 123 4567',
-    membership_tier: 'premium',
-    membership_status: 'active',
-    joined_date: '2024-01-15',
-    expiry_date: '2025-12-31',
-    photo_url: null,
-    province: 'Gauteng',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    region: { id: 'reg1', organization_id: 'org1', name: 'Gauteng', code: 'GP', is_active: true, created_at: '' },
-  },
-  {
-    id: '2',
-    organization_id: 'org1',
-    region_id: 'reg2',
-    member_number: 'SOA-WC-24-00015',
-    member_type: 'facilitator',
-    first_name: 'Sarah',
-    last_name: 'Johnson',
-    email: 'sarah.j@email.com',
-    phone: '+27 83 456 7890',
-    membership_tier: 'vip',
-    membership_status: 'active',
-    joined_date: '2023-06-01',
-    expiry_date: '2025-06-01',
-    photo_url: null,
-    province: 'Western Cape',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    region: { id: 'reg2', organization_id: 'org1', name: 'Western Cape', code: 'WC', is_active: true, created_at: '' },
-  },
-  {
-    id: '3',
-    organization_id: 'org1',
-    region_id: 'reg1',
-    member_number: 'SOA-GP-24-00089',
-    member_type: 'mentor',
-    first_name: 'James',
-    last_name: 'Ndlovu',
-    email: 'james.n@email.com',
-    phone: '+27 84 567 8901',
-    membership_tier: 'standard',
-    membership_status: 'pending',
-    joined_date: '2024-12-01',
-    photo_url: null,
-    province: 'Gauteng',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    region: { id: 'reg1', organization_id: 'org1', name: 'Gauteng', code: 'GP', is_active: true, created_at: '' },
-  },
-  {
-    id: '4',
-    organization_id: 'org1',
-    region_id: 'reg3',
-    member_number: 'SOA-KZN-23-00234',
-    member_type: 'regional_manager',
-    first_name: 'Nomvula',
-    last_name: 'Dlamini',
-    email: 'nomvula.d@soilofafrica.org',
-    phone: '+27 85 678 9012',
-    membership_tier: 'vip',
-    membership_status: 'active',
-    joined_date: '2022-03-15',
-    expiry_date: '2026-03-15',
-    photo_url: null,
-    province: 'KwaZulu-Natal',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    region: { id: 'reg3', organization_id: 'org1', name: 'KwaZulu-Natal', code: 'KZN', is_active: true, created_at: '' },
-  },
-  {
-    id: '5',
-    organization_id: 'org1',
-    region_id: 'reg1',
-    member_number: 'SOA-GP-24-00156',
-    member_type: 'learner',
-    first_name: 'Lindiwe',
-    last_name: 'Sithole',
-    email: 'lindiwe.s@email.com',
-    phone: '+27 86 789 0123',
-    membership_tier: 'standard',
-    membership_status: 'expired',
-    joined_date: '2023-01-15',
-    expiry_date: '2024-01-15',
-    photo_url: null,
-    province: 'Gauteng',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    region: { id: 'reg1', organization_id: 'org1', name: 'Gauteng', code: 'GP', is_active: true, created_at: '' },
-  },
-];
 
 type FilterType = 'all' | 'active' | 'pending' | 'expired';
 type SortType = 'name' | 'date' | 'region';
@@ -140,30 +41,41 @@ export default function MembersListScreen() {
   const insets = useSafeAreaInsets();
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('name');
-  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredMembers = useMemo(() => {
-    let result = [...MOCK_MEMBERS];
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch members from database
+  const { 
+    members, 
+    loading, 
+    error, 
+    totalCount, 
+    refetch 
+  } = useMembersList({
+    searchQuery: debouncedSearch,
+    statusFilter: activeFilter,
+    sortBy,
+  });
+
+  // Handle refresh
+  const onRefresh = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
+
+  // Local filtering and sorting (for immediate UI updates before API responds)
+  const displayMembers = useMemo(() => {
+    let result = [...members];
     
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(m => 
-        m.first_name.toLowerCase().includes(query) ||
-        m.last_name.toLowerCase().includes(query) ||
-        m.member_number.toLowerCase().includes(query) ||
-        m.email?.toLowerCase().includes(query)
-      );
-    }
-    
-    // Apply status filter
-    if (activeFilter !== 'all') {
-      result = result.filter(m => m.membership_status === activeFilter);
-    }
-    
-    // Apply sorting
+    // Apply additional client-side sorting if needed
     result.sort((a, b) => {
       switch (sortBy) {
         case 'name':
@@ -178,17 +90,11 @@ export default function MembersListScreen() {
     });
     
     return result;
-  }, [searchQuery, activeFilter, sortBy]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
-  };
+  }, [members, sortBy]);
 
   const renderMemberItem = ({ item }: { item: OrganizationMember }) => {
     const statusColor = STATUS_COLORS[item.membership_status] || STATUS_COLORS.pending;
-    const initials = `${item.first_name[0]}${item.last_name[0]}`.toUpperCase();
+    const initials = `${item.first_name?.[0] || '?'}${item.last_name?.[0] || ''}`.toUpperCase();
     
     return (
       <TouchableOpacity 
@@ -221,12 +127,17 @@ export default function MembersListScreen() {
             <View style={styles.memberMeta}>
               <View style={[styles.typeBadge, { backgroundColor: theme.primary + '15' }]}>
                 <Text style={[styles.typeText, { color: theme.primary }]}>
-                  {MEMBER_TYPE_LABELS[item.member_type]}
+                  {MEMBER_TYPE_LABELS[item.member_type] || item.member_type}
                 </Text>
               </View>
               {item.region && (
                 <Text style={[styles.regionText, { color: theme.textSecondary }]}>
                   {item.region.name}
+                </Text>
+              )}
+              {!item.region && item.province && (
+                <Text style={[styles.regionText, { color: theme.textSecondary }]}>
+                  {item.province}
                 </Text>
               )}
             </View>
@@ -263,21 +174,22 @@ export default function MembersListScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Stack.Screen
-        options={{
-          title: 'Members',
-          headerRight: () => (
-            <View style={styles.headerButtons}>
-              <TouchableOpacity 
-                style={styles.headerButton}
-                onPress={() => router.push('/screens/membership/add-member')}
-              >
-                <Ionicons name="person-add-outline" size={24} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
-          ),
-        }}
-      />
+      <DashboardWallpaperBackground>
+        {/* Custom Header */}
+        <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Members</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+            {loading ? 'Loading...' : `${totalCount} member${totalCount !== 1 ? 's' : ''}`}
+          </Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={() => router.push('/screens/membership/add-member')}
+        >
+          <Ionicons name="person-add-outline" size={24} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
@@ -307,7 +219,15 @@ export default function MembersListScreen() {
           <FilterButton filter="expired" label="Expired" />
         </ScrollableFilters>
         
-        <TouchableOpacity style={[styles.sortButton, { borderColor: theme.border }]}>
+        <TouchableOpacity 
+          style={[styles.sortButton, { borderColor: theme.border }]}
+          onPress={() => {
+            // Cycle through sort options
+            const sortOptions: SortType[] = ['name', 'date', 'region'];
+            const currentIndex = sortOptions.indexOf(sortBy);
+            setSortBy(sortOptions[(currentIndex + 1) % sortOptions.length]);
+          }}
+        >
           <Ionicons name="swap-vertical-outline" size={18} color={theme.text} />
         </TouchableOpacity>
       </View>
@@ -315,30 +235,55 @@ export default function MembersListScreen() {
       {/* Results Count */}
       <View style={styles.resultsHeader}>
         <Text style={[styles.resultsCount, { color: theme.textSecondary }]}>
-          {filteredMembers.length} member{filteredMembers.length !== 1 ? 's' : ''}
+          {displayMembers.length} member{displayMembers.length !== 1 ? 's' : ''} • Sorted by {sortBy}
         </Text>
       </View>
 
+      {/* Error State */}
+      {error && !loading && (
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: theme.primary }]}
+            onPress={refetch}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Loading State */}
+      {loading && members.length === 0 && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading members...</Text>
+        </View>
+      )}
+
       {/* Members List */}
-      <FlatList
-        data={filteredMembers}
-        renderItem={renderMemberItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={64} color={theme.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No members found</Text>
-            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-              Try adjusting your search or filters
-            </Text>
-          </View>
-        }
-      />
+      {!loading && !error && (
+        <FlatList
+          data={displayMembers}
+          renderItem={renderMemberItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={theme.primary} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color={theme.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>No members found</Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+                {searchQuery || activeFilter !== 'all' 
+                  ? 'Try adjusting your search or filters'
+                  : 'Add your first member to get started'}
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       {/* FAB */}
       <TouchableOpacity 
@@ -347,6 +292,7 @@ export default function MembersListScreen() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }
@@ -364,12 +310,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // Custom Header
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
   headerButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginRight: 16,
   },
-  headerButton: {},
+  headerButton: {
+    padding: 4,
+  },
   
   // Search
   searchContainer: {
@@ -532,6 +499,42 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 14,
     marginTop: 4,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    marginTop: 12,
+  },
+  
+  // Error State
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   
   // FAB

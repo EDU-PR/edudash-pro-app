@@ -127,7 +127,7 @@ export interface UserProfile {
   preschool_name?: string;
   first_name?: string;
   last_name?: string;
-  full_name?: string;
+  full_name?: string; // Computed field: first_name + last_name
   avatar_url?: string;
   date_of_birth?: string;
   seat_status?: 'active' | 'inactive' | 'pending';
@@ -236,7 +236,6 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
         role,
         first_name,
         last_name,
-        full_name,
         avatar_url,
         created_at,
         preschool_id,

@@ -99,16 +99,16 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               if (profileData?.organization_id) orgId = profileData.organization_id;
             } catch {/* ignore */}
 
-            // Current schema commonly stores principals/teachers in users table with auth_user_id
+            // Try profiles table for tenant info
             if ((!schoolId || !orgId)) {
               try {
-                const { data: userRow } = await assertSupabase()
-                  .from('users')
+                const { data: profileData } = await assertSupabase()
+                  .from('profiles')
                   .select('preschool_id, organization_id')
-                  .eq('auth_user_id', user.id)
+                  .eq('id', user.id)
                   .maybeSingle();
-                if (userRow?.preschool_id) schoolId = userRow.preschool_id as any;
-                if (userRow?.organization_id) orgId = userRow.organization_id as any;
+                if (profileData?.preschool_id) schoolId = profileData.preschool_id;
+                if (profileData?.organization_id) orgId = profileData.organization_id;
               } catch {/* ignore */}
             }
           }
