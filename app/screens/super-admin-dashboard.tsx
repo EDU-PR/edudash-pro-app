@@ -203,7 +203,7 @@ export default function SuperAdminDashboardScreen() {
         // Get active subscriptions with billing info
         assertSupabase().from('subscriptions').select('id,seats_total,plan_id,status,billing_frequency').eq('status', 'active'),
         // Get total users count (with limit for performance)
-        assertSupabase().from('users').select('id').limit(1000)
+        assertSupabase().from('profiles').select('id').limit(1000)
       ]);
       
       // Process hybrid tenant count (preschools + K-12 schools)

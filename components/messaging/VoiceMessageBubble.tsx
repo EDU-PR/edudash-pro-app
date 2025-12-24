@@ -24,7 +24,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { PURPLE_LIGHT, SUCCESS_GREEN } from './theme';
 
 // Generate random waveform bars (normalized 0-1)

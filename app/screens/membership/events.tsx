@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -355,6 +356,7 @@ export default function EventsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <DashboardWallpaperBackground>
       <Stack.Screen
         options={{
           title: 'Events & Calendar',
@@ -494,6 +496,7 @@ export default function EventsScreen() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }

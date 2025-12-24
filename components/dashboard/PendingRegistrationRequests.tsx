@@ -30,20 +30,23 @@ export const PendingRegistrationRequests: React.FC = () => {
     queryFn: async () => {
       const supabase = assertSupabase();
       
-      // Get internal user ID
+      // Get internal user ID (profiles.id = auth user id)
       const { data: userData } = await supabase
-        .from('users')
-        .select('id, preschool_id')
-        .eq('auth_user_id', user!.id)
+        .from('profiles')
+        .select('id, preschool_id, organization_id')
+        .eq('id', user!.id)
         .single();
 
       if (!userData?.id) return [];
+
+      const schoolId = userData.preschool_id || userData.organization_id;
+      if (!schoolId) return [];
 
       const { data, error } = await supabase
         .from('registration_requests')
         .select('*')
         .eq('parent_id', userData.id)
-        .eq('preschool_id', userData.preschool_id!)
+        .eq('preschool_id', schoolId)
         .in('status', ['pending', 'approved', 'rejected'])
         .order('requested_at', { ascending: false })
         .limit(5);

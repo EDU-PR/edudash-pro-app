@@ -274,7 +274,7 @@ async function forwardToInbox(
     // Find parent with this phone number
     const { data: parent } = await supabase
       .from('parents')
-      .select('id, full_name, preschool_id')
+      .select('id, first_name, last_name, preschool_id')
       .eq('phone_number', from)
       .single();
 

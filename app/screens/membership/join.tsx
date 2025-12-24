@@ -23,15 +23,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+import { assertSupabase } from '@/lib/supabase';
 import { MemberType, MEMBER_TYPE_LABELS } from '@/components/membership/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Mock organization/region data that would be returned from code lookup
+// Organization info returned from code lookup
 interface OrganizationInfo {
   id: string;
   name: string;
   region: string;
+  region_id: string;
   region_code: string;
   manager_name: string;
   member_count: number;
@@ -39,40 +42,6 @@ interface OrganizationInfo {
   default_tier: string;
   allowed_types: MemberType[];
 }
-
-// Simulate code lookup
-const VALID_CODES: Record<string, OrganizationInfo> = {
-  'SOA-GP-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'Gauteng',
-    region_code: 'GP',
-    manager_name: 'Nomvula Dlamini',
-    member_count: 847,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator', 'mentor'],
-  },
-  'SOA-WC-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'Western Cape',
-    region_code: 'WC',
-    manager_name: 'Sarah Johnson',
-    member_count: 523,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator'],
-  },
-  'SOA-KZN-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'KwaZulu-Natal',
-    region_code: 'KZN',
-    manager_name: 'James Ndlovu',
-    member_count: 412,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator', 'mentor'],
-  },
-};
 
 interface JoinFormData {
   first_name: string;
@@ -118,30 +87,104 @@ export default function JoinByCodeScreen() {
     setCodeError('');
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      const supabase = assertSupabase();
       
-      const org = VALID_CODES[inviteCode.toUpperCase()];
-      
-      if (org) {
-        setOrgInfo(org);
-        // Animate the form in
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      } else {
+      // Query the region_invite_codes table
+      const { data: codeData, error: codeError } = await supabase
+        .from('region_invite_codes')
+        .select(`
+          id,
+          code,
+          organization_id,
+          region_id,
+          allowed_member_types,
+          default_tier,
+          max_uses,
+          current_uses,
+          expires_at,
+          is_active,
+          organizations (
+            id,
+            name,
+            logo_url
+          ),
+          organization_regions (
+            id,
+            name,
+            code,
+            province_code
+          )
+        `)
+        .eq('code', inviteCode.toUpperCase())
+        .eq('is_active', true)
+        .single();
+
+      if (codeError || !codeData) {
         setCodeError('Invalid invite code. Please check and try again.');
+        return;
       }
+
+      // Check if code has expired
+      if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
+        setCodeError('This invite code has expired.');
+        return;
+      }
+
+      // Check if code has reached max uses
+      if (codeData.max_uses && codeData.current_uses >= codeData.max_uses) {
+        setCodeError('This invite code has reached its maximum usage limit.');
+        return;
+      }
+
+      // Get member count for the region
+      const { count: memberCount } = await supabase
+        .from('organization_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('region_id', codeData.region_id);
+
+      // Get regional manager name
+      const { data: managerData } = await supabase
+        .from('organization_members')
+        .select('first_name, last_name')
+        .eq('region_id', codeData.region_id)
+        .eq('role', 'regional_manager')
+        .single();
+
+      const org = codeData.organizations as any;
+      const region = codeData.organization_regions as any;
+
+      const orgInfo: OrganizationInfo = {
+        id: codeData.organization_id,
+        name: org?.name || 'Unknown Organization',
+        region: region?.name || 'Unknown Region',
+        region_id: codeData.region_id,
+        region_code: region?.province_code || region?.code || '',
+        manager_name: managerData 
+          ? `${managerData.first_name} ${managerData.last_name}`
+          : 'Regional Manager',
+        member_count: memberCount || 0,
+        logo_url: org?.logo_url,
+        default_tier: codeData.default_tier || 'standard',
+        allowed_types: (codeData.allowed_member_types || ['learner']) as MemberType[],
+      };
+
+      setOrgInfo(orgInfo);
+      
+      // Animate the form in
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } catch (error) {
+      console.error('[JoinByCode] Error verifying code:', error);
       setCodeError('Failed to verify code. Please try again.');
     } finally {
       setIsVerifying(false);
@@ -161,21 +204,74 @@ export default function JoinByCodeScreen() {
       Alert.alert('Required', 'Please enter your phone number');
       return;
     }
+    if (!orgInfo) {
+      Alert.alert('Error', 'Please verify your invite code first');
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const supabase = assertSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
       
+      if (!user) {
+        Alert.alert('Sign In Required', 'Please sign in or create an account to join.');
+        router.push('/(auth)/sign-in');
+        return;
+      }
+
       // Generate member number
       const year = new Date().getFullYear().toString().slice(-2);
-      const sequence = String(Math.floor(Math.random() * 9999) + 1).padStart(5, '0');
-      const memberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
+      
+      // Get next sequence number for the region
+      const { count } = await supabase
+        .from('organization_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('region_id', orgInfo.region_id);
+      
+      const sequence = String((count || 0) + 1).padStart(5, '0');
+      const memberNumber = `SOA-${orgInfo.region_code}-${year}-${sequence}`;
+      
+      // Create organization member record
+      const { data: memberData, error: memberError } = await supabase
+        .from('organization_members')
+        .insert({
+          organization_id: orgInfo.id,
+          region_id: orgInfo.region_id,
+          user_id: user.id,
+          member_number: memberNumber,
+          member_type: formData.member_type,
+          membership_status: 'active',
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          email: formData.email,
+          phone: formData.phone,
+          role: 'member',
+          join_date: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (memberError) {
+        console.error('[JoinByCode] Error creating member:', memberError);
+        if (memberError.code === '23505') {
+          Alert.alert('Already a Member', 'You are already a member of this organization.');
+        } else {
+          throw memberError;
+        }
+        return;
+      }
+
+      // Update invite code usage count
+      await supabase
+        .from('region_invite_codes')
+        .update({ current_uses: (orgInfo as any).current_uses + 1 })
+        .eq('code', inviteCode.toUpperCase());
       
       Alert.alert(
         'Welcome to Soil of Africa! 🎉',
-        `You've successfully joined ${orgInfo?.region} region.\n\nYour Member Number: ${memberNumber}`,
+        `You've successfully joined ${orgInfo.region} region.\n\nYour Member Number: ${memberNumber}`,
         [
           { 
             text: 'View ID Card', 
@@ -184,6 +280,7 @@ export default function JoinByCodeScreen() {
         ]
       );
     } catch (error) {
+      console.error('[JoinByCode] Error joining:', error);
       Alert.alert('Error', 'Failed to complete registration. Please try again.');
     } finally {
       setIsSubmitting(false);

@@ -184,7 +184,7 @@ export const usePrincipalDashboard = () => {
         const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value.data || [] : [];
         const activitiesData = activitiesResult.status === 'fulfilled' ? activitiesResult.value.data || [] : [];
 
-        // Fetch teacher and parent users by membership
+        // Fetch teacher and parent users by membership (profiles.id = auth_user_id)
         let teacherUsersData: Array<Record<string, unknown>> = [];
         let parentUsersData: Array<Record<string, unknown>> = [];
         try {
@@ -194,9 +194,9 @@ export const usePrincipalDashboard = () => {
               .filter((v) => !!v);
             if (teacherIds.length > 0) {
               const { data: tUsers } = await authenticatedClient
-                .from('users')
-                .select('id, name, email, role, preschool_id, auth_user_id')
-                .in('auth_user_id', teacherIds)
+                .from('profiles')
+                .select('id, first_name, last_name, email, role, preschool_id, organization_id')
+                .in('id', teacherIds)
                 .eq('role', 'teacher');
               teacherUsersData = tUsers || [];
             }
@@ -207,9 +207,9 @@ export const usePrincipalDashboard = () => {
               .filter((v) => !!v);
             if (parentIds.length > 0) {
               const { data: pUsers } = await authenticatedClient
-                .from('users')
-                .select('id, name, email, role, preschool_id, auth_user_id')
-                .in('auth_user_id', parentIds)
+                .from('profiles')
+                .select('id, first_name, last_name, email, role, preschool_id, organization_id')
+                .in('id', parentIds)
                 .eq('role', 'parent');
               parentUsersData = pUsers || [];
             }

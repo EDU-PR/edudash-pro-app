@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,7 +19,15 @@ import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useOrganization } from '@/hooks/useOrganization';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { useOrganizationBranding } from '@/contexts/OrganizationBrandingContext';
 import type { ThemeColors } from '@/contexts/ThemeContext';
+
+// Soil of Africa organization ID
+const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
+
+// Soil of Africa logo
+const SOA_LOGO = require('@/assets/branding/soa-logo.png');
 
 export default function LearnerDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -42,6 +50,12 @@ export default function LearnerDashboard() {
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = extractOrganizationId(profile);
+  
+  // Get organization from branding context (fetched from organization_members table)
+  const { organizationId: memberOrgId } = useOrganizationBranding();
+  
+  // Use memberOrgId (from organization_members) or orgId (from profile) for organization checks
+  const effectiveOrgId = memberOrgId || orgId;
   
   // Fetch organization details
   const { data: organization, isLoading: orgLoading } = useOrganization();
@@ -124,13 +138,25 @@ export default function LearnerDashboard() {
         borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.2)',
         borderBottomWidth: isDark ? 2 : 1.5,
       }]}>
-        <TouchableOpacity
-          onPress={() => setIsDrawerOpen(true)}
-          style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="menu" size={26} color={theme.text} />
-        </TouchableOpacity>
+        <View style={styles.headerLeftSection}>
+          <TouchableOpacity
+            onPress={() => setIsDrawerOpen(true)}
+            style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="menu" size={26} color={theme.text} />
+          </TouchableOpacity>
+          {/* Show Soil of Africa logo if user belongs to that organization */}
+          {effectiveOrgId === SOIL_OF_AFRICA_ORG_ID && (
+            <View style={styles.orgLogoContainer}>
+              <Image
+                source={SOA_LOGO}
+                style={styles.orgLogo}
+                resizeMode="cover"
+              />
+            </View>
+          )}
+        </View>
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>
             {t('learner.dashboard_title', { defaultValue: 'My Learning' })}
@@ -150,6 +176,8 @@ export default function LearnerDashboard() {
           <Ionicons name="person-circle-outline" size={26} color={theme.text} />
         </TouchableOpacity>
       </View>
+      
+      <DashboardWallpaperBackground>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -282,7 +310,12 @@ export default function LearnerDashboard() {
                 subtitle: t('learner.showcase_work', { defaultValue: 'Showcase your work' }),
                 onPress: () => router.push('/screens/learner/portfolio'),
               },
-              {
+              effectiveOrgId ? {
+                icon: 'business-outline',
+                title: t('learner.org_dashboard', { defaultValue: 'Org Dashboard' }),
+                subtitle: t('learner.org_matters', { defaultValue: 'Organization matters' }),
+                onPress: () => router.push('/screens/membership/landing'),
+              } : {
                 icon: 'business-outline',
                 title: t('learner.join_organization', { defaultValue: 'Join Organization' }),
                 subtitle: t('learner.enter_org_code', { defaultValue: 'Enter organization code' }),
@@ -375,6 +408,7 @@ export default function LearnerDashboard() {
           </Card>
         )}
       </ScrollView>
+      </DashboardWallpaperBackground>
       
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer
@@ -435,6 +469,25 @@ const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create(
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
+  },
+  headerLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  orgLogoContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  orgLogo: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   headerTitleContainer: {
     flex: 1,

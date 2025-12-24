@@ -2,7 +2,7 @@
  * Membership Module - Main Navigation Hub
  * Entry point for Soil of Africa membership system
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { assertSupabase } from '@/lib/supabase';
+import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -97,6 +99,35 @@ export default function MembershipIndexScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const [dashboardRoute, setDashboardRoute] = useState('/screens/membership/dashboard');
+
+  useEffect(() => {
+    checkUserRoleForDashboard();
+  }, []);
+
+  const checkUserRoleForDashboard = async () => {
+    try {
+      const supabase = assertSupabase();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: member } = await supabase
+        .from('organization_members')
+        .select('role, member_type')
+        .eq('user_id', user.id)
+        .single();
+
+      if (member && (member.role === 'national_admin' || member.member_type === 'ceo')) {
+        setDashboardRoute('/screens/membership/ceo-dashboard');
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error);
+    }
+  };
+
+  const handleDashboardPress = () => {
+    router.push(dashboardRoute as any);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
@@ -116,6 +147,7 @@ export default function MembershipIndexScreen() {
         }}
       />
 
+      <DashboardWallpaperBackground>
       <ScrollView
         style={styles.content}
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -174,7 +206,13 @@ export default function MembershipIndexScreen() {
               <TouchableOpacity
                 key={module.id}
                 style={styles.moduleCard}
-                onPress={() => router.push(module.route as any)}
+                onPress={() => {
+                  if (module.id === 'dashboard') {
+                    handleDashboardPress();
+                  } else {
+                    router.push(module.route as any);
+                  }
+                }}
               >
                 <LinearGradient
                   colors={module.gradient}
@@ -265,6 +303,7 @@ export default function MembershipIndexScreen() {
           </View>
         </View>
       </ScrollView>
+      </DashboardWallpaperBackground>
     </SafeAreaView>
   );
 }

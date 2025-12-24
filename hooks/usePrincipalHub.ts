@@ -472,15 +472,15 @@ export const usePrincipalHub = () => {
           // classes.teacher_id references users.id. Some teacher rows may not yet have user_id linked.
           let effectiveUserId: string | null = teacher.user_id || null;
           if (!effectiveUserId && teacher.email) {
-            // Fallback: try resolve users.id by teacher email within the same preschool
+            // Fallback: try resolve profiles.id by teacher email within the same preschool
             try {
-              const { data: fallbackUser } = await assertSupabase()
-                .from('users')
+              const { data: fallbackProfile } = await assertSupabase()
+                .from('profiles')
                 .select('id')
                 .eq('email', teacher.email)
-                .eq('preschool_id', preschoolId)
+                .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`)
                 .maybeSingle();
-              if (fallbackUser?.id) effectiveUserId = fallbackUser.id;
+              if (fallbackProfile?.id) effectiveUserId = fallbackProfile.id;
             } catch { /* Intentional: non-fatal */ }
           }
 
