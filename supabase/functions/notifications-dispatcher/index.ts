@@ -112,12 +112,13 @@ interface NotificationTemplate {
 function getNotificationTemplate(eventType: string, context: any = {}): NotificationTemplate {
   const templates: { [key: string]: NotificationTemplate } = {
     new_message: {
-      title: "New Message",
-      body: context.sender_name ? `${context.sender_name} sent you a message` : "You have a new message",
+      title: context.sender_name ? `${context.sender_name}` : "New Message",
+      body: context.message_preview || (context.sender_name ? `${context.sender_name} sent you a message` : "You have a new message"),
       data: {
         type: 'message',
         thread_id: context.thread_id,
         message_id: context.message_id,
+        sender_id: context.sender_id,
         screen: 'messages'
       },
       sound: 'default',

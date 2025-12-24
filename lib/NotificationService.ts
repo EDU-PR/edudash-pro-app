@@ -236,6 +236,19 @@ class NotificationService {
       showBadge: true,
     });
 
+    // Messages channel - for direct messages (alias for social, dedicated channel)
+    await Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages',
+      description: 'Direct messages from teachers, parents, and staff',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#4ade80',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
     // Incoming calls - highest priority for full-screen intent
     // Uses MAX importance and bypasses DND for critical calls
     await Notifications.setNotificationChannelAsync('calls', {
@@ -278,7 +291,7 @@ class NotificationService {
       showBadge: true,
     });
 
-    console.log('Android notification channels configured with 7 channels');
+    console.log('Android notification channels configured with 8 channels');
   }
 
   /**

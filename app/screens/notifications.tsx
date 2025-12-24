@@ -37,6 +37,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTIFICATIONS_LAST_SEEN_KEY = 'notifications_last_seen_at';
 const READ_NOTIFICATIONS_KEY = 'read_notifications';
+const CLEARED_NOTIFICATIONS_KEY = 'cleared_notifications';
 
 // Helper to get set of read notification IDs
 const getReadNotificationIds = async (userId: string): Promise<Set<string>> => {
@@ -51,6 +52,35 @@ const getReadNotificationIds = async (userId: string): Promise<Set<string>> => {
     console.error('[getReadNotificationIds] Error:', e);
   }
   return new Set();
+};
+
+// Helper to get set of cleared notification IDs
+const getClearedNotificationIds = async (userId: string): Promise<Set<string>> => {
+  try {
+    const key = `${CLEARED_NOTIFICATIONS_KEY}_${userId}`;
+    const stored = await AsyncStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Set(parsed);
+    }
+  } catch (e) {
+    console.error('[getClearedNotificationIds] Error:', e);
+  }
+  return new Set();
+};
+
+// Helper to mark notifications as cleared
+const markNotificationsCleared = async (userId: string, notificationIds: string[]): Promise<void> => {
+  try {
+    const key = `${CLEARED_NOTIFICATIONS_KEY}_${userId}`;
+    const existing = await getClearedNotificationIds(userId);
+    notificationIds.forEach(id => existing.add(id));
+    // Keep only last 1000 entries to prevent infinite growth
+    const arr = Array.from(existing).slice(-1000);
+    await AsyncStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {
+    console.error('[markNotificationsCleared] Error:', e);
+  }
 };
 
 // Helper to mark a notification as read
@@ -402,6 +432,8 @@ const useNotifications = () => {
       
       // Get set of read notification IDs from local storage
       const readIds = await getReadNotificationIds(user.id);
+      // Get set of cleared notification IDs from local storage
+      const clearedIds = await getClearedNotificationIds(user.id);
       
       // Try to fetch from notifications table if it exists
       try {
@@ -413,11 +445,13 @@ const useNotifications = () => {
           .limit(50);
         
         if (!error && data) {
-          // Mark as read if in our local read set
-          return data.map(n => ({
-            ...n,
-            read: n.read || readIds.has(n.id),
-          })) as Notification[];
+          // Mark as read if in our local read set, filter out cleared
+          return data
+            .filter(n => !clearedIds.has(n.id))
+            .map(n => ({
+              ...n,
+              read: n.read || readIds.has(n.id),
+            })) as Notification[];
         }
       } catch {
         // Table might not exist, fall back to composite notifications
@@ -504,10 +538,10 @@ const useNotifications = () => {
         console.log('[Notifications] Error fetching calls:', e);
       }
       
-      // Sort by date
+      // Sort by date and filter out cleared notifications
       notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       
-      return notifications;
+      return notifications.filter(n => !clearedIds.has(n.id));
     },
     enabled: !!user?.id,
     staleTime: 1000 * 30, // 30 seconds
@@ -619,8 +653,9 @@ export default function NotificationsScreen() {
     if (!user?.id) return;
     
     try {
-      // Mark all notification IDs as read/deleted in local storage
+      // Mark all notification IDs as cleared in local storage
       const allIds = notifications.map(n => n.id);
+      await markNotificationsCleared(user.id, allIds);
       await markAllNotificationsRead(user.id, allIds);
       
       // Mark calls and announcements as seen
