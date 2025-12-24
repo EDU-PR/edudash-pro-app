@@ -322,24 +322,6 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
           </Text>
         )}
         
-        {/* Upgrade CTA for free tier */}
-        {showUpgradeCTA && isFreeTier && (
-          <TouchableOpacity
-            style={[styles.upgradeButton, { backgroundColor: theme.primary }]}
-            onPress={handleUpgradePress}
-          >
-            <LinearGradient
-              colors={[theme.primary, '#7C3AED']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.upgradeGradient}
-            >
-              <Ionicons name="sparkles" size={18} color="#fff" />
-              <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-        
         {/* Cancel option for paid tiers */}
         {showCancelOption && !isFreeTier && subscriptionDetails?.status === 'active' && (
           <TouchableOpacity
