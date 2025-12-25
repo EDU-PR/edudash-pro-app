@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Header, Footer } from '@/components';
+import { Header, Footer, MerchandiseSlider } from '@/components';
 import {
   Leaf,
   Users,
@@ -491,35 +491,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Merchandise Banner */}
-          <div className="mt-12 max-w-4xl mx-auto">
-            <div className="relative rounded-2xl overflow-hidden shadow-xl">
-              <Image 
-                src="/images/combo.png" 
-                alt="SOA Combo - T-Shirt and Cap R300" 
-                width={1024}
-                height={500}
-                className="w-full object-cover"
-              />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="text-white text-center sm:text-left">
-                    <h3 className="text-xl font-bold">Official SOA Merchandise</h3>
-                    <p className="text-white/80 text-sm">Show your pride with our exclusive combo pack</p>
-                  </div>
-                  <a
-                    href="https://wa.me/27762233981?text=Hi%2C%20I%20would%20like%20to%20order%20the%20SOA%20Combo%20(T-Shirt%20and%20Cap)%20for%20R300"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-soa-gold text-white rounded-xl font-semibold hover:bg-amber-500 transition whitespace-nowrap"
-                  >
-                    Order Now - R300
-                    <ChevronRight className="w-4 h-4" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Merchandise Banner with Slider */}
+          <MerchandiseSlider />
         </div>
       </section>
 
