@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
@@ -13,9 +14,25 @@ import {
   ExternalLink,
   Leaf,
   Globe,
+  Bell,
+  Sparkles,
+  Mail,
 } from 'lucide-react';
 
 export default function DownloadPage() {
+  const [email, setEmail] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const handleEarlyAccess = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (email) {
+      const message = `Hi! I'd like to get early access to the EduDash Pro app. My email: ${email}`;
+      window.open(`https://wa.me/27762233981?text=${encodeURIComponent(message)}`, '_blank');
+      setIsSubmitted(true);
+      setEmail('');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -30,25 +47,32 @@ export default function DownloadPage() {
               </div>
             </ScaleIn>
             <FadeIn delay={0.1}>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-soa-gold/20 text-soa-gold rounded-full text-sm font-medium mb-4">
+                <Sparkles className="w-4 h-4" />
+                Coming Soon
+              </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-                Download the EduDash Pro App
+                EduDash Pro App
               </h1>
             </FadeIn>
             <SlideIn direction="up" delay={0.2}>
               <p className="text-gray-600 max-w-2xl mx-auto">
                 Access your Soil of Africa membership, digital ID card, resources, and events on
-                the go. Available on Android and iOS.
+                the go. Coming soon to Android and iOS.
               </p>
             </SlideIn>
           </div>
 
-          {/* Download Options */}
+          {/* Coming Soon Cards */}
           <StaggerChildren className="grid md:grid-cols-2 gap-6 mb-12" staggerDelay={0.1}>
             {/* Android */}
             <motion.div 
-              className="bg-white rounded-2xl shadow-sm p-8"
+              className="bg-white rounded-2xl shadow-sm p-8 relative overflow-hidden"
               whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
             >
+              <div className="absolute top-4 right-4 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                Coming Soon
+              </div>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-soa-light rounded-xl flex items-center justify-center">
                   <svg viewBox="0 0 24 24" className="w-8 h-8 text-soa-primary" fill="currentColor">
@@ -61,26 +85,24 @@ export default function DownloadPage() {
                 </div>
               </div>
 
-              <a
-                href={process.env.NEXT_PUBLIC_PLAY_STORE_URL || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 transition mb-4"
-              >
-                <Download className="w-5 h-5" />
-                Get on Google Play
-              </a>
+              <div className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-200 text-gray-500 rounded-xl font-semibold cursor-not-allowed mb-4">
+                <Bell className="w-5 h-5" />
+                Notify Me When Available
+              </div>
 
               <p className="text-xs text-gray-500 text-center">
-                Requires Android 8.0 or higher
+                Expected Q1 2026
               </p>
             </motion.div>
 
             {/* iOS */}
             <motion.div 
-              className="bg-white rounded-2xl shadow-sm p-8"
+              className="bg-white rounded-2xl shadow-sm p-8 relative overflow-hidden"
               whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
             >
+              <div className="absolute top-4 right-4 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                Coming Soon
+              </div>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center">
                   <Apple className="w-8 h-8 text-gray-900" />
@@ -91,64 +113,64 @@ export default function DownloadPage() {
                 </div>
               </div>
 
-              <a
-                href={process.env.NEXT_PUBLIC_APP_STORE_URL || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 transition mb-4"
-              >
-                <Download className="w-5 h-5" />
-                Get on App Store
-              </a>
+              <div className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-200 text-gray-500 rounded-xl font-semibold cursor-not-allowed mb-4">
+                <Bell className="w-5 h-5" />
+                Notify Me When Available
+              </div>
 
-              <p className="text-xs text-gray-500 text-center">Requires iOS 14.0 or higher</p>
+              <p className="text-xs text-gray-500 text-center">Expected Q1 2026</p>
             </motion.div>
           </StaggerChildren>
 
-          {/* Alternative: Web App */}
-          <div className="bg-gradient-to-br from-edudash-primary to-edudash-secondary rounded-2xl p-8 text-white mb-12">
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
-                <Globe className="w-8 h-8" />
-              </div>
-              <div className="flex-1 text-center md:text-left">
-                <h3 className="text-xl font-bold mb-2">Prefer using a browser?</h3>
-                <p className="text-white/80 mb-4">
-                  Access your membership through the EduDash Pro web portal. Works on any device
-                  with a modern browser.
+          {/* Early Access Signup */}
+          <FadeIn delay={0.3}>
+            <div className="bg-gradient-to-br from-soa-primary to-soa-dark rounded-2xl p-8 text-white mb-12">
+              <div className="max-w-xl mx-auto text-center">
+                <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <Mail className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2">Get Early Access</h3>
+                <p className="text-white/80 mb-6">
+                  Be among the first to try the EduDash Pro app. Sign up for beta access and we'll
+                  notify you when it's ready.
                 </p>
-                <a
-                  href="https://edudashpro.org.za"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-edudash-primary rounded-lg font-medium hover:bg-white/90 transition"
-                >
-                  Open Web App
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                
+                {isSubmitted ? (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center justify-center gap-2 text-soa-gold"
+                  >
+                    <CheckCircle2 className="w-6 h-6" />
+                    <span className="font-medium">Thanks! We'll be in touch soon.</span>
+                  </motion.div>
+                ) : (
+                  <form onSubmit={handleEarlyAccess} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      required
+                      className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-soa-gold/50 focus:border-soa-gold"
+                    />
+                    <button
+                      type="submit"
+                      className="px-6 py-3 bg-soa-gold text-gray-900 rounded-xl font-semibold hover:bg-amber-400 transition-all duration-300 hover:scale-105 whitespace-nowrap"
+                    >
+                      Get Early Access
+                    </button>
+                  </form>
+                )}
               </div>
             </div>
-          </div>
-
-          {/* QR Code Section */}
-          <div className="bg-white rounded-2xl shadow-sm p-8 text-center mb-12">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Scan to Download</h3>
-            <div className="w-48 h-48 bg-gray-100 rounded-xl mx-auto flex items-center justify-center mb-4">
-              <div className="text-center">
-                <QrCode className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                <p className="text-xs text-gray-400">QR Code</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-500">
-              Scan this QR code with your phone's camera to download the app
-            </p>
-          </div>
+          </FadeIn>
 
           {/* App Features */}
           <div className="mb-12">
             <FadeIn>
               <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-                What you can do in the app
+                What you'll be able to do in the app
               </h2>
             </FadeIn>
             <StaggerChildren className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" staggerDelay={0.1}>

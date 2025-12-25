@@ -663,24 +663,63 @@ export default function AnimatedHomePage() {
           <FadeIn>
             <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center gap-8">
               <div className="flex-1 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-soa-gold/20 text-soa-gold rounded-full text-sm font-medium mb-4">
+                  <Sparkles className="w-4 h-4" />
+                  Coming Soon
+                </div>
                 <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-                  Get the SOA Mobile App
+                  Connect with SOA on the EduDash Pro App
                 </h2>
                 <p className="text-gray-300 mb-6">
                   Access your membership, events, and community features on the go.
-                  Available for Android and iOS.
+                  Coming soon to Android and iOS.
                 </p>
-                <div className="flex flex-wrap gap-4 justify-center md:justify-start">
-                  <a href="#" className="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-900 rounded-xl font-medium hover:bg-gray-100 transition-all duration-300 hover:scale-105">
-                    <Download className="w-5 h-5" />
-                    Download App
-                  </a>
+                
+                {/* Early Access Email Signup */}
+                <div className="max-w-md">
+                  <p className="text-sm text-gray-400 mb-3">Get notified when the app launches:</p>
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.target as HTMLFormElement;
+                      const email = (form.elements.namedItem('email') as HTMLInputElement)?.value;
+                      if (email) {
+                        // Open WhatsApp with pre-filled message
+                        const message = `Hi! I'd like to get early access to the EduDash Pro app. My email: ${email}`;
+                        window.open(`https://wa.me/27762233981?text=${encodeURIComponent(message)}`, '_blank');
+                        form.reset();
+                      }
+                    }}
+                    className="flex flex-col sm:flex-row gap-3"
+                  >
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="Enter your email"
+                      required
+                      className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-soa-gold/50 focus:border-soa-gold"
+                    />
+                    <button
+                      type="submit"
+                      className="px-6 py-3 bg-soa-gold text-gray-900 rounded-xl font-medium hover:bg-amber-400 transition-all duration-300 hover:scale-105 whitespace-nowrap"
+                    >
+                      Get Early Access
+                    </button>
+                  </form>
+                  <p className="text-xs text-gray-500 mt-2">
+                    We'll notify you when the beta version is available.
+                  </p>
                 </div>
               </div>
               <div className="flex-shrink-0">
                 <FloatingElement duration={3} distance={6}>
-                  <div className="w-48 h-48 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-3xl flex items-center justify-center shadow-2xl">
-                    <Smartphone className="w-24 h-24 text-white" />
+                  <div className="relative w-48 h-72 rounded-3xl overflow-hidden shadow-2xl border-4 border-gray-700">
+                    <Image 
+                      src="/images/edudash-app-screenshot.png" 
+                      alt="EduDash Pro App"
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </FloatingElement>
               </div>
