@@ -137,11 +137,11 @@ export function usePrincipalAnalytics() {
           .eq('preschool_id', school.id)
           .eq('type', 'fee_payment')
           .eq('status', 'pending'),
-        // Staff
+        // Staff (profiles.id = auth_user_id)
         supabase
-          .from('users')
+          .from('profiles')
           .select('id, role')
-          .eq('preschool_id', school.id)
+          .or(`preschool_id.eq.${school.id},organization_id.eq.${school.id}`)
           .eq('role', 'teacher'),
       ]);
 

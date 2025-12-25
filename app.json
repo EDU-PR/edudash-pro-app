@@ -29,12 +29,9 @@
         "UIBackgroundModes": [
           "audio",
           "voip",
-          "audio",
-          "voip",
-          "audio",
-          "voip",
-          "audio",
-          "voip"
+          "background-processing",
+          "background-fetch",
+          "fetch"
         ],
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition."
       },
@@ -98,7 +95,11 @@
         "android.permission.ANSWER_PHONE_CALLS",
         "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+        "android.permission.BIND_TELECOM_CONNECTION_SERVICE",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.DISABLE_KEYGUARD",
+        "android.permission.TURN_SCREEN_ON",
+        "android.permission.BACKGROUND_APP_REFRESH"
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",

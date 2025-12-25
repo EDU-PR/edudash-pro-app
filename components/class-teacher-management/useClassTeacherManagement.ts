@@ -126,7 +126,7 @@ export function useClassTeacherManagement({
         // Use profiles table (not deprecated users table)
         const { data: usersData } = await assertSupabase()
           .from('profiles')
-          .select('id, email, first_name, last_name, full_name, role, created_at')
+          .select('id, email, first_name, last_name, role, created_at')
           .in('id', teacherAuthIds);
         teacherUsers = usersData || [];
       }
@@ -135,7 +135,7 @@ export function useClassTeacherManagement({
       if (teacherUsers.length === 0) {
         const { data: fallbackUsers } = await assertSupabase()
           .from('profiles')
-          .select('id, email, first_name, last_name, full_name, role, created_at')
+          .select('id, email, first_name, last_name, role, created_at')
           .eq('preschool_id', schoolId)
           .ilike('role', '%teacher%');
         teacherUsers = fallbackUsers || [];

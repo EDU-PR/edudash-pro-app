@@ -1,0 +1,301 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+xmlns:w='urn:schemas-microsoft-com:office:word'
+xmlns='http://www.w3.org/TR/REC-html40'>
+
+<head>
+<meta charset="UTF-8">
+<meta http-equiv=Content-Type content="text/html; charset=utf-8">
+<meta name=Generator content="Microsoft Word 15">
+<!--[if gte mso 9]>
+<xml>
+<o:DocumentProperties>
+  <o:Author>Soil of Africa</o:Author>
+  <o:LastAuthor>Soil of Africa</o:LastAuthor>
+  <o:Company>Soil of Africa NPC</o:Company>
+  <o:Version>16.00</o:Version>
+</o:DocumentProperties>
+<o:OfficeDocumentSettings>
+  <o:AllowPNG/>
+</o:OfficeDocumentSettings>
+</xml>
+<![endif]-->
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+<!--
+/* Style Definitions */
+@page Section1 {
+  size: 8.5in 11.0in;
+  margin: 0.5in 0.5in 0.5in 0.5in;
+  mso-header-margin: .5in;
+  mso-footer-margin: .5in;
+  mso-paper-source: 0;
+}
+
+div.Section1 { page: Section1; }
+
+body {
+  font-family: 'Times New Roman', serif;
+  font-size: 11pt;
+  color: #333333;
+  mso-ansi-font-size: 11pt;
+  mso-bidi-font-size: 11pt;
+  margin: 0;
+  padding: 0;
+}
+
+/* Header Container */
+.header-container {
+  border: 4px solid #1a472a;
+  padding: 0;
+  margin-bottom: 30px;
+}
+
+.header-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+}
+
+.header-left {
+  width: 120px;
+  padding: 15px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.header-center {
+  text-align: center;
+  padding: 15px;
+  vertical-align: middle;
+}
+
+.header-right {
+  width: 120px;
+  padding: 15px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.org-name {
+  font-size: 24pt;
+  font-weight: bold;
+  color: #1a472a;
+  margin: 0 0 5px 0;
+  mso-ansi-font-size: 24pt;
+}
+
+.tagline {
+  font-size: 10pt;
+  font-style: italic;
+  color: #c9a227;
+  margin: 0 0 10px 0;
+}
+
+.contact-info {
+  font-size: 8pt;
+  color: #555;
+  line-height: 1.4;
+}
+
+.gold-bar {
+  height: 4px;
+  background-color: #c9a227;
+}
+
+/* Logo placeholder */
+.logo-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a472a, #2d5a3d);
+  display: inline-block;
+  text-align: center;
+  line-height: 80px;
+  color: #c9a227;
+  font-size: 24pt;
+  font-weight: bold;
+}
+
+.africa-icon {
+  width: 60px;
+  height: 60px;
+  margin: 10px auto;
+  text-align: center;
+}
+
+.africa-text {
+  font-size: 40pt;
+  color: #c9a227;
+}
+
+/* Content Area */
+.content-area {
+  min-height: 600px;
+  padding: 20px 0;
+}
+
+.date-line {
+  text-align: right;
+  margin-bottom: 30px;
+  font-size: 11pt;
+}
+
+.recipient-block {
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.subject-line {
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+.body-text {
+  line-height: 1.8;
+  text-align: justify;
+}
+
+.signature-block {
+  margin-top: 50px;
+}
+
+.signature-line {
+  border-bottom: 1px solid #333;
+  width: 250px;
+  margin-bottom: 5px;
+  min-height: 40px;
+}
+
+.signature-label {
+  font-size: 9pt;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+/* Footer */
+.footer {
+  margin-top: 50px;
+  text-align: center;
+  border-top: 2px solid #1a472a;
+  padding-top: 15px;
+}
+
+.footer-reg {
+  font-size: 9pt;
+  color: #555;
+}
+
+.footer-quote {
+  font-style: italic;
+  font-size: 10pt;
+  color: #1a472a;
+  margin-top: 10px;
+}
+-->
+</style>
+<title>Soil of Africa - Official Letterhead</title>
+</head>
+
+<body lang=EN-ZA style='tab-interval:.5in'>
+<div class=Section1>
+
+<!-- HEADER -->
+<div class="header-container">
+  <table class="header-table">
+    <tr>
+      <td class="header-left">
+        <div class="logo-circle">SOA</div>
+      </td>
+      <td class="header-center">
+        <p class="org-name">SOIL OF AFRICA</p>
+        <p class="tagline">"Growing Communities, Cultivating Change"</p>
+        <div class="contact-info">
+          <strong>NPO Registration:</strong> 278-197 | <strong>PBO:</strong> 930080537<br>
+          <strong>Address:</strong> 1048 Pretorius Street, Hatfield, Pretoria, 0083<br>
+          <strong>Email:</strong> info@soilofafrica.org | <strong>Phone:</strong> +27 12 430 7773<br>
+          <strong>Website:</strong> www.soilofafrica.org
+        </div>
+      </td>
+      <td class="header-right">
+        <div class="africa-icon">
+          <span class="africa-text">🌍</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <div class="gold-bar"></div>
+</div>
+
+<!-- CONTENT AREA -->
+<div class="content-area">
+
+  <!-- Date -->
+  <div class="date-line">
+    [Date: ___________________]
+  </div>
+
+  <!-- Recipient -->
+  <div class="recipient-block">
+    [Recipient Name]<br>
+    [Position/Title]<br>
+    [Organization]<br>
+    [Address Line 1]<br>
+    [Address Line 2]
+  </div>
+
+  <!-- Subject -->
+  <div class="subject-line">
+    <strong>RE:</strong> [Subject of Letter]
+  </div>
+
+  <!-- Salutation -->
+  <p>Dear [Recipient Name],</p>
+
+  <!-- Body -->
+  <div class="body-text">
+    <p>[Your letter content goes here. Delete this placeholder text and replace with your actual content.]</p>
+    
+    <p>[Additional paragraphs as needed.]</p>
+    
+    <p>[Continue writing your letter content here.]</p>
+  </div>
+
+  <!-- Closing -->
+  <p style="margin-top: 30px;">Yours faithfully,</p>
+
+  <!-- Signature Block -->
+  <div class="signature-block">
+    <div class="signature-line">&nbsp;</div>
+    <div class="signature-label">Signature</div>
+    <p style="margin-top: 10px;">
+      <strong>[Full Name]</strong><br>
+      [Position/Title]<br>
+      Soil of Africa NPC
+    </p>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <p class="footer-reg">
+    <strong>SOIL OF AFRICA NPC</strong><br>
+    NPO Registration: 278-197 | PBO: 930080537<br>
+    1048 Pretorius Street, Hatfield, Pretoria, 0083 | Tel: +27 12 430 7773
+  </p>
+  <p class="footer-quote">
+    "Growing Communities, Cultivating Change"
+  </p>
+</div>
+
+</div>
+</body>
+</html>

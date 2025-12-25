@@ -50,14 +50,46 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     })
     
     // Also create a separate channel for calls with maximum priority
+    // This channel shows on lock screen and wakes the device
     await Notifications.setNotificationChannelAsync('calls', {
-      name: 'Calls',
-      importance: Notifications.AndroidImportance.MAX, // MAX priority for calls
+      name: 'Incoming Calls',
+      description: 'Incoming and missed call notifications',
+      importance: Notifications.AndroidImportance.MAX, // MAX priority - wakes screen
       vibrationPattern: [0, 250, 250, 250, 250, 250, 250, 250],
-      lightColor: '#FF231F7C',
+      lightColor: '#6366F1',
       sound: 'default',
       enableVibrate: true,
-      showBadge: true,
+      showBadge: true, // Shows red dot on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, // Shows on lock screen
+      bypassDnd: true, // Shows even in Do Not Disturb mode
+    })
+    
+    // Ongoing calls channel - for the notification shade during active calls
+    // This is what appears when you pull down the notification drawer during a call
+    await Notifications.setNotificationChannelAsync('ongoing-calls', {
+      name: 'Ongoing Calls',
+      description: 'Shows when you have an active call in progress',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0], // No vibration for ongoing notification
+      lightColor: '#6366F1',
+      sound: null, // No sound for ongoing notification
+      enableVibrate: false,
+      showBadge: false,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,
+    })
+    
+    // Missed calls channel - for missed call notifications
+    await Notifications.setNotificationChannelAsync('missed-calls', {
+      name: 'Missed Calls',
+      description: 'Missed call notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#EF4444', // Red for missed calls
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true, // Shows red dot on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     })
   }
 

@@ -1,0 +1,499 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+xmlns:w='urn:schemas-microsoft-com:office:word'
+xmlns='http://www.w3.org/TR/REC-html40'>
+
+<head>
+<meta charset="UTF-8">
+<meta http-equiv=Content-Type content="text/html; charset=utf-8">
+<meta name=Generator content="Microsoft Word 15">
+<!--[if gte mso 9]>
+<xml>
+<o:DocumentProperties>
+  <o:Author>Soil of Africa</o:Author>
+  <o:LastAuthor>Soil of Africa</o:LastAuthor>
+  <o:Company>Soil of Africa NPC</o:Company>
+  <o:Version>16.00</o:Version>
+</o:DocumentProperties>
+<o:OfficeDocumentSettings>
+  <o:AllowPNG/>
+</o:OfficeDocumentSettings>
+</xml>
+<![endif]-->
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+<!--
+/* Style Definitions */
+@page Section1 {
+  size: 8.5in 11.0in;
+  margin: 0.5in 0.5in 0.5in 0.5in;
+  mso-header-margin: .5in;
+  mso-footer-margin: .5in;
+  mso-paper-source: 0;
+}
+
+div.Section1 { page: Section1; }
+
+body {
+  font-family: 'Times New Roman', serif;
+  font-size: 11pt;
+  color: #333333;
+  mso-ansi-font-size: 11pt;
+  mso-bidi-font-size: 11pt;
+  margin: 0;
+  padding: 0;
+}
+
+/* Header Container */
+.header-container {
+  border: 4px solid #1a472a;
+  padding: 0;
+  margin-bottom: 20px;
+}
+
+.header-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+}
+
+.header-left {
+  width: 120px;
+  padding: 15px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.header-center {
+  text-align: center;
+  padding: 15px;
+  vertical-align: middle;
+}
+
+.header-right {
+  width: 120px;
+  padding: 15px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.org-name {
+  font-size: 24pt;
+  font-weight: bold;
+  color: #1a472a;
+  margin: 0 0 5px 0;
+  mso-ansi-font-size: 24pt;
+}
+
+.tagline {
+  font-size: 10pt;
+  font-style: italic;
+  color: #c9a227;
+  margin: 0 0 10px 0;
+}
+
+.contact-info {
+  font-size: 8pt;
+  color: #555;
+  line-height: 1.4;
+}
+
+.gold-bar {
+  height: 4px;
+  background-color: #c9a227;
+}
+
+/* Document Title */
+.document-title {
+  background-color: #1a472a;
+  color: #ffffff;
+  text-align: center;
+  padding: 12px;
+  font-size: 14pt;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+/* Form Sections */
+.section-header {
+  background-color: #1a472a;
+  color: #ffffff;
+  padding: 8px 12px;
+  font-weight: bold;
+  font-size: 11pt;
+  margin-top: 15px;
+}
+
+.section-content {
+  border: 1px solid #ddd;
+  border-top: none;
+  padding: 12px;
+  background-color: #fafafa;
+}
+
+.form-row {
+  margin-bottom: 10px;
+}
+
+.form-label {
+  font-weight: bold;
+  color: #1a472a;
+  display: inline;
+}
+
+.form-field {
+  border-bottom: 1px solid #1a472a;
+  min-width: 200px;
+  display: inline-block;
+  padding: 2px 5px;
+  margin-left: 10px;
+}
+
+.form-field-long {
+  border-bottom: 1px solid #1a472a;
+  width: 100%;
+  display: block;
+  padding: 2px 5px;
+  margin-top: 5px;
+  min-height: 20px;
+}
+
+/* Checkbox styling */
+.checkbox-item {
+  margin: 8px 0;
+  display: block;
+}
+
+.checkbox {
+  border: 2px solid #1a472a;
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  margin-right: 10px;
+  vertical-align: middle;
+  text-align: center;
+  font-size: 10pt;
+}
+
+/* Signature Section */
+.signature-table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+}
+
+.signature-cell {
+  width: 50%;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.signature-line {
+  border-bottom: 1px solid #333;
+  margin-bottom: 5px;
+  min-height: 30px;
+}
+
+.signature-label {
+  font-size: 9pt;
+  color: #666;
+}
+
+/* Footer */
+.footer {
+  margin-top: 30px;
+  text-align: center;
+  border-top: 2px solid #1a472a;
+  padding-top: 15px;
+}
+
+.footer-reg {
+  font-size: 9pt;
+  color: #555;
+}
+
+.footer-quote {
+  font-style: italic;
+  font-size: 10pt;
+  color: #1a472a;
+  margin-top: 10px;
+}
+
+/* Logo placeholder */
+.logo-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a472a, #2d5a3d);
+  display: inline-block;
+  text-align: center;
+  line-height: 80px;
+  color: #c9a227;
+  font-size: 24pt;
+  font-weight: bold;
+}
+
+.africa-icon {
+  width: 60px;
+  height: 60px;
+  margin: 10px auto;
+  text-align: center;
+}
+
+.africa-text {
+  font-size: 40pt;
+  color: #c9a227;
+}
+-->
+</style>
+<title>Soil of Africa - Sanction &amp; Outcome Confirmation Form</title>
+</head>
+
+<body lang=EN-ZA style='tab-interval:.5in'>
+<div class=Section1>
+
+<!-- HEADER -->
+<div class="header-container">
+  <table class="header-table">
+    <tr>
+      <td class="header-left">
+        <div class="logo-circle">SOA</div>
+      </td>
+      <td class="header-center">
+        <p class="org-name">SOIL OF AFRICA</p>
+        <p class="tagline">"Growing Communities, Cultivating Change"</p>
+        <div class="contact-info">
+          <strong>NPO Registration:</strong> 278-197 | <strong>PBO:</strong> 930080537<br>
+          <strong>Address:</strong> 1048 Pretorius Street, Hatfield, Pretoria, 0083<br>
+          <strong>Email:</strong> info@soilofafrica.org | <strong>Phone:</strong> +27 12 430 7773<br>
+          <strong>Website:</strong> www.soilofafrica.org
+        </div>
+      </td>
+      <td class="header-right">
+        <div class="africa-icon">
+          <span class="africa-text">🌍</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <div class="gold-bar"></div>
+</div>
+
+<!-- DOCUMENT TITLE -->
+<div class="document-title">
+  SANCTION &amp; OUTCOME CONFIRMATION FORM
+</div>
+
+<!-- SECTION 1: MEMBER DETAILS -->
+<div class="section-header">SECTION 1: MEMBER DETAILS</div>
+<div class="section-content">
+  <div class="form-row">
+    <span class="form-label">Full Name:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">ID Number:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Membership Number:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Province/Chapter:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Contact Number:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Email Address:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+</div>
+
+<!-- SECTION 2: CASE REFERENCE -->
+<div class="section-header">SECTION 2: CASE REFERENCE</div>
+<div class="section-content">
+  <div class="form-row">
+    <span class="form-label">Case Reference Number:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Hearing Date:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Hearing Venue:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Presiding Officer:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+</div>
+
+<!-- SECTION 3: NATURE OF TRANSGRESSION -->
+<div class="section-header">SECTION 3: NATURE OF TRANSGRESSION</div>
+<div class="section-content">
+  <p style="margin-bottom: 10px;">The member is found to have contravened the following provision(s) of the SOA Code of Conduct:</p>
+  <div class="form-field-long">&nbsp;</div>
+  <div class="form-field-long">&nbsp;</div>
+  <div class="form-field-long">&nbsp;</div>
+</div>
+
+<!-- SECTION 4: FINDING -->
+<div class="section-header">SECTION 4: FINDING</div>
+<div class="section-content">
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>GUILTY</strong> – The member is found guilty of the charge(s) as stated above.</span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>NOT GUILTY</strong> – The member is acquitted of all charges.</span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>PARTIALLY GUILTY</strong> – The member is found guilty of certain charges only (specify below).</span>
+  <p style="margin-top: 10px; font-weight: bold;">Remarks:</p>
+  <div class="form-field-long">&nbsp;</div>
+  <div class="form-field-long">&nbsp;</div>
+</div>
+
+<!-- SECTION 5: SANCTION IMPOSED -->
+<div class="section-header">SECTION 5: SANCTION IMPOSED</div>
+<div class="section-content">
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Verbal Warning</strong></span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Written Warning</strong></span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Final Written Warning</strong></span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Suspension</strong> – Duration: ________________</span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Demotion from Leadership Position</strong></span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Expulsion from Membership</strong></span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> <strong>Other</strong>: ________________________________</span>
+</div>
+
+<!-- SECTION 6: CONDITIONS -->
+<div class="section-header">SECTION 6: CONDITIONS (IF APPLICABLE)</div>
+<div class="section-content">
+  <p style="margin-bottom: 10px;">The following conditions apply to this sanction:</p>
+  <div class="form-field-long">&nbsp;</div>
+  <div class="form-field-long">&nbsp;</div>
+  <div class="form-field-long">&nbsp;</div>
+</div>
+
+<!-- SECTION 7: EFFECTIVE DATE -->
+<div class="section-header">SECTION 7: EFFECTIVE DATE</div>
+<div class="section-content">
+  <div class="form-row">
+    <span class="form-label">This sanction is effective from:</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+  <div class="form-row">
+    <span class="form-label">Review/Expiry Date (if applicable):</span>
+    <span class="form-field">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+  </div>
+</div>
+
+<!-- SECTION 8: APPEAL RIGHTS -->
+<div class="section-header">SECTION 8: RIGHT TO APPEAL</div>
+<div class="section-content">
+  <p>The member has the right to appeal this decision within <strong>14 (fourteen) calendar days</strong> of receiving this notice. 
+  Appeals must be submitted in writing to the National Disciplinary Committee at <strong>discipline@soilofafrica.org</strong>.</p>
+  <p style="margin-top: 10px;">The appeal must clearly state:</p>
+  <ul style="margin-left: 20px;">
+    <li>The grounds for appeal</li>
+    <li>Any new evidence not previously considered</li>
+    <li>The desired outcome</li>
+  </ul>
+</div>
+
+<!-- SECTION 9: MEMBER ACKNOWLEDGEMENT -->
+<div class="section-header">SECTION 9: MEMBER ACKNOWLEDGEMENT</div>
+<div class="section-content">
+  <p>I, the undersigned member, acknowledge receipt of this Sanction &amp; Outcome Confirmation Form.</p>
+  <span class="checkbox-item"><span class="checkbox">☐</span> I accept the sanction as imposed.</span>
+  <span class="checkbox-item"><span class="checkbox">☐</span> I intend to appeal this decision within the stipulated timeframe.</span>
+  <table class="signature-table">
+    <tr>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Member Signature</div>
+      </td>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Date</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- SECTION 10: PRESIDING OFFICER CONFIRMATION -->
+<div class="section-header">SECTION 10: PRESIDING OFFICER CONFIRMATION</div>
+<div class="section-content">
+  <table class="signature-table">
+    <tr>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Presiding Officer Name</div>
+      </td>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Designation</div>
+      </td>
+    </tr>
+    <tr>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Signature</div>
+      </td>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Date</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- SECTION 11: WITNESS -->
+<div class="section-header">SECTION 11: WITNESS (OPTIONAL)</div>
+<div class="section-content">
+  <table class="signature-table">
+    <tr>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Witness Name</div>
+      </td>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Designation/Role</div>
+      </td>
+    </tr>
+    <tr>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Signature</div>
+      </td>
+      <td class="signature-cell">
+        <div class="signature-line">&nbsp;</div>
+        <div class="signature-label">Date</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <p class="footer-reg">
+    <strong>SOIL OF AFRICA NPC</strong><br>
+    NPO Registration: 278-197 | PBO: 930080537<br>
+    1048 Pretorius Street, Hatfield, Pretoria, 0083 | Tel: +27 12 430 7773
+  </p>
+  <p class="footer-quote">
+    "Growing Communities, Cultivating Change"
+  </p>
+</div>
+
+</div>
+</body>
+</html>

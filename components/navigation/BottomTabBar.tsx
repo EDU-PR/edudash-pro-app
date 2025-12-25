@@ -223,6 +223,48 @@ const TAB_ITEMS: TabItem[] = [
     route: '/screens/settings', 
     roles: ['principal', 'principal_admin'] 
   },
+
+  // CEO / National Admin tabs (Soil of Africa)
+  { 
+    id: 'ceo-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/membership/ceo-dashboard', 
+    roles: ['national_admin'] 
+  },
+  { 
+    id: 'ceo-regions', 
+    label: 'Regions',
+    icon: 'map-outline', 
+    activeIcon: 'map', 
+    route: '/screens/membership/regional-managers', 
+    roles: ['national_admin'] 
+  },
+  { 
+    id: 'ceo-finance', 
+    label: 'Finance',
+    icon: 'wallet-outline', 
+    activeIcon: 'wallet', 
+    route: '/screens/membership/finance', 
+    roles: ['national_admin'] 
+  },
+  { 
+    id: 'ceo-members', 
+    label: 'Members',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/membership/members', 
+    roles: ['national_admin'] 
+  },
+  { 
+    id: 'ceo-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/settings', 
+    roles: ['national_admin'] 
+  },
 ];
 
 export function BottomTabBar() {
@@ -250,13 +292,24 @@ export function BottomTabBar() {
     return null;
   }
 
-  // Determine user role
+  // Determine user role - check for CEO/national_admin from organization membership
   const userRole = (profile?.role as string) || 'parent';
+  const memberType = (profile as any)?.organization_membership?.member_type;
+  const orgRole = (profile as any)?.organization_membership?.role;
   
-  // Filter tabs by role
-  const visibleTabs = TAB_ITEMS.filter(
-    item => !item.roles || item.roles.includes(userRole)
-  );
+  // Check if user is CEO (member_type === 'ceo' or role === 'national_admin')
+  const isCEO = memberType === 'ceo' || orgRole === 'national_admin';
+  
+  // Filter tabs by role - CEO gets ONLY CEO tabs, others get role-based tabs
+  const visibleTabs = TAB_ITEMS.filter(item => {
+    if (!item.roles) return false; // Require explicit role assignment
+    // If user is CEO, ONLY show CEO tabs (national_admin role)
+    if (isCEO) {
+      return item.roles.includes('national_admin');
+    }
+    // Otherwise, filter by profile role (exclude CEO tabs)
+    return item.roles.includes(userRole) && !item.roles.includes('national_admin');
+  });
 
   // Check if current route matches tab
   const isActive = (route: string) => {

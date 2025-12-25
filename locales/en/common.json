@@ -114,7 +114,10 @@
     "messages": "Messages",
     "calendar": "Calendar",
     "programs": "Programs",
-    "work": "Work"
+    "work": "Work",
+    "regions": "Regions",
+    "finance": "Finance",
+    "members": "Members"
   },
   "auth": {
     "resend_confirmation": "Resend confirmation email",

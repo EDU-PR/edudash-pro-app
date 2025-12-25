@@ -600,11 +600,11 @@ export class GoogleCalendarService implements IGoogleCalendarService {
       let preschoolId: string | null = null;
       try {
         const { data: me } = await supabase
-          .from('users')
-          .select('preschool_id')
+          .from('profiles')
+          .select('preschool_id, organization_id')
           .eq('id', userId)
           .maybeSingle();
-        preschoolId = (me as any)?.preschool_id || null;
+        preschoolId = (me as any)?.preschool_id || (me as any)?.organization_id || null;
       } catch { /* Intentional: non-fatal */ }
 
       await supabase.from('integration_audit_log').insert({

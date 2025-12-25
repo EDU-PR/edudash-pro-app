@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOA Official Letterhead</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --soa-green: #1a472a;
+      --soa-gold: #c9a227;
+      --soa-dark: #0d2818;
+      --soa-light: #f8f6f0;
+      --soa-cream: #fdfbf7;
+    }
+    
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: white;
+    }
+    
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 0;
+      margin: 0 auto;
+      background: white;
+      position: relative;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--soa-green) 0%, var(--soa-dark) 100%);
+      padding: 20px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 4px solid var(--soa-gold);
+    }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .logo-container {
+      width: 70px;
+      height: 70px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid var(--soa-gold);
+      overflow: hidden;
+    }
+    
+    .logo-container img {
+      width: 55px;
+      height: 55px;
+      object-fit: contain;
+    }
+    
+    /* Placeholder for logo if image not available */
+    .logo-placeholder {
+      width: 55px;
+      height: 55px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 14pt;
+      font-weight: 700;
+      color: var(--soa-green);
+    }
+    
+    .org-name {
+      color: white;
+    }
+    
+    .org-name h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 24pt;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+    
+    .org-name .tagline {
+      font-size: 9pt;
+      color: var(--soa-gold);
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    
+    .header-right {
+      text-align: right;
+      color: white;
+      font-size: 8pt;
+    }
+    
+    .header-right p {
+      margin-bottom: 2px;
+      opacity: 0.9;
+    }
+    
+    .header-right .highlight {
+      color: var(--soa-gold);
+      font-weight: 600;
+    }
+    
+    /* African Pattern Border */
+    .pattern-border {
+      height: 8px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--soa-gold) 0px,
+        var(--soa-gold) 15px,
+        var(--soa-green) 15px,
+        var(--soa-green) 30px,
+        var(--soa-gold) 30px,
+        var(--soa-gold) 35px,
+        transparent 35px,
+        transparent 40px
+      );
+    }
+    
+    /* Content */
+    .content {
+      padding: 30px 40px;
+      min-height: calc(297mm - 180px);
+    }
+    
+    /* Date & Reference */
+    .date-ref {
+      text-align: right;
+      margin-bottom: 30px;
+      font-size: 10pt;
+    }
+    
+    /* Recipient */
+    .recipient {
+      margin-bottom: 25px;
+    }
+    
+    /* Subject Line */
+    .subject {
+      font-weight: 600;
+      text-decoration: underline;
+      margin-bottom: 20px;
+      font-size: 11pt;
+    }
+    
+    /* Body Text */
+    .body-text {
+      text-align: justify;
+    }
+    
+    .body-text p {
+      margin-bottom: 15px;
+    }
+    
+    /* Signature Area */
+    .signature-area {
+      margin-top: 40px;
+    }
+    
+    .signature-area .closing {
+      margin-bottom: 50px;
+    }
+    
+    .signature-area .name {
+      font-weight: 600;
+    }
+    
+    .signature-area .title {
+      font-size: 10pt;
+      color: #555;
+    }
+    
+    /* Footer */
+    .footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--soa-dark);
+      color: white;
+      padding: 12px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+    }
+    
+    .footer-left {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .footer-left span {
+      opacity: 0.8;
+    }
+    
+    .footer-center {
+      color: var(--soa-gold);
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+    
+    .footer-right {
+      opacity: 0.7;
+    }
+    
+    /* Print Styles */
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      
+      .page {
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo-container">
+          <!-- Replace with actual logo path -->
+          <img src="/images/soa-logo.png" alt="SOA Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="logo-placeholder" style="display: none;">S.O.A</div>
+        </div>
+        <div class="org-name">
+          <h1>SOIL OF AFRICA</h1>
+          <div class="tagline">Vehicle of African Transformation</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <p class="highlight">#SIZOSEBENZANGENKANI</p>
+        <p>Est. 22 April 2021</p>
+        <p>Tel: +27 76 223 3981</p>
+        <p>Email: info@soilofafrica.org</p>
+        <p>www.soilofafrica.org</p>
+      </div>
+    </header>
+    
+    <div class="pattern-border"></div>
+    
+    <!-- Content Area -->
+    <main class="content">
+      <!-- Date & Reference -->
+      <div class="date-ref">
+        <p><strong>Date:</strong> ____________________</p>
+        <p><strong>Ref:</strong> S.O.A / ___ / ___ / ___</p>
+      </div>
+      
+      <!-- Recipient -->
+      <div class="recipient">
+        <p>To: ____________________</p>
+        <p>____________________</p>
+        <p>____________________</p>
+      </div>
+      
+      <!-- Subject -->
+      <p class="subject">RE: ________________________________________</p>
+      
+      <!-- Body -->
+      <div class="body-text">
+        <p>Dear ____________________,</p>
+        
+        <p>
+          [Your letter content goes here. This template provides a professional letterhead 
+          that can be used for all official Soil of Africa correspondence.]
+        </p>
+        
+        <p>
+          [Continue with the main body of your letter...]
+        </p>
+        
+        <p>
+          [Additional paragraphs as needed...]
+        </p>
+      </div>
+      
+      <!-- Signature -->
+      <div class="signature-area">
+        <p class="closing">Yours faithfully,</p>
+        
+        <p class="name">____________________</p>
+        <p class="title">____________________</p>
+        <p class="title">Soil of Africa</p>
+      </div>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-left">
+        <span>📧 info@soilofafrica.org</span>
+        <span>📱 +27 76 223 3981</span>
+        <span>🌐 www.soilofafrica.org</span>
+      </div>
+      <div class="footer-center">#SIZOSEBENZANGENKANI</div>
+      <div class="footer-right">Soil of Africa © 2021</div>
+    </footer>
+  </div>
+</body>
+</html>

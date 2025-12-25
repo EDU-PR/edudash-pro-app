@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOA Official Document</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --soa-green: #1a472a;
+      --soa-gold: #c9a227;
+      --soa-dark: #0d2818;
+      --soa-light: #f8f6f0;
+      --soa-cream: #fdfbf7;
+    }
+    
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      font-size: 11pt;
+      line-height: 1.5;
+      color: #1a1a1a;
+      background: white;
+    }
+    
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 0;
+      margin: 0 auto;
+      background: white;
+      position: relative;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--soa-green) 0%, var(--soa-dark) 100%);
+      padding: 20px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 4px solid var(--soa-gold);
+    }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .logo-container {
+      width: 70px;
+      height: 70px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid var(--soa-gold);
+    }
+    
+    .logo-container img {
+      width: 55px;
+      height: 55px;
+      object-fit: contain;
+    }
+    
+    .org-name {
+      color: white;
+    }
+    
+    .org-name h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 24pt;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+    
+    .org-name .tagline {
+      font-size: 9pt;
+      color: var(--soa-gold);
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    
+    .header-right {
+      text-align: right;
+      color: white;
+      font-size: 8pt;
+    }
+    
+    .header-right p {
+      margin-bottom: 2px;
+      opacity: 0.9;
+    }
+    
+    .header-right .highlight {
+      color: var(--soa-gold);
+      font-weight: 600;
+    }
+    
+    /* African Pattern Border */
+    .pattern-border {
+      height: 8px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--soa-gold) 0px,
+        var(--soa-gold) 15px,
+        var(--soa-green) 15px,
+        var(--soa-green) 30px,
+        var(--soa-gold) 30px,
+        var(--soa-gold) 35px,
+        transparent 35px,
+        transparent 40px
+      );
+    }
+    
+    /* Content */
+    .content {
+      padding: 25px 35px;
+      min-height: calc(297mm - 180px);
+    }
+    
+    /* Document Title */
+    .document-title {
+      text-align: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid var(--soa-green);
+    }
+    
+    .document-title h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 16pt;
+      color: var(--soa-green);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+    }
+    
+    .document-title .subtitle {
+      font-size: 9pt;
+      color: #666;
+      font-style: italic;
+    }
+    
+    /* Sections */
+    .section {
+      margin-bottom: 20px;
+    }
+    
+    .section-header {
+      background: linear-gradient(90deg, var(--soa-green), var(--soa-dark));
+      color: white;
+      padding: 8px 15px;
+      font-size: 10pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      border-left: 4px solid var(--soa-gold);
+    }
+    
+    .section-content {
+      padding: 0 10px;
+    }
+    
+    /* Form Fields */
+    .field-row {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+    
+    .field {
+      flex: 1;
+    }
+    
+    .field-label {
+      font-size: 9pt;
+      color: #555;
+      font-weight: 500;
+      margin-bottom: 3px;
+    }
+    
+    .field-value {
+      border-bottom: 1px solid #333;
+      min-height: 20px;
+      padding: 2px 5px;
+      font-size: 10pt;
+    }
+    
+    .field-value.blank {
+      min-width: 150px;
+    }
+    
+    /* Checkboxes */
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin: 10px 0;
+    }
+    
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10pt;
+    }
+    
+    .checkbox {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--soa-green);
+      display: inline-block;
+    }
+    
+    /* Text Areas */
+    .text-area {
+      border: 1px solid #ccc;
+      min-height: 50px;
+      padding: 8px;
+      margin: 10px 0;
+      background: var(--soa-cream);
+    }
+    
+    /* Signature Block */
+    .signature-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 25px;
+      margin-top: 15px;
+    }
+    
+    .signature-block {
+      border: 1px solid #ddd;
+      padding: 15px;
+      background: var(--soa-cream);
+    }
+    
+    .signature-block .title {
+      font-size: 9pt;
+      font-weight: 600;
+      color: var(--soa-green);
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--soa-gold);
+    }
+    
+    .signature-line {
+      border-bottom: 1px solid #333;
+      height: 30px;
+      margin-bottom: 5px;
+    }
+    
+    .signature-label {
+      font-size: 8pt;
+      color: #666;
+    }
+    
+    /* Seal Area */
+    .seal-area {
+      text-align: center;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    
+    .seal-box {
+      width: 120px;
+      height: 120px;
+      border: 3px dashed var(--soa-gold);
+      border-radius: 50%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--soa-cream);
+    }
+    
+    .seal-box span {
+      font-size: 8pt;
+      color: #999;
+      text-align: center;
+    }
+    
+    /* Footer */
+    .footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--soa-dark);
+      color: white;
+      padding: 12px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+    }
+    
+    .footer-left {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .footer-left span {
+      opacity: 0.8;
+    }
+    
+    .footer-center {
+      color: var(--soa-gold);
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+    
+    .footer-right {
+      opacity: 0.7;
+    }
+    
+    /* Print Styles */
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      
+      .page {
+        page-break-after: always;
+      }
+    }
+    
+    /* Helper Classes */
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .mt-10 { margin-top: 10px; }
+    .mb-10 { margin-bottom: 10px; }
+    .bold { font-weight: 600; }
+    .italic { font-style: italic; }
+    .small { font-size: 9pt; }
+    .gold { color: var(--soa-gold); }
+    .green { color: var(--soa-green); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo-container">
+          <img src="/images/soa-logo.png" alt="SOA Logo">
+        </div>
+        <div class="org-name">
+          <h1>SOIL OF AFRICA</h1>
+          <div class="tagline">Vehicle of African Transformation</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <p class="highlight">#SIZOSEBENZANGENKANI</p>
+        <p>Est. 22 April 2021</p>
+        <p>Tel: +27 76 223 3981</p>
+        <p>www.soilofafrica.org</p>
+      </div>
+    </header>
+    
+    <div class="pattern-border"></div>
+    
+    <!-- Content -->
+    <main class="content">
+      <!-- Document Title -->
+      <div class="document-title">
+        <h2>Sanction and Outcome Confirmation Form</h2>
+        <div class="subtitle">(Official Confirmation of Disciplinary Decision)</div>
+      </div>
+      
+      <!-- Section A -->
+      <div class="section">
+        <div class="section-header">Section A: Organisational & Case Details</div>
+        <div class="section-content">
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Organisation</div>
+              <div class="field-value">Soil of Africa (S.O.A.)</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Disciplinary Structure</div>
+              <div class="checkbox-group">
+                <div class="checkbox-item"><span class="checkbox"></span> Branch</div>
+                <div class="checkbox-item"><span class="checkbox"></span> Region</div>
+                <div class="checkbox-item"><span class="checkbox"></span> Province</div>
+                <div class="checkbox-item"><span class="checkbox"></span> National (NDC)</div>
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Name of Structure</div>
+              <div class="field-value blank"></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Case Reference Number</div>
+              <div class="field-value">S.O.A / SAN / ___ / ___</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Linked Hearing Reference</div>
+              <div class="field-value">S.O.A / DH / ___ / ___</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Date of Hearing</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section B -->
+      <div class="section">
+        <div class="section-header">Section B: Particulars of the Member</div>
+        <div class="section-content">
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Full Name</div>
+              <div class="field-value blank"></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Membership Number</div>
+              <div class="field-value blank"></div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Position / Deployment</div>
+              <div class="field-value blank"></div>
+            </div>
+            <div class="field">
+              <div class="field-label">Structure</div>
+              <div class="field-value blank"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section C -->
+      <div class="section">
+        <div class="section-header">Section C: Finding Confirmed</div>
+        <div class="section-content">
+          <p class="small mb-10">Following the disciplinary hearing conducted in accordance with the S.O.A. Constitution and Code of Conduct, the Disciplinary Committee records the following finding:</p>
+          <div class="checkbox-group">
+            <div class="checkbox-item"><span class="checkbox"></span> Not Guilty</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Guilty</div>
+          </div>
+          <div class="field mt-10">
+            <div class="field-label">Charge(s) on which the finding is based:</div>
+            <div class="text-area"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section D -->
+      <div class="section">
+        <div class="section-header">Section D: Sanction Imposed</div>
+        <div class="section-content">
+          <p class="small mb-10">In terms of the S.O.A. Code of Conduct and disciplinary procedures, the following sanction(s) are hereby formally imposed:</p>
+          <div class="checkbox-group">
+            <div class="checkbox-item"><span class="checkbox"></span> Reprimand</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Community Service</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Suspension</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Expulsion</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Combination of Sanctions</div>
+          </div>
+          <div class="field mt-10">
+            <div class="field-label bold">Sanction Details (Mandatory)</div>
+          </div>
+          <div class="field">
+            <div class="field-label">Description of Sanction:</div>
+            <div class="text-area"></div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Duration (From)</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Duration (To)</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">Conditions Attached to Sanction (if any):</div>
+            <div class="text-area"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-left">
+        <span>📧 info@soilofafrica.org</span>
+        <span>📱 +27 76 223 3981</span>
+      </div>
+      <div class="footer-center">#SIZOSEBENZANGENKANI</div>
+      <div class="footer-right">Page 1 of 2</div>
+    </footer>
+  </div>
+  
+  <!-- Page 2 -->
+  <div class="page">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo-container">
+          <img src="/images/soa-logo.png" alt="SOA Logo">
+        </div>
+        <div class="org-name">
+          <h1>SOIL OF AFRICA</h1>
+          <div class="tagline">Vehicle of African Transformation</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <p class="highlight">#SIZOSEBENZANGENKANI</p>
+        <p>Est. 22 April 2021</p>
+        <p>Tel: +27 76 223 3981</p>
+        <p>www.soilofafrica.org</p>
+      </div>
+    </header>
+    
+    <div class="pattern-border"></div>
+    
+    <main class="content">
+      <!-- Section E -->
+      <div class="section">
+        <div class="section-header">Section E: Effective Date & Status</div>
+        <div class="section-content">
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Effective Date of Sanction</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+          </div>
+          <div class="checkbox-group">
+            <div class="checkbox-item"><span class="checkbox"></span> Immediate Effect</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Subject to NDC Confirmation</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Confirmed by NDC</div>
+          </div>
+          <div class="field-row mt-10">
+            <div class="field">
+              <div class="field-label">Date of NDC Confirmation (if applicable)</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section F -->
+      <div class="section">
+        <div class="section-header">Section F: Organisational Consequences</div>
+        <div class="section-content">
+          <p class="small mb-10">As a consequence of the sanction imposed, the member:</p>
+          <div class="checkbox-group" style="flex-direction: column; gap: 8px;">
+            <div class="checkbox-item"><span class="checkbox"></span> Is relieved of all duties and deployments</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Is barred from representing S.O.A. in any capacity</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Must surrender S.O.A. property, insignia, or uniform</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Is reinstated upon completion of sanction</div>
+            <div class="checkbox-item"><span class="checkbox"></span> Other (specify): ________________________________</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section G -->
+      <div class="section">
+        <div class="section-header">Section G: Right to Appeal</div>
+        <div class="section-content">
+          <p class="small mb-10">The sanctioned member is hereby informed of their right to appeal in terms of the S.O.A. Constitution.</p>
+          <div class="field-row">
+            <div class="field">
+              <div class="field-label">Appeal Must Be Lodged By</div>
+              <div class="field-value">___ / ___ / ______</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Appeal Lodged</div>
+              <div class="checkbox-group">
+                <div class="checkbox-item"><span class="checkbox"></span> Yes</div>
+                <div class="checkbox-item"><span class="checkbox"></span> No</div>
+              </div>
+            </div>
+          </div>
+          <p class="small italic mt-10">Failure to appeal within the prescribed period renders this decision final and binding.</p>
+        </div>
+      </div>
+      
+      <!-- Section H -->
+      <div class="section">
+        <div class="section-header">Section H: Confirmation & Declaration</div>
+        <div class="section-content">
+          <p class="small">This form serves as the official confirmation and enforcement instrument of the disciplinary outcome. All relevant structures are instructed to give immediate effect to this sanction in accordance with organisational discipline and command authority.</p>
+        </div>
+      </div>
+      
+      <!-- Section I -->
+      <div class="section">
+        <div class="section-header">Section I: Authorised Signatures</div>
+        <div class="section-content">
+          <div class="signature-grid">
+            <div class="signature-block">
+              <div class="title">Chairperson / Presiding Officer</div>
+              <div class="field-label">Name:</div>
+              <div class="signature-line"></div>
+              <div class="field-label">Signature:</div>
+              <div class="signature-line"></div>
+              <div class="field-label">Date: ___ / ___ / ______</div>
+            </div>
+            <div class="signature-block">
+              <div class="title">Secretary (Structure / Province / National)</div>
+              <div class="field-label">Name:</div>
+              <div class="signature-line"></div>
+              <div class="field-label">Signature:</div>
+              <div class="signature-line"></div>
+              <div class="field-label">Date: ___ / ___ / ______</div>
+            </div>
+          </div>
+          <div class="signature-grid" style="grid-template-columns: 1fr;">
+            <div class="signature-block">
+              <div class="title">National Disciplinary Committee Representative (if applicable)</div>
+              <div class="field-row">
+                <div class="field">
+                  <div class="field-label">Name:</div>
+                  <div class="signature-line"></div>
+                </div>
+                <div class="field">
+                  <div class="field-label">Signature:</div>
+                  <div class="signature-line"></div>
+                </div>
+                <div class="field">
+                  <div class="field-label">Date: ___ / ___ / ______</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Section J -->
+      <div class="section">
+        <div class="section-header">Section J: Acknowledgement by Member</div>
+        <div class="section-content">
+          <p class="small mb-10">I acknowledge receipt of this Sanction and Outcome Confirmation Form and that its contents have been explained to me.</p>
+          <div class="signature-grid" style="grid-template-columns: 1fr;">
+            <div class="signature-block">
+              <div class="field-row">
+                <div class="field">
+                  <div class="field-label">Name:</div>
+                  <div class="signature-line"></div>
+                </div>
+                <div class="field">
+                  <div class="field-label">Signature:</div>
+                  <div class="signature-line"></div>
+                </div>
+                <div class="field">
+                  <div class="field-label">Date: ___ / ___ / ______</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="small italic text-center mt-10">(Refusal to sign does not invalidate this sanction.)</p>
+        </div>
+      </div>
+      
+      <!-- Section K -->
+      <div class="section">
+        <div class="section-header">Section K: Official Seal</div>
+        <div class="section-content">
+          <div class="seal-area">
+            <p class="small bold mb-10">SOIL OF AFRICA (S.O.A.) CONSTITUTIONAL SEAL</p>
+            <div class="seal-box">
+              <span>OFFICIAL<br>STAMP / SEAL</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-left">
+        <span>📧 info@soilofafrica.org</span>
+        <span>📱 +27 76 223 3981</span>
+      </div>
+      <div class="footer-center">#SIZOSEBENZANGENKANI</div>
+      <div class="footer-right">Page 2 of 2</div>
+    </footer>
+  </div>
+</body>
+</html>
