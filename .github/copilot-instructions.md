@@ -2,70 +2,295 @@
 
 ## Project Overview
 
-- **EduDash Pro** is a multi-tenant educational platform with advanced security, agentic AI features, and strict role-based access control (RBAC).
-- Backend: **Supabase** (Postgres, Auth, Functions), custom SQL migrations, Row-Level Security (RLS) on all sensitive tables.
-- Frontend: React Native (Expo), custom scripts, WhatsApp integration, and AI-powered workflows.
-- Agentic AI: Implements Plan-Act-Reflect loop, tool registry, and telemetry for all agent actions.
+**EduDash Pro** is a multi-tenant, mobile-first educational platform with advanced security, agentic AI features, and strict role-based access control (RBAC).
+
+**Architecture:**
+- **Mobile**: React Native + Expo (iOS/Android/Web via `expo-router`)
+- **Web**: Next.js 14 App Router (separate codebase in `/web`)
+- **Backend**: Supabase (PostgreSQL with RLS, Auth, Edge Functions)
+- **AI**: Claude (Anthropic), OpenAI GPT-4, Gemini
+- **Payments**: PayFast (South Africa)
+- **Video/Calls**: Daily.co WebRTC integration
+- **Analytics**: PostHog, custom telemetry
+
+**Multi-Tenant Model:**
+- Each preschool is a tenant (`preschool_id` / `organization_id`)
+- All tables enforce tenant isolation via RLS policies
+- Super-Admin role exists at platform level (bypasses RLS for monitoring)
 
 ## Key Architectural Patterns
 
-- **Agentic AI System**: The core agent logic is in `services/AgentOrchestrator.ts`, which runs a Plan-Act-Reflect loop. Agents use tools via the `DashToolRegistry` (`services/modules/DashToolRegistry.ts`).
-- **Tool Registry**: All agent tools are registered and executed through `DashToolRegistry`. Tools must specify risk level and input schema. See `AgentTool` interface for details.
-- **Telemetry & Feedback**: All agent actions, decisions, and errors are tracked in Supabase tables (`ai_events`, `ai_feedback`, `ai_task_runs`). RLS policies enforce tenant isolation. See `supabase/migrations/20251013081717_agent-telemetry-foundation.sql`.
-- **RBAC**: Permissions and roles are defined in `lib/rbac/roles-permissions.json` and TypeScript helpers in `lib/rbac/types.ts`. Always use these utilities for access checks.
-- **Database Migrations**: SQL scripts in `scripts/` must be run in strict order (see `scripts/README.md`). Security and educational schemas are separated for clarity and safety.
-- **Supabase Integration**: All data, auth, and functions managed via Supabase. RLS is always enabled. See `supabase/README.md` for setup.
-- **AI Features**: Quotas and feature flags managed in DB (`user_ai_tiers`, `feature_flags`).
+### 1. Hybrid Mobile + Web Architecture
+- **Mobile app** (`/app`, `/components`, `/services`): Expo Router, React Native
+- **Web app** (`/web/src`): Next.js 14 with App Router, TailwindCSS
+- **Shared logic**: Database types (`lib/database.types.ts`), RBAC utilities, AI service clients
+- Both platforms use same Supabase backend with identical auth flow
+
+### 2. Multi-Tenant with RLS
+- **Tenant Isolation**: Every sensitive table has `preschool_id` or `organization_id`
+- **RLS Policies**: SQL migrations enforce row-level security (see `migrations/`)
+- **Helper Function**: `current_user_org_id()` in SQL determines user's tenant from JWT
+- **Super-Admin Bypass**: Super-admins use service role for cross-tenant operations
+
+### 3. Agentic AI System
+- **Orchestrator**: `services/AgentOrchestrator.ts` runs Plan-Act-Reflect loop
+- **Tool Registry**: `services/dash-ai/DashToolRegistry.ts` - all tools registered with risk levels
+- **AI Proxy**: `supabase/functions/ai-proxy/` - Edge Function proxies Claude API with quota/PII checks
+- **Streaming**: Web uses SSE; mobile uses HTTP polling (WebSocket planned Phase 2)
+- **Telemetry**: All AI actions logged to `ai_events`, `ai_task_runs` tables
+
+### 4. RBAC System
+- **Roles**: `super_admin`, `principal`, `teacher`, `parent`, `student`
+- **Permissions**: Defined in `lib/rbac/roles-permissions.json` (machine-readable)
+- **Usage**: Import `roleHasPermission` from `lib/rbac/types.ts`
+- **Enhanced Profiles**: `fetchEnhancedUserProfile()` returns profile with `hasRole()`, `hasCapability()` methods
+- **Validation**: Run `npx tsx lib/rbac/validate.ts` to verify system integrity
+
+### 5. Authentication Flow
+- **Context**: `contexts/AuthContext.tsx` manages `user`, `session`, `profile`, `permissions`
+- **Session Manager**: `lib/sessionManager.ts` handles login/logout/refresh
+- **Route Guards**: `hooks/useRouteGuard.ts` enforces auth + mobile-web restrictions
+- **Web Client**: `web/src/lib/supabase/client.ts` uses `@supabase/ssr` for Next.js (singleton)
+- **Mobile Client**: `lib/supabase.ts` uses standard `@supabase/supabase-js` (`assertSupabase()`)
+
+### 6. Supabase Edge Functions
+All functions use `Deno.serve()` pattern with CORS handling:
+- **AI Services**: `ai-proxy` (Claude/OpenAI proxying with quota), `ai-gateway`, `ai-usage`
+- **Payment Webhooks**: `payfast-webhook`, `payments-webhook`, `revenuecat-webhook`
+- **Sync Services**: Bi-directional sync with external edusite platform
+- **Notifications**: `send-push`, `notifications-dispatcher`, `push-queue-processor`
+- **Daily.co**: `daily-token`, `daily-rooms` (video call token generation)
+- **Health**: Include `/health` endpoints for monitoring
 
 ## Developer Workflows
 
-- **Agent Tooling**: To add or update agent tools, edit `services/modules/DashToolRegistry.ts`. Register tools with clear input schema and risk level.
-- **Agent Telemetry**: All agent actions are logged in Supabase (`ai_events`). Use SQL migrations in `supabase/migrations/` to update schema.
-- **RBAC Validation**: Run `npx tsx lib/rbac/validate.ts` to validate role/permission logic. Output: `🎉 All validations passed! RBAC system is ready.`
-- **Database Setup**: Follow order in `scripts/README.md` to initialize/reset DB. SuperAdmin must exist before enhancements.
-- **Local Dev**: Use `npm install` and `npm start` for React Native app. For file picker support, run `npm run prebuild` first.
-- **Supabase Functions**: Use Supabase CLI for local dev and deployment. See `supabase/README.md` for CLI usage.
-- **Build/Deploy**: Android builds use EAS (`npm run build:android:apk` or `npm run build:android:aab`).
-- **Testing**: Use scripts in `scripts/` and test helpers in `test-*.js`.
+### Mobile Development
+```bash
+# Install dependencies
+npm install
+
+# Start Expo dev server
+npm start
+
+# Android emulator (with port forwarding)
+npm run dev:android
+
+# iOS simulator
+npm run ios
+
+# Clear cache and restart
+npm run start:clear
+```
+
+### Web Development
+```bash
+cd web
+
+# Install dependencies
+npm install
+
+# Start Next.js dev server (port 3000)
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview build
+npm run preview
+```
+
+### Database Migrations
+```bash
+# Create new migration
+supabase migration new <descriptive_name>
+
+# Lint SQL (REQUIRED before push)
+npm run lint:sql
+
+# Push to remote (NO --local flag)
+supabase db push
+
+# Verify no drift
+supabase db diff
+```
+
+### RBAC Validation
+```bash
+# Validate roles and permissions
+npx tsx lib/rbac/validate.ts
+
+# Expected output: "🎉 All validations passed! RBAC system is ready."
+```
+
+### Build Android APK/AAB
+```bash
+# Development APK (local build)
+npm run build:android:apk
+
+# Production AAB (EAS cloud build)
+npm run build:android:aab
+
+# Preview build
+npm run build:android:preview
+```
+
+### Testing & Quality
+```bash
+# Run tests
+npm test
+
+# Type checking
+npm run typecheck
+
+# Strict type checking (for new code)
+npm run typecheck:strict
+
+# Lint with auto-fix
+npm run lint:fix
+
+# Format code
+npm run format
+
+# Check for console.log statements
+npm run check:console
+
+# Check file sizes (WARP.md compliance)
+npm run check:file-sizes
+```
 
 ## Project-Specific Conventions
 
-- **Agent Prompts**: System instructions are prepended to user prompts. Use `getUserEditablePrompt` and related utilities in `web/src/lib/utils/prompt-filter.ts` to filter/edit prompts.
-- **Tool Use**: All agent actions must use registered tools. Avoid direct calls to external services; wrap them as tools in the registry.
-- **Access Control**: Always use RBAC helpers, never hardcoded role checks.
-- **SQL Scripts**: Source of truth for schema/security. Never edit DB manually.
-- **Feature Flags & AI Quotas**: Managed in DB, not code.
-- **SuperAdmin**: Always `superadmin@edudashpro.org.za` with 2FA enabled.
-- **Fix Unrelated Errors**: When working on a task, if you encounter unrelated errors or issues in the codebase, fix them as part of your changes to improve overall code quality.
+### File Organization
+- **React Native components**: `/components/<domain>/<Component>.tsx`
+- **Next.js components**: `/web/src/components/<domain>/<Component>.tsx`
+- **Services**: `/services/<ServiceName>.ts` (mobile-focused, ≤500 lines)
+- **Hooks**: `/hooks/use<HookName>.ts` (≤200 lines)
+- **Context**: `/contexts/<Name>Context.tsx`
+- **Types**: `/lib/database.types.ts` (auto-generated), custom types in service files
+- **Utilities**: `/lib/utils/<util-name>.ts`, `/web/src/lib/utils/<util-name>.ts`
+
+### Styling Patterns
+- **Mobile**: React Native `StyleSheet.create()` at bottom of file
+- **Web**: TailwindCSS utility classes
+- **Theming**: Use `useTheme()` context for mobile, Tailwind dark mode for web
+- **Split Large Styles**: If StyleSheet >200 lines, extract to `<Component>.styles.ts`
+
+### AI Integration
+- **NEVER call AI APIs directly from client** - always use Edge Functions
+- **Always use** `supabase/functions/ai-proxy/` Edge Function for AI calls
+- **Client SDK**: `services/dash-ai/DashAIClient.ts` wraps Edge Function calls
+- **Streaming**: Use `onChunk` callback for SSE streaming on web
+- **Tool Calls**: Register in `services/dash-ai/DashToolRegistry.ts` with `claudeToolDefinition`
+- **Quota**: Enforced at Edge Function level based on user tier
+
+### Database Access
+- **Web (Next.js)**: Use `createClient()` from `@/lib/supabase/client` (singleton pattern)
+- **Mobile (Expo)**: Use `assertSupabase()` from `@/lib/supabase` (throws if unavailable)
+- **Edge Functions**: Create new client with `SUPABASE_SERVICE_ROLE_KEY`
+- **Always enforce RLS**: Use user's session token, never bypass unless super-admin operation
+
+### Multi-Tenant Queries
+```typescript
+// Always filter by user's organization (RLS enforces this, but be explicit)
+const { data } = await supabase
+  .from('lessons')
+  .select('*')
+  .eq('preschool_id', userProfile.organization_id);
+```
+
+### Permission Checks
+```typescript
+import { roleHasPermission } from '@/lib/rbac/types';
+
+// Check permission before action
+if (!roleHasPermission(userRole, 'manage_courses')) {
+  throw new Error('Insufficient permissions');
+}
+
+// Or use enhanced profile methods
+if (!profile?.hasCapability('ai_lesson_generation')) {
+  return <UpgradePrompt />;
+}
+```
+
+### Error Handling
+- **Mobile**: Use `ErrorBoundary.tsx` for component-level errors
+- **Web**: Next.js error boundaries + custom error pages
+- **Sentry**: Errors auto-captured via `sentry-expo` (mobile) and `@sentry/nextjs` (web)
+- **Logging**: Use `lib/logger.ts` for structured logging (never `console.log`)
+
+### Code Quality Rules
+- **Fix unrelated errors**: If you encounter bugs/issues while working, fix them
+- **No console.log in production**: Use `logger` utilities
+- **Type safety**: Avoid `any`, use proper TypeScript types
+- **Component size limits**: See WARP.md section below
+- **Extract hooks**: Move complex state/effects to custom hooks
+- **Service layer**: Isolate all API calls in service files
 
 ## Integration Points
 
-- **Supabase**: All data, auth, and functions managed via Supabase. RLS always enabled.
-- **AI Services**: Quota-controlled, tied to user roles/tiers in DB. See `lib/ai/capabilities.ts` for tier/capability matrix.
-- **WhatsApp Integration**: See `components/whatsapp/DashWhatsAppConnector.tsx` for agent-powered onboarding and suggestions.
-- **PDF Export**: See `web/src/lib/utils/pdf-export.ts` for agent-driven PDF generation.
+### Supabase
+- **Database**: PostgreSQL with RLS enabled on all sensitive tables
+- **Auth**: Email/password, Google OAuth, OTP, 2FA
+- **Storage**: User uploads, attachments, profile images
+- **Realtime**: Subscriptions for live updates (lessons, messages)
+- **Edge Functions**: 50+ functions for AI, payments, webhooks, sync
+
+### AI Services
+- **Anthropic Claude**: Primary AI model (Claude 3.5 Sonnet, Claude 3 Haiku)
+- **OpenAI**: GPT-4 for specific use cases
+- **Gemini**: Alternative model for certain features
+- **Quotas**: Managed in `user_ai_tiers` table by subscription tier
+- **Capabilities**: Defined in `lib/ai/capabilities.ts`
+
+### Payment Integration
+- **PayFast**: South African payment gateway
+- **Webhooks**: `supabase/functions/payfast-webhook/`
+- **Subscription Tiers**: Free, Basic, Pro, Enterprise
+- **Billing**: Managed via PayFast dashboard + Supabase tables
+
+### Video Calls (Daily.co)
+- **Token Generation**: `supabase/functions/daily-token/`
+- **Room Management**: `supabase/functions/daily-rooms/`
+- **Components**: `components/calls/VideoCallInterface.tsx`, `VoiceCallInterface.tsx`
+- **Provider**: `components/calls/CallProvider.tsx` manages call state
+
+### Notifications
+- **Push Notifications**: Expo Notifications (mobile), Web Push (web)
+- **Multi-Account**: `lib/NotificationRouter.ts` routes to correct user profile
+- **Queue**: `supabase/functions/push-queue-processor/` for batch sending
+- **Context**: `contexts/NotificationContext.tsx`
 
 ## References
-- RBAC: `lib/rbac/README.md`, `lib/rbac/types.ts`, `lib/rbac/roles-permissions.json`
-- Database: `scripts/README.md`, `scripts/*.sql`
-- Supabase: `supabase/README.md`, `.env.example`
-- Agentic AI: `services/AgentOrchestrator.ts`, `services/modules/DashToolRegistry.ts`, `supabase/migrations/20251013081717_agent-telemetry-foundation.sql`
-- Capabilities: `lib/ai/capabilities.ts`, `web/src/lib/ai/capabilities.ts`
-- Prompt Filtering: `web/src/lib/utils/prompt-filter.ts`
-- WhatsApp: `components/whatsapp/DashWhatsAppConnector.tsx`
-- PDF Export: `web/src/lib/utils/pdf-export.ts`
+
+### RBAC
+- `lib/rbac/README.md` - System overview
+- `lib/rbac/types.ts` - TypeScript helpers
+- `lib/rbac/roles-permissions.json` - Permission matrix
+
+### Database
+- `scripts/README.md` - Setup order
+- `scripts/01_enhanced_security_system.sql` - Core security tables
+- `scripts/02_educational_schema.sql` - Educational platform tables
+- `migrations/` - All schema changes
+
+### Supabase
+- `supabase/README.md` - CLI usage
+- `supabase/functions/` - Edge Functions
+- `.env.example` - Required environment variables
+
+### Agentic AI
+- `services/AgentOrchestrator.ts` - Main agent loop
+- `services/dash-ai/DashToolRegistry.ts` - Tool registration
+- `services/dash-ai/DashAIClient.ts` - API client
+- `supabase/functions/ai-proxy/` - AI proxy Edge Function
+
+### Capabilities & Features
+- `lib/ai/capabilities.ts` - Mobile AI capabilities
+- `web/src/lib/ai/capabilities.ts` - Web AI capabilities
 
 
 ## WARP.md Standards (NON-NEGOTIABLE)
-
-### ⚠️ CRITICAL: Modular Code Requirements (ENFORCED ON ALL NEW CODE)
-**Before creating or modifying ANY file, you MUST:**
-1. Check if the resulting file will exceed size limits
-2. If yes, split into multiple files BEFORE writing code
-3. Never create a single file that violates these limits - plan the split upfront
-4. When adding to existing files, check current line count first and split if needed
-
-**This is NON-NEGOTIABLE. Violations create technical debt and merge conflicts.**
 
 ### Database Operations
 - **NEVER** use `supabase start` or local Docker instances
@@ -82,31 +307,6 @@
 - Hooks: ≤200 lines
 - Type definitions: ≤300 lines (except auto-generated)
 - StyleSheet definitions: Use separate `styles.ts` for components >200 lines
-
-**⚠️ BEFORE writing new code, calculate expected lines and split proactively!**
-
-### Mandatory File Splitting Workflow
-When creating new features:
-1. **Estimate size** - Will this exceed limits? If unsure, assume yes.
-2. **Plan structure first** - Define file breakdown before writing code
-3. **Create index files** - Use barrel exports for clean imports
-4. **Extract early** - Don't wait until file is too large
-
-```
-# Good: Plan modular structure upfront
-components/membership/
-  ├── index.ts              # Barrel exports
-  ├── MemberCard.tsx        # ~150 lines
-  ├── MemberList.tsx        # ~200 lines
-  ├── MemberFilters.tsx     # ~100 lines
-  ├── hooks/
-  │   ├── useMembersList.ts # ~150 lines
-  │   └── useMemberDetail.ts# ~100 lines
-  └── types.ts              # ~80 lines
-
-# Bad: Single monolithic file
-components/membership/MembershipScreen.tsx  # 800+ lines ❌
-```
 
 ### When to Split Files
 Split immediately if ANY apply:
@@ -147,33 +347,36 @@ Split immediately if ANY apply:
 - Android-first testing approach
 - Feature flags via environment variables
 
-**Example: Checking permissions in code**
+## Examples
+
+### Permission Check
 ```typescript
-import { roleHasPermission } from './lib/rbac/types';
-if (roleHasPermission(user.role, 'manage_courses')) { /* ... */ }
+import { roleHasPermission } from '@/lib/rbac/types';
+
+// Before performing action
+if (!roleHasPermission(user.role, 'manage_courses')) {
+  throw new Error('Insufficient permissions');
+}
 ```
 
-**Example: Running RBAC validation**
+### Database Migration
 ```bash
-npx tsx lib/rbac/validate.ts
-```
+# 1. Create migration
+supabase migration new add_lesson_templates
 
-**Example: Database migration workflow**
-```bash
-# Create migration
-supabase migration new add_new_feature
+# 2. Edit SQL file in migrations/
 
-# Lint SQL
+# 3. Lint
 npm run lint:sql
 
-# Push to remote
+# 4. Push
 supabase db push
 
-# Verify no drift
+# 5. Verify
 supabase db diff
 ```
 
-**Example: Splitting oversized component**
+### Splitting Oversized Component
 ```typescript
 // Before: components/TeacherDashboard.tsx (800 lines)
 // After:
@@ -181,4 +384,31 @@ supabase db diff
 // components/dashboard/teacher/TeacherStats.tsx (150 lines)
 // components/dashboard/teacher/TeacherActions.tsx (120 lines)
 // hooks/useTeacherDashboardState.ts (200 lines)
+```
+
+### AI Service Call
+```typescript
+import { DashAIClient } from '@/services/dash-ai/DashAIClient';
+
+const aiClient = new DashAIClient({
+  supabaseClient: supabase,
+  getUserProfile: () => profile,
+});
+
+const response = await aiClient.callAIService({
+  action: 'generate_lesson',
+  content: 'Create a lesson about photosynthesis',
+  stream: true,
+  onChunk: (chunk) => console.log(chunk),
+});
+```
+
+### Multi-Tenant Query
+```typescript
+// Supabase client automatically enforces RLS
+const { data: lessons } = await supabase
+  .from('lessons')
+  .select('*')
+  .eq('preschool_id', profile.organization_id) // Explicit filter
+  .eq('is_active', true);
 ```
