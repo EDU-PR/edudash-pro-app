@@ -37,8 +37,8 @@ export default function DownloadPage() {
             {/* Android */}
             <div className="bg-white rounded-2xl shadow-sm p-8">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" className="w-8 h-8 text-green-600" fill="currentColor">
+                <div className="w-14 h-14 bg-soa-light rounded-xl flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="w-8 h-8 text-soa-primary" fill="currentColor">
                     <path d="M17.523 15.341c-.5.5-1.172.784-1.875.784h-7.296c-.703 0-1.375-.284-1.875-.784l-3.773-3.773c-.5-.5-.5-1.311 0-1.811l8.296-8.296c.5-.5 1.311-.5 1.811 0l8.296 8.296c.5.5.5 1.311 0 1.811l-3.584 3.773zm-1.523-12.591l-8 8h4v4h4v-4h4l-8-8z" />
                   </svg>
                 </div>

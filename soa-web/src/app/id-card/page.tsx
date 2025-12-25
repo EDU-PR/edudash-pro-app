@@ -205,7 +205,7 @@ function MemberIDCardFront({ member }: { member: typeof sampleMember }) {
         </div>
         
         {/* Status Badge */}
-        <div className="bg-green-400 px-2 py-0.5 rounded text-[10px] font-semibold text-green-900 uppercase">
+        <div className="bg-soa-gold px-2 py-0.5 rounded text-[10px] font-semibold text-soa-dark uppercase">
           {member.membership_status}
         </div>
       </div>

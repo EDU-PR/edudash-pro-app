@@ -43,13 +43,13 @@ const regions = [
 // SOA Chapters
 const chapters = [
   {
-    id: 'skills',
-    name: 'Skills Development',
-    tagline: 'Empowering Youth Through Training',
-    description: 'Practical training programs in entrepreneurship, agriculture, ICT, and more. Reducing youth unemployment from 62.7% to 40%.',
+    id: 'womens',
+    name: 'Women\'s Chapter',
+    tagline: 'Empowering African Women',
+    description: 'Supporting and uplifting women through skills development, entrepreneurship, and leadership programs.',
     icon: GraduationCap,
-    color: 'from-emerald-500 to-green-600',
-    programs: ['Entrepreneurship & Business', 'Agriculture & Agro-processing', 'ICT Training', 'Poultry & Livestock'],
+    color: 'from-soa-khaki to-soa-primary',
+    programs: ['Women Entrepreneurship', 'Financial Literacy', 'Leadership Development', 'Health & Wellness'],
   },
   {
     id: 'youth',
@@ -61,13 +61,13 @@ const chapters = [
     programs: ['Leadership Development', 'Community Projects', 'Mentorship', 'Youth Advocacy'],
   },
   {
-    id: 'social',
-    name: 'Social Development',
-    tagline: 'Voice of the Voiceless',
-    description: 'Advocating for improved service delivery, exposing municipal failures, and restoring dignity through people-driven development.',
+    id: 'disability',
+    name: 'Disability Chapter',
+    tagline: 'Inclusion & Accessibility for All',
+    description: 'Advocating for the rights and inclusion of persons with disabilities, ensuring equal opportunities and accessibility.',
     icon: Scale,
     color: 'from-amber-500 to-orange-600',
-    programs: ['Service Delivery Advocacy', 'Rights Education', 'Community Mobilisation', 'Social Justice'],
+    programs: ['Disability Rights Advocacy', 'Skills & Employment', 'Accessibility Programs', 'Support Networks'],
   },
 ];
 
@@ -83,8 +83,8 @@ const coreValues = [
 const tiers = [
   {
     name: 'Community',
-    price: 'Free',
-    period: '',
+    price: 'R20',
+    period: '/year',
     description: 'Join the movement and stay connected',
     features: [
       'Digital Member ID Card',
@@ -92,39 +92,8 @@ const tiers = [
       'Event Notifications',
       'Basic Resources',
     ],
-    color: 'from-gray-500 to-gray-600',
-    badge: null,
-  },
-  {
-    name: 'Active Member',
-    price: 'R350',
-    period: '/year',
-    description: 'Full access to programs and resources',
-    features: [
-      'All Community Benefits',
-      'Skills Programs Access',
-      'Chapter Participation',
-      'Workshop Priority',
-      'Networking Events',
-    ],
     color: 'from-soa-primary to-soa-secondary',
-    badge: 'Most Popular',
-  },
-  {
-    name: 'Leader',
-    price: 'R750',
-    period: '/year',
-    description: 'For coordinators and chapter leaders',
-    features: [
-      'All Active Benefits',
-      'Leadership Training',
-      'Regional Coordination',
-      'VIP Event Access',
-      'Mentorship Programs',
-      'Official SOA Merchandise',
-    ],
-    color: 'from-amber-500 to-amber-600',
-    badge: 'Leadership',
+    badge: null,
   },
 ];
 
@@ -218,7 +187,7 @@ export default function HomePage() {
                 <a href="https://www.instagram.com/soilofafrica" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center text-pink-600 hover:bg-pink-200 transition">
                   <Instagram className="w-5 h-5" />
                 </a>
-                <a href="https://wa.me/27762233981" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 hover:bg-green-200 transition">
+                <a href="https://wa.me/27762233981" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-soa-light rounded-full flex items-center justify-center text-soa-gold hover:bg-soa-beige transition">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                 </a>
               </div>
@@ -433,7 +402,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Membership Tiers */}
+      {/* Membership & Support */}
       <section className="py-20 bg-stone-100/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
@@ -441,50 +410,115 @@ export default function HomePage() {
               Join the Movement
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Choose how you want to be part of African transformation
+              Be part of African transformation — as a member or a supporter
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {tiers.map((tier, index) => (
-              <div
-                key={index}
-                className={`relative bg-stone-50 rounded-2xl shadow-lg overflow-hidden card-hover ${
-                  tier.badge === 'Most Popular' ? 'ring-2 ring-soa-primary' : ''
-                }`}
-              >
-                {tier.badge && (
-                  <div className="absolute top-0 right-0 bg-soa-primary text-white text-xs font-semibold px-3 py-1 rounded-bl-lg">
-                    {tier.badge}
-                  </div>
-                )}
-                <div className={`bg-gradient-to-r ${tier.color} p-6 text-white`}>
-                  <h3 className="text-xl font-bold mb-2">{tier.name}</h3>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold">{tier.price}</span>
-                    <span className="text-sm opacity-80">{tier.period}</span>
-                  </div>
-                  <p className="text-sm opacity-80 mt-2">{tier.description}</p>
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Membership Card */}
+            <div className="relative bg-stone-50 rounded-2xl shadow-lg overflow-hidden card-hover">
+              <div className="bg-gradient-to-r from-soa-primary to-soa-secondary p-6 text-white">
+                <h3 className="text-xl font-bold mb-2">Community Membership</h3>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold">R20</span>
+                  <span className="text-sm opacity-80">/year</span>
                 </div>
-                <div className="p-6">
-                  <ul className="space-y-3">
-                    {tier.features.map((feature, fIndex) => (
-                      <li key={fIndex} className="flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-soa-primary shrink-0 mt-0.5" />
-                        <span className="text-gray-600 text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Link
-                    href={`/register?tier=${tier.name.toLowerCase().replace(' ', '-')}`}
-                    className="mt-6 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
-                  >
-                    {tier.price === 'Free' ? 'Join Free' : `Choose ${tier.name}`}
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
+                <p className="text-sm opacity-80 mt-2">Join the movement and stay connected</p>
+              </div>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  {['Digital Member ID Card', 'Community Updates', 'Event Notifications', 'Basic Resources', 'Newsletter Access'].map((feature, index) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-soa-primary shrink-0 mt-0.5" />
+                      <span className="text-gray-600 text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/register?tier=community"
+                  className="mt-6 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                >
+                  Become a Member
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Donations/Support Card */}
+            <div className="relative bg-stone-50 rounded-2xl shadow-lg overflow-hidden card-hover">
+              <div className="absolute top-0 right-0 bg-soa-gold text-white text-xs font-semibold px-3 py-1 rounded-bl-lg">
+                Support Us
+              </div>
+              <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-white">
+                <h3 className="text-xl font-bold mb-2">Make a Donation</h3>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold">Any Amount</span>
+                </div>
+                <p className="text-sm opacity-80 mt-2">Individuals, companies & organizations welcome</p>
+              </div>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  {[
+                    'One-time or recurring donations',
+                    'Corporate sponsorships',
+                    'Crowdfunding campaigns',
+                    'Patronage programs',
+                    'In-kind contributions',
+                    'Skills & expertise donations',
+                  ].map((feature, index) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <Heart className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                      <span className="text-gray-600 text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-gray-500 mt-4 mb-4">
+                  Your contribution helps fund skills development, community programs, and youth empowerment across South Africa.
+                </p>
+                <Link
+                  href="/donate"
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition"
+                >
+                  Donate Now
+                  <Heart className="w-4 h-4" />
+                </Link>
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 text-center">
+                    Want to become a patron or sponsor? <a href="/contact" className="text-soa-primary hover:underline">Contact us</a>
+                  </p>
                 </div>
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* Merchandise Banner */}
+          <div className="mt-12 max-w-4xl mx-auto">
+            <div className="relative rounded-2xl overflow-hidden shadow-xl">
+              <Image 
+                src="/images/combo.png" 
+                alt="SOA Combo - T-Shirt and Cap R300" 
+                width={1024}
+                height={500}
+                className="w-full object-cover"
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="text-white text-center sm:text-left">
+                    <h3 className="text-xl font-bold">Official SOA Merchandise</h3>
+                    <p className="text-white/80 text-sm">Show your pride with our exclusive combo pack</p>
+                  </div>
+                  <a
+                    href="https://wa.me/27762233981?text=Hi%2C%20I%20would%20like%20to%20order%20the%20SOA%20Combo%20(T-Shirt%20and%20Cap)%20for%20R300"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-soa-gold text-white rounded-xl font-semibold hover:bg-amber-500 transition whitespace-nowrap"
+                  >
+                    Order Now - R300
+                    <ChevronRight className="w-4 h-4" />
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -580,13 +614,13 @@ export default function HomePage() {
             {regions.map((region, index) => (
               <div
                 key={index}
-                className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center hover:bg-white/20 transition"
+                className="bg-white rounded-xl p-4 text-center hover:shadow-lg transition shadow-md"
               >
-                <div className="w-12 h-12 bg-soa-secondary/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <MapPin className="w-6 h-6 text-soa-secondary" />
+                <div className="w-12 h-12 bg-soa-gold/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <MapPin className="w-6 h-6 text-soa-gold" />
                 </div>
-                <p className="font-semibold">{region.name}</p>
-                <p className="text-sm text-gray-400">{region.members} members</p>
+                <p className="font-semibold text-soa-dark">{region.name}</p>
+                <p className="text-sm text-soa-primary">{region.members} members</p>
               </div>
             ))}
           </div>
@@ -600,73 +634,93 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Download App Section */}
-      <section className="py-20">
+      {/* Download App Section - EduDash Pro Branding */}
+      <section className="py-20 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-br from-soa-primary to-soa-dark rounded-3xl p-8 md:p-12 text-white">
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 rounded-full text-sm mb-4">
-                  <Smartphone className="w-4 h-4" />
-                  Mobile App Available
-                </div>
-                <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                  Take Your Membership Anywhere
-                </h2>
-                <p className="text-gray-200 mb-6">
-                  Access your digital ID card, resources, events, and connect with other members
-                  on the go. Download the EduDash Pro app to get started.
-                </p>
-                <div className="flex flex-wrap gap-4">
-                  <a
-                    href={process.env.NEXT_PUBLIC_PLAY_STORE_URL || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 px-6 py-3 bg-white text-gray-900 rounded-xl font-medium hover:bg-gray-100 transition"
-                  >
-                    <Download className="w-5 h-5" />
-                    Google Play
-                  </a>
-                  <a
-                    href={process.env.NEXT_PUBLIC_APP_STORE_URL || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 px-6 py-3 bg-white/20 text-white border border-white/30 rounded-xl font-medium hover:bg-white/30 transition"
-                  >
-                    <Download className="w-5 h-5" />
-                    App Store
-                  </a>
-                </div>
-                <p className="text-sm text-gray-300 mt-4 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-edudash-primary rounded-full" />
-                  Powered by EduDash Pro
-                </p>
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="text-white">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#6366f1]/20 rounded-full text-[#818cf8] text-sm font-medium mb-6">
+                <Smartphone className="w-4 h-4" />
+                Mobile App Available
               </div>
-              <div className="hidden md:flex justify-center">
-                <div className="relative">
-                  {/* Phone mockup */}
-                  <div className="w-64 h-[500px] bg-gray-900 rounded-[3rem] p-3 shadow-2xl">
-                    <div className="w-full h-full bg-gradient-to-b from-soa-light to-white rounded-[2.5rem] flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl mx-auto mb-4 flex items-center justify-center">
-                          <Leaf className="w-10 h-10 text-white" />
-                        </div>
-                        <p className="text-soa-dark font-bold">EduDash Pro</p>
-                        <p className="text-xs text-gray-500">Soil of Africa Portal</p>
-                      </div>
-                    </div>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Take Your Membership <span className="text-[#6366f1]">Anywhere</span>
+              </h2>
+              <p className="text-gray-300 mb-6 text-lg">
+                Access your digital ID card, learning programs, assignment help, and connect with 
+                other members on the go. Download the EduDash Pro app to get started.
+              </p>
+              
+              {/* Features list */}
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#6366f1]/20 rounded-lg flex items-center justify-center">
+                    <Award className="w-5 h-5 text-[#6366f1]" />
                   </div>
-                  {/* Notification popup */}
-                  <div className="absolute -left-8 top-1/4 bg-white rounded-xl shadow-xl p-3 w-52 animate-bounce">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-soa-light rounded-lg flex items-center justify-center">
-                        <Calendar className="w-4 h-4 text-soa-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-gray-900">New Event!</p>
-                        <p className="text-[10px] text-gray-500">GP Workshop - Jan 15</p>
-                      </div>
-                    </div>
+                  <span className="text-gray-300 text-sm">Digital ID Card</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#10b981]/20 rounded-lg flex items-center justify-center">
+                    <BookOpen className="w-5 h-5 text-[#10b981]" />
+                  </div>
+                  <span className="text-gray-300 text-sm">Skills Programs</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#f59e0b]/20 rounded-lg flex items-center justify-center">
+                    <Users className="w-5 h-5 text-[#f59e0b]" />
+                  </div>
+                  <span className="text-gray-300 text-sm">Community</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-[#ec4899]/20 rounded-lg flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-[#ec4899]" />
+                  </div>
+                  <span className="text-gray-300 text-sm">Events</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <a
+                  href={process.env.NEXT_PUBLIC_PLAY_STORE_URL || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-3 px-6 py-3 bg-[#6366f1] text-white rounded-xl font-medium hover:bg-[#4f46e5] transition shadow-lg shadow-[#6366f1]/25"
+                >
+                  <Download className="w-5 h-5" />
+                  Google Play
+                </a>
+                <a
+                  href={process.env.NEXT_PUBLIC_APP_STORE_URL || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-3 px-6 py-3 bg-white/10 text-white border border-white/20 rounded-xl font-medium hover:bg-white/20 transition"
+                >
+                  <Download className="w-5 h-5" />
+                  App Store
+                </a>
+              </div>
+              <p className="text-sm text-gray-400 mt-6 flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#10b981] rounded-full animate-pulse" />
+                Powered by EduDash Pro
+              </p>
+            </div>
+
+            {/* Phone Mockup - EduDash Pro Screenshot */}
+            <div className="flex justify-center mt-8 md:mt-0">
+              <div className="relative">
+                {/* Glow effect */}
+                <div className="absolute -inset-8 bg-[#6366f1]/20 rounded-full blur-3xl" />
+                
+                {/* Phone frame with actual screenshot */}
+                <div className="relative bg-gray-800 rounded-[2.5rem] md:rounded-[3rem] p-1.5 md:p-2 shadow-2xl border border-gray-700">
+                  <div className="rounded-[2rem] md:rounded-[2.5rem] overflow-hidden">
+                    <Image 
+                      src="/images/edudash-app-screenshot.png" 
+                      alt="EduDash Pro App - My Learning Dashboard" 
+                      width={288}
+                      height={600}
+                      className="object-cover w-48 md:w-72"
+                    />
                   </div>
                 </div>
               </div>

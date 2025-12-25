@@ -1,425 +1,342 @@
-import Link from 'next/link';
+'use client';
+
 import { Header, Footer } from '@/components';
-import {
-  Target,
-  Eye,
-  Heart,
-  Users,
-  Award,
-  Shield,
-  Sparkles,
-  GraduationCap,
-  Scale,
-  MapPin,
-  Phone,
-  Mail,
-  Clock,
-  ChevronRight,
-  Quote,
-  Calendar,
-} from 'lucide-react';
-
-// Core Values
-const coreValues = [
-  { 
-    icon: Award, 
-    title: 'Excellent Quality Service', 
-    description: 'We deliver excellence in everything we do, ensuring every program and initiative meets the highest standards.' 
-  },
-  { 
-    icon: Shield, 
-    title: 'Ethical Conduct', 
-    description: 'We maintain high moral codes and integrity in all our dealings with members and communities.' 
-  },
-  { 
-    icon: Users, 
-    title: 'Effective Leadership', 
-    description: 'We lead with purpose, accountability, and a commitment to serving our people.' 
-  },
-  { 
-    icon: Sparkles, 
-    title: 'Dynamic Innovation', 
-    description: 'We embrace creative solutions to address the challenges facing African communities.' 
-  },
-];
-
-// Leadership Team
-const leadershipTeam = [
-  {
-    name: 'President',
-    role: 'Founder & National President',
-    description: 'Leading the SOA movement with the vision to transform and liberate South Africans through skills development and social justice.',
-    image: '/team/president.jpg',
-  },
-  {
-    name: 'Vice President',
-    role: 'National Vice President',
-    description: 'Coordinating regional operations and ensuring the mission reaches every province.',
-    image: '/team/vice-president.jpg',
-  },
-  {
-    name: 'Secretary General',
-    role: 'National Secretary',
-    description: 'Managing organizational affairs and member communications.',
-    image: '/team/secretary.jpg',
-  },
-];
-
-// Timeline milestones
-const milestones = [
-  { year: '2020', title: 'Foundation', description: 'Soil of Africa established with vision to transform SA' },
-  { year: '2022', title: 'Skills Chapter Launch', description: 'Established skills development programs' },
-  { year: '2023', title: 'Youth Chapter Launch', description: 'Established dedicated chapter for young leaders' },
-  { year: '2024', title: 'Mamelodi Skills Centre', description: 'Opened flagship training facility' },
-  { year: '2025', title: 'National Expansion', description: 'Active presence in all 9 provinces' },
-];
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen flex flex-col bg-soa-cream">
       <Header />
-
-      {/* Hero */}
-      <section className="pt-24 pb-16 bg-gradient-to-br from-soa-primary via-soa-dark to-gray-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-sm mb-6">
-              <Heart className="w-4 h-4" />
-              About Us
-            </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6">
-              Vehicle of African Transformation
+      
+      <main className="flex-1">
+        {/* Hero Section */}
+        <section className="py-20 bg-gradient-to-b from-soa-dark to-soa-primary text-white">
+          <div className="container mx-auto px-4 text-center">
+            <h1 className="text-4xl md:text-6xl font-bold mb-6">
+              About <span className="text-soa-gold">Soil of Africa</span>
             </h1>
-            <p className="text-xl text-gray-300 leading-relaxed">
-              Soil of Africa is a civic movement formed to transform and liberate South Africans 
-              through skills development, community empowerment, and social justice advocacy.
+            <p className="text-xl md:text-2xl max-w-4xl mx-auto text-soa-cream/90">
+              A Pan-African Kingdom Movement Rooted in Sovereignty, Stewardship, and Self-Determination
             </p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Mission, Vision, Values */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Mission */}
-            <div className="bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl p-8 text-white">
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center mb-6">
-                <Target className="w-7 h-7" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4">Our Mission</h3>
-              <p className="text-white/90 leading-relaxed">
-                To improve the living conditions of all residents of South Africa through 
-                skills development, job creation, and advocacy for improved service delivery. 
-                We aim to reduce youth unemployment from 62.7% to 40%.
-              </p>
-            </div>
-
-            {/* Vision */}
-            <div className="bg-gray-900 rounded-2xl p-8 text-white">
-              <div className="w-14 h-14 bg-soa-primary/20 rounded-xl flex items-center justify-center mb-6">
-                <Eye className="w-7 h-7 text-soa-secondary" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4">Our Vision</h3>
-              <p className="text-gray-300 leading-relaxed">
-                A South Africa where every citizen has access to quality skills training, 
-                meaningful employment, and dignified living conditions. We envision communities 
-                that are self-sufficient, empowered, and thriving.
-              </p>
-            </div>
-
-            {/* Tagline */}
-            <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-8 text-white">
-              <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center mb-6">
-                <Quote className="w-7 h-7" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4">#SIZOSEBENZANGENKANI</h3>
-              <p className="text-white/90 leading-relaxed">
-                "We Will Work Together" - Our rallying cry that unites members across 
-                all provinces. Together, we build a better South Africa for all.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Core Values */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Our Core Values
+        {/* Introduction & Background */}
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
+              Introduction & Background
             </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              These principles guide everything we do at Soil of Africa
-            </p>
+            <div className="prose prose-lg max-w-none text-soa-dark/80 space-y-6">
+              <p>
+                The Soil of Africa (SOA) Kingdom was officially established on <strong>22 April 2021</strong>, the same day South Africa recognizes Freedom Day—a symbolic anchor that grounds our movement in the long arc of African liberation and self-determination. SOA was founded not merely as an organization, but as a Pan-African kingdom movement rooted in the principles of sovereignty, stewardship, and collective empowerment.
+              </p>
+              <p>
+                At its core, SOA exists to restore and preserve African identity, land, culture, and heritage. It stands as a movement that reclaims the dignity of the African people and affirms their rightful place as custodians of the land and architects of their own future.
+              </p>
+              <p>
+                SOA is built on foundational truths: that African liberation requires self-governance, economic independence, and collective responsibility. From this vision flows the structure, governance, and mission of the kingdom—driven by a commitment to uplift communities, protect sacred values, and ensure intergenerational continuity.
+              </p>
+            </div>
           </div>
+        </section>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {coreValues.map((value, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition"
-              >
-                <div className="w-14 h-14 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-xl flex items-center justify-center mb-4">
-                  <value.icon className="w-7 h-7 text-white" />
+        {/* Vision & Mission */}
+        <section className="py-16 bg-soa-cream">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <div className="grid md:grid-cols-2 gap-12">
+              {/* Vision */}
+              <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-gold">
+                <div className="w-16 h-16 bg-soa-gold/20 rounded-full flex items-center justify-center mb-6">
+                  <svg className="w-8 h-8 text-soa-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{value.title}</h3>
-                <p className="text-gray-600 text-sm">{value.description}</p>
+                <h3 className="text-2xl font-bold text-soa-dark mb-4">Our Vision</h3>
+                <p className="text-soa-dark/80 text-lg">
+                  To build a self-sustaining, sovereign African kingdom rooted in unity, dignity, and economic freedom—leading the revival of authentic African governance and spiritual heritage.
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Our Chapters */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Our Three Pillars
+              {/* Mission */}
+              <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-primary">
+                <div className="w-16 h-16 bg-soa-primary/20 rounded-full flex items-center justify-center mb-6">
+                  <svg className="w-8 h-8 text-soa-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-soa-dark mb-4">Our Mission</h3>
+                <p className="text-soa-dark/80 text-lg">
+                  To unite, educate, and economically empower African people through principled leadership, land stewardship, cultural preservation, and spiritual reclamation.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Strategic Objectives */}
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-12 text-center">
+              Strategic Objectives
             </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Three chapters driving transformation across South Africa
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Skills Development */}
-            <div className="relative bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="h-48 bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center">
-                <GraduationCap className="w-20 h-20 text-white/80" />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Skills Development Chapter</h3>
-                <p className="text-sm text-soa-primary font-medium mb-3">Practical Training</p>
-                <p className="text-gray-600 text-sm mb-4">
-                  Empowering youth through practical training in entrepreneurship, 
-                  agriculture, ICT, and poultry farming. 6-12 month programs leading to 
-                  recognized qualifications.
-                </p>
-                <div className="space-y-2 text-sm text-gray-700">
-                  <p>• Entrepreneurship & Business Skills</p>
-                  <p>• Agriculture & Agro-processing</p>
-                  <p>• Information Technology (ICT)</p>
-                  <p>• Poultry & Livestock Management</p>
-                </div>
-                <Link
-                  href="/chapters/skills"
-                  className="mt-4 inline-flex items-center gap-1 text-soa-primary font-medium hover:underline"
-                >
-                  Learn More <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Youth Chapter */}
-            <div className="relative bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="h-48 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                <Users className="w-20 h-20 text-white/80" />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Youth Chapter</h3>
-                <p className="text-sm text-blue-600 font-medium mb-3">The Future of SA</p>
-                <p className="text-gray-600 text-sm mb-4">
-                  Building the next generation of South African leaders through mentorship, 
-                  community projects, and youth advocacy programs.
-                </p>
-                <div className="space-y-2 text-sm text-gray-700">
-                  <p>• Leadership Development</p>
-                  <p>• Community Service Projects</p>
-                  <p>• Peer Mentorship Programs</p>
-                  <p>• Youth Rights Advocacy</p>
-                </div>
-                <Link
-                  href="/chapters/youth"
-                  className="mt-4 inline-flex items-center gap-1 text-blue-600 font-medium hover:underline"
-                >
-                  Learn More <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Social Development */}
-            <div className="relative bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="h-48 bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                <Scale className="w-20 h-20 text-white/80" />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Social Development & Justice</h3>
-                <p className="text-sm text-amber-600 font-medium mb-3">Voice of the Voiceless</p>
-                <p className="text-gray-600 text-sm mb-4">
-                  Advocating for improved service delivery, exposing municipal failures, 
-                  and restoring dignity through people-driven development initiatives.
-                </p>
-                <div className="space-y-2 text-sm text-gray-700">
-                  <p>• Service Delivery Advocacy</p>
-                  <p>• Rights Awareness Education</p>
-                  <p>• Community Mobilisation</p>
-                  <p>• Social Justice Campaigns</p>
-                </div>
-                <Link
-                  href="/chapters/social"
-                  className="mt-4 inline-flex items-center gap-1 text-amber-600 font-medium hover:underline"
-                >
-                  Learn More <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Timeline */}
-      <section className="py-20 bg-soa-dark text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">Our Journey</h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">
-              Key milestones in the Soil of Africa movement
-            </p>
-          </div>
-
-          <div className="relative">
-            {/* Timeline line */}
-            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-soa-secondary/30 hidden md:block" />
-
-            <div className="space-y-8">
-              {milestones.map((milestone, index) => (
-                <div
-                  key={index}
-                  className={`relative flex items-center gap-8 ${
-                    index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'
-                  }`}
-                >
-                  <div className={`flex-1 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
-                    <div className="bg-white/10 rounded-xl p-6 backdrop-blur-sm">
-                      <span className="text-soa-secondary font-bold text-2xl">{milestone.year}</span>
-                      <h4 className="text-lg font-semibold mt-2">{milestone.title}</h4>
-                      <p className="text-gray-400 text-sm mt-1">{milestone.description}</p>
-                    </div>
-                  </div>
-
-                  {/* Center dot */}
-                  <div className="hidden md:flex w-12 h-12 bg-soa-secondary rounded-full items-center justify-center shrink-0 z-10">
-                    <Calendar className="w-5 h-5 text-soa-dark" />
-                  </div>
-
-                  <div className="flex-1 hidden md:block" />
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                {
+                  icon: "🌍",
+                  title: "Land Sovereignty",
+                  description: "Reclaim and protect land as a birthright and communal resource."
+                },
+                {
+                  icon: "📚",
+                  title: "Education & Awareness",
+                  description: "Promote African consciousness, identity, and heritage across generations."
+                },
+                {
+                  icon: "💰",
+                  title: "Economic Self-Reliance",
+                  description: "Build sustainable enterprises and cooperative economies."
+                },
+                {
+                  icon: "👥",
+                  title: "Community Building",
+                  description: "Strengthen unity and collective action through structured leadership and local chapters."
+                },
+                {
+                  icon: "🛡️",
+                  title: "Cultural Preservation",
+                  description: "Safeguard traditions, languages, and sacred customs."
+                },
+                {
+                  icon: "✊",
+                  title: "Spiritual & Political Liberation",
+                  description: "Pursue full decolonization of mind, body, and governance."
+                }
+              ].map((objective, index) => (
+                <div key={index} className="bg-soa-cream rounded-xl p-6 hover:shadow-lg transition-shadow">
+                  <div className="text-4xl mb-4">{objective.icon}</div>
+                  <h3 className="text-xl font-bold text-soa-dark mb-2">{objective.title}</h3>
+                  <p className="text-soa-dark/70">{objective.description}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Contact Information */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 gap-12">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Get In Touch</h2>
-              <p className="text-gray-600 mb-8">
-                Ready to join the movement or have questions? Reach out to us through 
-                any of the channels below. We're here to help you become part of African transformation.
+        {/* Core Values */}
+        <section className="py-16 bg-gradient-to-br from-soa-primary to-soa-dark text-white">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold mb-12 text-center">
+              Core Values
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { value: "Excellence", description: "Striving for the highest standard in all that we do" },
+                { value: "Ethical Conduct", description: "Acting with integrity, fairness, and moral conviction" },
+                { value: "Leadership", description: "Servant leadership modeled on ancestral wisdom" },
+                { value: "Innovation", description: "Creative solutions rooted in African ingenuity" },
+                { value: "Transparency", description: "Openness in governance and decision-making" },
+                { value: "Accountability", description: "Responsibility to the community, elders, and future generations" },
+                { value: "Diversity & Inclusion", description: "Respect for all African identities and contributions" },
+                { value: "Sustainability", description: "Practices that preserve resources for generations to come" }
+              ].map((item, index) => (
+                <div key={index} className="bg-white/10 backdrop-blur rounded-xl p-6 hover:bg-white/20 transition-colors">
+                  <h3 className="text-xl font-bold text-soa-gold mb-2">{item.value}</h3>
+                  <p className="text-white/80 text-sm">{item.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Principles */}
+        <section className="py-16 bg-soa-cream">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-12 text-center">
+              Our Principles
+            </h2>
+            <div className="grid md:grid-cols-2 gap-8">
+              {[
+                {
+                  title: "Justice and Fairness",
+                  description: "All members are entitled to fair treatment, equitable resource distribution, and impartial dispute resolution."
+                },
+                {
+                  title: "Pan-African Solidarity",
+                  description: "Unity among African peoples, regardless of national boundaries, as one family under common ancestry."
+                },
+                {
+                  title: "Collective Ownership",
+                  description: "Land and strategic resources are communal assets, managed for collective benefit."
+                },
+                {
+                  title: "Self-Governance",
+                  description: "African people must lead themselves, guided by indigenous knowledge and spiritual truth."
+                },
+                {
+                  title: "Respect for Elders",
+                  description: "Honoring ancestral wisdom and intergenerational continuity."
+                },
+                {
+                  title: "Protection of the Youth",
+                  description: "Investment in the development, education, and leadership of the next generation."
+                }
+              ].map((principle, index) => (
+                <div key={index} className="flex gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-soa-gold rounded-full flex items-center justify-center text-white font-bold">
+                      {index + 1}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-soa-dark mb-2">{principle.title}</h3>
+                    <p className="text-soa-dark/70">{principle.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Critical Success Factors */}
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-12 text-center">
+              Critical Success Factors
+            </h2>
+            <div className="space-y-4">
+              {[
+                "Strong, visionary, and accountable leadership at every level",
+                "Active, committed membership across provinces and countries",
+                "Sustainable income streams and financial discipline",
+                "Clear governance, communication, and conflict resolution mechanisms",
+                "Deep cultural and spiritual connection among members",
+                "Strategic partnerships with aligned movements and institutions"
+              ].map((factor, index) => (
+                <div key={index} className="flex items-start gap-4 p-4 bg-soa-cream rounded-lg">
+                  <svg className="w-6 h-6 text-soa-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <p className="text-soa-dark/80">{factor}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Corporate Social Responsibility */}
+        <section className="py-16 bg-soa-cream">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
+              Corporate Social Responsibility
+            </h2>
+            <div className="bg-white rounded-2xl p-8 shadow-lg">
+              <p className="text-soa-dark/80 text-lg mb-6">
+                SOA is committed to:
               </p>
-
-              <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-soa-light rounded-xl flex items-center justify-center shrink-0">
-                    <MapPin className="w-6 h-6 text-soa-primary" />
+              <div className="grid md:grid-cols-2 gap-6">
+                {[
+                  { icon: "🌱", text: "Environmental sustainability and regenerative land practices" },
+                  { icon: "🤝", text: "Community development and social investment" },
+                  { icon: "📖", text: "Educational support for youth and women" },
+                  { icon: "🏠", text: "Poverty alleviation through cooperative enterprise" },
+                  { icon: "🎭", text: "Preserving and promoting African arts, culture, and tradition" }
+                ].map((item, index) => (
+                  <div key={index} className="flex items-center gap-4 p-4 bg-soa-cream/50 rounded-lg">
+                    <span className="text-2xl">{item.icon}</span>
+                    <p className="text-soa-dark/80">{item.text}</p>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Physical Address</h4>
-                    <p className="text-gray-600">679 Tanya Street, Moreleta Park</p>
-                    <p className="text-gray-600">Pretoria, 0044</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-soa-light rounded-xl flex items-center justify-center shrink-0">
-                    <Phone className="w-6 h-6 text-soa-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Phone Numbers</h4>
-                    <p className="text-gray-600">+27 12 884-5118</p>
-                    <p className="text-gray-600">+27 76 223-3981</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-soa-light rounded-xl flex items-center justify-center shrink-0">
-                    <Mail className="w-6 h-6 text-soa-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Email</h4>
-                    <a href="mailto:info@soilofafrica.org" className="text-soa-primary hover:underline">
-                      info@soilofafrica.org
-                    </a>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-soa-light rounded-xl flex items-center justify-center shrink-0">
-                    <Clock className="w-6 h-6 text-soa-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Office Hours</h4>
-                    <p className="text-gray-600">Monday - Friday: 8:00 AM - 5:00 PM</p>
-                    <p className="text-gray-600">Saturday: 9:00 AM - 1:00 PM</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* Map Placeholder */}
-            <div className="bg-gray-100 rounded-2xl overflow-hidden h-[400px] flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">Location Map</p>
-                <p className="text-gray-400 text-sm">679 Tanya St, Moreleta Park</p>
+        {/* Leadership Ethics */}
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
+              Leadership Ethics
+            </h2>
+            <div className="bg-gradient-to-br from-soa-primary/10 to-soa-gold/10 rounded-2xl p-8">
+              <p className="text-soa-dark/80 text-lg mb-8 text-center">
+                All SOA leaders are expected to:
+              </p>
+              <div className="grid md:grid-cols-2 gap-4">
+                {[
+                  "Act with honesty and integrity at all times",
+                  "Serve without personal enrichment at the expense of the collective",
+                  "Uphold and defend the constitution and values of SOA",
+                  "Be transparent in decision-making and finances",
+                  "Treat all members with respect and fairness",
+                  "Prioritize the well-being of children, youth, and vulnerable groups",
+                  "Represent the kingdom with dignity and cultural pride"
+                ].map((ethic, index) => (
+                  <div key={index} className="flex items-start gap-3 p-3">
+                    <svg className="w-5 h-5 text-soa-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-soa-dark/80">{ethic}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Philosophy */}
+        <section className="py-16 bg-soa-cream">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
+              Our Philosophy
+            </h2>
+            <div className="bg-white rounded-2xl p-8 shadow-lg space-y-6">
+              <p className="text-soa-dark/80 text-lg">
+                SOA is more than an organization—it is a covenant between its people, the land, and the ancestors.
+              </p>
+              <p className="text-soa-dark/80 text-lg">
+                Our philosophy is grounded in the belief that Africans must reclaim their role as stewards of the soil, protectors of sacred knowledge, and builders of their own destiny. This requires a return to principled governance, economic ownership, and spiritual wholeness.
+              </p>
+              <p className="text-soa-dark/80 text-lg">
+                We do not seek recognition from colonial systems—we seek the restoration of African systems. Our legitimacy comes from the soil we stand on, the ancestors we honor, and the generations yet to come.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Concluding Statement */}
+        <section className="py-20 bg-gradient-to-b from-soa-dark to-black text-white">
+          <div className="container mx-auto px-4 max-w-4xl text-center">
+            <h2 className="text-3xl font-bold mb-8">
+              Our Commitment
+            </h2>
+            <div className="space-y-6">
+              <p className="text-xl text-soa-cream/90">
+                The Soil of Africa Kingdom stands as a beacon of African pride, purpose, and possibility. We are building a future where land, wealth, knowledge, and power belong to the people—governed by truth, rooted in culture, and sustained by unity.
+              </p>
+              <div className="py-8">
+                <blockquote className="text-2xl md:text-3xl font-bold text-soa-gold italic">
+                  "Land to its custodians. Production to the people. Dignity to the nation. Africa to Africans."
+                </blockquote>
+              </div>
+              <p className="text-lg text-soa-cream/80">
+                We call upon all who share this vision to join hands—not as followers, but as co-builders of the African future.
+              </p>
+              <div className="pt-8">
                 <a
-                  href="https://maps.google.com/?q=679+Tanya+Street,+Moreleta+Park,+Pretoria"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-soa-primary text-sm mt-3 hover:underline"
+                  href="/register"
+                  className="inline-flex items-center gap-2 bg-soa-gold hover:bg-soa-gold/90 text-soa-dark px-8 py-4 rounded-lg font-bold text-lg transition-all hover:scale-105"
                 >
-                  Open in Google Maps <ChevronRight className="w-4 h-4" />
+                  Join the Movement
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
                 </a>
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-16 bg-gradient-to-r from-soa-primary to-soa-secondary text-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">Join the Movement Today</h2>
-          <p className="text-lg text-white/90 mb-8">
-            Be part of African transformation. Register as a member and receive your 
-            digital ID card instantly.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-soa-primary rounded-xl font-semibold hover:bg-gray-100 transition"
-            >
-              Register Now
-              <ChevronRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="https://wa.me/27762233981"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 text-white border border-white/30 rounded-xl font-semibold hover:bg-white/20 transition"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              WhatsApp Us
-            </Link>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       <Footer />
     </div>

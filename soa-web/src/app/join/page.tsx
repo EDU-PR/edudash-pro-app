@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { Header, Footer } from '@/components';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import {
   Leaf,
   Ticket,
@@ -173,6 +173,8 @@ export default function JoinPage() {
     setFormError('');
 
     try {
+      const supabase = getSupabase();
+      
       // 1. Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -231,8 +233,8 @@ export default function JoinPage() {
           {/* Success State */}
           {isComplete ? (
             <div className="bg-white rounded-2xl shadow-sm p-8 text-center animate-fade-in">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-10 h-10 text-green-600" />
+              <div className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 className="w-10 h-10 text-soa-primary" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Welcome to {orgInfo?.region} Region!
@@ -402,7 +404,7 @@ export default function JoinPage() {
                   {/* Verified Org Card */}
                   <div className="bg-white rounded-2xl shadow-sm p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-soa-light text-soa-primary rounded-full text-sm font-medium">
                         <CheckCircle2 className="w-4 h-4" />
                         Verified Organization
                       </div>

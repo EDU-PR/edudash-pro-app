@@ -8,16 +8,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Soil of Africa brand colors
+        // Soil of Africa brand colors - Beige theme
         soa: {
-          primary: '#166534',    // Forest green
-          secondary: '#22C55E',  // Bright green
-          accent: '#84CC16',     // Lime
-          dark: '#14532D',       // Dark green
-          light: '#DCFCE7',      // Light green
+          primary: '#8B7355',    // Warm brown (was forest green)
+          secondary: '#C4A052',  // Gold/mustard
+          accent: '#D4B896',     // Light beige
+          dark: '#5D4E37',       // Dark brown
+          light: '#F5F0E8',      // Cream/off-white background
           gold: '#C4A052',       // Mustard/gold from SOA shirt
-          beige: '#D4B896',      // Lighter beige accent
-          khaki: '#8B7355',      // Darker earth tone
+          beige: '#E8DFD0',      // Main beige
+          khaki: '#A89078',      // Mid-tone earth
+          cream: '#FAF7F2',      // Lightest cream
+          sand: '#D9CDBF',       // Sandy beige
+          earth: '#6B5B4F',      // Earthy brown
         },
         // EduDash Pro accent
         edudash: {

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import {
   Leaf,
   ArrowRight,
@@ -63,26 +63,26 @@ const memberTypes = [
 // Membership Tiers
 const tiers = [
   {
-    id: 'standard',
-    name: 'Standard',
-    price: 600,
-    description: 'Essential membership benefits',
-    features: ['Digital ID Card', 'Learning Resources', 'Regional Events', 'Newsletter'],
+    id: 'community',
+    name: 'Community',
+    price: 20,
+    description: 'Join the movement and stay connected',
+    features: ['Digital ID Card', 'Community Updates', 'Event Notifications', 'Basic Resources'],
   },
   {
-    id: 'premium',
-    name: 'Premium',
-    price: 1200,
-    description: 'Enhanced benefits for committed members',
-    features: ['All Standard +', 'Workshop Access', 'Networking Events', '10% Discounts'],
+    id: 'active',
+    name: 'Active Member',
+    price: 350,
+    description: 'Full access to programs and resources',
+    features: ['All Community +', 'Skills Programs', 'Chapter Participation', 'Workshop Priority'],
     popular: true,
   },
   {
     id: 'vip',
     name: 'VIP',
-    price: 2500,
-    description: 'Maximum benefits for future leaders',
-    features: ['All Premium +', '1-on-1 Mentorship', 'Leadership Programs', 'VIP Events'],
+    price: 600,
+    description: 'For coordinators and chapter leaders',
+    features: ['All Active +', 'Leadership Training', 'VIP Events', 'Mentorship Programs'],
   },
 ];
 
@@ -111,7 +111,7 @@ interface FormData {
   payment_method: string;
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const searchParams = useSearchParams();
   const preselectedTier = searchParams.get('tier') || '';
 
@@ -205,6 +205,8 @@ export default function RegisterPage() {
     setError('');
 
     try {
+      const supabase = getSupabase();
+      
       // 1. Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -685,8 +687,8 @@ export default function RegisterPage() {
             {/* Step 5: Complete */}
             {step === 'complete' && (
               <div className="animate-fade-in text-center py-8">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <CheckCircle2 className="w-10 h-10 text-green-600" />
+                <div className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle2 className="w-10 h-10 text-soa-primary" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Soil of Africa!</h2>
                 <p className="text-gray-600 mb-6">
@@ -825,5 +827,22 @@ export default function RegisterPage() {
 
       <Footer />
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function RegisterPageLoading() {
+  return (
+    <div className="min-h-screen bg-soa-cream flex items-center justify-center">
+      <div className="animate-pulse text-soa-primary">Loading...</div>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterPageLoading />}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }
