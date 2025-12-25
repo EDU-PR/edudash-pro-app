@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import {
   CreditCard,
   Download,
@@ -47,35 +49,46 @@ export default function IDCardPage() {
       {/* Hero */}
       <section className="pt-24 pb-12 bg-gradient-to-br from-soa-primary to-soa-dark text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-sm mb-4">
-            <CreditCard className="w-4 h-4" />
-            Digital ID Card
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4">
-            Your SOA Member ID
-          </h1>
-          <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-            Every registered member receives a professional digital ID card with QR verification.
-            Access your card anytime through the EduDash Pro app.
-          </p>
+          <ScaleIn>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full text-sm mb-4">
+              <CreditCard className="w-4 h-4" />
+              Digital ID Card
+            </div>
+          </ScaleIn>
+          <FadeIn delay={0.1}>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4">
+              Your SOA Member ID
+            </h1>
+          </FadeIn>
+          <SlideIn direction="up" delay={0.2}>
+            <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+              Every registered member receives a professional digital ID card with QR verification.
+              Access your card anytime through the EduDash Pro app.
+            </p>
+          </SlideIn>
         </div>
       </section>
 
       {/* ID Card Preview */}
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Preview Your Card</h2>
-            <p className="text-gray-600">Click the card to flip between front and back</p>
-          </div>
+          <FadeIn>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Preview Your Card</h2>
+              <p className="text-gray-600">Click the card to flip between front and back</p>
+            </div>
+          </FadeIn>
 
           {/* Card Container */}
-          <div className="flex justify-center mb-8">
-            <div 
-              className="relative cursor-pointer perspective-1000"
-              onClick={() => setShowBack(!showBack)}
-              style={{ width: '400px', height: '252px' }}
-            >
+          <ScaleIn delay={0.2}>
+            <div className="flex justify-center mb-8">
+              <motion.div 
+                className="relative cursor-pointer perspective-1000"
+                onClick={() => setShowBack(!showBack)}
+                style={{ width: '400px', height: '252px' }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
               {/* Front of Card */}
               <div className={`absolute inset-0 transition-all duration-500 transform ${showBack ? 'rotate-y-180 opacity-0' : 'rotate-y-0 opacity-100'}`}>
                 <MemberIDCardFront member={sampleMember} />
@@ -85,8 +98,9 @@ export default function IDCardPage() {
               <div className={`absolute inset-0 transition-all duration-500 transform ${showBack ? 'rotate-y-0 opacity-100' : 'rotate-y-180 opacity-0'}`}>
                 <MemberIDCardBack member={sampleMember} />
               </div>
+              </motion.div>
             </div>
-          </div>
+          </ScaleIn>
 
           {/* Flip Button */}
           <div className="text-center mb-12">
@@ -102,22 +116,26 @@ export default function IDCardPage() {
           </div>
 
           {/* Card Features */}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StaggerChildren className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" staggerDelay={0.1}>
             {[
               { icon: QrCode, title: 'QR Verification', description: 'Instant verification at events' },
               { icon: Shield, title: 'Secure', description: 'Unique card number' },
               { icon: Smartphone, title: 'Digital Access', description: 'Always on your phone' },
               { icon: Sparkles, title: 'Premium Design', description: 'Professional quality' },
             ].map((feature, index) => (
-              <div key={index} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+              <motion.div 
+                key={index} 
+                className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center"
+                whileHover={{ y: -5, boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
+              >
                 <div className="w-10 h-10 bg-soa-light rounded-lg flex items-center justify-center mx-auto mb-3">
                   <feature.icon className="w-5 h-5 text-soa-primary" />
                 </div>
                 <h4 className="font-semibold text-gray-900 text-sm">{feature.title}</h4>
                 <p className="text-xs text-gray-500 mt-1">{feature.description}</p>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </StaggerChildren>
         </div>
       </section>
 

@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import { getSupabase } from '@/lib/supabase';
 import {
   Leaf,
@@ -256,10 +258,16 @@ export default function JoinPage() {
         <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Success State */}
           {isComplete ? (
-            <div className="bg-white rounded-2xl shadow-sm p-8 text-center animate-fade-in">
-              <div className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-10 h-10 text-soa-primary" />
-              </div>
+            <ScaleIn>
+              <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
+                <motion.div 
+                  className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                >
+                  <CheckCircle2 className="w-10 h-10 text-soa-primary" />
+                </motion.div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Welcome to {orgInfo?.region_name} Region!
               </h2>
@@ -332,23 +340,31 @@ export default function JoinPage() {
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </p>
-            </div>
+              </div>
+            </ScaleIn>
           ) : (
             <>
               {/* Header */}
               <div className="text-center mb-8">
-                <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Ticket className="w-10 h-10 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Join with Invite Code</h1>
-                <p className="text-gray-500">
-                  Enter the invite code you received from your regional manager
-                </p>
+                <ScaleIn>
+                  <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Ticket className="w-10 h-10 text-white" />
+                  </div>
+                </ScaleIn>
+                <FadeIn delay={0.1}>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">Join with Invite Code</h1>
+                </FadeIn>
+                <SlideIn direction="up" delay={0.2}>
+                  <p className="text-gray-500">
+                    Enter the invite code you received from your regional manager
+                  </p>
+                </SlideIn>
               </div>
 
               {/* Code Input (if not verified) */}
               {!orgInfo && (
-                <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8 animate-fade-in">
+                <SlideIn direction="up" delay={0.3}>
+                  <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Invite Code
                   </label>
@@ -413,12 +429,18 @@ export default function JoinPage() {
                       .
                     </p>
                   </div>
-                </div>
+                  </div>
+                </SlideIn>
               )}
 
               {/* Verified Organization + Form */}
               {orgInfo && (
-                <div className="space-y-6 animate-fade-in">
+                <motion.div 
+                  className="space-y-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                >
                   {/* Verified Org Card */}
                   <div className="bg-white rounded-2xl shadow-sm p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -598,7 +620,7 @@ export default function JoinPage() {
                       )}
                     </button>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {/* Link to full registration */}

@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn } from '@/components/animations';
 import {
   X,
   ChevronLeft,
@@ -180,12 +182,16 @@ export default function GalleryPage() {
       {/* Hero */}
       <section className="pt-24 pb-12 bg-gradient-to-br from-soa-dark to-gray-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4">
-            SOA Gallery
-          </h1>
-          <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-            Capturing moments of transformation, empowerment, and community across South Africa
-          </p>
+          <FadeIn>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4">
+              SOA Gallery
+            </h1>
+          </FadeIn>
+          <SlideIn direction="up" delay={0.2}>
+            <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+              Capturing moments of transformation, empowerment, and community across South Africa
+            </p>
+          </SlideIn>
         </div>
       </section>
 
@@ -222,10 +228,15 @@ export default function GalleryPage() {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredImages.map((image, index) => (
-                <button
+                <motion.button
                   key={image.id}
                   onClick={() => openLightbox(image, index)}
                   className="relative aspect-square bg-gray-200 rounded-xl overflow-hidden group"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  whileHover={{ scale: 1.03, zIndex: 10 }}
+                  layout
                 >
                   {/* Placeholder gradient until real images */}
                   <div className={`w-full h-full bg-gradient-to-br ${
@@ -246,7 +257,7 @@ export default function GalleryPage() {
                   <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded capitalize">
                     {image.category}
                   </div>
-                </button>
+                </motion.button>
               ))}
             </div>
           )}

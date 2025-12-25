@@ -1,5 +1,9 @@
+'use client';
+
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import {
   Smartphone,
   Download,
@@ -20,22 +24,31 @@ export default function DownloadPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-soa-primary/25">
-              <Smartphone className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-              Download the EduDash Pro App
-            </h1>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Access your Soil of Africa membership, digital ID card, resources, and events on
-              the go. Available on Android and iOS.
-            </p>
+            <ScaleIn>
+              <div className="w-20 h-20 bg-gradient-to-br from-soa-primary to-soa-secondary rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-soa-primary/25">
+                <Smartphone className="w-10 h-10 text-white" />
+              </div>
+            </ScaleIn>
+            <FadeIn delay={0.1}>
+              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
+                Download the EduDash Pro App
+              </h1>
+            </FadeIn>
+            <SlideIn direction="up" delay={0.2}>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Access your Soil of Africa membership, digital ID card, resources, and events on
+                the go. Available on Android and iOS.
+              </p>
+            </SlideIn>
           </div>
 
           {/* Download Options */}
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <StaggerChildren className="grid md:grid-cols-2 gap-6 mb-12" staggerDelay={0.1}>
             {/* Android */}
-            <div className="bg-white rounded-2xl shadow-sm p-8">
+            <motion.div 
+              className="bg-white rounded-2xl shadow-sm p-8"
+              whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
+            >
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-soa-light rounded-xl flex items-center justify-center">
                   <svg viewBox="0 0 24 24" className="w-8 h-8 text-soa-primary" fill="currentColor">
@@ -61,10 +74,13 @@ export default function DownloadPage() {
               <p className="text-xs text-gray-500 text-center">
                 Requires Android 8.0 or higher
               </p>
-            </div>
+            </motion.div>
 
             {/* iOS */}
-            <div className="bg-white rounded-2xl shadow-sm p-8">
+            <motion.div 
+              className="bg-white rounded-2xl shadow-sm p-8"
+              whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
+            >
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center">
                   <Apple className="w-8 h-8 text-gray-900" />
@@ -86,8 +102,8 @@ export default function DownloadPage() {
               </a>
 
               <p className="text-xs text-gray-500 text-center">Requires iOS 14.0 or higher</p>
-            </div>
-          </div>
+            </motion.div>
+          </StaggerChildren>
 
           {/* Alternative: Web App */}
           <div className="bg-gradient-to-br from-edudash-primary to-edudash-secondary rounded-2xl p-8 text-white mb-12">
@@ -130,23 +146,29 @@ export default function DownloadPage() {
 
           {/* App Features */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-              What you can do in the app
-            </h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <FadeIn>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+                What you can do in the app
+              </h2>
+            </FadeIn>
+            <StaggerChildren className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" staggerDelay={0.1}>
               {[
                 { icon: '🪪', title: 'Digital ID Card', desc: 'View & share your member card' },
                 { icon: '📚', title: 'Resources', desc: 'Access learning materials' },
                 { icon: '📅', title: 'Events', desc: 'Register for workshops' },
                 { icon: '💬', title: 'Community', desc: 'Connect with members' },
               ].map((feature, i) => (
-                <div key={i} className="bg-white rounded-xl p-5 text-center">
+                <motion.div 
+                  key={i} 
+                  className="bg-white rounded-xl p-5 text-center"
+                  whileHover={{ scale: 1.05, y: -3 }}
+                >
                   <span className="text-3xl mb-3 block">{feature.icon}</span>
                   <h4 className="font-semibold text-gray-900">{feature.title}</h4>
                   <p className="text-sm text-gray-500 mt-1">{feature.desc}</p>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </StaggerChildren>
           </div>
 
           {/* Not a member yet? */}

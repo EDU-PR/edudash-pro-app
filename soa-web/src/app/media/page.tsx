@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import {
   Play,
   Image as ImageIcon,
@@ -159,31 +161,37 @@ export default function MediaPage() {
       <section className="pt-24 pb-12 bg-gradient-to-br from-soa-primary via-soa-dark to-gray-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
-            <h1 className="text-4xl sm:text-5xl font-bold mb-4">
-              SOA Media Hub
-            </h1>
-            <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-              Videos, photos, and updates from the Soil of Africa movement. 
-              Follow us on social media to stay connected with our mission.
-            </p>
+            <FadeIn>
+              <h1 className="text-4xl sm:text-5xl font-bold mb-4">
+                SOA Media Hub
+              </h1>
+            </FadeIn>
+            <SlideIn direction="up" delay={0.2}>
+              <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+                Videos, photos, and updates from the Soil of Africa movement. 
+                Follow us on social media to stay connected with our mission.
+              </p>
+            </SlideIn>
           </div>
 
           {/* Social Platform Links */}
-          <div className="flex flex-wrap justify-center gap-4 mt-8">
+          <StaggerChildren className="flex flex-wrap justify-center gap-4 mt-8" staggerDelay={0.1}>
             {platforms.slice(1).map((platform) => (
-              <a
+              <motion.a
                 key={platform.id}
                 href={platform.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`inline-flex items-center gap-2 px-5 py-3 ${platform.color} text-white rounded-xl font-medium hover:opacity-90 transition shadow-lg`}
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
               >
                 <platform.icon className="w-5 h-5" />
                 {platform.name}
                 <ExternalLink className="w-4 h-4 opacity-60" />
-              </a>
+              </motion.a>
             ))}
-          </div>
+          </StaggerChildren>
         </div>
       </section>
 
@@ -248,16 +256,20 @@ export default function MediaPage() {
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredMedia.map((item) => {
+              {filteredMedia.map((item, index) => {
                 const PlatformIcon = getPlatformIcon(item.platform);
                 
                 return (
-                  <a
+                  <motion.a
                     key={item.id}
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition group"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    whileHover={{ y: -5 }}
                   >
                     {/* Thumbnail */}
                     <div className="relative aspect-video bg-gray-100">
@@ -327,7 +339,7 @@ export default function MediaPage() {
                         </span>
                       </div>
                     </div>
-                  </a>
+                  </motion.a>
                 );
               })}
             </div>

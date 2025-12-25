@@ -3,7 +3,9 @@
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import { getSupabase } from '@/lib/supabase';
 import {
   Leaf,
@@ -386,41 +388,58 @@ function RegisterPageContent() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Progress Header */}
           {step !== 'complete' && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl font-bold text-gray-900">Join Soil of Africa</h1>
-                <span className="text-sm text-gray-500">
-                  Step {currentStepIndex + 1} of {steps.length - 1}
-                </span>
-              </div>
+            <FadeIn>
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-2xl font-bold text-gray-900">Join Soil of Africa</h1>
+                  <span className="text-sm text-gray-500">
+                    Step {currentStepIndex + 1} of {steps.length - 1}
+                  </span>
+                </div>
 
-              {/* Progress Bar */}
-              <div className="flex gap-2">
-                {steps.slice(0, -1).map((s, i) => (
-                  <div
-                    key={s}
-                    className={`h-2 flex-1 rounded-full transition-colors ${
-                      i <= currentStepIndex ? 'bg-soa-primary' : 'bg-gray-200'
-                    }`}
-                  />
-                ))}
+                {/* Progress Bar */}
+                <div className="flex gap-2">
+                  {steps.slice(0, -1).map((s, i) => (
+                    <motion.div
+                      key={s}
+                      className={`h-2 flex-1 rounded-full transition-colors ${
+                        i <= currentStepIndex ? 'bg-soa-primary' : 'bg-gray-200'
+                      }`}
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ duration: 0.3, delay: i * 0.1 }}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            </FadeIn>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+            <motion.div 
+              className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>{error}</span>
-            </div>
+            </motion.div>
           )}
 
           {/* Step Content */}
-          <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8">
+          <motion.div 
+            className="bg-white rounded-2xl shadow-sm p-6 sm:p-8"
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
             {/* Step 1: Region Selection */}
             {step === 'region' && (
-              <div className="animate-fade-in">
+              <div>
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <MapPin className="w-8 h-8 text-soa-primary" />
@@ -454,7 +473,7 @@ function RegisterPageContent() {
 
             {/* Step 2: Personal Information */}
             {step === 'personal' && (
-              <div className="animate-fade-in">
+              <div>
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <User className="w-8 h-8 text-soa-primary" />
@@ -621,7 +640,7 @@ function RegisterPageContent() {
 
             {/* Step 3: Membership Selection */}
             {step === 'membership' && (
-              <div className="animate-fade-in">
+              <div>
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <Building2 className="w-8 h-8 text-soa-primary" />
@@ -708,7 +727,7 @@ function RegisterPageContent() {
 
             {/* Step 4: Payment */}
             {step === 'payment' && (
-              <div className="animate-fade-in">
+              <div>
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-soa-light rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <CreditCard className="w-8 h-8 text-soa-primary" />
@@ -787,10 +806,15 @@ function RegisterPageContent() {
 
             {/* Step 5: Complete */}
             {step === 'complete' && (
-              <div className="animate-fade-in text-center py-8">
-                <div className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6">
+              <div className="text-center py-8">
+                <motion.div 
+                  className="w-20 h-20 bg-soa-light rounded-full flex items-center justify-center mx-auto mb-6"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                >
                   <CheckCircle2 className="w-10 h-10 text-soa-primary" />
-                </div>
+                </motion.div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Soil of Africa!</h2>
                 <p className="text-gray-600 mb-6">
                   Your registration is complete. Your membership is pending payment confirmation.
@@ -912,7 +936,7 @@ function RegisterPageContent() {
                 )}
               </div>
             )}
-          </div>
+          </motion.div>
 
           {/* Have a code? */}
           {step !== 'complete' && (

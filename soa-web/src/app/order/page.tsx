@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import {
   ShoppingBag,
   Package,
@@ -156,11 +158,17 @@ ${formData.notes ? `Notes: ${formData.notes}` : ''}`;
         <Header />
         <div className="pt-24 pb-16">
           <div className="max-w-2xl mx-auto px-4 text-center">
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-8 h-8 text-green-600" />
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Submitted!</h1>
+            <ScaleIn>
+              <div className="bg-white rounded-2xl shadow-lg p-8">
+                <motion.div 
+                  className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                >
+                  <CheckCircle2 className="w-8 h-8 text-green-600" />
+                </motion.div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Order Submitted!</h1>
               <p className="text-gray-600 mb-6">
                 Your order has been sent via WhatsApp. Our team will contact you shortly to confirm your order and arrange payment.
               </p>
@@ -192,7 +200,8 @@ ${formData.notes ? `Notes: ${formData.notes}` : ''}`;
                   Place Another Order
                 </button>
               </div>
-            </div>
+              </div>
+            </ScaleIn>
           </div>
         </div>
         <Footer />
@@ -211,13 +220,17 @@ ${formData.notes ? `Notes: ${formData.notes}` : ''}`;
             <ChevronLeft className="w-4 h-4" />
             Back to Home
           </Link>
-          <div className="flex items-center gap-3 mb-2">
-            <ShoppingBag className="w-8 h-8" />
-            <h1 className="text-3xl sm:text-4xl font-bold">Order Merchandise</h1>
-          </div>
-          <p className="text-lg text-white/80">
-            Get your official Soil of Africa merchandise delivered to your door
-          </p>
+          <FadeIn>
+            <div className="flex items-center gap-3 mb-2">
+              <ShoppingBag className="w-8 h-8" />
+              <h1 className="text-3xl sm:text-4xl font-bold">Order Merchandise</h1>
+            </div>
+          </FadeIn>
+          <SlideIn direction="up" delay={0.1}>
+            <p className="text-lg text-white/80">
+              Get your official Soil of Africa merchandise delivered to your door
+            </p>
+          </SlideIn>
         </div>
       </section>
 
@@ -231,12 +244,19 @@ ${formData.notes ? `Notes: ${formData.notes}` : ''}`;
             </h2>
 
             <div className="grid sm:grid-cols-2 gap-6">
-              {products.map((product) => {
+              {products.map((product, index) => {
                 const currentImageIndex = productImageIndex[product.id] || 0;
                 const currentImage = product.images[currentImageIndex];
                 
                 return (
-                  <div key={product.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
+                  <motion.div 
+                    key={product.id} 
+                    className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    whileHover={{ y: -5 }}
+                  >
                     {/* Popular Badge */}
                     {product.popular && (
                       <div className="absolute top-3 left-3 z-10 px-2 py-1 bg-soa-gold text-white text-xs font-bold rounded-full">
@@ -323,7 +343,7 @@ ${formData.notes ? `Notes: ${formData.notes}` : ''}`;
                       Add to Order
                     </button>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>

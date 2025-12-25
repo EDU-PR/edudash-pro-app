@@ -1,6 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 
 export default function AboutPage() {
   return (
@@ -11,22 +13,29 @@ export default function AboutPage() {
         {/* Hero Section */}
         <section className="py-20 bg-gradient-to-b from-soa-dark to-soa-primary text-white">
           <div className="container mx-auto px-4 text-center">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              About <span className="text-soa-gold">Soil of Africa</span>
-            </h1>
-            <p className="text-xl md:text-2xl max-w-4xl mx-auto text-soa-cream/90">
-              A Pan-African Kingdom Movement Rooted in Sovereignty, Stewardship, and Self-Determination
-            </p>
+            <FadeIn>
+              <h1 className="text-4xl md:text-6xl font-bold mb-6">
+                About <span className="text-soa-gold">Soil of Africa</span>
+              </h1>
+            </FadeIn>
+            <SlideIn direction="up" delay={0.2}>
+              <p className="text-xl md:text-2xl max-w-4xl mx-auto text-soa-cream/90">
+                A Pan-African Kingdom Movement Rooted in Sovereignty, Stewardship, and Self-Determination
+              </p>
+            </SlideIn>
           </div>
         </section>
 
         {/* Introduction & Background */}
         <section className="py-16 bg-white">
           <div className="container mx-auto px-4 max-w-5xl">
-            <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
-              Introduction & Background
-            </h2>
-            <div className="prose prose-lg max-w-none text-soa-dark/80 space-y-6">
+            <FadeIn>
+              <h2 className="text-3xl font-bold text-soa-dark mb-8 text-center">
+                Introduction & Background
+              </h2>
+            </FadeIn>
+            <SlideIn direction="up" delay={0.1}>
+              <div className="prose prose-lg max-w-none text-soa-dark/80 space-y-6">
               <p>
                 The Soil of Africa (SOA) Kingdom was officially established on <strong>22 April 2021</strong>, the same day South Africa recognizes Freedom Day—a symbolic anchor that grounds our movement in the long arc of African liberation and self-determination. SOA was founded not merely as an organization, but as a Pan-African kingdom movement rooted in the principles of sovereignty, stewardship, and collective empowerment.
               </p>
@@ -36,7 +45,8 @@ export default function AboutPage() {
               <p>
                 SOA is built on foundational truths: that African liberation requires self-governance, economic independence, and collective responsibility. From this vision flows the structure, governance, and mission of the kingdom—driven by a commitment to uplift communities, protect sacred values, and ensure intergenerational continuity.
               </p>
-            </div>
+              </div>
+            </SlideIn>
           </div>
         </section>
 
@@ -45,7 +55,8 @@ export default function AboutPage() {
           <div className="container mx-auto px-4 max-w-5xl">
             <div className="grid md:grid-cols-2 gap-12">
               {/* Vision */}
-              <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-gold">
+              <ScaleIn delay={0.1}>
+                <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-gold hover:shadow-xl transition-shadow duration-300">
                 <div className="w-16 h-16 bg-soa-gold/20 rounded-full flex items-center justify-center mb-6">
                   <svg className="w-8 h-8 text-soa-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -56,10 +67,12 @@ export default function AboutPage() {
                 <p className="text-soa-dark/80 text-lg">
                   To build a self-sustaining, sovereign African kingdom rooted in unity, dignity, and economic freedom—leading the revival of authentic African governance and spiritual heritage.
                 </p>
-              </div>
+                </div>
+              </ScaleIn>
 
               {/* Mission */}
-              <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-primary">
+              <ScaleIn delay={0.2}>
+                <div className="bg-white rounded-2xl p-8 shadow-lg border-t-4 border-soa-primary hover:shadow-xl transition-shadow duration-300">
                 <div className="w-16 h-16 bg-soa-primary/20 rounded-full flex items-center justify-center mb-6">
                   <svg className="w-8 h-8 text-soa-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -69,7 +82,8 @@ export default function AboutPage() {
                 <p className="text-soa-dark/80 text-lg">
                   To unite, educate, and economically empower African people through principled leadership, land stewardship, cultural preservation, and spiritual reclamation.
                 </p>
-              </div>
+                </div>
+              </ScaleIn>
             </div>
           </div>
         </section>
@@ -77,10 +91,12 @@ export default function AboutPage() {
         {/* Strategic Objectives */}
         <section className="py-16 bg-white">
           <div className="container mx-auto px-4 max-w-5xl">
-            <h2 className="text-3xl font-bold text-soa-dark mb-12 text-center">
-              Strategic Objectives
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FadeIn>
+              <h2 className="text-3xl font-bold text-soa-dark mb-12 text-center">
+                Strategic Objectives
+              </h2>
+            </FadeIn>
+            <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-3 gap-6" staggerDelay={0.1}>
               {[
                 {
                   icon: "🌍",
@@ -113,23 +129,30 @@ export default function AboutPage() {
                   description: "Pursue full decolonization of mind, body, and governance."
                 }
               ].map((objective, index) => (
-                <div key={index} className="bg-soa-cream rounded-xl p-6 hover:shadow-lg transition-shadow">
+                <motion.div 
+                  key={index} 
+                  className="bg-soa-cream rounded-xl p-6 hover:shadow-lg transition-shadow"
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  transition={{ duration: 0.2 }}
+                >
                   <div className="text-4xl mb-4">{objective.icon}</div>
                   <h3 className="text-xl font-bold text-soa-dark mb-2">{objective.title}</h3>
                   <p className="text-soa-dark/70">{objective.description}</p>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </StaggerChildren>
           </div>
         </section>
 
         {/* Core Values */}
         <section className="py-16 bg-gradient-to-br from-soa-primary to-soa-dark text-white">
           <div className="container mx-auto px-4 max-w-5xl">
-            <h2 className="text-3xl font-bold mb-12 text-center">
-              Core Values
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <FadeIn>
+              <h2 className="text-3xl font-bold mb-12 text-center">
+                Core Values
+              </h2>
+            </FadeIn>
+            <StaggerChildren className="grid md:grid-cols-2 lg:grid-cols-4 gap-6" staggerDelay={0.08}>
               {[
                 { value: "Excellence", description: "Striving for the highest standard in all that we do" },
                 { value: "Ethical Conduct", description: "Acting with integrity, fairness, and moral conviction" },
@@ -140,12 +163,17 @@ export default function AboutPage() {
                 { value: "Diversity & Inclusion", description: "Respect for all African identities and contributions" },
                 { value: "Sustainability", description: "Practices that preserve resources for generations to come" }
               ].map((item, index) => (
-                <div key={index} className="bg-white/10 backdrop-blur rounded-xl p-6 hover:bg-white/20 transition-colors">
+                <motion.div 
+                  key={index} 
+                  className="bg-white/10 backdrop-blur rounded-xl p-6 hover:bg-white/20 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ duration: 0.2 }}
+                >
                   <h3 className="text-xl font-bold text-soa-gold mb-2">{item.value}</h3>
                   <p className="text-white/80 text-sm">{item.description}</p>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </StaggerChildren>
           </div>
         </section>
 
