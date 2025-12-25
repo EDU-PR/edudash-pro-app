@@ -147,7 +147,7 @@ export default function CEODashboard() {
             <Ionicons name="menu" size={26} color={theme.text} />
           </TouchableOpacity>
           <View style={styles.headerLeft}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>CEO Dashboard</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>President</Text>
             <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Executive Overview</Text>
           </View>
         </View>
@@ -158,9 +158,6 @@ export default function CEODashboard() {
           >
             <Ionicons name="color-palette-outline" size={22} color={theme.primary} />
           </TouchableOpacity>
-          <View style={styles.ceoBadge}>
-            <Text style={styles.ceoBadgeText}>CEO</Text>
-          </View>
           <TouchableOpacity 
             style={styles.headerButton}
             onPress={() => router.push('/screens/notifications')}

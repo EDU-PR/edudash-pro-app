@@ -25,7 +25,7 @@ export interface OrganizationMember {
   profile_id?: string;
   
   member_number: string;
-  member_type: 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' | 'regional_manager' | 'national_admin' | 'ceo' | 'executive' | 'board_member' | 'volunteer';
+  member_type: 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' | 'regional_manager' | 'national_admin' | 'ceo' | 'president' | 'executive' | 'board_member' | 'volunteer' | 'secretary_general' | 'deputy_president' | 'treasurer';
   
   first_name: string;
   last_name: string;
@@ -155,13 +155,17 @@ export const MEMBER_TYPE_LABELS: Record<string, string> = {
   mentor: 'Mentor',
   facilitator: 'Facilitator',
   staff: 'Staff Member',
-  admin: 'Administrator',
+  admin: 'President',
   regional_manager: 'Regional Manager',
   national_admin: 'National Administrator',
-  ceo: 'Chief Executive Officer',
+  ceo: 'President',
+  president: 'President',
   executive: 'Executive',
   board_member: 'Board Member',
   volunteer: 'Volunteer',
+  secretary_general: 'Secretary General',
+  deputy_president: 'Deputy President',
+  treasurer: 'Treasurer',
 };
 
 export const MEMBERSHIP_TIER_LABELS: Record<string, string> = {

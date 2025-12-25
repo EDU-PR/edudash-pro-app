@@ -7,5 +7,6 @@ export { useMemberDetail } from './useMemberDetail';
 export { useCEODashboard } from './useCEODashboard';
 export { useIDCard } from './useIDCard';
 export { useOrganizationRegions } from './useOrganizationRegions';
+export { useOrgAnnouncements } from './useOrgAnnouncements';
 export type { ExecutiveStats, RegionalPerformance, StrategicPriority } from './useCEODashboard';
 export type { OrganizationRegion } from './useOrganizationRegions';

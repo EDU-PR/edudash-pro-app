@@ -390,13 +390,13 @@ export default function FinanceScreen() {
       <DashboardWallpaperBackground>
         <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
           <View style={styles.headerLeft}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Finance</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Financial Reports</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Finance</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Financial Reports</Text>
+          </View>
+          <TouchableOpacity style={styles.headerButton}>
+            <Ionicons name="download-outline" size={24} color={theme.primary} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="download-outline" size={24} color={theme.primary} />
-        </TouchableOpacity>
-      </View>
 
       {/* Tab Switcher */}
       <View style={[styles.tabBar, { backgroundColor: theme.surface, borderColor: theme.border }]}>

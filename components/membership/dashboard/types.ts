@@ -147,10 +147,12 @@ export const MOCK_STRATEGIC_PRIORITIES: StrategicPriority[] = [
 ];
 
 export const MOCK_EXECUTIVE_ACTIONS: ExecutiveAction[] = [
+  { id: 'broadcast', icon: 'megaphone', label: 'Broadcast', route: '/screens/membership/broadcast', color: '#EF4444' },
+  { id: 'documents', icon: 'folder-open', label: 'Document Vault', route: '/screens/membership/documents', color: '#6366F1' },
   { id: 'regional', icon: 'people', label: 'Regional Managers', route: '/screens/membership/regional-managers', color: '#3B82F6' },
   { id: 'strategy', icon: 'bulb', label: 'Strategic Plan', route: '/screens/membership/strategy', color: '#8B5CF6' },
   { id: 'finance', icon: 'trending-up', label: 'Financial Reports', route: '/screens/membership/finance', color: '#10B981' },
-  { id: 'performance', icon: 'bar-chart', label: 'Performance', route: '/screens/membership/performance', color: '#F59E0B' },
   { id: 'governance', icon: 'shield-checkmark', label: 'Governance', route: '/screens/membership/governance', color: '#06B6D4' },
+  { id: 'performance', icon: 'bar-chart', label: 'Performance', route: '/screens/membership/performance', color: '#F59E0B' },
   { id: 'analytics', icon: 'analytics', label: 'Analytics', route: '/screens/membership/analytics', color: '#EC4899' },
 ];
