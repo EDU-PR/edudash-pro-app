@@ -25,26 +25,36 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-// South African Regions
+// Soil of Africa Organization ID
+const SOA_ORGANIZATION_ID = '63b6139a-e21f-447c-b322-376fb0828992';
+
+// South African Regions with database IDs
 const regions = [
-  { code: 'GP', name: 'Gauteng', description: 'Johannesburg, Pretoria' },
-  { code: 'WC', name: 'Western Cape', description: 'Cape Town, Stellenbosch' },
-  { code: 'KZN', name: 'KwaZulu-Natal', description: 'Durban, Pietermaritzburg' },
-  { code: 'EC', name: 'Eastern Cape', description: 'Port Elizabeth, East London' },
-  { code: 'LP', name: 'Limpopo', description: 'Polokwane, Tzaneen' },
-  { code: 'MP', name: 'Mpumalanga', description: 'Nelspruit, Witbank' },
-  { code: 'NW', name: 'North West', description: 'Rustenburg, Mahikeng' },
-  { code: 'FS', name: 'Free State', description: 'Bloemfontein, Welkom' },
-  { code: 'NC', name: 'Northern Cape', description: 'Kimberley, Upington' },
+  { code: 'GP', name: 'Gauteng', description: 'Johannesburg, Pretoria', id: '7e770bd4-3cad-4755-9b65-f7c0a2974139' },
+  { code: 'WC', name: 'Western Cape', description: 'Cape Town, Stellenbosch', id: 'dd1a7b1a-3ee9-477e-a34d-f0eebac6eca5' },
+  { code: 'KZN', name: 'KwaZulu-Natal', description: 'Durban, Pietermaritzburg', id: 'd9c0da5d-4363-42d8-8d4a-9924af458aa9' },
+  { code: 'EC', name: 'Eastern Cape', description: 'Port Elizabeth, East London', id: '6eee4c35-743d-4907-bbd4-d40c24170baf' },
+  { code: 'LP', name: 'Limpopo', description: 'Polokwane, Tzaneen', id: '2fb5e377-7cf8-42da-9cfc-25fcd3e7e3f1' },
+  { code: 'MP', name: 'Mpumalanga', description: 'Nelspruit, Witbank', id: 'cebc4383-7912-4b80-9037-ec723b05f04a' },
+  { code: 'NW', name: 'North West', description: 'Rustenburg, Mahikeng', id: 'd52fd5fb-1a85-49cc-b60e-3b13919e19b8' },
+  { code: 'FS', name: 'Free State', description: 'Bloemfontein, Welkom', id: 'ccecc955-1edc-441b-9d2b-e638d013001b' },
+  { code: 'NC', name: 'Northern Cape', description: 'Kimberley, Upington', id: 'd0245ae9-8413-4635-b345-b2da8be22282' },
 ];
 
-// Member Types
+// Member Types (for public registration)
+// Note: Leadership roles (president, ceo, board_member, etc.) are assigned internally
 const memberTypes = [
   {
     id: 'learner',
     name: 'Learner',
     description: 'New to SOA, eager to learn and grow',
     icon: User,
+  },
+  {
+    id: 'volunteer',
+    name: 'Volunteer',
+    description: 'Contribute your time and skills',
+    icon: Users,
   },
   {
     id: 'facilitator',
@@ -58,19 +68,31 @@ const memberTypes = [
     description: 'Senior member providing leadership',
     icon: Shield,
   },
+  {
+    id: 'staff',
+    name: 'Staff Member',
+    description: 'Full-time or part-time SOA employee',
+    icon: Building2,
+  },
+  {
+    id: 'executive',
+    name: 'Executive',
+    description: 'Leadership team member',
+    icon: Shield,
+  },
 ];
 
-// Membership Tiers
+// Membership Tiers (maps to database: standard, premium, vip, honorary)
 const tiers = [
   {
-    id: 'community',
+    id: 'standard',
     name: 'Community',
     price: 20,
     description: 'Join the movement and stay connected',
     features: ['Digital ID Card', 'Community Updates', 'Event Notifications', 'Basic Resources'],
   },
   {
-    id: 'active',
+    id: 'premium',
     name: 'Active Member',
     price: 350,
     description: 'Full access to programs and resources',
@@ -198,6 +220,52 @@ function RegisterPageContent() {
     }
   };
 
+  // Helper to convert errors to user-friendly messages
+  const getUserFriendlyError = (err: any): string => {
+    const message = err?.message?.toLowerCase() || '';
+    const code = err?.code?.toLowerCase() || '';
+    
+    // Database unique constraint violations
+    if (code === '23505' || message.includes('duplicate key') || message.includes('unique constraint')) {
+      if (message.includes('id_number') || message.includes('org_id_number')) {
+        return 'This ID number is already registered with Soil of Africa. Each person can only register once.';
+      }
+      if (message.includes('email') || message.includes('org_email')) {
+        return 'This email address is already registered. Please use a different email or login to your existing account.';
+      }
+      return 'You are already registered with Soil of Africa. Please contact support if you need assistance.';
+    }
+    
+    // Custom validation errors (our own throws)
+    if (message.includes('already registered') || message.includes('each person can only register')) {
+      return err.message; // Use our custom message directly
+    }
+    
+    // Auth errors
+    if (message.includes('user already registered')) {
+      return 'An account with this email already exists. Please login instead or use a different email.';
+    }
+    
+    // Network/connection issues
+    if (message.includes('network') || message.includes('fetch') || message.includes('connection') || message.includes('failed to fetch')) {
+      return 'Unable to connect to our servers. Please check your internet connection and try again.';
+    }
+    
+    // Supabase not configured
+    if (message.includes('supabase url') || message.includes('anon key')) {
+      return 'Our registration system is temporarily unavailable. Please try again later or contact support.';
+    }
+    
+    // RLS policy errors
+    if (message.includes('rls') || message.includes('policy') || message.includes('permission denied')) {
+      return 'Registration could not be completed due to a permissions issue. Please contact support.';
+    }
+    
+    // Generic fallback - don't expose technical details
+    console.error('Registration error details:', err);
+    return 'Registration could not be completed. Please try again or contact support at info@soilofafrica.org.za';
+  };
+
   const handleSubmit = async () => {
     if (!validateStep()) return;
 
@@ -207,9 +275,39 @@ function RegisterPageContent() {
     try {
       const supabase = getSupabase();
       
-      // 1. Create user in Supabase Auth
+      // 1. Check if email is already registered as a member
+      const { data: existingEmail } = await supabase
+        .from('organization_members')
+        .select('id, email, member_number')
+        .eq('email', formData.email.toLowerCase().trim())
+        .maybeSingle();
+      
+      if (existingEmail) {
+        throw new Error(`This email address is already registered with member number ${existingEmail.member_number}. You cannot register in multiple regions.`);
+      }
+      
+      // 2. Check if ID number is already registered (if provided)
+      if (formData.id_number && formData.id_number.trim()) {
+        const { data: existingIdNumber } = await supabase
+          .from('organization_members')
+          .select('id, id_number, member_number, first_name, last_name')
+          .eq('id_number', formData.id_number.trim())
+          .maybeSingle();
+        
+        if (existingIdNumber) {
+          throw new Error(`This ID number is already registered with Soil of Africa. Each person can only register once, regardless of region.`);
+        }
+      }
+      
+      // Get the selected region
+      const selectedRegion = regions.find(r => r.code === formData.region_code);
+      if (!selectedRegion) {
+        throw new Error('Please select a valid region');
+      }
+      
+      // 3. Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
+        email: formData.email.toLowerCase().trim(),
         password: Math.random().toString(36).slice(-12) + 'Aa1!', // Temporary password
         options: {
           data: {
@@ -222,37 +320,38 @@ function RegisterPageContent() {
 
       if (authError) throw authError;
 
-      // 2. Generate member number
+      // 4. Generate member number
       const year = new Date().getFullYear().toString().slice(-2);
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
-      // 3. Create membership record
+      // 5. Create membership record with correct UUIDs
       const { error: memberError } = await supabase.from('organization_members').insert({
         user_id: authData.user?.id,
-        organization_id: 'soil-of-africa', // This should be the actual org ID
-        region_id: formData.region_code, // This should be the actual region ID
+        organization_id: SOA_ORGANIZATION_ID,
+        region_id: selectedRegion.id,
         member_number: generatedMemberNumber,
         member_type: formData.member_type,
         membership_tier: formData.membership_tier,
-        status: 'pending',
+        membership_status: 'pending',
         first_name: formData.first_name,
         last_name: formData.last_name,
-        email: formData.email,
+        email: formData.email.toLowerCase().trim(),
         phone: formData.phone,
-        id_number: formData.id_number,
+        id_number: formData.id_number || null,
         date_of_birth: formData.date_of_birth || null,
-        address: formData.address,
+        physical_address: formData.address,
         city: formData.city,
+        province: selectedRegion.name,
         emergency_contact_name: formData.emergency_name,
         emergency_contact_phone: formData.emergency_phone,
-        emergency_contact_relationship: formData.emergency_relationship,
-        joined_at: new Date().toISOString(),
+        notes: formData.emergency_relationship ? `Emergency contact relationship: ${formData.emergency_relationship}` : null,
+        join_date: new Date().toISOString().split('T')[0],
       });
 
       if (memberError) throw memberError;
 
-      // 4. Create invoice
+      // 6. Create invoice
       const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
       if (selectedTier) {
         await supabase.from('member_invoices').insert({
@@ -268,7 +367,8 @@ function RegisterPageContent() {
       setStep('complete');
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
+      // Show user-friendly error message
+      setError(getUserFriendlyError(err));
     } finally {
       setIsSubmitting(false);
     }
