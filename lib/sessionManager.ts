@@ -599,44 +599,31 @@ export async function signInWithSession(
   try {
     if (__DEV__) console.log('[SessionManager] signInWithSession called for:', email);
 
-    // Ensure Supabase in-memory auth state is clean before switching accounts.
-    // Otherwise Supabase may respond "already signed in", and AuthContext won't receive a SIGNED_IN event.
+    // Quick check if there's an existing session for a different user
     try {
       const wantedEmail = email.trim().toLowerCase();
-      const { data: existing } = await assertSupabase().auth.getSession();
+      const { data: existing } = await withTimeout(
+        assertSupabase().auth.getSession(),
+        2000,
+        { data: { session: null } }
+      );
       const existingEmail = existing?.session?.user?.email?.toLowerCase();
       if (existing?.session && existingEmail && existingEmail !== wantedEmail) {
         if (__DEV__) console.log('[SessionManager] Existing session detected for different user, signing out first...');
-        // Use global scope to ensure server-side session is cleared
-        await assertSupabase().auth.signOut({ scope: 'global' } as any);
-        // Increased delay to allow auth state to fully settle
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await withTimeout(
+          assertSupabase().auth.signOut({ scope: 'local' } as any),
+          1500,
+          { error: null }
+        );
       }
     } catch (e) {
       // Non-fatal; proceed with sign-in attempt.
-      if (__DEV__) console.log('[SessionManager] Pre sign-in signOut check failed (non-fatal)', e);
+      if (__DEV__) console.log('[SessionManager] Pre sign-in check failed (non-fatal)', e);
     }
     
-    // Clear any stale session data before attempting new sign-in
+    // Clear any stale session data
     if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
     await clearStoredData();
-    
-    // Additional delay to ensure storage and Supabase client state are fully cleared
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Force clear Supabase client state by getting a fresh client instance
-    try {
-      const supabase = assertSupabase();
-      // Ensure client is in a clean state
-      const { data: sessionCheck } = await supabase.auth.getSession();
-      if (sessionCheck?.session) {
-        if (__DEV__) console.log('[SessionManager] Stale session still present, forcing clear...');
-        await supabase.auth.signOut({ scope: 'global' } as any);
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    } catch (clientCheckError) {
-      if (__DEV__) console.log('[SessionManager] Client state check failed (non-fatal):', clientCheckError);
-    }
     
     const { data, error } = await assertSupabase().auth.signInWithPassword({
       email,
@@ -802,6 +789,18 @@ export async function signInWithSession(
 }
 
 /**
+ * Helper to wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => 
+      setTimeout(() => resolve(fallback), ms)
+    )
+  ]);
+}
+
+/**
  * Sign out and clear session
  */
 export async function signOut(): Promise<void> {
@@ -818,43 +817,24 @@ export async function signOut(): Promise<void> {
       sessionRefreshTimer = null;
     }
 
+    // Attempt Supabase sign-out with timeout protection (2 seconds max)
     try {
-      // Sign out from Supabase with global scope first to clear server-side session
-      // This ensures the session is completely cleared on both client and server
       console.log('[SessionManager] Signing out from Supabase (global scope to clear server session)...');
-      await assertSupabase().auth.signOut({ scope: 'global' } as any);
-      console.log('[SessionManager] Supabase sign-out (global) successful');
-      
-      // Additional delay to ensure server-side state is cleared
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    } catch (supabaseGlobalError) {
-      console.warn('[SessionManager] Supabase global sign-out error:', supabaseGlobalError);
-      try {
-        // Fallback: try local scope
-        console.log('[SessionManager] Attempting Supabase sign-out (local scope)...');
-        await assertSupabase().auth.signOut({ scope: 'local' } as any);
-        console.log('[SessionManager] Supabase sign-out (local) successful');
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      } catch (supabaseLocalError) {
-        console.warn('[SessionManager] Supabase local sign-out error:', supabaseLocalError);
-        try {
-          // Last resort: try default signOut
-          console.log('[SessionManager] Attempting Supabase sign-out (default scope)...');
-          await assertSupabase().auth.signOut();
-          console.log('[SessionManager] Supabase sign-out (default) successful');
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        } catch (supabaseDefaultError) {
-          // Continue even if Supabase sign-out ultimately fails (network issues, etc.)
-          console.warn('[SessionManager] Supabase sign-out failed across all scopes (continuing):', supabaseDefaultError);
-        }
-      }
+      await withTimeout(
+        assertSupabase().auth.signOut({ scope: 'global' } as any),
+        2000,
+        { error: null }
+      );
+      console.log('[SessionManager] Supabase sign-out completed');
+    } catch (supabaseError) {
+      console.warn('[SessionManager] Supabase sign-out error (continuing):', supabaseError);
     }
 
-    // Clear stored data
+    // Clear stored data immediately (don't wait for Supabase)
     await clearStoredData();
     
-    // Additional delay to ensure all state is cleared before allowing new sign-in
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Short delay to ensure storage is cleared
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     track('edudash.auth.sign_out', {
       session_duration_minutes: sessionDuration,
