@@ -334,6 +334,7 @@ function RegisterPageContent() {
         member_type: formData.member_type,
         membership_tier: formData.membership_tier,
         membership_status: 'pending',
+        seat_status: 'active',
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email.toLowerCase().trim(),

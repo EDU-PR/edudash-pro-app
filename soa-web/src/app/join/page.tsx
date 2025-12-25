@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Header, Footer } from '@/components';
 import { getSupabase } from '@/lib/supabase';
@@ -20,81 +20,41 @@ import {
   ExternalLink,
   MapPin,
   X,
+  Building2,
+  Heart,
 } from 'lucide-react';
 
-// Mock invite code data (in production, this comes from database)
+// Organization info returned from database
 interface OrganizationInfo {
   id: string;
-  name: string;
-  region: string;
+  code: string;
+  organization_id: string;
+  organization_name: string;
+  region_id: string;
+  region_name: string;
   region_code: string;
-  manager_name: string;
+  allowed_member_types: string[];
   member_count: number;
-  default_tier: string;
-  allowed_types: ('learner' | 'facilitator' | 'mentor')[];
 }
 
-const VALID_CODES: Record<string, OrganizationInfo> = {
-  'SOA-GP-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'Gauteng',
-    region_code: 'GP',
-    manager_name: 'Nomvula Dlamini',
-    member_count: 847,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator', 'mentor'],
-  },
-  'SOA-WC-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'Western Cape',
-    region_code: 'WC',
-    manager_name: 'Sarah Johnson',
-    member_count: 523,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator'],
-  },
-  'SOA-KZN-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'KwaZulu-Natal',
-    region_code: 'KZN',
-    manager_name: 'James Ndlovu',
-    member_count: 412,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator', 'mentor'],
-  },
-  'SOA-EC-2025': {
-    id: 'org1',
-    name: 'Soil of Africa',
-    region: 'Eastern Cape',
-    region_code: 'EC',
-    manager_name: 'Thandi Gcaba',
-    member_count: 389,
-    default_tier: 'standard',
-    allowed_types: ['learner', 'facilitator', 'mentor'],
-  },
+// All available member types with their display info
+const memberTypeConfig: Record<string, { label: string; icon: any; description: string }> = {
+  learner: { label: 'Learner', icon: User, description: 'New to SOA, eager to learn' },
+  volunteer: { label: 'Volunteer', icon: Heart, description: 'Contribute your time' },
+  facilitator: { label: 'Facilitator', icon: Users, description: 'Guide and teach learners' },
+  mentor: { label: 'Mentor', icon: Shield, description: 'Senior leadership' },
+  staff: { label: 'Staff', icon: Building2, description: 'SOA employee' },
+  executive: { label: 'Executive', icon: Shield, description: 'Leadership team' },
 };
 
-const memberTypeLabels: Record<string, string> = {
-  learner: 'Learner',
-  facilitator: 'Facilitator',
-  mentor: 'Mentor',
-};
-
-const memberTypeIcons: Record<string, any> = {
-  learner: User,
-  facilitator: Users,
-  mentor: Shield,
-};
+type MemberType = 'learner' | 'volunteer' | 'facilitator' | 'mentor' | 'staff' | 'executive';
 
 interface FormData {
   first_name: string;
   last_name: string;
   email: string;
   phone: string;
-  member_type: 'learner' | 'facilitator' | 'mentor';
+  member_type: MemberType;
 }
 
 export default function JoinPage() {
@@ -130,19 +90,65 @@ export default function JoinPage() {
     setCodeError('');
 
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const supabase = getSupabase();
+      
+      // Query the region_invite_codes table
+      const { data: inviteData, error: inviteError } = await supabase
+        .from('region_invite_codes')
+        .select(`
+          id,
+          code,
+          organization_id,
+          region_id,
+          allowed_member_types,
+          is_active,
+          organizations:organization_id (
+            id,
+            name
+          ),
+          organization_regions:region_id (
+            id,
+            name,
+            code
+          )
+        `)
+        .eq('code', inviteCode.toUpperCase())
+        .eq('is_active', true)
+        .single();
 
-      // In production, this would be a Supabase query
-      const org = VALID_CODES[inviteCode.toUpperCase()];
-
-      if (org) {
-        setOrgInfo(org);
-      } else {
+      if (inviteError || !inviteData) {
         setCodeError('Invalid invite code. Please check and try again.');
+        return;
       }
-    } catch (error) {
-      setCodeError('Failed to verify code. Please try again.');
+
+      // Get member count for this region
+      const { count: memberCount } = await supabase
+        .from('organization_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', inviteData.organization_id)
+        .eq('region_id', inviteData.region_id);
+
+      const org = inviteData.organizations as any;
+      const region = inviteData.organization_regions as any;
+
+      setOrgInfo({
+        id: inviteData.id,
+        code: inviteData.code,
+        organization_id: inviteData.organization_id,
+        organization_name: org?.name || 'Soil of Africa',
+        region_id: inviteData.region_id,
+        region_name: region?.name || 'Unknown Region',
+        region_code: region?.code || 'XX',
+        allowed_member_types: inviteData.allowed_member_types || ['learner', 'facilitator', 'mentor'],
+        member_count: memberCount || 0,
+      });
+    } catch (error: any) {
+      console.error('Code verification error:', error);
+      if (error.message?.includes('Supabase URL')) {
+        setCodeError('Service temporarily unavailable. Please try again later.');
+      } else {
+        setCodeError('Failed to verify code. Please try again.');
+      }
     } finally {
       setIsVerifying(false);
     }
@@ -175,6 +181,20 @@ export default function JoinPage() {
     try {
       const supabase = getSupabase();
       
+      // Check for duplicate email in this organization
+      const { data: existingEmail } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('organization_id', orgInfo?.organization_id)
+        .eq('email', formData.email.toLowerCase())
+        .single();
+
+      if (existingEmail) {
+        setFormError('This email is already registered. Please use a different email or contact your regional manager.');
+        setIsSubmitting(false);
+        return;
+      }
+      
       // 1. Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -195,24 +215,28 @@ export default function JoinPage() {
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
-      // 3. Create membership record
+      // 3. Create membership record with proper UUIDs
       const { error: memberError } = await supabase.from('organization_members').insert({
         user_id: authData.user?.id,
-        organization_id: 'soil-of-africa',
-        region_id: orgInfo?.region_code,
+        organization_id: orgInfo?.organization_id,
+        region_id: orgInfo?.region_id,
         member_number: generatedMemberNumber,
         member_type: formData.member_type,
-        membership_tier: orgInfo?.default_tier || 'standard',
-        status: 'pending',
+        membership_tier: 'standard',
+        membership_status: 'pending',
+        seat_status: 'active',
         first_name: formData.first_name,
         last_name: formData.last_name,
-        email: formData.email,
+        email: formData.email.toLowerCase(),
         phone: formData.phone,
-        joined_at: new Date().toISOString(),
-        invite_code_used: inviteCode.toUpperCase(),
+        join_date: new Date().toISOString().split('T')[0],
+        notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
       });
 
       if (memberError) throw memberError;
+
+      // 4. Increment the usage count on the invite code
+      await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
 
       setMemberNumber(generatedMemberNumber);
       setIsComplete(true);
@@ -237,7 +261,7 @@ export default function JoinPage() {
                 <CheckCircle2 className="w-10 h-10 text-soa-primary" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Welcome to {orgInfo?.region} Region!
+                Welcome to {orgInfo?.region_name} Region!
               </h2>
               <p className="text-gray-600 mb-6">
                 You've successfully joined Soil of Africa. Your membership is pending approval by
@@ -379,21 +403,15 @@ export default function JoinPage() {
                     )}
                   </button>
 
-                  {/* Example codes hint */}
+                  {/* Help text */}
                   <div className="mt-6 p-4 bg-gray-50 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-2">Demo codes for testing:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.keys(VALID_CODES).map((code) => (
-                        <button
-                          key={code}
-                          type="button"
-                          onClick={() => setInviteCode(code)}
-                          className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:border-soa-primary hover:text-soa-primary transition"
-                        >
-                          {code}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-sm text-gray-600">
+                      Don't have an invite code? Contact your regional manager or{' '}
+                      <Link href="/register" className="text-soa-primary hover:underline">
+                        register directly
+                      </Link>
+                      .
+                    </p>
                   </div>
                 </div>
               )}
@@ -422,9 +440,8 @@ export default function JoinPage() {
                         <Leaf className="w-8 h-8 text-soa-primary" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-bold text-gray-900">{orgInfo.name}</h3>
-                        <p className="text-soa-primary font-medium">{orgInfo.region} Region</p>
-                        <p className="text-sm text-gray-500">Manager: {orgInfo.manager_name}</p>
+                        <h3 className="text-lg font-bold text-gray-900">{orgInfo.organization_name}</h3>
+                        <p className="text-soa-primary font-medium">{orgInfo.region_name} Region</p>
                       </div>
                     </div>
 
@@ -517,8 +534,10 @@ export default function JoinPage() {
                           Join as *
                         </label>
                         <div className="grid sm:grid-cols-3 gap-3">
-                          {orgInfo.allowed_types.map((type) => {
-                            const Icon = memberTypeIcons[type];
+                          {orgInfo.allowed_member_types.map((type) => {
+                            const config = memberTypeConfig[type];
+                            if (!config) return null;
+                            const Icon = config.icon;
                             return (
                               <button
                                 key={type}
@@ -544,7 +563,7 @@ export default function JoinPage() {
                                       : 'text-gray-700'
                                   }`}
                                 >
-                                  {memberTypeLabels[type]}
+                                  {config.label}
                                 </span>
                               </button>
                             );
@@ -573,7 +592,7 @@ export default function JoinPage() {
                         </>
                       ) : (
                         <>
-                          Join {orgInfo.region} Region
+                          Join {orgInfo.region_name} Region
                           <ArrowRight className="w-5 h-5" />
                         </>
                       )}
