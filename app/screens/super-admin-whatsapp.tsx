@@ -80,6 +80,9 @@ export default function SuperAdminWhatsAppScreen() {
     access_token: '',
   });
 
+  // Track if WhatsApp is configured
+  const [isConfigured, setIsConfigured] = useState(false);
+
   const fetchWhatsAppData = useCallback(async () => {
     if (!isSuperAdmin(profile?.role)) {
       Alert.alert('Access Denied', 'Super admin privileges required');
@@ -89,86 +92,101 @@ export default function SuperAdminWhatsAppScreen() {
     try {
       setLoading(true);
       
-      // Mock WhatsApp connections data
-      const mockConnections: WhatsAppConnection[] = [
-        {
-          id: '1',
-          school_id: 'school_1',
-          school_name: 'Bright Minds Preschool',
-          phone_number: '+27123456789',
-          business_account_id: 'ba_123456789',
-          status: 'connected',
-          last_sync: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-          message_count: 1247,
-          webhook_verified: true,
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        },
-        {
-          id: '2',
-          school_id: 'school_2',
-          school_name: 'Little Learners Academy',
-          phone_number: '+27987654321',
-          business_account_id: 'ba_987654321',
-          status: 'pending',
-          last_sync: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          message_count: 0,
-          webhook_verified: false,
-          created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
+      // Try to fetch real WhatsApp data from database
+      const { data: configData, error: configError } = await assertSupabase()
+        .from('whatsapp_config')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
 
-      // Mock templates data
-      const mockTemplates: WhatsAppTemplate[] = [
-        {
-          id: 't_1',
-          name: 'welcome_message',
-          category: 'utility',
-          language: 'en',
-          status: 'approved',
-          components: [],
-          created_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: 't_2',
-          name: 'payment_reminder',
-          category: 'utility',
-          language: 'en',
-          status: 'approved',
-          components: [],
-          created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: 't_3',
-          name: 'event_notification',
-          category: 'marketing',
-          language: 'en',
-          status: 'pending',
-          components: [],
-          created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
+      if (configError && configError.code !== 'PGRST116' && !configError.message.includes('does not exist')) {
+        console.error('WhatsApp config error:', configError);
+      }
 
-      // Mock metrics data
-      const mockMetrics: WhatsAppMetrics = {
-        total_connections: mockConnections.length,
-        active_connections: mockConnections.filter(c => c.status === 'connected').length,
-        messages_sent_today: 89,
-        messages_sent_month: 2341,
-        delivery_rate: 97.2,
-        read_rate: 82.5,
-        response_rate: 34.8,
-        failed_messages: 12,
-      };
+      // If we have config data, fetch connections
+      if (configData) {
+        setIsConfigured(true);
+        
+        // Fetch real connections
+        const { data: connectionsData } = await assertSupabase()
+          .from('whatsapp_connections')
+          .select(`
+            id,
+            school_id,
+            phone_number,
+            business_account_id,
+            status,
+            last_sync,
+            message_count,
+            webhook_verified,
+            created_at,
+            updated_at,
+            preschools:school_id(name)
+          `)
+          .order('created_at', { ascending: false });
 
-      setConnections(mockConnections);
-      setTemplates(mockTemplates);
-      setMetrics(mockMetrics);
+        if (connectionsData) {
+          const formattedConnections: WhatsAppConnection[] = connectionsData.map((c: any) => ({
+            id: c.id,
+            school_id: c.school_id,
+            school_name: c.preschools?.name || 'Unknown School',
+            phone_number: c.phone_number,
+            business_account_id: c.business_account_id,
+            status: c.status,
+            last_sync: c.last_sync,
+            message_count: c.message_count || 0,
+            webhook_verified: c.webhook_verified || false,
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+          }));
+          setConnections(formattedConnections);
+        }
+
+        // Fetch templates
+        const { data: templatesData } = await assertSupabase()
+          .from('whatsapp_templates')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (templatesData) {
+          const formattedTemplates: WhatsAppTemplate[] = templatesData.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            category: t.category,
+            language: t.language,
+            status: t.status,
+            components: t.components || [],
+            created_at: t.created_at,
+          }));
+          setTemplates(formattedTemplates);
+        }
+
+        // Calculate metrics
+        setMetrics({
+          total_connections: connections.length,
+          active_connections: connections.filter(c => c.status === 'connected').length,
+          messages_sent_today: 0,
+          messages_sent_month: 0,
+          delivery_rate: 0,
+          read_rate: 0,
+          response_rate: 0,
+          failed_messages: 0,
+        });
+      } else {
+        // WhatsApp is not configured - show empty state
+        setIsConfigured(false);
+        setConnections([]);
+        setTemplates([]);
+        setMetrics(null);
+      }
 
     } catch (error) {
       console.error('Failed to fetch WhatsApp data:', error);
-      Alert.alert('Error', 'Failed to load WhatsApp data');
+      // On error, show not configured state instead of mock data
+      setIsConfigured(false);
+      setConnections([]);
+      setTemplates([]);
+      setMetrics(null);
     } finally {
       setLoading(false);
     }
@@ -285,6 +303,43 @@ export default function SuperAdminWhatsAppScreen() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#25d366" />
             <Text style={styles.loadingText}>Loading WhatsApp data...</Text>
+          </View>
+        ) : !isConfigured ? (
+          <View style={styles.notConfiguredContainer}>
+            <View style={styles.notConfiguredCard}>
+              <Ionicons name="logo-whatsapp" size={64} color="#25d366" style={{ opacity: 0.6 }} />
+              <Text style={styles.notConfiguredTitle}>WhatsApp Integration Not Configured</Text>
+              <Text style={styles.notConfiguredDescription}>
+                Connect your WhatsApp Business API to enable messaging with schools and parents.
+              </Text>
+              <TouchableOpacity 
+                style={styles.configureButton}
+                onPress={handleConfigureBusiness}
+              >
+                <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.configureButtonText}>Set Up WhatsApp Business</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.setupSteps}>
+                <Text style={styles.setupStepsTitle}>Setup Steps:</Text>
+                <View style={styles.setupStep}>
+                  <Text style={styles.setupStepNumber}>1</Text>
+                  <Text style={styles.setupStepText}>Create a Meta Business Account</Text>
+                </View>
+                <View style={styles.setupStep}>
+                  <Text style={styles.setupStepNumber}>2</Text>
+                  <Text style={styles.setupStepText}>Set up WhatsApp Business API</Text>
+                </View>
+                <View style={styles.setupStep}>
+                  <Text style={styles.setupStepNumber}>3</Text>
+                  <Text style={styles.setupStepText}>Configure webhook endpoints</Text>
+                </View>
+                <View style={styles.setupStep}>
+                  <Text style={styles.setupStepNumber}>4</Text>
+                  <Text style={styles.setupStepText}>Add API credentials in settings</Text>
+                </View>
+              </View>
+            </View>
           </View>
         ) : (
           <>
@@ -820,5 +875,82 @@ const styles = StyleSheet.create({
     padding: 12,
     color: '#ffffff',
     fontSize: 16,
+  },
+  notConfiguredContainer: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notConfiguredCard: {
+    backgroundColor: '#1f2937',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  notConfiguredTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  notConfiguredDescription: {
+    color: '#9ca3af',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  configureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#25d366',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  configureButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  setupSteps: {
+    marginTop: 32,
+    width: '100%',
+  },
+  setupStepsTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  setupStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  setupStepNumber: {
+    backgroundColor: '#374151',
+    color: '#25d366',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    textAlign: 'center',
+    lineHeight: 24,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  setupStepText: {
+    color: '#d1d5db',
+    fontSize: 13,
+    flex: 1,
   },
 });

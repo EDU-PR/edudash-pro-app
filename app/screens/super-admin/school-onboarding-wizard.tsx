@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
+import { isSuperAdmin } from '@/lib/roleUtils';
 
 // Form data interfaces
 interface SchoolData {
@@ -115,7 +116,7 @@ export default function SuperAdminSchoolOnboardingWizard() {
 
   // Check if current user is superadmin
   useEffect(() => {
-    if (profile && profile.role !== 'super_admin') {
+    if (profile && !isSuperAdmin(profile.role)) {
       Alert.alert(
         'Access Denied',
         'This screen is only accessible to superadmins.',
