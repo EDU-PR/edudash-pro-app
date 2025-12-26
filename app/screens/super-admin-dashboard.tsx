@@ -548,15 +548,15 @@ export default function SuperAdminDashboardScreen() {
         {dashboardStats && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Global Platform Overview</Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>Serving preschools and K-12 educational institutions</Text>
+            <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>Empowering educational institutions across South Africa</Text>
             <View style={styles.statsContainer}>
               <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
                 <Ionicons name="business" size={24} color="#3b82f6" />
                 <Text style={[styles.statValue, { color: theme.text }]}>
                   {dashboardStats.total_organizations}
                 </Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Tenants</Text>
-                <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>Preschools + K-12</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Organizations</Text>
+                <Text style={[styles.statSubtext, { color: theme.textTertiary }]}>All institution types</Text>
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
