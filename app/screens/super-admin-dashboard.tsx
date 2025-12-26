@@ -150,6 +150,14 @@ export default function SuperAdminDashboardScreen() {
       color: '#f59e0b',
     },
     {
+      id: 'devops',
+      title: 'DevOps & Integrations',
+      description: 'GitHub, EAS, Vercel, Claude & Campaigns',
+      icon: 'git-branch',
+      route: '/screens/super-admin-devops',
+      color: '#059669',
+    },
+    {
       id: 'system-test',
       title: 'System Tests',
       description: 'Run comprehensive system validation',

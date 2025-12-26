@@ -229,13 +229,57 @@ export default function SuperAdminAdminManagementScreen() {
         return;
       }
 
-      // TODO: Create admin user via Supabase
-      Alert.alert('Success', `Admin user ${formData.full_name} created successfully!`);
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        Alert.alert('Validation Error', 'Please enter a valid email address');
+        return;
+      }
+
+      // Call admin-invite Edge Function
+      const supabase = assertSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
       
-      track('superadmin_admin_user_created', {
+      if (!session?.access_token) {
+        Alert.alert('Error', 'You must be logged in to invite admins');
+        return;
+      }
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-invite`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: formData.email.toLowerCase().trim(),
+            full_name: formData.full_name.trim(),
+            role: formData.role,
+            department: formData.department,
+            send_email: true,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send invitation');
+      }
+
+      Alert.alert(
+        'Invitation Sent! 🎉',
+        `An invitation email has been sent to ${formData.email}. They will receive a link to set up their account.`,
+        [{ text: 'OK' }]
+      );
+      
+      track('superadmin_admin_user_invited', {
         role: formData.role,
         department: formData.department,
         created_by: profile?.id,
+        invite_id: result.invite_id || result.user_id,
       });
       
       setShowCreateModal(false);
@@ -249,9 +293,9 @@ export default function SuperAdminAdminManagementScreen() {
       });
       await fetchAdminUsers();
       
-    } catch (error) {
-      console.error('Failed to create admin user:', error);
-      Alert.alert('Error', 'Failed to create admin user');
+    } catch (error: any) {
+      console.error('Failed to invite admin user:', error);
+      Alert.alert('Error', error.message || 'Failed to send invitation. Please try again.');
     }
   };
 

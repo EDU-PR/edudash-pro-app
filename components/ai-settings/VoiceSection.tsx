@@ -1,9 +1,9 @@
 /**
  * Voice settings section component
  */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { voiceService } from '@/lib/voice/client';
 import { normalizeLanguageCode, resolveDefaultVoiceId } from '@/lib/ai/dashSettings';
 import { SectionHeader } from './SectionHeader';
@@ -32,45 +32,81 @@ export function VoiceSection({
   const [samplePlaying, setSamplePlaying] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleProgress, setSampleProgress] = useState(0);
-  const sampleSoundRef = useRef<Audio.Sound | null>(null);
+  const samplePlayerRef = useRef<AudioPlayer | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      if (samplePlayerRef.current) {
+        samplePlayerRef.current.release();
+      }
+    };
+  }, []);
 
   const handlePlaySample = async () => {
     try {
-      if (samplePlaying) {
-        await sampleSoundRef.current?.stopAsync();
-        await sampleSoundRef.current?.unloadAsync();
-        sampleSoundRef.current = null;
+      if (samplePlaying && samplePlayerRef.current) {
+        samplePlayerRef.current.pause();
+        samplePlayerRef.current.release();
+        samplePlayerRef.current = null;
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
         setSamplePlaying(false);
         setSampleProgress(0);
         return;
       }
+      
       setSampleLoading(true);
       const langNorm = normalizeLanguageCode(settings.voiceLanguage);
       const isProviderVoice = /Neural$/i.test(settings.voiceType || '');
       const gender = settings.voiceType === 'male' ? 'male' : 'female';
       const voice_id = isProviderVoice ? settings.voiceType : resolveDefaultVoiceId(langNorm, gender as any);
       const audioUrl = await voiceService.testVoice(langNorm as any, voice_id);
-      const sound = new Audio.Sound();
-      await sound.loadAsync({ uri: audioUrl }, { shouldPlay: true });
-      sound.setOnPlaybackStatusUpdate((status: any) => {
-        if (!status?.isLoaded) return;
-        if (status.didJustFinish) {
-          setSamplePlaying(false);
-          setSampleLoading(false);
-          setSampleProgress(1);
-          sound.unloadAsync().catch(() => {});
-          sampleSoundRef.current = null;
-        } else if (status.isPlaying && status.durationMillis) {
-          setSamplePlaying(true);
-          setSampleProgress(status.positionMillis / status.durationMillis);
-        }
-      });
-      sampleSoundRef.current = sound;
+      
+      // Use expo-audio createAudioPlayer
+      const player = createAudioPlayer({ uri: audioUrl });
+      samplePlayerRef.current = player;
+      
+      player.play();
+      setSamplePlaying(true);
       setSampleLoading(false);
+      
+      // Poll for progress (expo-audio doesn't have callbacks like expo-av)
+      progressIntervalRef.current = setInterval(() => {
+        if (!samplePlayerRef.current) {
+          if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+          return;
+        }
+        
+        const duration = samplePlayerRef.current.duration || 0;
+        const position = samplePlayerRef.current.currentTime || 0;
+        const playing = samplePlayerRef.current.playing;
+        
+        if (duration > 0) {
+          setSampleProgress(position / duration);
+        }
+        
+        // Check if finished
+        if (!playing && position >= duration - 0.1 && duration > 0) {
+          setSamplePlaying(false);
+          setSampleProgress(1);
+          if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+          samplePlayerRef.current?.release();
+          samplePlayerRef.current = null;
+        }
+      }, 100);
+      
     } catch (err) {
       setSampleLoading(false);
       setSamplePlaying(false);
       setSampleProgress(0);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       Alert.alert('Sample Error', 'Could not play sample.');
     }
   };
