@@ -273,8 +273,28 @@ export default function SuperAdminOrganizations() {
         pending: allOrgs.filter(o => o.status === 'pending').length,
         suspended: allOrgs.filter(o => o.status === 'suspended').length,
         verified: allOrgs.filter(o => o.is_verified).length,
-        with_subscription: 0, // Would need subscription join
+        with_subscription: 0,
       };
+
+      // Fetch subscription counts to enhance stats
+      try {
+        const { data: subscriptions } = await supabase
+          .from('subscriptions')
+          .select('preschool_id, organization_id, status')
+          .eq('status', 'active');
+        
+        if (subscriptions) {
+          const orgsWithSubs = new Set<string>();
+          subscriptions.forEach((sub: any) => {
+            if (sub.preschool_id) orgsWithSubs.add(sub.preschool_id);
+            if (sub.organization_id) orgsWithSubs.add(sub.organization_id);
+          });
+          calculatedStats.with_subscription = orgsWithSubs.size;
+        }
+      } catch (subError) {
+        console.log('Could not fetch subscription counts:', subError);
+      }
+
       setStats(calculatedStats);
 
       track('superadmin_organizations_viewed', {
@@ -767,7 +787,7 @@ export default function SuperAdminOrganizations() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <ThemedStatusBar />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
@@ -778,7 +798,7 @@ export default function SuperAdminOrganizations() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ThemedStatusBar />
       <Stack.Screen
         options={{
