@@ -8,7 +8,7 @@
  * - Preview with play/stop/send buttons
  * - Compact, ChatGPT-inspired design
  * 
- * Uses expo-av Audio.Recording API
+ * Uses expo-audio for modern audio API with background support
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
@@ -20,14 +20,9 @@ import {
   Animated,
   Vibration,
   Platform,
-  Dimensions,
-  Pressable,
   PanResponder,
-  Modal,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   CYAN_PRIMARY,
@@ -38,10 +33,35 @@ import {
   GRADIENT_PURPLE_INDIGO,
 } from './theme';
 
+// Try to import expo-audio - it may not be available in all builds
+let useAudioPlayer: any;
+let useAudioPlayerStatus: any;
+let useAudioRecorder: any;
+let useAudioRecorderState: any;
+let RecordingPresets: any;
+let setAudioModeAsync: any;
+let requestRecordingPermissionsAsync: any;
+let getRecordingPermissionsAsync: any;
+let audioAvailable = false;
+
+try {
+  const expoAudio = require('expo-audio');
+  useAudioPlayer = expoAudio.useAudioPlayer;
+  useAudioPlayerStatus = expoAudio.useAudioPlayerStatus;
+  useAudioRecorder = expoAudio.useAudioRecorder;
+  useAudioRecorderState = expoAudio.useAudioRecorderState;
+  RecordingPresets = expoAudio.RecordingPresets;
+  setAudioModeAsync = expoAudio.setAudioModeAsync;
+  requestRecordingPermissionsAsync = expoAudio.requestRecordingPermissionsAsync;
+  getRecordingPermissionsAsync = expoAudio.getRecordingPermissionsAsync;
+  audioAvailable = true;
+} catch (e) {
+  console.warn('[VoiceRecorder] expo-audio not available:', e);
+}
+
 const MIN_RECORDING_DURATION = 500;
 const WAVEFORM_BAR_COUNT = 35;
 const CANCEL_THRESHOLD = 80; // Slide up 80px to cancel
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VoiceRecorderProps {
   onRecordingComplete: (uri: string, duration: number) => void;
@@ -50,7 +70,17 @@ interface VoiceRecorderProps {
   onRecordingStateChange?: (isRecording: boolean) => void; // Callback to notify parent
 }
 
-export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
+// Fallback component when expo-audio is not available
+const VoiceRecorderFallback: React.FC = () => (
+  <View style={styles.container}>
+    <View style={[styles.micButton, { backgroundColor: '#6B7280' }]}>
+      <Ionicons name="mic-off" size={20} color="#9CA3AF" />
+    </View>
+  </View>
+);
+
+// Main component that requires expo-audio
+const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   onRecordingComplete,
   onRecordingCancel,
   disabled = false,
@@ -66,9 +96,15 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const [previewProgress, setPreviewProgress] = useState(0);
   const [inCancelZone, setInCancelZone] = useState(false);
   
+  // expo-audio hooks
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 100); // Poll every 100ms
+  
+  // Preview player - only created when we have a URI
+  const previewPlayer = useAudioPlayer(previewUri || undefined);
+  const previewStatus = useAudioPlayerStatus(previewPlayer);
+  
   // Refs
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
   const recordingStartTime = useRef<number>(0);
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRecordingRef = useRef(false);
@@ -98,14 +134,23 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   useEffect(() => {
     return () => {
       if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      }
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-      }
+      // expo-audio hooks handle cleanup automatically
     };
   }, []);
+
+  // Sync preview playback state with player status
+  useEffect(() => {
+    if (previewStatus && previewUri) {
+      setIsPlayingPreview(previewStatus.playing);
+      if (previewStatus.duration && previewStatus.currentTime !== undefined) {
+        setPreviewProgress(previewStatus.currentTime / previewStatus.duration);
+      }
+      if (previewStatus.didJustFinish) {
+        setPreviewProgress(0);
+        previewPlayer.seekTo(0);
+      }
+    }
+  }, [previewStatus, previewUri, previewPlayer]);
 
   // Pulse animation for active recording
   useEffect(() => {
@@ -138,12 +183,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     const requestPermissions = async () => {
       if (!hasPermissionsRef.current) {
         try {
-          const permission = await Audio.requestPermissionsAsync();
-          if (permission.status === 'granted') {
+          const { granted } = await getRecordingPermissionsAsync();
+          if (granted) {
             hasPermissionsRef.current = true;
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: true,
-              playsInSilentModeIOS: true,
+            await setAudioModeAsync({
+              allowsRecording: true,
+              playsInSilentMode: true,
             });
           }
         } catch (error) {
@@ -156,50 +201,54 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     requestPermissions();
   }, []);
 
+  // Update duration from recorder state
+  useEffect(() => {
+    if (recorderState?.isRecording) {
+      setRecordingDuration(recorderState.durationMillis || 0);
+      
+      // Generate waveform data from metering if available
+      if (recorderState.metering !== undefined) {
+        const normalized = Math.max(0, Math.min(1, (recorderState.metering + 60) / 60));
+        const value = 0.2 + normalized * 0.6;
+        
+        waveformDataRef.current.push(value);
+        
+        setWaveformData(prev => {
+          const newData = [...prev.slice(1), value];
+          newData.forEach((val, idx) => {
+            waveformAnims[idx].setValue(val);
+          });
+          return newData;
+        });
+      }
+    }
+  }, [recorderState, waveformAnims]);
+
   const startRecording = async () => {
-    if (isRecordingRef.current || recordingRef.current || disabled) return;
+    if (isRecordingRef.current || disabled) return;
     
     isRecordingRef.current = true;
     
     try {
       // Check permissions
       if (!hasPermissionsRef.current) {
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        isRecordingRef.current = false;
-        return;
+        const { granted } = await requestRecordingPermissionsAsync();
+        if (!granted) {
+          isRecordingRef.current = false;
+          return;
         }
         hasPermissionsRef.current = true;
       }
       
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
       
-      // Start recording immediately
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        (status) => {
-          if (status.isRecording && status.metering !== undefined) {
-            const normalized = Math.max(0, Math.min(1, (status.metering + 60) / 60));
-            const value = 0.2 + normalized * 0.6;
-            
-            waveformDataRef.current.push(value);
-            
-            setWaveformData(prev => {
-              const newData = [...prev.slice(1), value];
-              newData.forEach((val, idx) => {
-                waveformAnims[idx].setValue(val);
-              });
-              return newData;
-            });
-          }
-        },
-        50
-      );
+      // Start recording using expo-audio
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       
-      recordingRef.current = recording;
       recordingStartTime.current = Date.now();
       waveformDataRef.current = [];
       setIsRecording(true);
@@ -208,16 +257,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       
       Vibration.vibrate(50);
       
-      durationIntervalRef.current = setInterval(() => {
-        setRecordingDuration(Date.now() - recordingStartTime.current);
-      }, 100);
-      
     } catch (error) {
       if (__DEV__) {
         console.error('[VoiceRecorder] Start error:', error);
       }
       isRecordingRef.current = false;
-      recordingRef.current = null;
       setIsRecording(false);
       // Reset state on error
       resetState();
@@ -225,25 +269,17 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   };
 
   const stopRecording = async (shouldSend: boolean = true, showPreviewMode: boolean = false) => {
-    if (!isRecordingRef.current || !recordingRef.current) return;
+    if (!isRecordingRef.current) return;
     
     isRecordingRef.current = false;
     
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
-      durationIntervalRef.current = null;
-    }
-    
-    const duration = Date.now() - recordingStartTime.current;
+    const duration = recorderState?.durationMillis || (Date.now() - recordingStartTime.current);
     
     try {
-      const recording = recordingRef.current;
-      recordingRef.current = null;
+      await recorder.stop();
+      const uri = recorder.uri;
       
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       
       if (!uri || duration < MIN_RECORDING_DURATION) {
         Vibration.vibrate(30);
@@ -271,7 +307,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       if (__DEV__) {
         console.error('[VoiceRecorder] Stop error:', error);
       }
-      recordingRef.current = null;
       resetState();
       // Notify cancellation on error
       onRecordingCancel?.();
@@ -291,56 +326,33 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     waveformAnims.forEach(anim => anim.setValue(0.2));
   };
 
-  // Preview handlers
+  // Preview handlers - using expo-audio player hook
   const handlePreviewPlayPause = async () => {
-    if (!previewUri) return;
+    if (!previewUri || !previewPlayer) return;
     
     try {
-      if (isPlayingPreview && soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setIsPlayingPreview(false);
+      if (isPlayingPreview) {
+        previewPlayer.pause();
       } else {
-        if (!soundRef.current) {
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: previewUri },
-            { shouldPlay: true },
-            (status) => {
-              if (status.isLoaded) {
-                if (status.durationMillis && status.positionMillis !== undefined) {
-                  setPreviewProgress(status.positionMillis / status.durationMillis);
-                }
-                if (status.didJustFinish) {
-                  setIsPlayingPreview(false);
-                  setPreviewProgress(0);
-                }
-              }
-            }
-          );
-          soundRef.current = sound;
-        } else {
-          const status = await soundRef.current.getStatusAsync();
-          if (status.isLoaded && status.positionMillis >= (status.durationMillis || 0) - 100) {
-            await soundRef.current.setPositionAsync(0);
-            setPreviewProgress(0);
-          }
-          await soundRef.current.playAsync();
+        // Reset if at the end
+        if (previewStatus?.didJustFinish || previewProgress >= 0.99) {
+          await previewPlayer.seekTo(0);
         }
-        setIsPlayingPreview(true);
+        previewPlayer.play();
       }
     } catch (error) {
       if (__DEV__) {
         console.error('[VoiceRecorder] Playback error:', error);
       }
-      // Reset playback state on error
       setIsPlayingPreview(false);
       setPreviewProgress(0);
     }
   };
 
-  const handleSendPreview = async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+  const handleSendPreview = () => {
+    // Stop playback if playing
+    if (previewPlayer && isPlayingPreview) {
+      previewPlayer.pause();
     }
     
     if (previewUri) {
@@ -349,10 +361,10 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     resetState();
   };
 
-  const handleDiscardPreview = async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+  const handleDiscardPreview = () => {
+    // Stop playback if playing
+    if (previewPlayer && isPlayingPreview) {
+      previewPlayer.pause();
     }
     onRecordingCancel?.();
     resetState();
@@ -423,187 +435,119 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     [disabled, isRecording, showPreview, inCancelZone]
   );
 
-  // If recording, show enhanced recording modal UI with slide-to-cancel
+  // If recording, show inline recording UI (no modal)
   if (isRecording) {
     return (
-      <>
-        {/* Hidden mic button placeholder to maintain layout */}
-        <View style={styles.container} pointerEvents="none">
-          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
-            <Ionicons name="mic" size={20} color="#fff" />
-          </LinearGradient>
+      <View style={[styles.inlineRecordingContainer, inCancelZone && styles.cancelZoneActive]}>
+        {/* Recording indicator */}
+        <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
+          <View style={styles.recordingDot} />
+        </Animated.View>
+        
+        {/* Waveform */}
+        <View style={styles.waveformContainer}>
+          {waveformAnims.slice(0, 20).map((anim, index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.waveformBar,
+                {
+                  height: anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [4, 24],
+                  }),
+                  backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
+                },
+              ]}
+            />
+          ))}
         </View>
-        {/* Modal overlay */}
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="fade"
-          statusBarTranslucent={true}
-          onRequestClose={() => stopRecording(false)}
+        
+        {/* Duration */}
+        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+        
+        {/* Cancel button */}
+        <TouchableOpacity
+          onPress={() => stopRecording(false)}
+          style={styles.inlineCancelButton}
+          activeOpacity={0.7}
         >
-          <View style={styles.recordingModalOverlay} {...panResponder.panHandlers}>
-            <View style={styles.recordingModalOverlayContent}>
-              <Animated.View 
-                style={[
-                  styles.recordingModal,
-                  inCancelZone && styles.recordingModalCancel,
-                  { transform: [{ translateY: slideY }] }
-                ]}
-              >
-                {/* Header */}
-                <View style={styles.recordingModalHeader}>
-                  <Animated.View style={[styles.recordingIndicatorLarge, { transform: [{ scale: pulseAnim }] }]}>
-                    <View style={styles.recordingDotLarge} />
-                  </Animated.View>
-                  <Text style={styles.recordingModalTitle}>
-                    {inCancelZone ? 'Release to Cancel' : 'Recording'}
-                  </Text>
-                </View>
-                
-                {/* Waveform */}
-                <View style={styles.waveformContainerLarge}>
-                  {waveformAnims.map((anim, index) => (
-                    <Animated.View
-                      key={index}
-                      style={[
-                        styles.waveformBarLarge,
-                        {
-                          height: anim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [8, 60],
-                          }),
-                          backgroundColor: inCancelZone ? ERROR_RED : PURPLE_PRIMARY,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-                
-                {/* Duration */}
-                <Text style={styles.durationTextLarge}>{formatDuration(recordingDuration)}</Text>
-                
-                {/* Action Buttons */}
-                <View style={styles.recordingModalActions}>
-                  <TouchableOpacity
-                    onPress={() => stopRecording(false)}
-                    style={styles.recordingCancelButton}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="close-circle" size={32} color={ERROR_RED} />
-                    <Text style={styles.recordingCancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={() => stopRecording(true, true)}
-                    style={styles.recordingStopButton}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.recordingStopButtonInner}>
-                      <Ionicons name="stop" size={24} color="#fff" />
-                    </View>
-                    <Text style={styles.recordingStopButtonText}>Stop</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Hint */}
-                <Text style={[styles.hintText, inCancelZone && styles.hintTextCancel]}>
-                  {inCancelZone ? '👆 Release to cancel recording' : '⬆️ Or slide up to cancel'}
-                </Text>
-              </Animated.View>
-            </View>
-          </View>
-        </Modal>
-      </>
+          <Ionicons name="close-circle" size={28} color={ERROR_RED} />
+        </TouchableOpacity>
+        
+        {/* Stop/Send button */}
+        <TouchableOpacity
+          onPress={() => stopRecording(true, true)}
+          style={styles.inlineStopButton}
+          activeOpacity={0.7}
+        >
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.inlineStopButtonInner}>
+            <Ionicons name="stop" size={18} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
     );
   }
 
-  // If preview, show modal preview UI
+  // If preview, show inline preview UI (no modal)
   if (showPreview) {
     return (
-      <>
-        {/* Hidden mic button placeholder to maintain layout */}
-        <View style={styles.container} pointerEvents="none">
-          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.micButton}>
-            <Ionicons name="mic" size={20} color="#fff" />
-          </LinearGradient>
-        </View>
-        {/* Preview Modal */}
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="fade"
-          statusBarTranslucent={true}
-          onRequestClose={handleDiscardPreview}
+      <View style={styles.inlinePreviewContainer}>
+        {/* Play/Pause button */}
+        <TouchableOpacity
+          onPress={handlePreviewPlayPause}
+          style={styles.playButton}
+          activeOpacity={0.7}
         >
-          <View style={styles.recordingModalOverlay}>
-            <View style={styles.recordingModalOverlayContent}>
-              <View style={styles.previewModal}>
-                {/* Header */}
-                <Text style={styles.previewModalTitle}>Voice Preview</Text>
-                
-                {/* Waveform */}
-                <View style={styles.previewWaveformContainerLarge}>
-                  {previewWaveformBars.map((height, index) => (
-                    <View 
-                      key={index} 
-                      style={[
-                        styles.previewBarLarge, 
-                        { 
-                          height: height * 60,
-                          backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED,
-                        },
-                      ]} 
-                    />
-                  ))}
-                </View>
-                
-                {/* Duration */}
-                <Text style={styles.previewDurationLarge}>{formatDuration(previewDuration)}</Text>
-                
-                {/* Action Buttons */}
-                <View style={styles.previewModalActions}>
-                  <TouchableOpacity
-                    onPress={handleDiscardPreview}
-                    style={styles.previewActionButton}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="close-circle" size={32} color={ERROR_RED} />
-                    <Text style={styles.previewActionButtonText}>Discard</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={handlePreviewPlayPause}
-                    style={styles.previewActionButton}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.previewPlayButtonInner}>
-                      <Ionicons 
-                        name={isPlayingPreview ? 'pause' : 'play'} 
-                        size={24} 
-                        color="#fff" 
-                      />
-                    </LinearGradient>
-                    <Text style={styles.previewActionButtonText}>
-                      {isPlayingPreview ? 'Pause' : 'Play'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={handleSendPreview}
-                    style={styles.previewActionButton}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.previewSendButtonInner}>
-                      <Ionicons name="send" size={24} color="#fff" />
-                    </LinearGradient>
-                    <Text style={styles.previewActionButtonText}>Send</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      </>
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.playButtonInner}>
+            <Ionicons 
+              name={isPlayingPreview ? 'pause' : 'play'} 
+              size={18} 
+              color="#fff" 
+              style={isPlayingPreview ? undefined : { marginLeft: 2 }}
+            />
+          </LinearGradient>
+        </TouchableOpacity>
+        
+        {/* Waveform */}
+        <View style={styles.previewWaveformContainer}>
+          {previewWaveformBars.map((height, index) => (
+            <View 
+              key={index} 
+              style={[
+                styles.previewBar, 
+                { 
+                  height: Math.max(4, height * 24),
+                  backgroundColor: index < playedBars ? WAVEFORM_PLAYED : WAVEFORM_UNPLAYED,
+                },
+              ]} 
+            />
+          ))}
+        </View>
+        
+        {/* Duration */}
+        <Text style={styles.previewDuration}>{formatDuration(previewDuration)}</Text>
+        
+        {/* Discard button */}
+        <TouchableOpacity
+          onPress={handleDiscardPreview}
+          style={styles.discardButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="trash-outline" size={18} color={ERROR_RED} />
+        </TouchableOpacity>
+        
+        {/* Send button */}
+        <TouchableOpacity
+          onPress={handleSendPreview}
+          style={styles.sendButton}
+          activeOpacity={0.7}
+        >
+          <LinearGradient colors={GRADIENT_PURPLE_INDIGO} style={styles.sendButtonInner}>
+            <Ionicons name="send" size={18} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -617,12 +561,22 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   );
 };
 
+// Wrapper that checks for expo-audio availability
+export const VoiceRecorder: React.FC<VoiceRecorderProps> = (props) => {
+  if (!audioAvailable) {
+    return <VoiceRecorderFallback />;
+  }
+  return <VoiceRecorderImpl {...props} />;
+};
+
 const styles = StyleSheet.create({
   container: {
     width: 48,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    // Match the input wrapper offset
+    bottom: -12,
   },
   micButton: {
     width: 48,
@@ -645,18 +599,28 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.15)', // Purple tint when recording
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
     borderRadius: 24,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 8,
     minHeight: 50,
     borderWidth: 1.5,
-    borderColor: 'rgba(139, 92, 246, 0.4)', // Purple border
-    gap: 8,
+    borderColor: 'rgba(139, 92, 246, 0.4)',
+    gap: 10,
+    // Match the input wrapper offset
+    bottom: -12,
+    marginLeft: -4,
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cancelZoneActive: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)', // Red tint when in cancel zone
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderColor: 'rgba(239, 68, 68, 0.5)',
+    shadowColor: ERROR_RED,
   },
   recordingIndicator: {
     width: 28,
@@ -705,7 +669,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  // Enhanced recording modal styles
+  inlineCancelButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineStopButton: {
+    width: 36,
+    height: 36,
+  },
+  inlineStopButtonInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Enhanced recording modal styles (kept for backwards compatibility)
   recordingModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
@@ -905,68 +886,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Inline preview UI
+  // Inline preview UI - matches input wrapper styling
   inlinePreviewContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
     borderRadius: 24,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 8,
     minHeight: 50,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
-    gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(139, 92, 246, 0.35)',
+    gap: 10,
+    // Match the input wrapper offset
+    bottom: -12,
+    marginLeft: -4,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
   },
   playButton: {
-    width: 28,
-    height: 28,
+    width: 36,
+    height: 36,
   },
   playButtonInner: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   previewWaveformContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 26,
+    height: 32,
     gap: 2.5,
     paddingHorizontal: 4,
   },
   previewBar: {
-    width: 2.5,
-    borderRadius: 1.25,
-    minHeight: 3,
+    width: 3,
+    borderRadius: 1.5,
+    minHeight: 4,
   },
   previewDuration: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#E2E8F0',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    minWidth: 40,
+    minWidth: 44,
     textAlign: 'center',
+    fontWeight: '500',
   },
   discardButton: {
-    width: 28,
-    height: 28,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 18,
   },
   sendButton: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
   },
   sendButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: PURPLE_PRIMARY,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
 

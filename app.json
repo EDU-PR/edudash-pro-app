@@ -140,7 +140,16 @@
       "expo-updates",
       "expo-web-browser",
       "sentry-expo",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access the microphone for voice messages.",
+          "androidAudioForegroundServiceConfig": {
+            "name": "Voice Message",
+            "text": "Playing voice message..."
+          }
+        }
+      ],
       "@react-native-voice/voice",
       "expo-speech-recognition",
       [

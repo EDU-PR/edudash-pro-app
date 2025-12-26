@@ -156,6 +156,9 @@ export default function ParentMessageThreadScreen() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [showMessageActions, setShowMessageActions] = useState(false);
   
+  // Continuous voice playback state
+  const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
+  
   // Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
@@ -573,11 +576,30 @@ export default function ParentMessageThreadScreen() {
 
   // Render messages with date separators
   const renderMessages = useMemo(() => {
+    // Get all voice message IDs in order for continuous playback
+    const voiceMessageIds = allMessages
+      .filter(m => m.voice_url)
+      .map(m => m.id);
+    
     let lastDateKey = '';
-    return allMessages.map((msg) => {
+    return allMessages.map((msg, index) => {
       const dateKey = getDateKey(msg.created_at);
       const showDateSeparator = dateKey !== lastDateKey;
       lastDateKey = dateKey;
+      
+      // Handler for when voice playback finishes - play next voice message
+      const handleVoiceFinished = msg.voice_url ? () => {
+        const currentIndex = voiceMessageIds.indexOf(msg.id);
+        if (currentIndex >= 0 && currentIndex < voiceMessageIds.length - 1) {
+          // There's a next voice message - set it as current to trigger playback
+          setCurrentlyPlayingVoiceId(voiceMessageIds[currentIndex + 1]);
+        } else {
+          setCurrentlyPlayingVoiceId(null);
+        }
+      } : undefined;
+      
+      // Check if this voice message should auto-play (continuous playback)
+      const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
       
       return (
         <React.Fragment key={msg.id}>
@@ -586,11 +608,13 @@ export default function ParentMessageThreadScreen() {
             msg={msg} 
             isOwn={msg.sender_id === user?.id} 
             onLongPress={() => handleMessageLongPress(msg)}
+            onPlaybackFinished={handleVoiceFinished}
+            autoPlayVoice={shouldAutoPlay}
           />
         </React.Fragment>
       );
     });
-  }, [allMessages, user?.id, handleMessageLongPress]);
+  }, [allMessages, user?.id, handleMessageLongPress, currentlyPlayingVoiceId]);
 
   // No thread ID error state
   if (!threadId) {

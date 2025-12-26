@@ -151,6 +151,7 @@ export default function TeacherMessageThreadScreen() {
   const [wallpaper, setWallpaper] = useState<any>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sending, setSending] = useState(false);
+  const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
   
   const scrollRef = useRef<ScrollView>(null);
   
@@ -275,11 +276,29 @@ export default function TeacherMessageThreadScreen() {
   
   // Render messages with date separators
   const renderMessages = useMemo(() => {
+    // Get all voice message IDs in order for continuous playback
+    const voiceMessageIds = messages
+      .filter((m: Message) => m.voice_url)
+      .map((m: Message) => m.id);
+    
     let lastDateKey = '';
     return messages.map((msg: Message) => {
       const dateKey = getDateKey(msg.created_at);
       const showDateSep = dateKey !== lastDateKey;
       lastDateKey = dateKey;
+      
+      // Handler for when voice playback finishes - play next voice message
+      const handleVoiceFinished = msg.voice_url ? () => {
+        const currentIndex = voiceMessageIds.indexOf(msg.id);
+        if (currentIndex >= 0 && currentIndex < voiceMessageIds.length - 1) {
+          setCurrentlyPlayingVoiceId(voiceMessageIds[currentIndex + 1]);
+        } else {
+          setCurrentlyPlayingVoiceId(null);
+        }
+      } : undefined;
+      
+      // Check if this voice message should auto-play
+      const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
       
       return (
         <React.Fragment key={msg.id}>
@@ -288,12 +307,14 @@ export default function TeacherMessageThreadScreen() {
             msg={msg} 
             isOwn={msg.sender_id === user?.id} 
             onLongPress={() => handleLongPress(msg)}
+            onPlaybackFinished={handleVoiceFinished}
+            autoPlayVoice={shouldAutoPlay}
             otherParticipantIds={otherIds}
           />
         </React.Fragment>
       );
     });
-  }, [messages, user?.id, handleLongPress, otherIds]);
+  }, [messages, user?.id, handleLongPress, otherIds, currentlyPlayingVoiceId]);
   
   // Loading state
   if (isLoading) {
