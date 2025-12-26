@@ -125,8 +125,14 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       // Mobile: Use dismissAll first to clear the entire navigation stack
       // This prevents back button from going to authenticated screens
       try {
-        console.log('[authActions] Clearing navigation stack...');
-        router.dismissAll();
+        // Only call dismissAll if there are screens to dismiss
+        // This prevents "POP_TO_TOP was not handled" warning when already at root
+        if (router.canDismiss && router.canDismiss()) {
+          console.log('[authActions] Clearing navigation stack...');
+          router.dismissAll();
+        } else {
+          console.debug('[authActions] No screens to dismiss, skipping dismissAll');
+        }
       } catch (dismissErr) {
         console.debug('[authActions] dismissAll not available:', dismissErr);
       }
