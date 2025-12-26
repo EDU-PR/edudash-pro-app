@@ -23,13 +23,17 @@ interface MessageBubbleProps {
   msg: Message;
   isOwn: boolean;
   onLongPress: () => void;
+  onPlaybackFinished?: () => void;
+  autoPlayVoice?: boolean;
   otherParticipantIds?: string[];
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
   msg, 
   isOwn, 
-  onLongPress, 
+  onLongPress,
+  onPlaybackFinished,
+  autoPlayVoice = false,
   otherParticipantIds = [] 
 }) => {
   const name = getSenderName(msg.sender);
@@ -66,6 +70,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         senderName={!isOwn ? name : undefined}
         isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
         onLongPress={onLongPress}
+        onPlaybackFinished={onPlaybackFinished}
+        autoPlay={autoPlayVoice}
       />
     );
   }

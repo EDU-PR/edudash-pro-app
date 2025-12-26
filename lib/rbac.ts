@@ -692,7 +692,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     // Preferred: Use secure RPC that returns the caller's profile (bypasses RLS safely)
     log('[Profile] Calling get_my_profile RPC...');
     const rpcCall = () => assertSupabase().rpc('get_my_profile').maybeSingle();
-    const rpcTimeoutMs = 8000; // allow a bit more time on slow networks
+    const rpcTimeoutMs = 12000; // allow more time on slow networks or after sign-in
     const rpcTimeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('RPC timeout')), rpcTimeoutMs)
     );

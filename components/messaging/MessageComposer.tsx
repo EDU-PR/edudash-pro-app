@@ -26,7 +26,9 @@ let EmojiPicker: React.FC<any> | null = null;
 
 try {
   VoiceRecorder = require('@/components/messaging/VoiceRecorder').VoiceRecorder;
-} catch {}
+} catch (e) {
+  console.error('[MessageComposer] Failed to load VoiceRecorder:', e);
+}
 
 try {
   EmojiPicker = require('@/components/messaging/EmojiPicker').EmojiPicker;

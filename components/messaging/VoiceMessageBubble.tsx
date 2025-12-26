@@ -1,490 +1,669 @@
 /**
- * VoiceMessageBubble Component - Enhanced
- * WhatsApp-style voice message player with animated waveform
- * Uses expo-av Audio.Sound API for stable playback
- * 
- * Features:
- * - Play/pause button with gradient
- * - Animated waveform visualization that moves during playback
- * - Duration and progress display
- * - Profile picture for received messages
- * - Seek by tapping on waveform
- * - Auto-generates signed URLs for storage paths
+ * VoiceMessageBubble.tsx
+ *
+ * WhatsApp-style voice message player component using expo-audio
+ * Supports background playback with media controls
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Image,
-  Pressable,
+  Vibration,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../../contexts/ThemeContext';
-import { PURPLE_LIGHT, SUCCESS_GREEN } from './theme';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { assertSupabase } from '@/lib/supabase';
 
-const VOICE_BUCKET = 'voice_recordings';
-
-// Generate random waveform bars (normalized 0-1)
-const generateWaveformBars = (count: number = 25): number[] => {
-  const bars: number[] = [];
-  for (let i = 0; i < count; i++) {
-    // Create a somewhat natural looking waveform
-    const base = 0.3 + Math.random() * 0.4;
-    const variation = Math.sin(i * 0.3) * 0.2;
-    bars.push(Math.min(1, Math.max(0.15, base + variation)));
-  }
-  return bars;
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface VoiceMessageBubbleProps {
+  /** URL or storage path to the audio file */
   audioUrl: string;
-  duration: number; // in milliseconds
-  isOwnMessage: boolean;
-  timestamp: string;
-  senderAvatar?: string;
+  /** Duration in seconds (from message metadata) */
+  duration?: number;
+  /** Whether this is the current user's message */
+  isOwnMessage?: boolean;
+  /** Timestamp to display */
+  timestamp?: string;
+  /** Sender name (for received messages) */
   senderName?: string;
+  /** Whether message has been read */
   isRead?: boolean;
+  /** Long press handler for context menu (reactions, reply, forward, delete) */
   onLongPress?: () => void;
+  /** Called when playback finishes - use for continuous play */
+  onPlaybackFinished?: () => void;
+  /** Auto-start playback when true (for continuous play) */
+  autoPlay?: boolean;
+  /** Custom styles */
+  style?: object;
+  /** Theme colors */
+  theme?: {
+    primary?: string;
+    background?: string;
+    text?: string;
+    textSecondary?: string;
+  };
 }
 
-export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
-  audioUrl,
-  duration,
-  isOwnMessage,
-  timestamp,
-  senderAvatar,
-  senderName,
-  isRead = false,
-  onLongPress,
-}) => {
-  const { theme } = useTheme();
-  const [isLoading, setIsLoading] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const [playbackProgress, setPlaybackProgress] = useState(0);
-  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
-  
-  const waveformBars = useRef(generateWaveformBars(25)).current;
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const audioDurationRef = useRef<number>(duration);
-  
-  // Animated values for each bar
-  const barAnimations = useRef(
-    waveformBars.map(() => new Animated.Value(0))
-  ).current;
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Check if the URL is a storage path (not a full URL)
-   * Storage paths look like: "user-id/voice_timestamp_random.m4a"
-   * Full URLs start with "http" or contain "supabase" domain
-   */
-  const isStoragePath = (url: string): boolean => {
-    return !url.startsWith('http') && !url.startsWith('blob:');
-  };
+const DEFAULT_THEME = {
+  primary: '#25D366',
+  background: '#075E54',
+  text: '#FFFFFF',
+  textSecondary: 'rgba(255, 255, 255, 0.7)', // More visible on green
+};
 
-  /**
-   * Create a signed URL for private voice note access
-   */
-  const createSignedUrl = async (storagePath: string): Promise<string> => {
+const WAVEFORM_BARS = 28;
+const PLAYBACK_SPEEDS = [1, 1.5, 2] as const;
+type PlaybackSpeed = typeof PLAYBACK_SPEEDS[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Format seconds to mm:ss
+ */
+function formatDuration(seconds: number): string {
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Generate deterministic waveform heights from URL
+ */
+function generateWaveformFromUrl(url: string): number[] {
+  const bars: number[] = [];
+  let hash = 0;
+
+  // Simple hash from URL
+  for (let i = 0; i < url.length; i++) {
+    hash = (hash << 5) - hash + url.charCodeAt(i);
+    hash |= 0;
+  }
+
+  // Generate bar heights (0.2 to 1.0)
+  for (let i = 0; i < WAVEFORM_BARS; i++) {
+    const seed = Math.abs((hash * (i + 1)) % 100);
+    bars.push(0.2 + (seed / 100) * 0.8);
+  }
+
+  return bars;
+}
+
+/**
+ * Get signed URL for Supabase storage paths
+ */
+async function getSignedUrl(path: string): Promise<string | null> {
+  // If it's already a full URL, return as-is
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+
+  try {
     const supabase = assertSupabase();
     const { data, error } = await supabase.storage
-      .from(VOICE_BUCKET)
-      .createSignedUrl(storagePath, 3600); // 1 hour
-    
-    if (error || !data?.signedUrl) {
-      throw new Error(`Failed to create signed URL: ${error?.message || 'Unknown error'}`);
-    }
-    return data.signedUrl;
-  };
+      .from('voice_recordings')
+      .createSignedUrl(path, 3600); // 1 hour expiry
 
-  /**
-   * Get a playable URL - either use directly or generate signed URL
-   */
-  const getPlayableUrl = async (url: string): Promise<string> => {
-    if (isStoragePath(url)) {
-      console.log('[VoiceMessageBubble] Generating signed URL for storage path:', url);
-      try {
-        const signedUrl = await createSignedUrl(url);
-        console.log('[VoiceMessageBubble] Signed URL generated successfully');
-        return signedUrl;
-      } catch (error) {
-        console.error('[VoiceMessageBubble] Failed to generate signed URL:', error);
-        throw error;
+    if (error) {
+      // Log concisely - file may have been deleted
+      if (__DEV__) {
+        console.warn('[VoiceMessageBubble] Audio not found:', path);
       }
+      return null;
     }
-    // Already a full URL (might be expired signed URL, but try it)
-    return url;
-  };
 
-  // Format duration as MM:SS
-  const formatTime = (ms: number): string => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
+    return data?.signedUrl || null;
+  } catch (err) {
+    if (__DEV__) {
+      console.warn('[VoiceMessageBubble] Failed to get signed URL for:', path);
+    }
+    return null;
+  }
+}
 
-  // Cleanup on unmount
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function VoiceMessageBubble({
+  audioUrl,
+  duration: providedDuration,
+  isOwnMessage = false,
+  timestamp,
+  senderName,
+  isRead,
+  onLongPress,
+  onPlaybackFinished,
+  autoPlay = false,
+  style,
+  theme: customTheme,
+}: VoiceMessageBubbleProps) {
+  const theme = { ...DEFAULT_THEME, ...customTheme };
+
+  // ─── State ─────────────────────────────────────────────────────────────────
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekPosition, setSeekPosition] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
+
+  // Waveform animation refs
+  const waveformAnimations = useRef<Animated.Value[]>(
+    Array.from({ length: WAVEFORM_BARS }, () => new Animated.Value(0))
+  ).current;
+
+  // ─── Resolve Audio URL ─────────────────────────────────────────────────────
   useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+    let mounted = true;
+
+    async function resolveUrl() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const url = await getSignedUrl(audioUrl);
+        if (mounted) {
+          if (url) {
+            setResolvedUrl(url);
+          } else {
+            setError('Could not load audio');
+          }
+        }
+      } catch (err) {
+        if (mounted) {
+          setError('Failed to load audio');
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
+    }
+
+    resolveUrl();
+
+    return () => {
+      mounted = false;
     };
+  }, [audioUrl]);
+
+  // ─── Configure Audio Mode ──────────────────────────────────────────────────
+  useEffect(() => {
+    async function configureAudio() {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionMode: 'doNotMix',
+          interruptionModeAndroid: 'doNotMix',
+          allowsRecording: false,
+          shouldRouteThroughEarpiece: false,
+        });
+        if (__DEV__) {
+          console.log('[VoiceMessageBubble] Audio mode configured for background playback');
+        }
+      } catch (err) {
+        console.error('[VoiceMessageBubble] Failed to configure audio mode:', err);
+      }
+    }
+
+    configureAudio();
   }, []);
 
-  // Animate bars when playing
+  // ─── Audio Player Hook ─────────────────────────────────────────────────────
+  const player = useAudioPlayer(resolvedUrl || undefined);
+  const status = useAudioPlayerStatus(player);
+
+  // ─── Derived State ─────────────────────────────────────────────────────────
+  const isPlaying = status?.playing ?? false;
+  const isLoaded = status?.isLoaded ?? false;
+  const currentTime = status?.currentTime ?? 0;
+  const audioDuration = status?.duration ?? providedDuration ?? 0;
+  const didJustFinish = status?.didJustFinish ?? false;
+
+  // Progress (0 to 1)
+  const progress = useMemo(() => {
+    if (isSeeking) return seekPosition;
+    if (!audioDuration || audioDuration === 0) return 0;
+    return Math.min(currentTime / audioDuration, 1);
+  }, [currentTime, audioDuration, isSeeking, seekPosition]);
+
+  // Display duration
+  const displayDuration = useMemo(() => {
+    if (isPlaying || currentTime > 0) {
+      return formatDuration(currentTime);
+    }
+    return formatDuration(audioDuration || providedDuration || 0);
+  }, [isPlaying, currentTime, audioDuration, providedDuration]);
+
+  // Generate waveform bars
+  const waveformBars = useMemo(
+    () => generateWaveformFromUrl(audioUrl),
+    [audioUrl]
+  );
+
+  // ─── Handle Finish ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (didJustFinish) {
+      // PAUSE first, then reset to beginning and clear lock screen
+      player.pause();
+      player.seekTo(0);
+      player.setActiveForLockScreen(false);
+      
+      // Notify parent for continuous playback
+      onPlaybackFinished?.();
+    }
+  }, [didJustFinish, player, onPlaybackFinished]);
+
+  // ─── Auto Play (for continuous playback) ───────────────────────────────────
+  useEffect(() => {
+    if (autoPlay && isLoaded && !isPlaying && !error) {
+      // Start playback automatically
+      (async () => {
+        try {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+            interruptionMode: 'doNotMix',
+            interruptionModeAndroid: 'doNotMix',
+            allowsRecording: false,
+          });
+          player.setPlaybackRate(playbackSpeed);
+          player.setActiveForLockScreen(true, {
+            title: 'Voice Message',
+            artist: 'EduDash Pro',
+          });
+          await player.play();
+        } catch (err) {
+          console.error('[VoiceMessageBubble] Auto-play error:', err);
+        }
+      })();
+    }
+  }, [autoPlay, isLoaded, isPlaying, error, player, playbackSpeed]);
+
+  // ─── Waveform Animation ────────────────────────────────────────────────────
   useEffect(() => {
     if (isPlaying) {
-      const animations = barAnimations.map((anim, index) => {
+      // Animate waveform bars
+      const animations = waveformAnimations.map((anim, index) => {
         return Animated.loop(
           Animated.sequence([
             Animated.timing(anim, {
               toValue: 1,
-              duration: 200 + Math.random() * 300,
-              useNativeDriver: false, // height animation requires JS driver
+              duration: 200 + (index % 5) * 50,
+              useNativeDriver: true,
             }),
             Animated.timing(anim, {
               toValue: 0,
-              duration: 200 + Math.random() * 300,
-              useNativeDriver: false,
+              duration: 200 + (index % 5) * 50,
+              useNativeDriver: true,
             }),
           ])
         );
       });
-      
-      Animated.stagger(20, animations).start();
-      
+
+      Animated.parallel(animations).start();
+
       return () => {
-        barAnimations.forEach(anim => anim.stopAnimation());
+        animations.forEach((anim) => anim.stop());
       };
     } else {
-      barAnimations.forEach(anim => anim.setValue(0));
+      // Reset animations
+      waveformAnimations.forEach((anim) => anim.setValue(0));
     }
-  }, [isPlaying, barAnimations]);
+  }, [isPlaying, waveformAnimations]);
 
-  // Audio status callback
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setCurrentPosition(status.positionMillis || 0);
-      if (status.durationMillis) {
-        audioDurationRef.current = status.durationMillis;
-        setPlaybackProgress(status.positionMillis / status.durationMillis);
-      }
-      setIsPlaying(status.isPlaying);
-      
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setCurrentPosition(0);
-        setPlaybackProgress(0);
-      }
-    }
-  };
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+  const handlePlayPause = useCallback(async () => {
+    if (!isLoaded || error) return;
 
-  const handlePlayPause = async () => {
     try {
-      setIsLoading(true);
-      
-      if (isPlaying && soundRef.current) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
+      if (isPlaying) {
+        await player.pause();
+        // Remove from lock screen when paused
+        player.setActiveForLockScreen(false);
       } else {
-        // Create sound if not exists
-        if (!soundRef.current) {
-          // Resolve the audio URL (generate signed URL if needed)
-          let playableUrl = resolvedAudioUrl;
-          if (!playableUrl) {
-            playableUrl = await getPlayableUrl(audioUrl);
-            setResolvedAudioUrl(playableUrl);
-          }
-          
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: playableUrl },
-            { shouldPlay: true },
-            onPlaybackStatusUpdate
-          );
-          soundRef.current = sound;
-        } else {
-          // Check if finished, restart from beginning
-          const status = await soundRef.current.getStatusAsync();
-          if (status.isLoaded && status.positionMillis >= (status.durationMillis || 0) - 100) {
-            await soundRef.current.setPositionAsync(0);
-          }
-          await soundRef.current.playAsync();
-        }
-        setIsPlaying(true);
+        // Re-configure audio mode before playing to ensure background works
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionMode: 'doNotMix',
+          interruptionModeAndroid: 'doNotMix',
+          allowsRecording: false,
+        });
+        
+        // Set playback speed
+        player.setPlaybackRate(playbackSpeed);
+        
+        // Enable lock screen controls with metadata BEFORE playing
+        // This starts the Android foreground service for background playback
+        player.setActiveForLockScreen(true, {
+          title: 'Voice Message',
+          artist: 'EduDash Pro',
+        });
+        await player.play();
       }
-      
-      setIsLoading(false);
-    } catch (error) {
-      console.error('[VoiceMessageBubble] Error playing audio:', error);
-      // If signed URL expired, clear it so we regenerate on next attempt
-      setResolvedAudioUrl(null);
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-      setIsLoading(false);
+    } catch (err) {
+      console.error('[VoiceMessageBubble] Play/pause error:', err);
     }
-  };
+  }, [isLoaded, isPlaying, player, error, playbackSpeed]);
 
-  // Handle seeking by tapping on waveform
-  const handleSeek = async (index: number) => {
-    if (!soundRef.current) return;
+  // Cycle through playback speeds (1x → 1.5x → 2x → 1x)
+  const handleSpeedChange = useCallback(() => {
+    const currentIndex = PLAYBACK_SPEEDS.indexOf(playbackSpeed);
+    const nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.length;
+    const newSpeed = PLAYBACK_SPEEDS[nextIndex];
+    setPlaybackSpeed(newSpeed);
     
-    try {
-      const status = await soundRef.current.getStatusAsync();
-      if (status.isLoaded && status.durationMillis) {
-        const seekPosition = (index / waveformBars.length) * status.durationMillis;
-        await soundRef.current.setPositionAsync(seekPosition);
-        setCurrentPosition(seekPosition);
-        setPlaybackProgress(index / waveformBars.length);
-      }
-    } catch (error) {
-      console.error('[VoiceMessageBubble] Error seeking:', error);
+    // Apply immediately if playing
+    if (isPlaying) {
+      player.setPlaybackRate(newSpeed);
     }
-  };
+    
+    Vibration.vibrate(20);
+  }, [playbackSpeed, isPlaying, player]);
 
-  const displayTime = isPlaying || currentPosition > 0 
-    ? formatTime(currentPosition) 
-    : formatTime(duration);
+  // Handle long press with haptic feedback
+  const handleLongPress = useCallback(() => {
+    Vibration.vibrate(50);
+    onLongPress?.();
+  }, [onLongPress]);
 
-  // Teal gradient for own messages, purple for received
-  const ownMessageGradient = ['#14b8a6', '#0d9488'] as const;
-  const receivedMessageGradient = ['#8b5cf6', '#7c3aed'] as const;
+  // ─── Clean up lock screen on unmount ───────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      // Clear lock screen controls when component unmounts
+      try {
+        player.clearLockScreenControls();
+      } catch {
+        // Ignore errors on cleanup
+      }
+    };
+  }, [player]);
 
-  const styles = StyleSheet.create({
-    container: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      maxWidth: '88%',
-      alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
-      marginVertical: 4,
-      marginHorizontal: 12,
-    },
-    avatarContainer: {
-      marginRight: 10,
-    },
-    avatar: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      borderWidth: 2,
-      borderColor: theme.primary + '30',
-    },
-    avatarPlaceholder: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.primary + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: theme.primary + '30',
-    },
-    bubble: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: isOwnMessage ? '#0d9488' : theme.surface,
-      borderRadius: 24,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      minWidth: 240,
-      maxWidth: '100%',
-      // Shadow for depth
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-      // Bubble tail effect via border
-      borderWidth: isOwnMessage ? 0 : 1,
-      borderColor: theme.border + '30',
-    },
-    playButtonWrapper: {
-      marginRight: 12,
-    },
-    playButtonGradient: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-      // Enhanced shadow
-      shadowColor: isOwnMessage ? '#14b8a6' : PURPLE_LIGHT,
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.4,
-      shadowRadius: 6,
-      elevation: 5,
-    },
-    waveformContainer: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      height: 40,
-      marginRight: 10,
-      paddingVertical: 4,
-      overflow: 'hidden',
-    },
-    waveformBar: {
-      width: 3.5,
-      marginHorizontal: 1,
-      borderRadius: 2,
-      backgroundColor: isOwnMessage 
-        ? 'rgba(255,255,255,0.4)' 
-        : theme.textSecondary + '40',
-    },
-    waveformBarPlayed: {
-      backgroundColor: isOwnMessage 
-        ? '#ffffff' 
-        : theme.primary,
-    },
-    infoContainer: {
-      alignItems: 'flex-end',
-      justifyContent: 'center',
-      minWidth: 50,
-      paddingLeft: 4,
-    },
-    duration: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: isOwnMessage ? '#ffffff' : theme.text,
-      marginBottom: 3,
-    },
-    timestampRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    timestamp: {
-      fontSize: 11,
-      color: isOwnMessage ? 'rgba(255,255,255,0.75)' : theme.textSecondary,
-    },
-    readReceipt: {
-      fontSize: 11,
-      color: isRead ? SUCCESS_GREEN : (isOwnMessage ? 'rgba(255,255,255,0.6)' : theme.textSecondary),
-      marginLeft: 3,
-      fontWeight: '600',
-    },
-    micBadge: {
-      position: 'absolute',
-      right: 8,
-      top: 8,
-      backgroundColor: theme.primary + '20',
-      borderRadius: 10,
-      padding: 4,
-    },
-  });
+  const handleSeek = useCallback(
+    async (normalizedPosition: number) => {
+      if (!isLoaded || !audioDuration) return;
 
-  const playedBars = Math.floor(playbackProgress * waveformBars.length);
+      const seekTime = normalizedPosition * audioDuration;
+      try {
+        await player.seekTo(seekTime);
+      } catch (err) {
+        console.error('[VoiceMessageBubble] Seek error:', err);
+      }
+    },
+    [isLoaded, audioDuration, player]
+  );
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <View 
+        style={[
+          styles.container, 
+          styles.loading, 
+          { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' },
+          style
+        ]}
+      >
+        <ActivityIndicator size="small" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+          Loading audio...
+        </Text>
+      </View>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <View 
+        style={[
+          styles.container, 
+          styles.error, 
+          { alignSelf: isOwnMessage ? 'flex-end' : 'flex-start' },
+          style
+        ]}
+      >
+        <Ionicons name="alert-circle" size={24} color="#FF6B6B" />
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      {/* Avatar for received messages */}
-      {!isOwnMessage && (
-        <View style={styles.avatarContainer}>
-          {senderAvatar ? (
-            <Image source={{ uri: senderAvatar }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons name="person" size={18} color={theme.primary} />
-            </View>
-          )}
-        </View>
+    <Pressable
+      onLongPress={handleLongPress}
+      delayLongPress={300}
+      style={({ pressed }) => [
+        styles.container,
+        {
+          backgroundColor: isOwnMessage ? theme.primary : theme.background,
+          alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
+          opacity: pressed ? 0.9 : 1,
+          transform: pressed ? [{ scale: 0.98 }] : [{ scale: 1 }],
+        },
+        style,
+      ]}
+    >
+      {/* Sender name for received messages */}
+      {!isOwnMessage && senderName && (
+        <Text style={[styles.senderName, { color: theme.primary }]} numberOfLines={1}>
+          {senderName}
+        </Text>
       )}
       
-      <Pressable 
-        style={styles.bubble}
-        onLongPress={onLongPress}
-        delayLongPress={300}
-      >
-        {/* Play/Pause Button with Gradient */}
-        <TouchableOpacity 
+      <View style={styles.contentRow}>
+        {/* Play/Pause Button */}
+        <TouchableOpacity
+          style={[styles.playButton, { backgroundColor: isOwnMessage ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }]}
           onPress={handlePlayPause}
-          disabled={isLoading}
           activeOpacity={0.7}
-          style={styles.playButtonWrapper}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          disabled={!isLoaded}
         >
-          <LinearGradient
-            colors={isOwnMessage ? ownMessageGradient : receivedMessageGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.playButtonGradient}
-          >
-            {isLoading ? (
-              <Ionicons 
-                name="hourglass-outline" 
-                size={24} 
-                color="#fff" 
-              />
-            ) : (
-              <Ionicons 
-                name={isPlaying ? 'pause' : 'play'} 
-                size={24} 
-                color="#fff"
-                style={!isPlaying ? { marginLeft: 3 } : undefined}
-              />
-            )}
-          </LinearGradient>
+          {!isLoaded ? (
+            <ActivityIndicator size="small" color={theme.text} />
+          ) : (
+            <Ionicons
+              name={isPlaying ? 'pause' : 'play'}
+              size={22}
+              color={theme.text}
+              style={!isPlaying ? { marginLeft: 2 } : undefined}
+            />
+          )}
         </TouchableOpacity>
-        
-        {/* Waveform - Tap to seek */}
+
+        {/* Waveform + Controls */}
         <View style={styles.waveformContainer}>
-          {waveformBars.map((height, index) => {
-            const isPlayed = index < playedBars;
-            const animatedHeight = barAnimations[index].interpolate({
-              inputRange: [0, 1],
-              outputRange: [height * 24, height * 36],
-            });
-            
-            return (
-              <Pressable
-                key={index}
-                onPress={() => handleSeek(index)}
-                style={{ paddingVertical: 6, paddingHorizontal: 0.5 }}
-                hitSlop={{ top: 4, bottom: 4 }}
-              >
+          <View style={styles.waveform}>
+            {waveformBars.map((height, index) => {
+              const barProgress = index / WAVEFORM_BARS;
+              const isActive = barProgress <= progress;
+
+              return (
                 <Animated.View
+                  key={index}
                   style={[
                     styles.waveformBar,
-                    isPlayed && styles.waveformBarPlayed,
                     {
-                      height: isPlaying 
-                        ? animatedHeight 
-                        : height * 24,
+                      height: 4 + height * 20, // Fixed height calculation
+                      backgroundColor: isActive ? theme.text : theme.textSecondary,
+                      opacity: isActive ? 1 : 0.4,
+                      transform: [
+                        {
+                          scaleY: waveformAnimations[index].interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 1.2],
+                          }),
+                        },
+                      ],
                     },
                   ]}
                 />
-              </Pressable>
-            );
-          })}
-        </View>
-        
-        {/* Duration and timestamp */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.duration}>{displayTime}</Text>
-          <View style={styles.timestampRow}>
-            <Text style={styles.timestamp}>{timestamp}</Text>
-            {isOwnMessage && (
-              <Text style={styles.readReceipt}>
-                {isRead ? '✓✓' : '✓'}
+              );
+            })}
+          </View>
+
+          {/* Duration Row */}
+          <View style={styles.durationRow}>
+            <Text style={[styles.duration, { color: theme.text }]}>
+              {displayDuration}
+            </Text>
+            
+            {/* Speed Control Button */}
+            <TouchableOpacity
+              onPress={handleSpeedChange}
+              style={[
+                styles.speedButton,
+                { backgroundColor: isOwnMessage ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' }
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.speedText, { color: theme.text }]}>
+                {playbackSpeed}x
+              </Text>
+            </TouchableOpacity>
+            
+            {timestamp && (
+              <Text style={[styles.timestamp, { color: isOwnMessage ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.7)' }]}>
+                {timestamp}
               </Text>
             )}
           </View>
         </View>
-      </Pressable>
-      
-      {/* Spacer for own messages */}
-      {isOwnMessage && <View style={{ width: 4 }} />}
-    </View>
+        
+        {/* Mic icon indicator */}
+        <Ionicons 
+          name="mic" 
+          size={16} 
+          color={isOwnMessage ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.7)'} 
+          style={styles.micIcon}
+        />
+      </View>
+    </Pressable>
   );
-};
+}
 
-export default VoiceMessageBubble;
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'column',
+    padding: 10,
+    paddingBottom: 8,
+    borderRadius: 16,
+    minWidth: 220,
+    maxWidth: 300,
+    marginVertical: 2,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    marginLeft: 2,
+  },
+  loading: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    paddingVertical: 16,
+  },
+  loadingText: {
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  error: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    paddingVertical: 16,
+  },
+  errorText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#FF6B6B',
+  },
+  playButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  waveformContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  waveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 28,
+    gap: 2,
+    overflow: 'hidden',
+  },
+  waveformBar: {
+    width: 3,
+    borderRadius: 1.5,
+    minHeight: 4,
+    maxHeight: 24,
+  },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+  duration: {
+    fontSize: 12,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  speedButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  speedText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  timestamp: {
+    fontSize: 10,
+    marginLeft: 'auto',
+  },
+  micIcon: {
+    marginLeft: 6,
+    opacity: 0.6,
+  },
+});
+
+// Named export for compatibility with existing imports
+export { VoiceMessageBubble };

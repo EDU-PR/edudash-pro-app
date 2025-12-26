@@ -713,6 +713,15 @@ export async function signInWithSession(
       email: data.user.email,
     };
 
+    // Store session EARLY so fetchUserProfile can read it from storage
+    // This prevents race conditions where profile fetch needs the session
+    if (__DEV__) console.log('[SessionManager] Storing session early for profile fetch...');
+    try {
+      await storeSession(session);
+    } catch (earlyStoreError) {
+      console.warn('[SessionManager] Early session store failed (non-fatal):', earlyStoreError);
+    }
+
     // Fetch user profile
     if (__DEV__) console.log('[SessionManager] Fetching user profile for:', data.user.id);
     const profile = await fetchUserProfile(data.user.id);
