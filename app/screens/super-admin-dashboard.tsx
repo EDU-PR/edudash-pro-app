@@ -84,6 +84,15 @@ export default function SuperAdminDashboardScreen() {
       badge: 0,
     },
     {
+      id: 'organizations',
+      title: 'Organizations',
+      description: 'View & manage all registered organizations',
+      icon: 'business',
+      route: '/screens/super-admin-organizations',
+      color: '#10b981',
+      badge: dashboardStats?.total_organizations || 0,
+    },
+    {
       id: 'school-onboarding',
       title: 'School Onboarding',
       description: 'Create and onboard new schools',
