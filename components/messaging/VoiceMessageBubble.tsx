@@ -24,6 +24,8 @@ import { assertSupabase } from '@/lib/supabase';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { MessageReaction } from './types';
+
 interface VoiceMessageBubbleProps {
   /** URL or storage path to the audio file */
   audioUrl: string;
@@ -52,6 +54,12 @@ interface VoiceMessageBubbleProps {
     text?: string;
     textSecondary?: string;
   };
+  /** Message reactions */
+  reactions?: MessageReaction[];
+  /** Message ID for reaction handling */
+  messageId?: string;
+  /** Handler for clicking on reaction to delete it */
+  onReactionPress?: (messageId: string, emoji: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,8 +161,14 @@ export default function VoiceMessageBubble({
   autoPlay = false,
   style,
   theme: customTheme,
+  reactions,
+  messageId,
+  onReactionPress,
 }: VoiceMessageBubbleProps) {
   const theme = { ...DEFAULT_THEME, ...customTheme };
+  
+  // Get the user's reaction (only one allowed)
+  const userReaction = reactions?.find(r => r.hasReacted);
 
   // ─── State ─────────────────────────────────────────────────────────────────
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -559,6 +573,20 @@ export default function VoiceMessageBubble({
           style={styles.micIcon}
         />
       </View>
+      
+      {/* Reaction display below bubble - only show user's reaction */}
+      {userReaction && (
+        <TouchableOpacity
+          style={[
+            styles.reactionBelowBubble,
+            isOwnMessage ? styles.reactionBelowOwn : styles.reactionBelowOther
+          ]}
+          onPress={() => messageId && onReactionPress?.(messageId, userReaction.emoji)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.reactionEmojiBelow}>{userReaction.emoji}</Text>
+        </TouchableOpacity>
+      )}
     </Pressable>
   );
 }
@@ -662,6 +690,32 @@ const styles = StyleSheet.create({
   micIcon: {
     marginLeft: 6,
     opacity: 0.6,
+  },
+  reactionBelowBubble: {
+    marginTop: -4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reactionBelowOwn: {
+    alignSelf: 'flex-end',
+    marginRight: 8,
+  },
+  reactionBelowOther: {
+    alignSelf: 'flex-start',
+    marginLeft: 8,
+  },
+  reactionEmojiBelow: {
+    fontSize: 16,
+    lineHeight: 20,
   },
 });
 

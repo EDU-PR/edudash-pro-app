@@ -346,7 +346,10 @@ export class DashAICore {
       const conversation = await this.conversation.getConversation(conversationId);
       const recentMessages = conversation?.messages?.slice(-5) || [];
 
-      const langDirective = this.promptBuilder.buildLanguageDirective();
+      // Check if strict language mode is enabled in personality settings
+      const personality = this.profileManager.getPersonality();
+      const strictLanguageMode = personality?.strict_language_mode === true;
+      const langDirective = this.promptBuilder.buildLanguageDirective(strictLanguageMode);
       const shouldStream = typeof onStreamChunk === 'function';
 
       const response = await this.aiClient.callAIService({

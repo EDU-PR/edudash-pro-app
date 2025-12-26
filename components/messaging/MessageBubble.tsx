@@ -26,6 +26,7 @@ interface MessageBubbleProps {
   onPlaybackFinished?: () => void;
   autoPlayVoice?: boolean;
   otherParticipantIds?: string[];
+  onReactionPress?: (messageId: string, emoji: string) => void;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
@@ -34,7 +35,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   onLongPress,
   onPlaybackFinished,
   autoPlayVoice = false,
-  otherParticipantIds = [] 
+  otherParticipantIds = [],
+  onReactionPress,
 }) => {
   const name = getSenderName(msg.sender);
 
@@ -72,29 +74,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         onLongPress={onLongPress}
         onPlaybackFinished={onPlaybackFinished}
         autoPlay={autoPlayVoice}
+        reactions={msg.reactions}
+        messageId={msg.id}
+        onReactionPress={onReactionPress}
       />
     );
   }
 
+  // Get the user's reaction (only one allowed)
+  const userReaction = msg.reactions?.find(r => r.hasReacted);
+
   return (
-    <Pressable
-      onLongPress={onLongPress}
-      delayLongPress={300}
-      style={[styles.container, isOwn ? styles.own : styles.other]}
-    >
+    <View style={[styles.container, isOwn ? styles.own : styles.other]}>
       {!isOwn && (
         <Text style={styles.name}>{name}</Text>
       )}
-      <LinearGradient
-        colors={isOwn ? ['#3b82f6', '#2563eb'] : ['#1e293b', '#0f172a']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[
-          styles.bubble,
-          isOwn ? styles.bubbleOwn : styles.bubbleOther,
-          isVoice && styles.voiceBubble,
-        ]}
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={300}
       >
+        <LinearGradient
+          colors={isOwn ? ['#3b82f6', '#2563eb'] : ['#1e293b', '#0f172a']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.bubble,
+            isOwn ? styles.bubbleOwn : styles.bubbleOther,
+            isVoice && styles.voiceBubble,
+          ]}
+        >
         {isVoice ? (
           <View style={styles.voiceContainer}>
             <View style={styles.voiceRow}>
@@ -139,14 +147,30 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
             </View>
           )}
         </View>
-      </LinearGradient>
-    </Pressable>
+        </LinearGradient>
+      </Pressable>
+      
+      {/* Reaction display below bubble - only show user's reaction */}
+      {userReaction && (
+        <TouchableOpacity
+          style={[
+            styles.reactionBelowBubble,
+            isOwn ? styles.reactionBelowOwn : styles.reactionBelowOther
+          ]}
+          onPress={() => onReactionPress?.(msg.id, userReaction.emoji)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.reactionEmoji}>{userReaction.emoji}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }, (prevProps, nextProps) => {
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
-         JSON.stringify(prevProps.msg.delivered_to) === JSON.stringify(nextProps.msg.delivered_to);
+         JSON.stringify(prevProps.msg.delivered_to) === JSON.stringify(nextProps.msg.delivered_to) &&
+         JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
 });
 
 const styles = StyleSheet.create({
@@ -238,4 +262,30 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 11 },
   ticksContainer: { marginLeft: 2 },
+  reactionBelowBubble: {
+    marginTop: -6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reactionBelowOwn: {
+    alignSelf: 'flex-end',
+    marginRight: 8,
+  },
+  reactionBelowOther: {
+    alignSelf: 'flex-start',
+    marginLeft: 8,
+  },
+  reactionEmoji: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
 });

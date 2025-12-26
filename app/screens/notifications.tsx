@@ -18,6 +18,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -405,6 +406,7 @@ export default function NotificationsScreen() {
   const alert = useAlert();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   
   const { data: notifications = [], isLoading, refetch } = useNotifications();
   
@@ -641,36 +643,81 @@ export default function NotificationsScreen() {
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
         rightAction={{
           icon: 'ellipsis-vertical',
-          onPress: () => {
-            Alert.alert(
-              t('notifications.options', { defaultValue: 'Notification Options' }),
-              t('notifications.optionsDesc', { defaultValue: 'Choose an action' }),
-              [
-                { 
-                  text: t('notifications.markAllRead', { defaultValue: 'Mark All as Read' }), 
-                  onPress: handleMarkAllRead
-                },
-                { 
-                  text: t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }), 
-                  onPress: handleMarkMessagesRead,
-                  style: 'destructive'
-                },
-                { 
-                  text: t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }), 
-                  onPress: handleClearCallNotifications,
-                  style: 'destructive'
-                },
-                { 
-                  text: t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }), 
-                  style: 'destructive', 
-                  onPress: handleClearAll 
-                },
-                { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-              ]
-            );
-          }
+          onPress: () => setMenuVisible(true),
         }}
       />
+      
+      {/* Dropdown Menu Modal */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.menuOverlay} 
+          activeOpacity={1} 
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={[styles.menuContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => { setMenuVisible(false); handleMarkAllRead(); }}
+            >
+              <Ionicons name="checkmark-done" size={20} color={theme.primary} style={styles.menuIcon} />
+              <Text style={[styles.menuText, { color: theme.text }]}>
+                {t('notifications.markAllRead', { defaultValue: 'Mark All as Read' })}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+            
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => { setMenuVisible(false); handleMarkMessagesRead(); }}
+            >
+              <Ionicons name="chatbubble-outline" size={20} color={theme.warning || '#f59e0b'} style={styles.menuIcon} />
+              <Text style={[styles.menuText, { color: theme.text }]}>
+                {t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' })}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => { setMenuVisible(false); handleClearCallNotifications(); }}
+            >
+              <Ionicons name="call-outline" size={20} color={theme.warning || '#f59e0b'} style={styles.menuIcon} />
+              <Text style={[styles.menuText, { color: theme.text }]}>
+                {t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' })}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+            
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => { setMenuVisible(false); handleClearAll(); }}
+            >
+              <Ionicons name="trash-outline" size={20} color={theme.error} style={styles.menuIcon} />
+              <Text style={[styles.menuText, { color: theme.error }]}>
+                {t('notifications.clearAll', { defaultValue: 'Clear All Notifications' })}
+              </Text>
+            </TouchableOpacity>
+            
+            <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+            
+            <TouchableOpacity 
+              style={styles.menuItem} 
+              onPress={() => setMenuVisible(false)}
+            >
+              <Ionicons name="close" size={20} color={theme.textSecondary} style={styles.menuIcon} />
+              <Text style={[styles.menuText, { color: theme.textSecondary }]}>
+                {t('common.cancel', { defaultValue: 'Cancel' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
       
       <FlatList
         data={notifications}
@@ -765,6 +812,41 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 100,
+    paddingRight: 16,
+  },
+  menuContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 240,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  menuIcon: {
+    marginRight: 12,
+  },
+  menuText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  menuDivider: {
+    height: 1,
   },
 });
 

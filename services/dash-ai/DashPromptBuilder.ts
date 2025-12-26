@@ -163,17 +163,35 @@ IMPORTANT: Always use tools to access real data. Never make up information. Neve
    * Build language directive based on voice settings
    * 
    * South African language mappings for reply instructions.
+   * Now supports strict language mode to prevent language switching.
    */
-  public buildLanguageDirective(): string {
+  public buildLanguageDirective(strictMode?: boolean): string {
     const replyLocale = (this.personality?.voice_settings?.language || 'en-ZA') as string;
     const langMap: Record<string, string> = {
       'en-ZA': 'English (South Africa)',
+      'en': 'English (South Africa)',
       'af-ZA': 'Afrikaans',
-      'zu-ZA': 'Zulu (isiZulu)',
-      'xh-ZA': 'Xhosa (isiXhosa)',
+      'af': 'Afrikaans',
+      'zu-ZA': 'isiZulu',
+      'zu': 'isiZulu',
+      'xh-ZA': 'isiXhosa',
+      'xh': 'isiXhosa',
       'nso-ZA': 'Northern Sotho (Sepedi)',
+      'nso': 'Northern Sotho (Sepedi)',
     };
-    return `REPLY LANGUAGE: Reply strictly in ${langMap[replyLocale] || 'English (South Africa)'} (${replyLocale}). If the user switches language, switch accordingly.`;
+    
+    const languageName = langMap[replyLocale] || 'English (South Africa)';
+    
+    if (strictMode) {
+      return `🌍 STRICT LANGUAGE MODE - ABSOLUTELY MANDATORY:
+You MUST respond ONLY in ${languageName}.
+DO NOT switch to any other language under ANY circumstances.
+Even if the user writes in a different language, you MUST respond in ${languageName}.
+If the user asks you to respond in another language, politely explain that you are configured to respond only in ${languageName}.
+This is a strict user preference that cannot be overridden.`;
+    }
+    
+    return `REPLY LANGUAGE: Reply in ${languageName} (${replyLocale}). If the user writes in a different language, you may switch to match their language.`;
   }
   
   /**
