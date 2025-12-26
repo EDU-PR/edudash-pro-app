@@ -9,6 +9,7 @@
  * - Duration and progress display
  * - Profile picture for received messages
  * - Seek by tapping on waveform
+ * - Auto-generates signed URLs for storage paths
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -26,6 +27,9 @@ import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PURPLE_LIGHT, SUCCESS_GREEN } from './theme';
+import { assertSupabase } from '@/lib/supabase';
+
+const VOICE_BUCKET = 'voice_recordings';
 
 // Generate random waveform bars (normalized 0-1)
 const generateWaveformBars = (count: number = 25): number[] => {
@@ -65,6 +69,7 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [playbackProgress, setPlaybackProgress] = useState(0);
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
   
   const waveformBars = useRef(generateWaveformBars(25)).current;
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -74,6 +79,49 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
   const barAnimations = useRef(
     waveformBars.map(() => new Animated.Value(0))
   ).current;
+
+  /**
+   * Check if the URL is a storage path (not a full URL)
+   * Storage paths look like: "user-id/voice_timestamp_random.m4a"
+   * Full URLs start with "http" or contain "supabase" domain
+   */
+  const isStoragePath = (url: string): boolean => {
+    return !url.startsWith('http') && !url.startsWith('blob:');
+  };
+
+  /**
+   * Create a signed URL for private voice note access
+   */
+  const createSignedUrl = async (storagePath: string): Promise<string> => {
+    const supabase = assertSupabase();
+    const { data, error } = await supabase.storage
+      .from(VOICE_BUCKET)
+      .createSignedUrl(storagePath, 3600); // 1 hour
+    
+    if (error || !data?.signedUrl) {
+      throw new Error(`Failed to create signed URL: ${error?.message || 'Unknown error'}`);
+    }
+    return data.signedUrl;
+  };
+
+  /**
+   * Get a playable URL - either use directly or generate signed URL
+   */
+  const getPlayableUrl = async (url: string): Promise<string> => {
+    if (isStoragePath(url)) {
+      console.log('[VoiceMessageBubble] Generating signed URL for storage path:', url);
+      try {
+        const signedUrl = await createSignedUrl(url);
+        console.log('[VoiceMessageBubble] Signed URL generated successfully');
+        return signedUrl;
+      } catch (error) {
+        console.error('[VoiceMessageBubble] Failed to generate signed URL:', error);
+        throw error;
+      }
+    }
+    // Already a full URL (might be expired signed URL, but try it)
+    return url;
+  };
 
   // Format duration as MM:SS
   const formatTime = (ms: number): string => {
@@ -150,8 +198,15 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
       } else {
         // Create sound if not exists
         if (!soundRef.current) {
+          // Resolve the audio URL (generate signed URL if needed)
+          let playableUrl = resolvedAudioUrl;
+          if (!playableUrl) {
+            playableUrl = await getPlayableUrl(audioUrl);
+            setResolvedAudioUrl(playableUrl);
+          }
+          
           const { sound } = await Audio.Sound.createAsync(
-            { uri: audioUrl },
+            { uri: playableUrl },
             { shouldPlay: true },
             onPlaybackStatusUpdate
           );
@@ -170,6 +225,12 @@ export const VoiceMessageBubble: React.FC<VoiceMessageBubbleProps> = ({
       setIsLoading(false);
     } catch (error) {
       console.error('[VoiceMessageBubble] Error playing audio:', error);
+      // If signed URL expired, clear it so we regenerate on next attempt
+      setResolvedAudioUrl(null);
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
       setIsLoading(false);
     }
   };

@@ -83,7 +83,8 @@ class CallKeepManager extends EventEmitter {
         ios: {
           appName: config.appName,
           imageName: config.imageName || 'AppIcon',
-          ringtoneSound: config.ringtoneSound || 'ringtone.mp3',
+          // Omit ringtoneSound to use device's default system ringtone
+          // For custom ringtone: ringtoneSound: 'custom_ringtone.mp3',
           supportsVideo: config.supportsVideo,
           maximumCallGroups: '1',
           maximumCallsPerCallGroup: '1',
