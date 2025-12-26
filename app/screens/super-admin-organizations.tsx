@@ -127,6 +127,8 @@ export default function SuperAdminOrganizations() {
       setLoading(true);
       const supabase = assertSupabase();
 
+      console.log('[Organizations] Fetching organizations...');
+
       // Fetch from multiple tables in parallel
       const [preschoolsRes, schoolsRes, orgsRes] = await Promise.all([
         // Preschools
@@ -193,6 +195,20 @@ export default function SuperAdminOrganizations() {
           .order('created_at', { ascending: false })
           .limit(100),
       ]);
+
+      // Debug logging
+      console.log('[Organizations] Preschools response:', {
+        count: preschoolsRes.data?.length || 0,
+        error: preschoolsRes.error?.message,
+      });
+      console.log('[Organizations] Schools response:', {
+        count: schoolsRes.data?.length || 0,
+        error: schoolsRes.error?.message,
+      });
+      console.log('[Organizations] Orgs response:', {
+        count: orgsRes.data?.length || 0,
+        error: orgsRes.error?.message,
+      });
 
       // Process preschools
       const preschools: Organization[] = (preschoolsRes.data || []).map((p: any) => ({
@@ -803,24 +819,23 @@ export default function SuperAdminOrganizations() {
       <Stack.Screen
         options={{
           title: 'Organizations',
-          headerShown: true,
-          headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.text,
-          headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 8 }}>
-              <Ionicons name="arrow-back" size={24} color={theme.text} />
-            </TouchableOpacity>
-          ),
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => router.push('/screens/super-admin/school-onboarding-wizard')}
-              style={{ marginRight: 8 }}
-            >
-              <Ionicons name="add-circle" size={28} color={theme.primary} />
-            </TouchableOpacity>
-          ),
+          headerShown: false,
         }}
       />
+
+      {/* Custom Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Organizations</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/screens/super-admin/school-onboarding-wizard')}
+          style={styles.headerButton}
+        >
+          <Ionicons name="add-circle" size={28} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={filteredOrgs}
@@ -894,6 +909,24 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: theme.background,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: theme.text,
   },
   statsRow: {
     flexDirection: 'row',

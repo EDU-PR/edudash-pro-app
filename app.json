@@ -152,6 +152,7 @@
       ],
       "@react-native-voice/voice",
       "expo-speech-recognition",
+      "expo-video",
       [
         "react-native-google-mobile-ads",
         {
