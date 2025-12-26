@@ -112,6 +112,22 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
         { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
       ];
+    case 'super_admin':
+    case 'superadmin':
+      return [
+        { id: 'home', label: 'Dashboard', icon: 'shield-checkmark', route: '/screens/super-admin-dashboard' },
+        { id: 'ai-command', label: 'AI Command Center', icon: 'flash', route: '/screens/super-admin-ai-command-center' },
+        { id: 'users', label: 'User Management', icon: 'people', route: '/screens/super-admin-users' },
+        { id: 'admin-mgmt', label: 'Admin Management', icon: 'people-circle', route: '/screens/super-admin-admin-management' },
+        { id: 'onboarding', label: 'School Onboarding', icon: 'school', route: '/screens/super-admin/school-onboarding-wizard' },
+        { id: 'ai-quotas', label: 'AI Quotas', icon: 'hardware-chip', route: '/screens/super-admin-ai-quotas' },
+        { id: 'moderation', label: 'Content Moderation', icon: 'shield', route: '/screens/super-admin-moderation' },
+        { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/super-admin-announcements' },
+        { id: 'monitoring', label: 'System Monitoring', icon: 'analytics', route: '/screens/super-admin-system-monitoring' },
+        { id: 'whatsapp', label: 'WhatsApp Hub', icon: 'logo-whatsapp', route: '/screens/super-admin-whatsapp' },
+        { id: 'system-test', label: 'System Tests', icon: 'checkmark-circle', route: '/screens/super-admin-system-test' },
+        { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
+      ];
     default:
       return [
         { id: 'home', label: 'Home', icon: 'home', route: '/' },

@@ -491,62 +491,37 @@ export default function SuperAdminDashboardScreen() {
   }
 
   return (
-    <DesktopLayout role="super_admin">
+    <DesktopLayout role="super_admin" title="Super Admin">
       <View style={styles.container}>
         <ThemedStatusBar />
       
-      {/* Header */}
-      <SafeAreaView style={[styles.header, { backgroundColor: theme.background }]}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            <View style={styles.titleSection}>
-              <Text style={[styles.titleText, { color: theme.text }]}>Super Admin</Text>
-              <Text style={[styles.subtitleText, { color: theme.textTertiary }]}>
-                EduDash Pro Management
-              </Text>
-            </View>
-            
-            {/* AI Command Center Quick Access */}
-            <TouchableOpacity 
-              style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
-              onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
-            >
-              <Ionicons name="flash" size={18} color="#fff" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.notificationBell}
-              onPress={() => {
-                track('superadmin_notifications_opened');
-                router.push('/screens/super-admin-system-monitoring' as any);
-              }}
-            >
-              <Ionicons name="notifications-outline" size={22} color={theme.text} />
-              {/* Notification badge */}
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>{recentAlerts.length}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Health indicator moved below header */}
-          <View style={[styles.healthIndicator, { 
-            backgroundColor: dashboardStats?.system_health === 'healthy' ? '#10b98108' : '#f59e0b08',
-            borderColor: dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'
+      {/* Quick Access Bar - AI Command Center + Health Status */}
+      <View style={[styles.quickAccessBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <TouchableOpacity 
+          style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
+          onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
+        >
+          <Ionicons name="flash" size={16} color="#fff" />
+          <Text style={styles.aiButtonText}>AI Command</Text>
+        </TouchableOpacity>
+        
+        {/* Health indicator */}
+        <View style={[styles.healthIndicator, { 
+          backgroundColor: dashboardStats?.system_health === 'healthy' ? '#10b98108' : '#f59e0b08',
+          borderColor: dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'
+        }]}>
+          <Ionicons 
+            name={dashboardStats?.system_health === 'healthy' ? 'checkmark-circle' : 'warning'} 
+            size={14} 
+            color={dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'} 
+          />
+          <Text style={[styles.healthText, { 
+            color: dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'
           }]}>
-            <Ionicons 
-              name={dashboardStats?.system_health === 'healthy' ? 'checkmark-circle' : 'warning'} 
-              size={14} 
-              color={dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'} 
-            />
-            <Text style={[styles.healthText, { 
-              color: dashboardStats?.system_health === 'healthy' ? '#10b981' : '#f59e0b'
-            }]}>
-              {dashboardStats?.system_health === 'healthy' ? 'All Systems Operational' : 'System Issues'}
-            </Text>
-          </View>
+            {dashboardStats?.system_health === 'healthy' ? 'All Systems Operational' : 'System Issues'}
+          </Text>
         </View>
-      </SafeAreaView>
+      </View>
 
       <ScrollView 
         style={styles.content}
@@ -807,48 +782,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerContent: {
-    gap: 12,
-  },
-  headerTop: {
+  quickAccessBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  titleSection: {
-    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
   aiButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  notificationBell: {
-    position: 'relative',
-    padding: 8,
-    marginRight: 4,
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#ef4444',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationBadgeText: {
+  aiButtonText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '600',
   },
   titleText: {
