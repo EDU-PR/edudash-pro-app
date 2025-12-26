@@ -20,6 +20,8 @@ import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { isSuperAdmin } from '@/lib/roleUtils';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -34,8 +36,17 @@ interface DraggableDashFABProps {
 
 export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: DraggableDashFABProps) {
   const { theme } = useTheme();
+  const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const { showDashFAB, fabPosition, setFabPosition } = useAppPreferencesSafe();
+  
+  // Determine destination based on user role
+  const getDestination = () => {
+    if (isSuperAdmin(profile?.role)) {
+      return '/screens/super-admin-ai-command-center';
+    }
+    return '/screens/dash-assistant';
+  };
   
   // Default position (bottom right, above safe area)
   const defaultX = SCREEN_WIDTH - FAB_SIZE - EDGE_PADDING;
@@ -112,7 +123,7 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
         if (!wasDragging.current && Math.abs(gestureState.dx) < 10 && Math.abs(gestureState.dy) < 10) {
           position.flattenOffset();
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          router.push('/screens/dash-assistant');
+          router.push(getDestination());
           return;
         }
         
@@ -150,7 +161,7 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
     } catch {
       // Haptics not available
     }
-    router.push('/screens/dash-assistant');
+    router.push(getDestination());
   };
 
   if (!showDashFAB) {
