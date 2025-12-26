@@ -108,7 +108,8 @@ async function setupCallKeepHeadless(): Promise<boolean> {
       ios: {
         appName: 'EduDash Pro',
         imageName: 'AppIcon',
-        ringtoneSound: 'ringtone.mp3',
+        // Use empty string to use device's default ringtone
+        // Or omit ringtoneSound entirely for system default
         supportsVideo: true,
         maximumCallGroups: '1',
         maximumCallsPerCallGroup: '1',

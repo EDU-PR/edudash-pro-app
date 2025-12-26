@@ -209,10 +209,12 @@ export default function TeacherMessageThreadScreen() {
     try {
       if (uploadVoiceNote) {
         const result = await uploadVoiceNote(uri, dur, threadId);
+        // Store storagePath (not publicUrl) - signed URLs expire!
+        // VoiceMessageBubble will generate fresh signed URLs for playback
         await sendMessage({ 
           threadId, 
           content: `🎤 Voice (${durationSecs}s)`,
-          voiceUrl: result.publicUrl,
+          voiceUrl: result.storagePath,
           voiceDuration: durationSecs,
         });
       } else {

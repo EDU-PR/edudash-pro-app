@@ -308,10 +308,12 @@ export default function ParentMessageThreadScreen() {
       // Upload to Supabase Storage
       if (uploadVoiceNote) {
         const result = await uploadVoiceNote(uri, duration, threadId);
+        // Store storagePath (not publicUrl) - signed URLs expire!
+        // VoiceMessageBubble will generate fresh signed URLs for playback
         await sendMessage({ 
           threadId, 
           content,
-          voiceUrl: result.publicUrl,
+          voiceUrl: result.storagePath,
           voiceDuration: durationSecs,
         });
       } else {
