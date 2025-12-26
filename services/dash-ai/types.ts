@@ -548,6 +548,10 @@ export interface DashPersonality {
     voice?: string;    // Specific voice ID (Azure/Google voices)
   };
   
+  /** Language enforcement settings */
+  response_language?: string;       // Force AI to respond in this language
+  strict_language_mode?: boolean;   // If true, AI never switches language
+  
   /** Role-specific specializations */
   role_specializations: {
     [role: string]: {

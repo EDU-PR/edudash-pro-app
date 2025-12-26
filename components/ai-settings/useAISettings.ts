@@ -145,14 +145,17 @@ export function useAISettings(): UseAISettingsReturn {
         ].filter(Boolean),
         response_style: settings.personality,
         voice_settings: {
-          language: settings.voiceLanguage,
+          language: settings.responseLanguage || settings.voiceLanguage,
           voice: settings.voiceType,
           rate: settings.voiceRate,
           pitch: settings.voicePitch,
           volume: settings.voiceVolume
         },
         user_context: settings.userContext,
-        teaching_style: settings.teachingStyle
+        teaching_style: settings.teachingStyle,
+        // Language enforcement settings
+        response_language: settings.responseLanguage || settings.voiceLanguage,
+        strict_language_mode: settings.strictLanguageMode || false
       };
       
       await dashAIInstance.savePersonality(dashPersonality);

@@ -465,11 +465,42 @@ export class DashVoiceService {
   }
 
   /**
+   * Languages with full TTS support (Azure Neural voices available)
+   */
+  private static readonly TTS_SUPPORTED_LANGUAGES = ['en', 'af', 'zu', 'en-ZA', 'af-ZA', 'zu-ZA'];
+
+  /**
+   * Check if a language has TTS support
+   */
+  private isTTSSupported(language: string): boolean {
+    const shortLang = language?.toLowerCase()?.split('-')[0] || 'en';
+    return DashVoiceService.TTS_SUPPORTED_LANGUAGES.some(l => 
+      l === shortLang || l.toLowerCase().startsWith(shortLang)
+    );
+  }
+
+  /**
    * Speak text using TTS with intelligent text normalization
    */
   public async speakText(text: string, callbacks?: SpeechCallbacks, options?: { language?: string }): Promise<void> {
     try {
       const voiceSettings = this.config.voiceSettings;
+      
+      // Check if TTS is supported for this language
+      const requestedLang = options?.language || voiceSettings.language || 'en';
+      if (!this.isTTSSupported(requestedLang)) {
+        const langNames: Record<string, string> = {
+          'xh': 'isiXhosa',
+          'xh-ZA': 'isiXhosa',
+          'nso': 'Sepedi',
+          'nso-ZA': 'Sepedi',
+          'st': 'Sesotho',
+        };
+        const langName = langNames[requestedLang] || requestedLang;
+        console.warn(`[DashVoice] TTS not supported for ${langName}. Only English, Afrikaans, and isiZulu have voice support.`);
+        callbacks?.onError?.(`Voice output not available for ${langName}. Only English, Afrikaans, and isiZulu are supported.`);
+        return;
+      }
 
       // Normalize text first
       const normalizedText = this.normalizeTextForSpeech(text);

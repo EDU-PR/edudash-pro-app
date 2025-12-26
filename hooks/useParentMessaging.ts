@@ -190,7 +190,47 @@ export const useThreadMessages = (threadId: string | null) => {
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      return data || [];
+      
+      let messagesWithReactions = data || [];
+      
+      // Fetch reactions for all messages
+      const messageIds = messagesWithReactions.map((m) => m.id);
+      if (messageIds.length > 0) {
+        const { data: reactions } = await client
+          .from('message_reactions')
+          .select('message_id, emoji, user_id')
+          .in('message_id', messageIds);
+        
+        // Group reactions by message and emoji
+        const reactionMap = new Map<string, Map<string, { count: number; users: string[] }>>();
+        (reactions || []).forEach((r: { message_id: string; emoji: string; user_id: string }) => {
+          if (!reactionMap.has(r.message_id)) {
+            reactionMap.set(r.message_id, new Map());
+          }
+          const msgReactions = reactionMap.get(r.message_id)!;
+          if (!msgReactions.has(r.emoji)) {
+            msgReactions.set(r.emoji, { count: 0, users: [] });
+          }
+          const emojiData = msgReactions.get(r.emoji)!;
+          emojiData.count++;
+          emojiData.users.push(r.user_id);
+        });
+        
+        messagesWithReactions = messagesWithReactions.map((msg) => {
+          const msgReactions = reactionMap.get(msg.id);
+          if (!msgReactions) return { ...msg, reactions: [] };
+          
+          const reactionsArray = Array.from(msgReactions.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.users.includes(user?.id || ''),
+          }));
+          
+          return { ...msg, reactions: reactionsArray };
+        });
+      }
+      
+      return messagesWithReactions;
     },
     enabled: !!threadId && !!user?.id,
     staleTime: 1000 * 30, // 30 seconds

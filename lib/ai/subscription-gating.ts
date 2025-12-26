@@ -29,6 +29,7 @@ export interface ModelAccessResult {
 
 /**
  * Get user's subscription context from database
+ * Super admins automatically get 'enterprise' tier with no limits
  */
 export async function getUserSubscriptionContext(
   supabase: SupabaseClient,
@@ -43,6 +44,16 @@ export async function getUserSubscriptionContext(
       .maybeSingle()
 
     if (!profile) return null
+
+    // Super admins get enterprise tier with unlimited access
+    if (profile.role === 'super_admin' || profile.role === 'superadmin') {
+      return {
+        userId,
+        organizationId: null,
+        tier: 'enterprise',
+        role: profile.role
+      }
+    }
 
     const organizationId = profile.organization_id || profile.preschool_id
     if (!organizationId) {

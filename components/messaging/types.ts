@@ -3,6 +3,12 @@
  * Used by both parent and teacher message threads
  */
 
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  hasReacted: boolean;
+}
+
 export interface Message {
   id: string;
   content: string;
@@ -18,6 +24,7 @@ export interface Message {
   isTyping?: boolean;
   voice_url?: string;
   voice_duration?: number;
+  reactions?: MessageReaction[];
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';

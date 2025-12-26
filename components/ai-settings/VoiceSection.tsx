@@ -8,7 +8,7 @@ import { voiceService } from '@/lib/voice/client';
 import { normalizeLanguageCode, resolveDefaultVoiceId } from '@/lib/ai/dashSettings';
 import { SectionHeader } from './SectionHeader';
 import { ToggleSetting, SliderSetting, PickerSetting } from './SettingRows';
-import { AISettings, LANGUAGE_OPTIONS } from './types';
+import { AISettings, LANGUAGE_OPTIONS, TTS_SUPPORTED_LANGUAGES } from './types';
 
 interface VoiceSectionProps {
   settings: AISettings;
@@ -165,6 +165,39 @@ export function VoiceSection({
       <SectionHeader title="Voice & Speech" icon="🎙️" expanded={expanded} onToggle={onToggleSection} theme={theme} />
       {expanded && (
         <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          {/* Response Language Setting */}
+          <PickerSetting
+            title="AI Response Language"
+            subtitle="Dash will ALWAYS respond in this language"
+            value={settings.responseLanguage}
+            options={LANGUAGE_OPTIONS}
+            onValueChange={(v) => {
+              onChange('responseLanguage', v);
+              // Auto-sync voice language when response language changes
+              onChange('voiceLanguage', v);
+            }}
+            theme={theme}
+          />
+          <ToggleSetting
+            title="Strict Language Mode"
+            subtitle="Never switch language, even if user writes in another language"
+            value={settings.strictLanguageMode}
+            onValueChange={(v) => onChange('strictLanguageMode', v)}
+            theme={theme}
+          />
+          
+          {/* TTS Warning for unsupported languages */}
+          {!TTS_SUPPORTED_LANGUAGES.includes(settings.responseLanguage) && (
+            <View style={[styles.warningBox, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+              <Text style={[styles.warningText, { color: '#92400e' }]}>
+                ⚠️ Voice output (TTS) is not available for {settings.responseLanguage === 'xh' ? 'isiXhosa' : 'Sepedi'}. 
+                Only English, Afrikaans, and isiZulu have voice support.
+              </Text>
+            </View>
+          )}
+          
+          <View style={styles.divider} />
+          
           <ToggleSetting
             title="Realtime Streaming (Beta)"
             subtitle="Stream voice input and receive live tokens"
@@ -183,7 +216,7 @@ export function VoiceSection({
             title="Voice Language"
             subtitle="Primary language for voice output"
             value={settings.voiceLanguage}
-            options={LANGUAGE_OPTIONS}
+            options={LANGUAGE_OPTIONS.filter(o => TTS_SUPPORTED_LANGUAGES.includes(o.value))}
             onValueChange={(v) => onChange('voiceLanguage', v)}
             theme={theme}
           />
@@ -227,4 +260,7 @@ const styles = StyleSheet.create({
   pickerOptionText: { fontSize: 14, fontWeight: '500' },
   actionButton: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, backgroundColor: 'transparent' },
   actionButtonText: { fontSize: 14, fontWeight: '600' },
+  warningBox: { margin: 12, padding: 12, borderRadius: 8, borderWidth: 1 },
+  warningText: { fontSize: 13, lineHeight: 18 },
+  divider: { height: 1, backgroundColor: '#e5e7eb', marginVertical: 8 },
 });

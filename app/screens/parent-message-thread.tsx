@@ -341,12 +341,65 @@ export default function ParentMessageThreadScreen() {
     setShowMessageActions(true);
   }, []);
 
-  // Message action handlers
-  const handleReact = useCallback((emoji: string) => {
-    console.log('React with:', emoji, 'to message:', selectedMessage?.id);
+  // Message action handlers - only one reaction allowed per user per message
+  const handleReact = useCallback(async (emoji: string) => {
+    if (!selectedMessage?.id || !user?.id) {
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+      return;
+    }
+    
+    try {
+      const client = require('@/lib/supabase').assertSupabase();
+      
+      // Delete any existing reaction from this user on this message first
+      await client
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', selectedMessage.id)
+        .eq('user_id', user.id);
+      
+      // Add the new reaction
+      await client.from('message_reactions').insert({
+        message_id: selectedMessage.id,
+        user_id: user.id,
+        emoji: emoji,
+      });
+      
+      // Refresh messages to show updated reactions
+      refetch();
+    } catch (err) {
+      console.error('Error reacting to message:', err);
+      toast.error('Failed to add reaction');
+    }
+    
     setShowMessageActions(false);
     setSelectedMessage(null);
-  }, [selectedMessage]);
+  }, [selectedMessage, user?.id, refetch]);
+
+  // Handler for clicking on a reaction to delete it
+  const handleReactionPress = useCallback(async (messageId: string, emoji: string) => {
+    if (!user?.id) return;
+    
+    try {
+      const client = require('@/lib/supabase').assertSupabase();
+      
+      // Delete the user's reaction
+      await client
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', user.id)
+        .eq('emoji', emoji);
+      
+      // Refresh messages
+      refetch();
+      toast.success('Reaction removed');
+    } catch (err) {
+      console.error('Error removing reaction:', err);
+      toast.error('Failed to remove reaction');
+    }
+  }, [user?.id, refetch]);
 
   const handleReply = useCallback(() => {
     if (selectedMessage) {
@@ -610,11 +663,12 @@ export default function ParentMessageThreadScreen() {
             onLongPress={() => handleMessageLongPress(msg)}
             onPlaybackFinished={handleVoiceFinished}
             autoPlayVoice={shouldAutoPlay}
+            onReactionPress={handleReactionPress}
           />
         </React.Fragment>
       );
     });
-  }, [allMessages, user?.id, handleMessageLongPress, currentlyPlayingVoiceId]);
+  }, [allMessages, user?.id, handleMessageLongPress, currentlyPlayingVoiceId, handleReactionPress]);
 
   // No thread ID error state
   if (!threadId) {

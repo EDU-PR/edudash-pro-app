@@ -2,12 +2,19 @@
  * AI Settings types and constants
  */
 
+// Languages with TTS support (Azure Neural voices available)
+export const TTS_SUPPORTED_LANGUAGES = ['en', 'af', 'zu'];
+
 export interface AISettings {
   // Core AI Settings
   voiceEnabled: boolean;
   proactiveHelp: boolean;
   memoryEnabled: boolean;
   multilingualSupport: boolean;
+  
+  // Language Settings
+  responseLanguage: string; // Force AI to respond in this language
+  strictLanguageMode: boolean; // If true, AI NEVER switches language
   
   // Personality Settings
   personality: 'professional' | 'casual' | 'encouraging' | 'formal';
@@ -79,6 +86,8 @@ export const DEFAULT_SETTINGS: AISettings = {
   proactiveHelp: true,
   memoryEnabled: true,
   multilingualSupport: true,
+  responseLanguage: 'en', // Default to English
+  strictLanguageMode: false, // Allow language switching by default
   personality: 'encouraging',
   personalityCustom: '',
   adaptiveTone: true,

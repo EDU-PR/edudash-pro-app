@@ -75,6 +75,15 @@ export default function SuperAdminDashboardScreen() {
   // Quick actions configuration
   const quickActions: QuickAction[] = [
     {
+      id: 'ai-command-center',
+      title: 'AI Command Center',
+      description: 'Agentic AI operations & autonomous tasks',
+      icon: 'flash',
+      route: '/screens/super-admin-ai-command-center',
+      color: '#8b5cf6',
+      badge: 0,
+    },
+    {
       id: 'school-onboarding',
       title: 'School Onboarding',
       description: 'Create and onboard new schools',
@@ -497,17 +506,25 @@ export default function SuperAdminDashboardScreen() {
               </Text>
             </View>
             
+            {/* AI Command Center Quick Access */}
+            <TouchableOpacity 
+              style={[styles.aiButton, { backgroundColor: '#8b5cf6' }]}
+              onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
+            >
+              <Ionicons name="flash" size={18} color="#fff" />
+            </TouchableOpacity>
+            
             <TouchableOpacity 
               style={styles.notificationBell}
               onPress={() => {
                 track('superadmin_notifications_opened');
-                Alert.alert('Notifications', 'Notification center coming soon!');
+                router.push('/screens/super-admin-system-monitoring' as any);
               }}
             >
               <Ionicons name="notifications-outline" size={22} color={theme.text} />
               {/* Notification badge */}
               <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>3</Text>
+                <Text style={styles.notificationBadgeText}>{recentAlerts.length}</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -804,6 +821,14 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     flex: 1,
+  },
+  aiButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   notificationBell: {
     position: 'relative',
