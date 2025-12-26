@@ -38,68 +38,48 @@ export function useAnnouncements() {
     try {
       setLoading(true);
 
-      // Mock data for platform-wide announcements
-      const mockAnnouncements: PlatformAnnouncement[] = [
-        {
-          id: '1',
-          title: 'New AI Features Available',
-          content: 'We\'ve just released new AI-powered features including enhanced lesson generation and automated grading. All schools now have access to these tools.',
-          type: 'feature',
-          priority: 'high',
-          target_audience: 'all',
-          target_schools: [],
-          is_active: true,
-          is_pinned: true,
-          show_banner: true,
-          created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || 'system',
-          views_count: 1247,
-          click_count: 89,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: '2',
-          title: 'Scheduled Maintenance Window',
-          content: 'The platform will undergo scheduled maintenance on Sunday, December 17th from 2:00 AM to 6:00 AM UTC. During this time, some features may be temporarily unavailable.',
-          type: 'maintenance',
-          priority: 'urgent',
-          target_audience: 'all',
-          target_schools: [],
-          is_active: true,
-          is_pinned: false,
-          show_banner: true,
-          created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || 'system',
-          views_count: 892,
-          click_count: 23,
-          scheduled_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: '3',
-          title: 'Security Update Required',
-          content: 'All users are required to update their passwords within the next 30 days as part of our enhanced security measures.',
-          type: 'alert',
-          priority: 'high',
-          target_audience: 'all',
-          target_schools: [],
-          is_active: true,
-          is_pinned: false,
-          show_banner: false,
-          created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || 'system',
-          views_count: 2156,
-          click_count: 445,
-          expires_at: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
+      // Fetch real announcements from database
+      const { data: announcementsData, error: announcementsError } = await assertSupabase()
+        .from('platform_announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-      setAnnouncements(mockAnnouncements);
+      if (announcementsError) {
+        // Table might not exist or access denied - show empty state
+        console.log('Announcements table not configured:', announcementsError.message);
+        setAnnouncements([]);
+        return;
+      }
+
+      if (announcementsData && announcementsData.length > 0) {
+        const formattedAnnouncements: PlatformAnnouncement[] = announcementsData.map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          content: a.content,
+          type: a.type || 'info',
+          priority: a.priority || 'medium',
+          target_audience: a.target_audience || 'all',
+          target_schools: a.target_schools || [],
+          is_active: a.is_active ?? true,
+          is_pinned: a.is_pinned ?? false,
+          show_banner: a.show_banner ?? false,
+          created_at: a.created_at,
+          updated_at: a.updated_at,
+          created_by: a.created_by || 'system',
+          views_count: a.views_count || 0,
+          click_count: a.click_count || 0,
+          expires_at: a.expires_at,
+          scheduled_at: a.scheduled_at,
+        }));
+        setAnnouncements(formattedAnnouncements);
+      } else {
+        // No announcements - show empty state
+        setAnnouncements([]);
+      }
     } catch (error) {
       console.error('Failed to fetch announcements:', error);
-      Alert.alert('Error', 'Failed to load announcements');
+      setAnnouncements([]);
     } finally {
       setLoading(false);
     }

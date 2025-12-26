@@ -149,69 +149,67 @@ export default function SuperAdminAdminManagementScreen() {
     try {
       setLoading(true);
       
-      // Mock admin users data - replace with real Supabase query
-      const mockAdminUsers: AdminUser[] = [
-        {
-          id: '1',
-          email: 'sarah.johnson@edudashpro.com',
-          full_name: 'Sarah Johnson',
-          role: 'admin',
-          department: 'operations',
-          permissions: ['user_management', 'billing', 'analytics'],
-          is_active: true,
-          last_login: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || '',
-          schools_assigned: ['school_1', 'school_2'],
-        },
-        {
-          id: '2',
-          email: 'mike.chen@edudashpro.com',
-          full_name: 'Mike Chen',
-          role: 'content_moderator',
-          department: 'content',
-          permissions: ['content_moderation', 'user_communication'],
-          is_active: true,
-          last_login: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-          created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || '',
-        },
-        {
-          id: '3',
-          email: 'lisa.rodriguez@edudashpro.com',
-          full_name: 'Lisa Rodriguez',
-          role: 'support_admin',
-          department: 'customer_success',
-          permissions: ['user_support', 'system_diagnostics'],
-          is_active: false,
-          last_login: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || '',
-          schools_assigned: ['school_3'],
-        },
-        {
-          id: '4',
-          email: 'alex.kumar@edudashpro.com',
-          full_name: 'Alex Kumar',
-          role: 'system_admin',
-          department: 'engineering',
-          permissions: ['system_config', 'database_access', 'analytics'],
-          is_active: true,
-          last_login: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          created_at: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-          created_by: profile?.id || '',
-        },
-      ];
+      // Fetch real admin users from database
+      const { data: usersData, error: usersError } = await assertSupabase()
+        .from('users')
+        .select('id, email, full_name, role, is_active, last_login, created_at, avatar_url')
+        .in('role', ['admin', 'super_admin', 'superadmin', 'content_moderator', 'support_admin', 'billing_admin', 'system_admin'])
+        .order('created_at', { ascending: false });
 
-      setAdminUsers(mockAdminUsers);
+      if (usersError) {
+        console.error('Failed to fetch admin users:', usersError);
+        // If table doesn't exist or access denied, show empty state
+        setAdminUsers([]);
+        return;
+      }
+
+      if (usersData && usersData.length > 0) {
+        const formattedUsers: AdminUser[] = usersData.map((user: any) => ({
+          id: user.id,
+          email: user.email || '',
+          full_name: user.full_name || user.email?.split('@')[0] || 'Unknown',
+          role: mapUserRole(user.role),
+          department: 'customer_success', // Default department
+          permissions: getPermissionsForRole(user.role),
+          is_active: user.is_active ?? true,
+          last_login: user.last_login,
+          created_at: user.created_at,
+          created_by: profile?.id || '',
+          avatar_url: user.avatar_url,
+        }));
+        setAdminUsers(formattedUsers);
+      } else {
+        // No admin users found - show empty state
+        setAdminUsers([]);
+      }
 
     } catch (error) {
       console.error('Failed to fetch admin users:', error);
-      Alert.alert('Error', 'Failed to load admin users');
+      setAdminUsers([]);
     } finally {
       setLoading(false);
     }
   }, [profile?.role, profile?.id]);
+
+  // Helper to map various role strings to our AdminUser role type
+  const mapUserRole = (role: string): AdminUser['role'] => {
+    const roleMap: Record<string, AdminUser['role']> = {
+      'admin': 'admin',
+      'super_admin': 'system_admin',
+      'superadmin': 'system_admin',
+      'content_moderator': 'content_moderator',
+      'support_admin': 'support_admin',
+      'billing_admin': 'billing_admin',
+      'system_admin': 'system_admin',
+    };
+    return roleMap[role.toLowerCase()] || 'admin';
+  };
+
+  // Helper to get permissions based on role
+  const getPermissionsForRole = (role: string): string[] => {
+    const roleConfig = ADMIN_ROLES.find(r => r.value === mapUserRole(role));
+    return roleConfig?.permissions || ['user_management'];
+  };
 
   useEffect(() => {
     fetchAdminUsers();
