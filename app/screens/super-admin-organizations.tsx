@@ -196,6 +196,17 @@ export default function SuperAdminOrganizations() {
           .limit(100),
       ]);
 
+      // Debug auth session to help diagnose RLS issues
+      try {
+        const authInfo = await supabase.auth.getUser();
+        console.log('[Organizations] Auth getUser:', {
+          user: authInfo.data?.user?.id || null,
+          email: authInfo.data?.user?.email || null,
+        });
+      } catch (authErr) {
+        console.warn('[Organizations] Failed to get auth user during fetch:', authErr);
+      }
+
       // Debug logging
       console.log('[Organizations] Preschools response:', {
         count: preschoolsRes.data?.length || 0,
@@ -328,8 +339,11 @@ export default function SuperAdminOrganizations() {
   }, []);
 
   useEffect(() => {
+    // Only fetch organizations once the auth/profile is available to ensure
+    // Row Level Security (RLS) policies that depend on auth.uid() allow access.
+    if (!profile) return;
     fetchOrganizations();
-  }, [fetchOrganizations]);
+  }, [fetchOrganizations, profile]);
 
   // Filter organizations
   useEffect(() => {
