@@ -484,7 +484,7 @@ export async function queueOfflineAudio(uri: string, metadata: any): Promise<voi
 
 /**
  * Get audio duration from file
- * NOTE: Removed expo-av dependency - not needed for streaming-only
+ * NOTE: Uses expo-audio for audio playback, expo-av is deprecated and removed
  */
 export async function getAudioDuration(uri: string): Promise<number> {
   logger.warn('getAudioDuration: Not supported in streaming-only mode');

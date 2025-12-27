@@ -75,7 +75,7 @@ export class AudioManager {
       this.player = createAudioPlayer(uri);
       this.player.play();
       
-      // Set up status polling for updates (expo-audio doesn't have callbacks like expo-av)
+      // Set up status polling for updates (expo-audio uses hooks pattern instead of callbacks)
       const pollInterval = setInterval(() => {
         if (!this.player) {
           clearInterval(pollInterval);

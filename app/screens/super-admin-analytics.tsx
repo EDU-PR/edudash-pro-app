@@ -19,6 +19,7 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
+import DashOrb from '@/components/super-admin/DashOrb';
 
 interface PlatformStats {
   totalSchools: number;
@@ -437,14 +438,19 @@ export default function SuperAdminAnalyticsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </>
+          </>  
         )}
       </ScrollView>
+      
+      {/* Dash AI Assistant */}
+      <DashOrb 
+        position="bottom-right"
+        size={56}
+        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'analytics' })}
+      />
     </View>
   );
-}
-
-const styles = StyleSheet.create({
+}const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0b1220',

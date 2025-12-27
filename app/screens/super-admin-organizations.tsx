@@ -196,17 +196,6 @@ export default function SuperAdminOrganizations() {
           .limit(100),
       ]);
 
-      // Debug auth session to help diagnose RLS issues
-      try {
-        const authInfo = await supabase.auth.getUser();
-        console.log('[Organizations] Auth getUser:', {
-          user: authInfo.data?.user?.id || null,
-          email: authInfo.data?.user?.email || null,
-        });
-      } catch (authErr) {
-        console.warn('[Organizations] Failed to get auth user during fetch:', authErr);
-      }
-
       // Debug logging
       console.log('[Organizations] Preschools response:', {
         count: preschoolsRes.data?.length || 0,
@@ -221,9 +210,9 @@ export default function SuperAdminOrganizations() {
         error: orgsRes.error?.message,
       });
 
-      // Process preschools
+      // Process preschools - prefix ID to avoid duplicates with organizations table
       const preschools: Organization[] = (preschoolsRes.data || []).map((p: any) => ({
-        id: p.id,
+        id: `preschool_${p.id}`,
         name: p.name || 'Unnamed Preschool',
         type: 'preschool' as OrganizationType,
         status: p.is_active ? 'active' : 'inactive',
@@ -242,9 +231,9 @@ export default function SuperAdminOrganizations() {
         metadata: p.metadata,
       }));
 
-      // Process K-12 schools
+      // Process K-12 schools - prefix ID to avoid duplicates
       const k12Schools: Organization[] = (schoolsRes.data || []).map((s: any) => ({
-        id: s.id,
+        id: `school_${s.id}`,
         name: s.name || 'Unnamed School',
         type: 'k12' as OrganizationType,
         status: s.is_active ? 'active' : 'inactive',
@@ -263,9 +252,9 @@ export default function SuperAdminOrganizations() {
         metadata: s.metadata,
       }));
 
-      // Process generic organizations (may not exist)
+      // Process generic organizations - prefix ID to avoid duplicates
       const otherOrgs: Organization[] = (orgsRes.data || []).map((o: any) => ({
-        id: o.id,
+        id: `org_${o.id}`,
         name: o.name || 'Unnamed Organization',
         type: (o.organization_type || 'org') as OrganizationType,
         status: o.is_active ? 'active' : 'inactive',
@@ -305,16 +294,17 @@ export default function SuperAdminOrganizations() {
 
       // Fetch subscription counts to enhance stats
       try {
-        const { data: subscriptions } = await supabase
+        const { data: subscriptions, error: subErr } = await supabase
           .from('subscriptions')
-          .select('preschool_id, organization_id, status')
+          .select('school_id, user_id, status')
           .eq('status', 'active');
         
-        if (subscriptions) {
+        if (subErr) {
+          console.log('[Organizations] Subscription query error:', subErr.message);
+        } else if (subscriptions) {
           const orgsWithSubs = new Set<string>();
           subscriptions.forEach((sub: any) => {
-            if (sub.preschool_id) orgsWithSubs.add(sub.preschool_id);
-            if (sub.organization_id) orgsWithSubs.add(sub.organization_id);
+            if (sub.school_id) orgsWithSubs.add(sub.school_id);
           });
           calculatedStats.with_subscription = orgsWithSubs.size;
         }
@@ -339,11 +329,8 @@ export default function SuperAdminOrganizations() {
   }, []);
 
   useEffect(() => {
-    // Only fetch organizations once the auth/profile is available to ensure
-    // Row Level Security (RLS) policies that depend on auth.uid() allow access.
-    if (!profile) return;
     fetchOrganizations();
-  }, [fetchOrganizations, profile]);
+  }, [fetchOrganizations]);
 
   // Filter organizations
   useEffect(() => {
@@ -405,11 +392,34 @@ export default function SuperAdminOrganizations() {
               text: 'Suspend',
               style: 'destructive',
               onPress: async () => {
-                // TODO: Implement suspension
-                track('superadmin_org_suspended', { org_id: selectedOrg.id });
-                Alert.alert('Success', 'Organization suspended');
-                setShowActionsModal(false);
-                await fetchOrganizations();
+                try {
+                  const idParts = selectedOrg.id.split('_');
+                  const sourceType = idParts[0];
+                  const actualId = idParts.slice(1).join('_');
+                  
+                  let table: string;
+                  if (sourceType === 'preschool') {
+                    table = 'preschools';
+                  } else if (sourceType === 'school') {
+                    table = 'schools';
+                  } else {
+                    table = 'organizations';
+                  }
+                  
+                  const { error } = await assertSupabase()
+                    .from(table)
+                    .update({ is_active: false })
+                    .eq('id', actualId);
+                  
+                  if (error) throw error;
+                  
+                  track('superadmin_org_suspended', { org_id: actualId });
+                  Alert.alert('Success', 'Organization suspended');
+                  setShowActionsModal(false);
+                  await fetchOrganizations();
+                } catch (error: any) {
+                  Alert.alert('Error', error?.message || 'Failed to suspend organization');
+                }
               },
             },
           ]
@@ -422,17 +432,32 @@ export default function SuperAdminOrganizations() {
             text: 'Verify',
             onPress: async () => {
               try {
-                const table = selectedOrg.type === 'preschool' ? 'preschools' : 'schools';
-                await assertSupabase()
+                const idParts = selectedOrg.id.split('_');
+                const sourceType = idParts[0];
+                const actualId = idParts.slice(1).join('_');
+                
+                let table: string;
+                if (sourceType === 'preschool') {
+                  table = 'preschools';
+                } else if (sourceType === 'school') {
+                  table = 'schools';
+                } else {
+                  table = 'organizations';
+                }
+                
+                const { error } = await assertSupabase()
                   .from(table)
                   .update({ is_verified: true })
-                  .eq('id', selectedOrg.id);
-                track('superadmin_org_verified', { org_id: selectedOrg.id });
+                  .eq('id', actualId);
+                
+                if (error) throw error;
+                
+                track('superadmin_org_verified', { org_id: actualId });
                 Alert.alert('Success', 'Organization verified');
                 setShowActionsModal(false);
                 await fetchOrganizations();
-              } catch (error) {
-                Alert.alert('Error', 'Failed to verify organization');
+              } catch (error: any) {
+                Alert.alert('Error', error?.message || 'Failed to verify organization');
               }
             },
           },
@@ -441,14 +466,84 @@ export default function SuperAdminOrganizations() {
       case 'delete':
         Alert.alert(
           'Delete Organization',
-          `⚠️ This action cannot be undone. Delete ${selectedOrg.name}?`,
+          `⚠️ This action cannot be undone!\n\nThis will permanently delete "${selectedOrg.name}" and unlink all associated users.\n\nAre you absolutely sure?`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
-              text: 'Delete',
+              text: 'Delete Forever',
               style: 'destructive',
-              onPress: () => {
-                Alert.alert('Safety Check', 'Deletion requires additional confirmation in settings');
+              onPress: async () => {
+                try {
+                  // Determine which table to delete from based on ID prefix
+                  const idParts = selectedOrg.id.split('_');
+                  const sourceType = idParts[0]; // preschool, school, or org
+                  const actualId = idParts.slice(1).join('_'); // The actual UUID
+                  
+                  let table: string;
+                  let profileColumn: string;
+                  if (sourceType === 'preschool') {
+                    table = 'preschools';
+                    profileColumn = 'preschool_id';
+                  } else if (sourceType === 'school') {
+                    table = 'schools';
+                    profileColumn = 'preschool_id'; // schools may also use preschool_id
+                  } else {
+                    table = 'organizations';
+                    profileColumn = 'organization_id';
+                  }
+                  
+                  console.log('[Organizations] Deleting from table:', table, 'id:', actualId);
+                  
+                  const supabase = assertSupabase();
+                  
+                  // Step 1: Unlink profiles from this organization
+                  console.log('[Organizations] Unlinking profiles with', profileColumn, '=', actualId);
+                  const { error: unlinkError } = await supabase
+                    .from('profiles')
+                    .update({ [profileColumn]: null })
+                    .eq(profileColumn, actualId);
+                  
+                  if (unlinkError) {
+                    console.log('[Organizations] Profile unlink error (non-fatal):', unlinkError.message);
+                  }
+                  
+                  // Step 2: Also unlink from users table if it has the column
+                  try {
+                    await supabase
+                      .from('users')
+                      .update({ [profileColumn]: null })
+                      .eq(profileColumn, actualId);
+                  } catch {
+                    // Users table might not have this column
+                  }
+                  
+                  // Step 3: Delete the organization
+                  const { error } = await supabase
+                    .from(table)
+                    .delete()
+                    .eq('id', actualId);
+                  
+                  if (error) throw error;
+                  
+                  track('superadmin_org_deleted', { 
+                    org_id: actualId, 
+                    org_name: selectedOrg.name,
+                    org_type: selectedOrg.type 
+                  });
+                  Alert.alert('Deleted', `${selectedOrg.name} has been permanently deleted.`);
+                  setShowActionsModal(false);
+                  setSelectedOrg(null);
+                  await fetchOrganizations();
+                } catch (error: any) {
+                  console.error('[Organizations] Delete error:', error);
+                  
+                  // Provide more helpful error messages
+                  let errorMessage = error?.message || 'Failed to delete organization.';
+                  if (error?.code === '23503') {
+                    errorMessage = 'Cannot delete: This organization still has linked data (students, classes, lessons, etc.). Please remove or reassign that data first.';
+                  }
+                  Alert.alert('Error', errorMessage);
+                }
               },
             },
           ]
@@ -465,7 +560,7 @@ export default function SuperAdminOrganizations() {
         <View style={styles.statsRow}>
           <View style={[styles.statCard, { backgroundColor: theme.primary + '20' }]}>
             <Text style={styles.statValue}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total Orgs</Text>
+            <Text style={styles.statLabel}>Total</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: '#8b5cf6' + '20' }]}>
             <Text style={styles.statValue}>{stats.preschools}</Text>
@@ -473,7 +568,11 @@ export default function SuperAdminOrganizations() {
           </View>
           <View style={[styles.statCard, { backgroundColor: '#3b82f6' + '20' }]}>
             <Text style={styles.statValue}>{stats.k12_schools}</Text>
-            <Text style={styles.statLabel}>K-12 Schools</Text>
+            <Text style={styles.statLabel}>K-12</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: '#10b981' + '20' }]}>
+            <Text style={styles.statValue}>{stats.other_orgs}</Text>
+            <Text style={styles.statLabel}>Organizations</Text>
           </View>
         </View>
         <View style={styles.statsRow}>
@@ -488,6 +587,10 @@ export default function SuperAdminOrganizations() {
           <View style={[styles.statCard, { backgroundColor: theme.info + '20' }]}>
             <Text style={styles.statValue}>{stats.verified}</Text>
             <Text style={styles.statLabel}>Verified</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: '#f59e0b' + '20' }]}>
+            <Text style={styles.statValue}>{stats.with_subscription}</Text>
+            <Text style={styles.statLabel}>Subscribed</Text>
           </View>
         </View>
       </View>

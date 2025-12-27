@@ -136,7 +136,7 @@ export function useTextToSpeech() {
 /**
  * Hook for audio recording
  * @deprecated Use useVoiceController with streaming instead
- * Recording via expo-av has been removed in favor of real-time streaming
+ * Recording via expo-av has been removed - use expo-audio useAudioRecorder hook instead
  */
 export function useVoiceRecording() {
   const [recordingState, setRecordingState] = useState<RecordingState>({
@@ -160,7 +160,7 @@ export function useVoiceRecording() {
     setRecordingState({
       isRecording: false,
       duration: 0,
-      error: 'Recording via expo-av removed. Use useVoiceController with streaming.',
+      error: 'Recording via expo-av removed. Use expo-audio useAudioRecorder hook or useVoiceController with streaming.',
     });
   }, []);
 

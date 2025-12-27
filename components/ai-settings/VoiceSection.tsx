@@ -77,7 +77,7 @@ export function VoiceSection({
       setSamplePlaying(true);
       setSampleLoading(false);
       
-      // Poll for progress (expo-audio doesn't have callbacks like expo-av)
+      // Poll for progress (expo-audio uses hooks pattern for state updates)
       progressIntervalRef.current = setInterval(() => {
         if (!samplePlayerRef.current) {
           if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);

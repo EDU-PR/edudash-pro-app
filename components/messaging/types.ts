@@ -20,7 +20,7 @@ export interface Message {
     role?: string;
   };
   read_by?: string[];
-  delivered_to?: string[];
+  delivered_at?: string; // Timestamp when message was delivered
   isTyping?: boolean;
   voice_url?: string;
   voice_duration?: number;
