@@ -121,6 +121,14 @@ export function VoiceCallInterface({
     callId: state.callIdRef.current,
     onReturnFromBackground: () => {
       console.log('[VoiceCallInterface] Returned from background');
+      // Re-enable audio when returning from background
+      if (state.dailyRef.current && state.isAudioEnabled) {
+        try {
+          state.dailyRef.current.setLocalAudio(true);
+        } catch (err) {
+          console.warn('[VoiceCallInterface] Failed to re-enable audio after background:', err);
+        }
+      }
     },
   });
 

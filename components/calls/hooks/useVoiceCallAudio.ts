@@ -41,46 +41,35 @@ export function useVoiceCallAudio({
   const audioInitializedRef = useRef(false);
 
   // Audio management via InCallManager
+  // CRITICAL: Only initialize audio ONCE to prevent ringtone changes
   useEffect(() => {
     if (!InCallManager) return;
+    if (audioInitializedRef.current) return;
     
-    const setupAudio = () => {
-      if (audioInitializedRef.current) return;
+    // Only start on first 'connecting' state, never restart
+    if (callState !== 'connecting') return;
+    
+    try {
+      console.log('[VoiceCallAudio] Initializing audio for', isOwner ? 'caller' : 'callee');
       
-      try {
-        if (isOwner && (callState === 'connecting' || callState === 'ringing')) {
-          // Caller: start with ringback, use earpiece by default
-          console.log('[VoiceCallAudio] Caller: Starting InCallManager with ringback');
-          InCallManager.start({ media: 'audio', ringback: '_DEFAULT_' });
-          InCallManager.setForceSpeakerphoneOn(false);
-          audioInitializedRef.current = true;
-        } else if (!isOwner && callState === 'connecting') {
-          // Callee: start audio with EARPIECE by default (like WhatsApp)
-          // User can toggle to speaker if needed
-          console.log('[VoiceCallAudio] Callee: Starting InCallManager with EARPIECE default');
-          InCallManager.start({ media: 'audio' });
-          InCallManager.setForceSpeakerphoneOn(false); // Earpiece for callees (WhatsApp-like)
-          setIsSpeakerEnabled(false); // Update state to reflect earpiece is on
-          audioInitializedRef.current = true;
-        }
-      } catch (error) {
-        console.error('[VoiceCallAudio] Failed to start InCallManager:', error);
-      }
-    };
-    
-    const stopRingback = () => {
-      try {
-        if (callState === 'connected') {
-          console.log('[VoiceCallAudio] Connected: Stopping ringback');
-          InCallManager.stopRingback();
-        }
-      } catch (error) {
-        console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
-      }
-    };
-    
-    setupAudio();
-    stopRingback();
+      // Start InCallManager in audio mode (no ringback ringtone)
+      // We handle ringing UI separately with Expo Audio
+      InCallManager.start({ 
+        media: 'audio',
+        auto: false, // Prevent auto focus release
+        ringback: '' // No ringback tone to prevent ringtone changes
+      });
+      
+      // Default to earpiece (WhatsApp-like)
+      InCallManager.setForceSpeakerphoneOn(false);
+      setIsSpeakerEnabled(false);
+      InCallManager.setKeepScreenOn(true);
+      
+      audioInitializedRef.current = true;
+      console.log('[VoiceCallAudio] Audio initialized successfully');
+    } catch (error) {
+      console.error('[VoiceCallAudio] Failed to start InCallManager:', error);
+    }
   }, [callState, isOwner, setIsSpeakerEnabled]);
 
   // Toggle speaker

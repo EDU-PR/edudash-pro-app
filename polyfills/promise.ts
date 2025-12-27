@@ -1,135 +1,119 @@
 /**
- * Promise polyfills for React Native
- * Required for Daily.co SDK which uses Promise.any
- * CRITICAL: Must be loaded BEFORE any other imports
+ * Promise.any polyfill for React Native / Hermes
  * 
- * The Daily.co SDK's WebRTC code uses Promise.any internally.
- * Hermes engine (React Native) doesn't have Promise.any by default.
+ * CRITICAL: This must run BEFORE any other modules load, especially Daily.co SDK.
+ * Daily.co captures Promise at module load time, so we must patch it synchronously.
+ * 
+ * This ONLY adds Promise.any - it does NOT replace the Promise constructor.
+ * (core-js causes infinite loops with Hermes because it replaces the entire Promise)
  */
 
-// Declare global types
-declare const global: any;
-declare const __DEV__: boolean;
+// Immediately-invoked setup - runs synchronously at import time
+(function setupPromisePolyfills() {
+  'use strict';
+  
+  // Get the global object (works in all environments)
+  const g: any = 
+    typeof globalThis !== 'undefined' ? globalThis :
+    typeof global !== 'undefined' ? global :
+    typeof window !== 'undefined' ? window :
+    typeof self !== 'undefined' ? self : {};
 
-// AggregateError polyfill (needed for Promise.any rejections)
-class AggregateErrorPolyfill extends Error {
-  errors: any[];
-  constructor(errors: any[], message: string) {
-    super(message);
-    this.name = 'AggregateError';
-    this.errors = errors;
-    // Fix prototype chain for instanceof checks
-    Object.setPrototypeOf(this, AggregateErrorPolyfill.prototype);
-  }
-}
-
-// Apply AggregateError to all global contexts immediately
-if (typeof globalThis !== 'undefined' && !globalThis.AggregateError) {
-  (globalThis as any).AggregateError = AggregateErrorPolyfill;
-}
-if (typeof global !== 'undefined' && !global.AggregateError) {
-  global.AggregateError = AggregateErrorPolyfill;
-}
-if (typeof window !== 'undefined' && !(window as any).AggregateError) {
-  (window as any).AggregateError = AggregateErrorPolyfill;
-}
-
-// Promise.any implementation following ES2021 spec
-function promiseAny<T>(promises: Iterable<T | PromiseLike<T>>): Promise<Awaited<T>> {
-  return new Promise((resolve, reject) => {
-    const promiseArray = Array.from(promises);
-    const errors: any[] = new Array(promiseArray.length);
-    let rejectedCount = 0;
-    
-    if (promiseArray.length === 0) {
-      reject(new AggregateErrorPolyfill([], 'All promises were rejected'));
-      return;
+  // AggregateError polyfill
+  if (typeof g.AggregateError === 'undefined') {
+    class AggregateErrorPolyfill extends Error {
+      errors: any[];
+      constructor(errors: Iterable<any>, message?: string) {
+        super(message || 'All promises were rejected');
+        this.name = 'AggregateError';
+        this.errors = Array.from(errors);
+        // Fix prototype chain for ES5 environments
+        Object.setPrototypeOf(this, AggregateErrorPolyfill.prototype);
+      }
     }
+    g.AggregateError = AggregateErrorPolyfill;
+    // Also set on globalThis if different
+    if (typeof globalThis !== 'undefined' && globalThis !== g) {
+      (globalThis as any).AggregateError = AggregateErrorPolyfill;
+    }
+  }
 
-    promiseArray.forEach((promise, index) => {
-      Promise.resolve(promise).then(
-        resolve, // First fulfilled promise resolves the whole thing
-        (error) => {
-          errors[index] = error;
-          rejectedCount++;
-          if (rejectedCount === promiseArray.length) {
-            reject(new AggregateErrorPolyfill(errors, 'All promises were rejected'));
+  // Promise.any implementation
+  function promiseAny<T>(iterable: Iterable<T | PromiseLike<T>>): Promise<Awaited<T>> {
+    return new Promise((resolve, reject) => {
+      const promises = Array.from(iterable);
+      
+      if (promises.length === 0) {
+        reject(new g.AggregateError([], 'All promises were rejected'));
+        return;
+      }
+
+      const errors: any[] = new Array(promises.length);
+      let rejectionCount = 0;
+      let resolved = false;
+
+      promises.forEach((promise, index) => {
+        Promise.resolve(promise).then(
+          (value) => {
+            if (!resolved) {
+              resolved = true;
+              resolve(value);
+            }
+          },
+          (reason) => {
+            if (!resolved) {
+              errors[index] = reason;
+              rejectionCount++;
+              if (rejectionCount === promises.length) {
+                reject(new g.AggregateError(errors, 'All promises were rejected'));
+              }
+            }
           }
-        }
-      );
+        );
+      });
     });
-  });
-}
+  }
 
-// Apply Promise.any to ALL possible Promise references
-// This is critical because different parts of the app may reference different Promise objects
-
-const applyPolyfill = (PromiseConstructor: any, name: string) => {
-  if (PromiseConstructor && typeof PromiseConstructor.any !== 'function') {
-    PromiseConstructor.any = promiseAny;
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.log(`[Polyfill] Promise.any added to ${name}`);
+  // Patch Promise.any if missing - use Object.defineProperty for better compatibility
+  const PromiseConstructor = g.Promise || Promise;
+  
+  if (typeof PromiseConstructor.any !== 'function') {
+    try {
+      Object.defineProperty(PromiseConstructor, 'any', {
+        value: promiseAny,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+      });
+    } catch (e) {
+      // Fallback if defineProperty fails
+      (PromiseConstructor as any).any = promiseAny;
+    }
+    
+    // Also patch the local Promise if different from global
+    if (Promise !== PromiseConstructor && typeof Promise.any !== 'function') {
+      try {
+        Object.defineProperty(Promise, 'any', {
+          value: promiseAny,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+      } catch (e) {
+        (Promise as any).any = promiseAny;
+      }
     }
   }
-};
 
-// Apply to local Promise
-applyPolyfill(Promise, 'Promise');
-
-// Apply to globalThis.Promise (ES2020 global)
-if (typeof globalThis !== 'undefined') {
-  applyPolyfill(globalThis.Promise, 'globalThis.Promise');
-}
-
-// Apply to global.Promise (Node.js / React Native)
-if (typeof global !== 'undefined') {
-  applyPolyfill(global.Promise, 'global.Promise');
-}
-
-// Apply to window.Promise (Browser)
-if (typeof window !== 'undefined') {
-  applyPolyfill((window as any).Promise, 'window.Promise');
-}
-
-// Also patch the prototype to catch any dynamic Promise creation
-// This is a last resort for WebRTC internal code
-const originalPromiseResolve = Promise.resolve.bind(Promise);
-const originalPromiseReject = Promise.reject.bind(Promise);
-
-// Verify the polyfill works
-if (typeof __DEV__ !== 'undefined' && __DEV__) {
-  try {
-    const testResult = Promise.any ? 'available' : 'missing';
-    console.log(`[Polyfill] Promise.any status: ${testResult}`);
-  } catch (e) {
-    console.warn('[Polyfill] Promise.any verification failed:', e);
+  // Verify installation
+  const isAvailable = typeof Promise.any === 'function';
+  console.log('[Polyfill] Promise.any:', isAvailable ? '✅ installed' : '❌ FAILED');
+  
+  if (!isAvailable) {
+    console.error('[Polyfill] CRITICAL: Promise.any polyfill failed to install!');
+    console.error('[Polyfill] Daily.co SDK will not work correctly.');
   }
-}
+})();
 
-// Polyfill AggregateError if not available
-if (typeof (globalThis_ as any).AggregateError === 'undefined') {
-  (globalThis_ as any).AggregateError = class AggregateError extends Error {
-    errors: any[];
-    constructor(errors: any[], message: string) {
-      super(message);
-      this.name = 'AggregateError';
-      this.errors = errors;
-    }
-  };
-  if (__DEV__) console.log('[Polyfill] AggregateError added');
-}
-
-// Polyfill Promise.allSettled if not available
-if (!Promise.allSettled) {
-  (Promise as any).allSettled = function (promises: Promise<any>[]) {
-    return Promise.all(
-      promises.map((p) =>
-        Promise.resolve(p).then(
-          (value) => ({ status: 'fulfilled' as const, value }),
-          (reason) => ({ status: 'rejected' as const, reason })
-        )
-      )
-    );
-  };
-  if (__DEV__) console.log('[Polyfill] Promise.allSettled added');
-}
+// Export to make this a module  
+export {};

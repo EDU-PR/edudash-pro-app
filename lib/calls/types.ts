@@ -70,6 +70,7 @@ export interface CallContextType {
   outgoingCall: OutgoingCallParams | null;
   isCallActive: boolean;
   isInActiveCall: boolean;
+  isCallInterfaceOpen: boolean; // Whether the full call modal is open
   callState: CallState;
   
   // Navigation

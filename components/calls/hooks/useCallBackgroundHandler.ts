@@ -96,12 +96,16 @@ export function useCallBackgroundHandler({
    * Configure audio session for background playback (Android)
    */
   const configureBackgroundAudio = useCallback(() => {
-    if (!InCallManager || Platform.OS !== 'android') return;
+    if (!InCallManager) return;
     
     try {
-      // InCallManager already handles background audio via foreground service
-      // Just ensure proper routing is maintained
-      console.log('[CallBackgroundHandler] Background audio configured');
+      // Start InCallManager in media mode for active call
+      InCallManager.start({ media: 'audio' });
+      // Keep screen on during active call
+      InCallManager.setKeepScreenOn(true);
+      // Use earpiece by default
+      InCallManager.setForceSpeakerphoneOn(false);
+      console.log('[CallBackgroundHandler] Background audio configured with InCallManager');
     } catch (error) {
       console.warn('[CallBackgroundHandler] Failed to configure background audio:', error);
     }
@@ -150,11 +154,13 @@ export function useCallBackgroundHandler({
           console.log('[CallBackgroundHandler] Returning from background with active call');
           wasInBackgroundRef.current = false;
           
-          // Ensure audio routing is restored
+          // Re-establish audio routing when returning from background
           if (InCallManager) {
             try {
-              // Re-verify audio routing
-              console.log('[CallBackgroundHandler] Verifying audio routing after background return');
+              // Restart InCallManager to ensure proper audio routing
+              InCallManager.start({ media: 'audio', auto: false });
+              InCallManager.setKeepScreenOn(true);
+              console.log('[CallBackgroundHandler] Audio routing restored after background return');
             } catch (error) {
               console.warn('[CallBackgroundHandler] Failed to restore audio:', error);
             }

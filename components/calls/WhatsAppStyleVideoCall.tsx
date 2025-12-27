@@ -431,6 +431,43 @@ export function WhatsAppStyleVideoCall({
               meeting_url: roomUrl,
             });
 
+            // CRITICAL: Send push notification to wake callee's app when backgrounded
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                user_ids: [calleeId],
+                title: '📹 Incoming Video Call',
+                body: `${callerName} is video calling...`,
+                data: {
+                  type: 'incoming_call',
+                  call_id: newCallId,
+                  caller_id: user.id,
+                  caller_name: callerName,
+                  call_type: 'video',
+                  meeting_url: roomUrl,
+                },
+                sound: 'default',
+                priority: 'high',
+                channelId: 'incoming-calls',
+                categoryId: 'incoming_call',
+                ttl: 30,
+              }),
+            }).then(res => {
+              if (res.ok) {
+                console.log('[VideoCall] ✅ Push notification sent to callee');
+              } else {
+                res.text().then(text => {
+                  console.warn('[VideoCall] Push notification failed:', text);
+                });
+              }
+            }).catch(err => {
+              console.warn('[VideoCall] Failed to send push notification:', err);
+            });
+
             await getSupabase().from('call_signals').insert({
               call_id: newCallId,
               from_user_id: user.id,

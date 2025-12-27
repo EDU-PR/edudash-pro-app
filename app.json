@@ -167,7 +167,10 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#00f5ff",
-          "defaultChannel": "default",
+          "mode": "production",
+          "androidMode": "default",
+          "iosDisplayInForeground": true,
+          "defaultChannel": "incoming-calls",
           "sounds": [
             "./assets/sounds/notification.wav"
           ]

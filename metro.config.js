@@ -7,6 +7,7 @@
  * Only essential customizations:
  * - JSON files as source files (required for i18n locales)
  * - Public assets serving (PWA manifest and icons)
+ * - Promise.any polyfill runs FIRST (required for Daily.co SDK)
  * 
  * Learn more: https://docs.expo.io/guides/customizing-metro
  */
@@ -18,6 +19,20 @@ require('dotenv').config();
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
+
+// CRITICAL: Ensure Promise.any polyfill runs BEFORE any other module
+// This is necessary because Daily.co SDK captures Promise at module init time
+config.serializer = {
+  ...config.serializer,
+  getModulesRunBeforeMainModule: () => [
+    // React Native's polyfills (required)
+    require.resolve('react-native/Libraries/Core/InitializeCore'),
+    // Official promise.any polyfill from npm
+    require.resolve('promise.any/auto'),
+    // Our backup Promise.any polyfill MUST run after InitializeCore but before app code
+    require.resolve('./polyfills/promise-shim.js'),
+  ],
+};
 
 // Treat JSON files as source files (required for i18n locale imports)
 config.resolver.assetExts = config.resolver.assetExts.filter(ext => ext !== 'json');

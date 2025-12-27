@@ -1,3 +1,7 @@
+// CRITICAL: Load Promise polyfills FIRST (required by Daily.co SDK)
+import '../polyfills/promise';
+import '../polyfills/react-use';
+
 import 'react-native-get-random-values';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform, LogBox } from 'react-native';
@@ -42,6 +46,7 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
 import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
+import { FloatingCallOverlay } from '../components/calls/FloatingCallOverlay';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -149,6 +154,9 @@ function LayoutContent() {
       
       {/* Persistent Bottom Navigation - positioned at bottom */}
       <BottomTabBar />
+      
+      {/* Floating Call Overlay - persists across all screens and when backgrounded */}
+      <FloatingCallOverlay />
       
       {/* Call Interfaces are rendered by CallProvider - no duplicates needed here */}
     </View>

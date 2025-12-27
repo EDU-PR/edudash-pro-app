@@ -19,6 +19,11 @@ import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { getPendingCall, cancelIncomingCallNotification, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
+import { 
+  checkForIncomingCallOnLaunch, 
+  cancelIncomingCallNotification as cancelBackgroundCallNotification 
+} from '@/lib/calls/CallBackgroundNotification';
+import { setupIncomingCallNotifications } from '@/lib/calls/setupPushNotifications';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -80,6 +85,7 @@ const DISABLED_CONTEXT: CallContextType = {
   outgoingCall: null,
   isCallActive: false,
   isInActiveCall: false,
+  isCallInterfaceOpen: false,
   callState: 'idle',
   returnToCall: () => {},
   // Presence - always return offline when calls are disabled
@@ -139,13 +145,26 @@ export function CallProvider({ children }: CallProviderProps) {
 
     const getUser = async () => {
       const { data: { user } } = await getSupabase().auth.getUser();
-      if (user) setCurrentUserId(user.id);
+      if (user) {
+        setCurrentUserId(user.id);
+        // CRITICAL: Save push token to profile for incoming call notifications
+        // This enables background call notifications when app is closed
+        setupIncomingCallNotifications(user.id).catch((err) => {
+          console.warn('[CallProvider] Failed to setup push notifications:', err);
+        });
+      }
     };
     getUser();
 
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
       (_event, session) => {
         setCurrentUserId(session?.user?.id || null);
+        // Also setup push notifications on auth state change
+        if (session?.user?.id) {
+          setupIncomingCallNotifications(session.user.id).catch((err) => {
+            console.warn('[CallProvider] Failed to setup push notifications on auth change:', err);
+          });
+        }
       }
     );
 
@@ -172,13 +191,24 @@ export function CallProvider({ children }: CallProviderProps) {
     return () => subscription.remove();
   }, [appState, callsEnabled]);
   
-  // Check for pending calls saved by HeadlessJS task
+  // Check for pending calls saved by HeadlessJS task OR background notification handler
   const checkPendingCall = useCallback(async () => {
     try {
-      const pendingCall = await getPendingCall();
-      if (pendingCall) {
+      // Check HeadlessJS pending call first (Firebase-based)
+      let pendingCall = await getPendingCall();
+      
+      // If no HeadlessJS call, check Expo background notification
+      if (!pendingCall) {
+        const backgroundCall = await checkForIncomingCallOnLaunch();
+        if (backgroundCall) {
+          pendingCall = backgroundCall;
+          console.log('[CallProvider] Found pending call from background notification:', backgroundCall.call_id);
+        }
+      } else {
         console.log('[CallProvider] Found pending call from HeadlessJS:', pendingCall.call_id);
-        
+      }
+      
+      if (pendingCall) {
         // Set as incoming call
         setIncomingCall({
           id: pendingCall.call_id,
@@ -343,6 +373,52 @@ export function CallProvider({ children }: CallProviderProps) {
     
     return () => subscription.remove();
   }, [callsEnabled, incomingCall, answerCall, rejectCall]);
+
+  // Listen for notifications RECEIVED (not just tapped) - handles background wake-up
+  useEffect(() => {
+    if (!callsEnabled) return;
+    
+    const subscription = Notifications.addNotificationReceivedListener(async (notification) => {
+      const data = notification.request.content.data;
+      
+      // Only handle incoming call notifications
+      if (data?.type !== 'incoming_call') return;
+      
+      console.log('[CallProvider] 📱 Notification received:', {
+        callId: data.call_id,
+        callerName: data.caller_name,
+        appState: appState,
+      });
+      
+      // If we already have this call or are in a call, ignore
+      if (incomingCall?.call_id === data.call_id || answeringCall || outgoingCall) {
+        console.log('[CallProvider] Ignoring notification - already handling call');
+        return;
+      }
+      
+      // Show incoming call UI when notification is received
+      // This handles the case where the app was woken by the notification
+      const activeCall: ActiveCall = {
+        id: data.call_id as string,
+        call_id: data.call_id as string,
+        caller_id: data.caller_id as string,
+        callee_id: currentUserId || '',
+        caller_name: data.caller_name as string || 'Unknown',
+        call_type: (data.call_type as 'voice' | 'video') || 'voice',
+        status: 'ringing',
+        meeting_url: data.meeting_url as string,
+        started_at: new Date().toISOString(),
+      };
+      
+      console.log('[CallProvider] Setting incoming call from notification:', activeCall.call_id);
+      setIncomingCall(activeCall);
+      
+      // Start vibration for incoming call
+      Vibration.vibrate([0, 1000, 500, 1000, 500, 1000], true);
+    });
+    
+    return () => subscription.remove();
+  }, [callsEnabled, currentUserId, appState, incomingCall, answeringCall, outgoingCall]);
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {
@@ -590,8 +666,9 @@ export function CallProvider({ children }: CallProviderProps) {
       callerName: incomingCall.caller_name,
     });
     
-    // Cancel notification and vibration
+    // Cancel both types of notifications and vibration
     await cancelIncomingCallNotification(incomingCall.call_id);
+    await cancelBackgroundCallNotification(incomingCall.call_id);
     await Notifications.setBadgeCountAsync(0);
     Vibration.cancel();
     
@@ -609,8 +686,9 @@ export function CallProvider({ children }: CallProviderProps) {
     if (!incomingCall) return;
     console.log('[CallProvider] Rejecting call:', incomingCall.call_id);
 
-    // Cancel notification and vibration
+    // Cancel both types of notifications and vibration
     await cancelIncomingCallNotification(incomingCall.call_id);
+    await cancelBackgroundCallNotification(incomingCall.call_id);
     await Notifications.setBadgeCountAsync(0);
     Vibration.cancel();
 
@@ -661,7 +739,9 @@ export function CallProvider({ children }: CallProviderProps) {
 
   // Calculate derived state
   const isCallActive = isCallInterfaceOpen || !!incomingCall;
-  const isInActiveCall = isCallInterfaceOpen && (!!answeringCall || !!outgoingCall);
+  // isInActiveCall: true when we have an active call (regardless of UI state)
+  // Used by FloatingCallOverlay to show mini call UI when modal is closed
+  const isInActiveCall = !!(answeringCall || outgoingCall);
 
   const contextValue: CallContextType = {
     startVoiceCall,
@@ -673,6 +753,7 @@ export function CallProvider({ children }: CallProviderProps) {
     outgoingCall,
     isCallActive,
     isInActiveCall,
+    isCallInterfaceOpen,
     callState,
     returnToCall,
     // Presence methods - unified single source to prevent duplicate subscriptions

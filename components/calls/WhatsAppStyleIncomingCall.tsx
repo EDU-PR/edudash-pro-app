@@ -53,6 +53,29 @@ export function WhatsAppStyleIncomingCall({
   const ring2Anim = useRef(new Animated.Value(0)).current;
   const ring3Anim = useRef(new Animated.Value(0)).current;
   const soundRef = useRef<AudioPlayer | null>(null);
+  
+  // Track app state to hide UI when backgrounded
+  const [appState, setAppState] = React.useState(Platform.select({ default: 'active' }));
+  const [shouldShowUI, setShouldShowUI] = React.useState(true);
+  
+  // Hide incoming call UI when app is backgrounded
+  // The notification handles incoming call alerts in background
+  useEffect(() => {
+    const { AppState } = require('react-native');
+    const subscription = AppState.addEventListener('change', (nextAppState: string) => {
+      setAppState(nextAppState);
+      
+      if (nextAppState === 'background') {
+        console.log('[IncomingCall] App backgrounded - hiding UI, notification will handle alert');
+        setShouldShowUI(false);
+      } else if (nextAppState === 'active') {
+        console.log('[IncomingCall] App active - showing UI');
+        setShouldShowUI(true);
+      }
+    });
+    
+    return () => subscription.remove();
+  }, []);
 
   // Ring pulse animation (WhatsApp style)
   useEffect(() => {
@@ -116,8 +139,9 @@ export function WhatsAppStyleIncomingCall({
   }, [isConnecting]);
 
   // Vibration and ringtone
+  // Stop when backgrounded - notification handles alert in background
   useEffect(() => {
-    if (!isVisible || isConnecting) {
+    if (!isVisible || isConnecting || appState === 'background') {
       if (soundRef.current) {
         soundRef.current.pause();
         soundRef.current.remove();
@@ -184,7 +208,8 @@ export function WhatsAppStyleIncomingCall({
     onReject();
   }, [onReject]);
 
-  if (!isVisible) return null;
+  // Don't show UI when backgrounded - notification handles it
+  if (!isVisible || !shouldShowUI) return null;
 
   const getInitials = (name: string) => {
     return name

@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '@/lib/supabase';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
@@ -20,10 +20,11 @@ import { v4 as uuidv4 } from 'uuid';
 // Lazy Supabase getter
 const getSupabase = () => assertSupabase();
 
-// Daily.co SDK - conditionally imported
+// Daily.co SDK - conditionally imported (worked before expo-audio changes)
 let Daily: any = null;
 try {
   Daily = require('@daily-co/react-native-daily-js').default;
+  console.log('[VoiceCallDaily] Daily SDK loaded directly');
 } catch (error) {
   console.warn('[VoiceCallDaily] Daily.co SDK not available:', error);
 }
@@ -143,22 +144,26 @@ export function useVoiceCallDaily({
         setIsSpeakerEnabled(false);
         console.log('[VoiceCallDaily] Initializing call with earpiece default');
 
-        // Get valid session token
+        // OPTIMIZATION: Get session and only refresh if needed
         console.log('[VoiceCallDaily] Getting session...');
         let { data: sessionData, error: sessionError } = await getSupabase().auth.getSession();
         let accessToken = sessionData.session?.access_token;
         
-        // Refresh for fresh token
-        console.log('[VoiceCallDaily] Refreshing session...');
-        const { data: refreshData, error: refreshError } = await getSupabase().auth.refreshSession();
-        
-        if (refreshData?.session?.access_token) {
-          accessToken = refreshData.session.access_token;
-          sessionData = refreshData;
-          console.log('[VoiceCallDaily] Session refreshed successfully');
-        } else if (!accessToken) {
-          console.warn('[VoiceCallDaily] No valid session:', refreshError || sessionError);
-          throw new Error('Please sign in to make calls.');
+        // Only refresh if token is missing or invalid
+        if (!accessToken || sessionError) {
+          console.log('[VoiceCallDaily] Refreshing session (no valid token)...');
+          const { data: refreshData, error: refreshError } = await getSupabase().auth.refreshSession();
+          
+          if (refreshData?.session?.access_token) {
+            accessToken = refreshData.session.access_token;
+            sessionData = refreshData;
+            console.log('[VoiceCallDaily] Session refreshed successfully');
+          } else {
+            console.warn('[VoiceCallDaily] No valid session:', refreshError || sessionError);
+            throw new Error('Please sign in to make calls.');
+          }
+        } else {
+          console.log('[VoiceCallDaily] Using existing session token (skip refresh)');
         }
 
         const user = sessionData.session?.user;
@@ -173,38 +178,45 @@ export function useVoiceCallDaily({
         let roomUrl = meetingUrl;
 
         if (isOwner && !roomUrl) {
-          // Create room via API
-          console.log('[VoiceCallDaily] Creating room via Edge Function...');
+          // OPTIMIZATION: Parallelize room creation and profile fetch
+          console.log('[VoiceCallDaily] Creating room and fetching profile...');
           
-          const response = await fetch(
-            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-rooms`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({
-                name: `voice-${Date.now()}`,
-                isPrivate: true,
-                expiryMinutes: 60,
-                maxParticipants: 2,
-              }),
-            }
-          );
+          const [roomResponse, profileData] = await Promise.all([
+            fetch(
+              `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-rooms`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({
+                  name: `voice-${Date.now()}`,
+                  isPrivate: true,
+                  expiryMinutes: 60,
+                  maxParticipants: 2,
+                }),
+              }
+            ),
+            calleeId ? getSupabase()
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', user.id)
+              .single() : Promise.resolve({ data: null, error: null })
+          ]);
 
-          if (!response.ok) {
+          if (!roomResponse.ok) {
             let errorMsg = 'Failed to create room';
             try {
-              const errorData = await response.json();
+              const errorData = await roomResponse.json();
               errorMsg = errorData.error || errorData.message || errorMsg;
             } catch (e) {
-              errorMsg = `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`;
+              errorMsg = `HTTP ${roomResponse.status}: ${roomResponse.statusText || 'Unknown error'}`;
             }
             throw new Error(errorMsg);
           }
 
-          const { room } = await response.json();
+          const { room } = await roomResponse.json();
           roomUrl = room.url;
           console.log('[VoiceCallDaily] Room created:', roomUrl);
 
@@ -213,14 +225,8 @@ export function useVoiceCallDaily({
             const newCallId = uuidv4();
             callIdRef.current = newCallId;
 
-            const { data: callerProfile } = await getSupabase()
-              .from('profiles')
-              .select('first_name, last_name')
-              .eq('id', user.id)
-              .single();
-
-            const callerName = callerProfile
-              ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
+            const callerName = profileData.data
+              ? `${profileData.data.first_name || ''} ${profileData.data.last_name || ''}`.trim() || 'Someone'
               : 'Someone';
 
             const { error: callError } = await getSupabase().from('active_calls').insert({
@@ -238,10 +244,49 @@ export function useVoiceCallDaily({
               throw callError;
             }
 
-            // Register with CallKeep
-            await callKeepManager.startCall(newCallId, userName || 'Unknown', false).catch((err) => {
-              console.warn('[VoiceCallDaily] Failed to start CallKeep call:', err);
+            // CRITICAL: Send push notification to wake callee's app when backgrounded
+            // This is non-blocking to not delay call setup
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                user_ids: [calleeId],
+                title: '📞 Incoming Call',
+                body: `${callerName} is calling...`,
+                data: {
+                  type: 'incoming_call',
+                  call_id: newCallId,
+                  caller_id: user.id,
+                  caller_name: callerName,
+                  call_type: 'voice',
+                  meeting_url: roomUrl,
+                },
+                sound: 'default',
+                priority: 'high',
+                channelId: 'incoming-calls',
+                categoryId: 'incoming_call',
+                ttl: 30, // Call times out after 30 seconds
+              }),
+            }).then(res => {
+              if (res.ok) {
+                console.log('[VoiceCallDaily] ✅ Push notification sent to callee');
+              } else {
+                res.text().then(text => {
+                  console.warn('[VoiceCallDaily] Push notification failed:', text);
+                });
+              }
+            }).catch(err => {
+              console.warn('[VoiceCallDaily] Failed to send push notification:', err);
             });
+
+            // OPTIMIZATION: Defer CallKeep registration (non-blocking)
+            callKeepManager.startCall(newCallId, userName || 'Unknown', false)
+              .catch((err) => {
+                console.warn('[VoiceCallDaily] Failed to start CallKeep call:', err);
+              });
 
             // Send signal
             await getSupabase().from('call_signals').insert({
@@ -304,7 +349,9 @@ export function useVoiceCallDaily({
           
           // Enable local audio using React Native compatible method
           try {
-            await daily.setLocalAudio(true);
+            // Note: audioSource: true was passed in join options
+            // setLocalAudio enables our audio track
+            daily.setLocalAudio(true);
             setIsAudioEnabled(true);
             console.log('[VoiceCallDaily] Local audio enabled on join');
           } catch (micError) {
@@ -343,9 +390,23 @@ export function useVoiceCallDaily({
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
 
-        daily.on('participant-left', () => {
-          console.log('[VoiceCallDaily] Participant left');
+        daily.on('participant-left', (event: any) => {
+          console.log('[VoiceCallDaily] Participant left:', event?.participant?.user_id);
           updateParticipantCount();
+          
+          // If a remote participant left and we're in a 1:1 call, end the call
+          const participants = daily.participants();
+          const remoteParticipants = Object.values(participants).filter((p: any) => !p.local);
+          
+          // End call if no remote participants remain (the other party hung up)
+          if (remoteParticipants.length === 0) {
+            console.log('[VoiceCallDaily] Last remote participant left - ending call');
+            // Small delay to let any final events process
+            setTimeout(() => {
+              endCall();
+            }, 500);
+          }
+          
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
 
@@ -366,6 +427,43 @@ export function useVoiceCallDaily({
           setError(userFriendlyError);
           setCallState('failed');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        });
+
+        // Handle network quality and reconnection events
+        daily.on('network-quality-change', (event: any) => {
+          const { quality, threshold } = event || {};
+          console.log('[VoiceCallDaily] Network quality:', quality, 'threshold:', threshold);
+        });
+
+        // Handle network connection state for background recovery
+        daily.on('network-connection', async (event: any) => {
+          const { type, event: eventType } = event || {};
+          console.log('[VoiceCallDaily] Network connection:', type, eventType);
+          
+          if (eventType === 'interrupted') {
+            console.log('[VoiceCallDaily] Connection interrupted - will attempt reconnect');
+            // Connection is interrupted but Daily.co will attempt automatic reconnection
+          } else if (eventType === 'connected') {
+            console.log('[VoiceCallDaily] Connection restored');
+            // Re-enable audio after reconnection with retry
+            // Note: We don't have isAudioEnabledRef, so check current state from Daily.co
+            if (dailyRef.current) {
+              try {
+                // Wait for connection to stabilize
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // Check if audio was enabled before interruption
+                const currentAudio = dailyRef.current.localAudio();
+                if (currentAudio !== false) {
+                  // Re-enable with setLocalAudio (RN compatible)
+                  dailyRef.current.setLocalAudio(true);
+                  console.log('[VoiceCallDaily] Re-enabled mic after reconnect');
+                }
+              } catch (e) {
+                console.warn('[VoiceCallDaily] Failed to re-enable audio:', e);
+              }
+            }
+          }
         });
 
         // Track remote audio - critical for hearing the other party
@@ -457,28 +555,102 @@ export function useVoiceCallDaily({
           }
         }
 
-        // Join the call
-        console.log('[VoiceCallDaily] Joining room:', roomUrl);
-        await daily.join({ url: roomUrl });
+        // Note: setSubscribeToTracksAutomatically must be called AFTER join
+        // We pass subscribeToTracksAutomatically: true in the join options instead
+        console.log('[VoiceCallDaily] Preparing to join with auto-subscribe enabled...');
 
-        // Enable microphone after joining using setLocalAudio (React Native compatible)
+        // Join the call with explicit audio settings
+        console.log('[VoiceCallDaily] Joining room:', roomUrl);
+        await daily.join({ 
+          url: roomUrl,
+          audioSource: true,
+          videoSource: false,
+          // Ensure we receive all participant audio
+          subscribeToTracksAutomatically: true,
+        });
+
+        // Note: InCallManager is now managed by useVoiceCallAudio hook
+        // to prevent duplicate initialization and ringtone changes
+        console.log('[VoiceCallDaily] Joined successfully, audio managed by useVoiceCallAudio');
+
+        // Enable microphone with robust retry logic
+        let micEnabled = false;
+        
         try {
-          // First ensure input devices are set up
-          await daily.setInputDevicesAsync({ audioSource: true });
-          // Then enable local audio - this is the React Native compatible method
-          await daily.setLocalAudio(true);
-          setIsAudioEnabled(true);
-          console.log('[VoiceCallDaily] Microphone enabled successfully');
-        } catch (micError) {
-          console.warn('[VoiceCallDaily] Failed to enable microphone:', micError);
-          // Try alternative method
-          try {
-            await daily.setLocalAudio(true);
-            setIsAudioEnabled(true);
-            console.log('[VoiceCallDaily] Microphone enabled via fallback');
-          } catch (fallbackError) {
-            console.warn('[VoiceCallDaily] Fallback mic enable also failed:', fallbackError);
+          // 1. Request microphone permissions on Android
+          if (Platform.OS === 'android') {
+            console.log('[VoiceCallDaily] Checking Android microphone permissions...');
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+              {
+                title: 'Microphone Permission',
+                message: 'EduDash Pro needs microphone access for voice calls',
+                buttonNeutral: 'Ask Me Later',
+                buttonNegative: 'Cancel',
+                buttonPositive: 'OK',
+              }
+            );
+            
+            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+              console.error('[VoiceCallDaily] ❌ Microphone permission denied');
+              setError('Microphone permission denied. Please enable it in settings.');
+              // Continue with call but mic will be off
+            } else {
+              console.log('[VoiceCallDaily] ✅ Microphone permission granted');
+            }
           }
+          
+          // 2. Wait for Daily.co to be fully ready
+          await new Promise(resolve => setTimeout(resolve, 500));
+            
+          // 3. Verify Daily.co has loaded participants
+          const participants = daily.participants();
+          if (!participants || Object.keys(participants).length === 0) {
+            console.warn('[VoiceCallDaily] No participants yet, waiting longer...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+          // 4. Enable microphone with retry attempts
+          // Note: setInputDevicesAsync is NOT supported in React Native Daily SDK
+          // We use setLocalAudio(true) directly, which is the supported method
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+              console.log(`[VoiceCallDaily] Microphone enable attempt ${attempt}/5`);
+              
+              // Use setLocalAudio - the React Native compatible method
+              // audioSource: true in join options already requested the mic
+              daily.setLocalAudio(true);
+              
+              // Verify it worked
+              await new Promise(resolve => setTimeout(resolve, 200));
+              const localAudio = daily.localAudio();
+              
+              if (localAudio) {
+                micEnabled = true;
+                setIsAudioEnabled(true);
+                console.log('[VoiceCallDaily] ✅ Microphone enabled successfully');
+                break;
+              } else {
+                console.warn(`[VoiceCallDaily] Attempt ${attempt} failed, mic still off`);
+                if (attempt < 5) {
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+              }
+            } catch (micError) {
+              console.warn(`[VoiceCallDaily] Attempt ${attempt} error:`, micError);
+              if (attempt < 5) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+              }
+            }
+          }
+          
+          if (!micEnabled) {
+            console.error('[VoiceCallDaily] ❌ Failed to enable microphone after 5 attempts');
+            setError('Could not enable microphone. Please check your device settings.');
+          }
+        } catch (audioError) {
+          console.error('[VoiceCallDaily] ❌ Audio setup error:', audioError);
+          setError('Audio setup failed. Please restart the app.');
         }
 
       } catch (err) {
@@ -516,8 +688,8 @@ export function useVoiceCallDaily({
       const currentlyEnabled = dailyRef.current.localAudio();
       const newState = !currentlyEnabled;
       
-      // Use setLocalAudio instead of updateSendSettings for better reliability
-      await dailyRef.current.setLocalAudio(newState);
+      // Use setLocalAudio - React Native compatible method
+      dailyRef.current.setLocalAudio(newState);
       setIsAudioEnabled(newState);
       console.log('[VoiceCallDaily] Audio toggled:', { was: currentlyEnabled, now: newState });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
