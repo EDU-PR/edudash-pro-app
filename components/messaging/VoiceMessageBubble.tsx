@@ -43,7 +43,15 @@ interface VoiceMessageBubbleProps {
   onLongPress?: () => void;
   /** Called when playback finishes - use for continuous play */
   onPlaybackFinished?: () => void;
-  /** Auto-start playback when true (for continuous play) */
+  /** Called when user taps "next" in media controls */
+  onPlayNext?: () => void;
+  /** Called when user taps "previous" in media controls */
+  onPlayPrevious?: () => void;
+  /** Whether there's a next message to play */
+  hasNext?: boolean;
+  /** Whether there's a previous message to play */
+  hasPrevious?: boolean;
+  /** Auto-start playback when true (for continuous play */
   autoPlay?: boolean;
   /** Custom styles */
   style?: object;
@@ -158,6 +166,10 @@ export default function VoiceMessageBubble({
   isRead,
   onLongPress,
   onPlaybackFinished,
+  onPlayNext,
+  onPlayPrevious,
+  hasNext = false,
+  hasPrevious = false,
   autoPlay = false,
   style,
   theme: customTheme,
@@ -288,10 +300,17 @@ export default function VoiceMessageBubble({
 
   // ─── Auto Play (for continuous playback) ───────────────────────────────────
   useEffect(() => {
-    if (autoPlay && isLoaded && !isPlaying && !error) {
-      // Start playback automatically
+    if (autoPlay && isLoaded && !error) {
+      // Start playback automatically (even if currently playing from a previous message)
+      console.log('[VoiceMessageBubble] Auto-play triggered, isPlaying:', isPlaying, 'isLoaded:', isLoaded);
       (async () => {
         try {
+          // Stop any current playback first
+          if (isPlaying) {
+            await player.pause();
+            await player.seekTo(0);
+          }
+          
           await setAudioModeAsync({
             playsInSilentMode: true,
             shouldPlayInBackground: true,
@@ -303,14 +322,19 @@ export default function VoiceMessageBubble({
           player.setActiveForLockScreen(true, {
             title: 'Voice Message',
             artist: 'EduDash Pro',
+            shouldShowPreviousButton: hasPrevious,
+            shouldShowNextButton: hasNext,
+            onPrevious: hasPrevious ? onPlayPrevious : undefined,
+            onNext: hasNext ? onPlayNext : undefined,
           });
           await player.play();
+          console.log('[VoiceMessageBubble] Auto-play started successfully');
         } catch (err) {
           console.error('[VoiceMessageBubble] Auto-play error:', err);
         }
       })();
     }
-  }, [autoPlay, isLoaded, isPlaying, error, player, playbackSpeed]);
+  }, [autoPlay, isLoaded, error, player, playbackSpeed, hasPrevious, hasNext, onPlayPrevious, onPlayNext]);
 
   // ─── Waveform Animation ────────────────────────────────────────────────────
   useEffect(() => {
@@ -366,18 +390,23 @@ export default function VoiceMessageBubble({
         // Set playback speed
         player.setPlaybackRate(playbackSpeed);
         
-        // Enable lock screen controls with metadata BEFORE playing
+        // Enable lock screen controls with metadata and navigation BEFORE playing
         // This starts the Android foreground service for background playback
         player.setActiveForLockScreen(true, {
           title: 'Voice Message',
           artist: 'EduDash Pro',
+          // Enable navigation controls based on available messages
+          shouldShowPreviousButton: hasPrevious,
+          shouldShowNextButton: hasNext,
+          onPrevious: hasPrevious ? onPlayPrevious : undefined,
+          onNext: hasNext ? onPlayNext : undefined,
         });
         await player.play();
       }
     } catch (err) {
       console.error('[VoiceMessageBubble] Play/pause error:', err);
     }
-  }, [isLoaded, isPlaying, player, error, playbackSpeed]);
+  }, [isLoaded, isPlaying, player, error, playbackSpeed, hasPrevious, hasNext, onPlayPrevious, onPlayNext]);
 
   // Cycle through playback speeds (1x → 1.5x → 2x → 1x)
   const handleSpeedChange = useCallback(() => {

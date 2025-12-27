@@ -24,6 +24,10 @@ interface MessageBubbleProps {
   isOwn: boolean;
   onLongPress: () => void;
   onPlaybackFinished?: () => void;
+  onPlayNext?: () => void;
+  onPlayPrevious?: () => void;
+  hasNextVoice?: boolean;
+  hasPreviousVoice?: boolean;
   autoPlayVoice?: boolean;
   otherParticipantIds?: string[];
   onReactionPress?: (messageId: string, emoji: string) => void;
@@ -34,6 +38,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   isOwn, 
   onLongPress,
   onPlaybackFinished,
+  onPlayNext,
+  onPlayPrevious,
+  hasNextVoice = false,
+  hasPreviousVoice = false,
   autoPlayVoice = false,
   otherParticipantIds = [],
   onReactionPress,
@@ -42,16 +50,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 
   // Determine message status for ticks
   const getMessageStatus = (): MessageStatus => {
+    // Only show ticks for own messages
     if (!isOwn) return 'sent';
-    const isRead = msg.read_by && otherParticipantIds.length > 0
-      ? otherParticipantIds.some(id => msg.read_by?.includes(id))
-      : false;
+    
+    // Check if message is still being sent (temp ID or no ID yet)
+    if (!msg.id || msg.id.startsWith('temp-')) {
+      return 'sending';
+    }
+    
+    // Check if read by any recipient (double green ticks)
+    const isRead = msg.read_by && msg.read_by.length > 0;
     if (isRead) return 'read';
-    const isDelivered = msg.delivered_to && otherParticipantIds.length > 0
-      ? otherParticipantIds.some(id => msg.delivered_to?.includes(id))
-      : false;
+    
+    // Check if delivered to recipient's device (double grey ticks)
+    // delivered_at is set when recipient comes online and receives the message
+    const isDelivered = !!msg.delivered_at;
     if (isDelivered) return 'delivered';
-    return msg.id && !msg.id.startsWith('temp-') ? 'delivered' : 'sending';
+    
+    // Message sent to server but not yet delivered (single grey tick)
+    // This happens when recipient is offline
+    return 'sent';
   };
 
   const status = getMessageStatus();
@@ -73,6 +91,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
         onLongPress={onLongPress}
         onPlaybackFinished={onPlaybackFinished}
+        onPlayNext={onPlayNext}
+        onPlayPrevious={onPlayPrevious}
+        hasNext={hasNextVoice}
+        hasPrevious={hasPreviousVoice}
         autoPlay={autoPlayVoice}
         reactions={msg.reactions}
         messageId={msg.id}
@@ -169,7 +191,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
-         JSON.stringify(prevProps.msg.delivered_to) === JSON.stringify(nextProps.msg.delivered_to) &&
+         prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
          JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
 });
 

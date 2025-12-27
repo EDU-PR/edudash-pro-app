@@ -69,19 +69,26 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
         return;
       }
 
-      // Get user's organization membership
+      // Get user's organization membership (maybeSingle to handle users not in any org)
       const { data: member, error: memberError } = await supabase
         .from('organization_members')
         .select('organization_id, organizations(id, name, dashboard_settings)')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       console.log('[Branding] Member query result:', { member, memberError });
 
       if (memberError) {
-        // User might not be in an organization
-        console.log('[Branding] User not in organization:', memberError.message);
-        logger.info('[Branding] User not in organization:', memberError.message);
+        // Actual error occurred
+        console.log('[Branding] Error querying membership:', memberError.message);
+        logger.info('[Branding] Error querying membership:', memberError.message);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!member) {
+        // User not in any organization (e.g., Super-Admin)
+        console.log('[Branding] User not in any organization (platform-level user)');
         setIsLoading(false);
         return;
       }

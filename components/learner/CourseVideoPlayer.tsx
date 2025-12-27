@@ -7,14 +7,30 @@
  * - Auto-save progress
  * - Fullscreen support
  * - Speed control
+ * 
+ * Uses expo-video (SDK 54+) for modern video playback on native
+ * Falls back to HTML5 video on web
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+
+// Conditional imports for native video
+let useVideoPlayer: any = null;
+let VideoView: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const expoVideo = require('expo-video');
+    useVideoPlayer = expoVideo.useVideoPlayer;
+    VideoView = expoVideo.VideoView;
+  } catch (e) {
+    console.warn('[CourseVideoPlayer] expo-video not available, using fallback');
+  }
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const VIDEO_HEIGHT = (SCREEN_WIDTH * 9) / 16; // 16:9 aspect ratio
@@ -29,38 +45,126 @@ interface CourseVideoPlayerProps {
   startTime?: number; // Resume from saved position
 }
 
-export function CourseVideoPlayer({
+// Web fallback video player using HTML5 video
+function WebVideoPlayer({
   videoUrl,
-  courseId,
-  lessonId,
+  autoplay,
+  startTime,
   onProgress,
   onComplete,
+}: CourseVideoPlayerProps) {
+  return (
+    <View style={webStyles.container}>
+      <video
+        src={videoUrl}
+        autoPlay={autoplay}
+        controls
+        style={{ width: '100%', height: VIDEO_HEIGHT, backgroundColor: '#000', borderRadius: 12 }}
+        onTimeUpdate={(e) => {
+          const video = e.target as HTMLVideoElement;
+          if (onProgress && video.duration > 0) {
+            onProgress((video.currentTime / video.duration) * 100);
+          }
+        }}
+        onEnded={() => onComplete?.()}
+      />
+    </View>
+  );
+}
+
+const webStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#000',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginVertical: 16,
+  },
+});
+
+// Native video player using expo-video
+function NativeVideoPlayer({
+  videoUrl,
   autoplay = false,
   startTime = 0,
+  onProgress,
+  onComplete,
 }: CourseVideoPlayerProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const styles = createStyles(theme);
 
-  const videoRef = useRef<Video>(null);
-  const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
   const [currentPosition, setCurrentPosition] = useState(startTime);
   const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasCompletedRef = useRef(false);
 
+  // Create video player with expo-video hook (only called on native)
+  const player = useVideoPlayer ? useVideoPlayer(videoUrl, (p: any) => {
+    p.loop = false;
+    p.timeUpdateEventInterval = 1;
+    if (autoplay) {
+      p.play();
+    }
+  }) : null;
+
+  // Listen for player status changes
   useEffect(() => {
-    // Auto-hide controls after 3 seconds
+    if (!player) return;
+
+    const statusSubscription = player.addListener('statusChange', (event: any) => {
+      if (event.status === 'readyToPlay') {
+        setIsLoading(false);
+        setDuration(player.duration);
+        if (startTime > 0) {
+          player.currentTime = startTime;
+        }
+      } else if (event.status === 'loading') {
+        setIsLoading(true);
+      } else if (event.status === 'error') {
+        setIsLoading(false);
+        console.error('Video playback error:', event.error);
+      }
+    });
+
+    const playingSubscription = player.addListener('playingChange', (event: any) => {
+      setIsPlaying(event.isPlaying);
+    });
+
+    const timeUpdateSubscription = player.addListener('timeUpdate', (event: any) => {
+      setCurrentPosition(event.currentTime);
+      if (player.duration > 0 && onProgress) {
+        const progress = (event.currentTime / player.duration) * 100;
+        onProgress(progress);
+      }
+    });
+
+    const endSubscription = player.addListener('playToEnd', () => {
+      if (!hasCompletedRef.current && onComplete) {
+        hasCompletedRef.current = true;
+        onComplete();
+      }
+    });
+
+    return () => {
+      statusSubscription.remove();
+      playingSubscription.remove();
+      timeUpdateSubscription.remove();
+      endSubscription.remove();
+    };
+  }, [player, startTime, onProgress, onComplete]);
+
+  // Auto-hide controls after 3 seconds
+  useEffect(() => {
     if (isPlaying && showControls) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000);
     }
-
     return () => {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
@@ -68,63 +172,28 @@ export function CourseVideoPlayer({
     };
   }, [isPlaying, showControls]);
 
-  useEffect(() => {
-    // Seek to saved position on load
-    if (videoRef.current && startTime > 0 && duration > 0) {
-      videoRef.current.setPositionAsync(startTime * 1000); // Convert to milliseconds
-    }
-  }, [startTime, duration]);
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    setStatus(status);
-
-    if (status.isLoaded) {
-      setIsLoading(false);
-      setIsPlaying(status.isPlaying);
-      setCurrentPosition(status.positionMillis / 1000); // Convert to seconds
-      setDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
-
-      // Calculate progress percentage
-      if (status.durationMillis && onProgress) {
-        const progress = (status.positionMillis / status.durationMillis) * 100;
-        onProgress(progress);
-      }
-
-      // Check if video completed
-      if (status.didJustFinish && onComplete) {
-        onComplete();
-      }
-    } else if ((status as any).error) {
-      setIsLoading(false);
-      console.error('Video playback error:', (status as any).error);
-    }
-  };
-
-  const togglePlayPause = async () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        await videoRef.current.pauseAsync();
-      } else {
-        await videoRef.current.playAsync();
-        setShowControls(true);
-      }
-    }
-  };
-
-  const handleSeek = async (position: number) => {
-    if (videoRef.current && duration > 0) {
-      const seekTime = (position / 100) * duration;
-      await videoRef.current.setPositionAsync(seekTime * 1000);
+  const togglePlayPause = useCallback(() => {
+    if (!player) return;
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
       setShowControls(true);
     }
-  };
+  }, [player, isPlaying]);
 
-  const changePlaybackRate = async (rate: number) => {
-    if (videoRef.current) {
-      await videoRef.current.setRateAsync(rate, true);
-      setPlaybackRate(rate);
-    }
-  };
+  const handleSeek = useCallback((position: number) => {
+    if (!player || duration <= 0) return;
+    const seekTime = (position / 100) * duration;
+    player.currentTime = seekTime;
+    setShowControls(true);
+  }, [player, duration]);
+
+  const changePlaybackRate = useCallback((rate: number) => {
+    if (!player) return;
+    player.playbackRate = rate;
+    setPlaybackRate(rate);
+  }, [player]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -134,6 +203,21 @@ export function CourseVideoPlayer({
 
   const progress = duration > 0 ? (currentPosition / duration) * 100 : 0;
 
+  // If expo-video isn't available, show a message
+  if (!VideoView || !player) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <Ionicons name="videocam-off-outline" size={48} color={theme.textSecondary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary, marginTop: 12 }]}>
+          Video player requires app rebuild
+        </Text>
+        <Text style={[styles.loadingText, { color: theme.textSecondary, fontSize: 12 }]}>
+          Run: npx expo run:android
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -141,15 +225,14 @@ export function CourseVideoPlayer({
         activeOpacity={1}
         onPress={() => setShowControls(!showControls)}
       >
-        <Video
-          ref={videoRef}
+        <VideoView
           style={styles.video}
-          source={{ uri: videoUrl }}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={autoplay}
-          isLooping={false}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          progressUpdateIntervalMillis={1000}
+          player={player}
+          contentFit="contain"
+          nativeControls={false}
+          allowsFullscreen={true}
+          onFullscreenEnter={() => setIsFullscreen(true)}
+          onFullscreenExit={() => setIsFullscreen(false)}
         />
 
         {isLoading && (
@@ -228,25 +311,20 @@ export function CourseVideoPlayer({
             >
               <Text style={styles.speedText}>{playbackRate}x</Text>
             </TouchableOpacity>
-
-            {/* Fullscreen (if supported) */}
-            {Platform.OS === 'web' && (
-              <TouchableOpacity
-                style={styles.controlButton}
-                onPress={() => setIsFullscreen(!isFullscreen)}
-              >
-                <Ionicons
-                  name={isFullscreen ? 'contract' : 'expand'}
-                  size={24}
-                  color="#fff"
-                />
-              </TouchableOpacity>
-            )}
           </View>
         )}
       </TouchableOpacity>
     </View>
   );
+}
+
+export function CourseVideoPlayer(props: CourseVideoPlayerProps) {
+  // Use web video player on web, native player on mobile
+  if (Platform.OS === 'web') {
+    return <WebVideoPlayer {...props} />;
+  }
+
+  return <NativeVideoPlayer {...props} />;
 }
 
 const createStyles = (theme: any) => StyleSheet.create({

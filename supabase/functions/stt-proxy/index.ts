@@ -150,36 +150,32 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(auth.replace('Bearer ', ''));
     if (authError || !user) return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     
-    // Get preschool_id from JWT or user metadata
+    // Check user role - Super-Admins don't need preschool_id
+    const userRole = user.user_metadata?.role || user.app_metadata?.role;
+    const isSuperAdmin = userRole === 'super_admin' || userRole === 'superadmin';
+    
+    // Get preschool_id from JWT or user metadata (optional for super_admin)
     const preschoolId = user.user_metadata?.preschool_id || user.app_metadata?.preschool_id;
-    if (!preschoolId) {
+    if (!preschoolId && !isSuperAdmin) {
       return new Response(JSON.stringify({ error: 'No preschool_id found' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
+    
+    console.log(`[STT] User: ${user.id}, role: ${userRole}, preschool: ${preschoolId || 'N/A (super_admin)'}`);
 
-    // Handle both JSON (storage_path/audio_url) and FormData (direct file upload)
+    // Handle both JSON (storage_path/audio_url/audio_base64) and FormData (direct file upload)
     const contentType = (req.headers.get('content-type') || '').toLowerCase();
     console.log('[STT] Content-Type:', contentType);
     let body: STTRequest = {};
     let audioFile: Blob | null = null;
     let language = 'en-ZA';
     
-    // Try FormData first (React Native default)
-    try {
-      const formData = await req.formData();
-      const maybeFile = formData.get('audio');
-      language = (formData.get('language') as string) || 'en-ZA';
-      
-      if (maybeFile && typeof maybeFile !== 'string') {
-        audioFile = maybeFile as Blob;
-        console.log(`[STT] FormData: Received audio file ${audioFile.size} bytes, language: ${language}`);
-      }
-    } catch (formError) {
-      // FormData parsing failed, try JSON
-      console.log('[STT] FormData parse failed, trying JSON:', (formError as Error).message);
+    // Check content-type to decide parsing strategy (request body can only be read once)
+    if (contentType.includes('application/json')) {
+      // Parse as JSON
       try {
         const text = await req.text();
         body = JSON.parse(text);
-        console.log('[STT] JSON parsed successfully');
+        console.log('[STT] JSON parsed successfully, keys:', Object.keys(body));
         
         // Handle base64 audio
         if (body.audio_base64) {
@@ -189,13 +185,44 @@ serve(async (req) => {
           const mime = body.format === 'wav' ? 'audio/wav' : body.format === 'mp3' ? 'audio/mpeg' : 'audio/m4a';
           audioFile = new Blob([bytes.buffer], { type: mime });
           language = body.language || 'en-ZA';
-          console.log(`[STT] JSON: Decoded base64 audio ${bytes.length} bytes`);
+          console.log(`[STT] JSON: Decoded base64 audio ${bytes.length} bytes, format: ${body.format || 'm4a'}`);
         } else if (!body.storage_path && !body.audio_url) {
           return new Response(JSON.stringify({ error: 'storage_path, audio_url or audio_base64 required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
         }
       } catch (jsonError) {
-        console.error('[STT] Both FormData and JSON parsing failed');
-        return new Response(JSON.stringify({ error: 'Invalid request body' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        console.error('[STT] JSON parsing failed:', (jsonError as Error).message);
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+    } else if (contentType.includes('multipart/form-data')) {
+      // Parse as FormData
+      try {
+        const formData = await req.formData();
+        const maybeFile = formData.get('audio');
+        language = (formData.get('language') as string) || 'en-ZA';
+        
+        if (maybeFile && typeof maybeFile !== 'string') {
+          audioFile = maybeFile as Blob;
+          console.log(`[STT] FormData: Received audio file ${audioFile.size} bytes, language: ${language}`);
+        }
+      } catch (formError) {
+        console.error('[STT] FormData parsing failed:', (formError as Error).message);
+        return new Response(JSON.stringify({ error: 'Invalid FormData body' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+    } else {
+      // Unknown content type - try to guess
+      console.log('[STT] Unknown content-type, attempting FormData then JSON');
+      try {
+        const formData = await req.formData();
+        const maybeFile = formData.get('audio');
+        language = (formData.get('language') as string) || 'en-ZA';
+        
+        if (maybeFile && typeof maybeFile !== 'string') {
+          audioFile = maybeFile as Blob;
+          console.log(`[STT] FormData: Received audio file ${audioFile.size} bytes, language: ${language}`);
+        }
+      } catch (formError) {
+        console.error('[STT] Could not parse request body, content-type:', contentType);
+        return new Response(JSON.stringify({ error: 'Invalid request body - set Content-Type to application/json or multipart/form-data' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
     }
     

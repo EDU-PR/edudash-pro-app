@@ -20,6 +20,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import DashOrb from '@/components/dash-orb';
 
 interface DashboardStats {
   total_users: number;
@@ -75,12 +76,21 @@ export default function SuperAdminDashboardScreen() {
   // Quick actions configuration
   const quickActions: QuickAction[] = [
     {
+      id: 'dash-ai-chat',
+      title: 'Dash AI Assistant',
+      description: 'Chat with Dash - your AI-powered assistant',
+      icon: 'chatbubbles',
+      route: '/screens/dash-ai-chat',
+      color: '#8b5cf6',
+      badge: 0,
+    },
+    {
       id: 'ai-command-center',
       title: 'AI Command Center',
       description: 'Agentic AI operations & autonomous tasks',
       icon: 'flash',
       route: '/screens/super-admin-ai-command-center',
-      color: '#8b5cf6',
+      color: '#00f5ff',
       badge: 0,
     },
     {
@@ -746,6 +756,13 @@ export default function SuperAdminDashboardScreen() {
           </View>
         )}
       </ScrollView>
+      
+      {/* Floating Dash AI Orb */}
+      <DashOrb 
+        position="bottom-right"
+        size={56}
+        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'super_admin_dashboard' })}
+      />
       </View>
     </DesktopLayout>
   );

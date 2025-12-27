@@ -149,10 +149,10 @@ export default function SuperAdminAdminManagementScreen() {
     try {
       setLoading(true);
       
-      // Fetch real admin users from database
+      // Fetch real admin users from profiles table (has proper RLS)
       const { data: usersData, error: usersError } = await assertSupabase()
-        .from('users')
-        .select('id, email, full_name, role, is_active, last_login, created_at, avatar_url')
+        .from('profiles')
+        .select('id, email, first_name, last_name, role, is_active, last_login_at, created_at, avatar_url')
         .in('role', ['admin', 'super_admin', 'superadmin', 'content_moderator', 'support_admin', 'billing_admin', 'system_admin'])
         .order('created_at', { ascending: false });
 
@@ -167,12 +167,12 @@ export default function SuperAdminAdminManagementScreen() {
         const formattedUsers: AdminUser[] = usersData.map((user: any) => ({
           id: user.id,
           email: user.email || '',
-          full_name: user.full_name || user.email?.split('@')[0] || 'Unknown',
+          full_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email?.split('@')[0] || 'Unknown',
           role: mapUserRole(user.role),
           department: 'customer_success', // Default department
           permissions: getPermissionsForRole(user.role),
           is_active: user.is_active ?? true,
-          last_login: user.last_login,
+          last_login: user.last_login_at,
           created_at: user.created_at,
           created_by: profile?.id || '',
           avatar_url: user.avatar_url,

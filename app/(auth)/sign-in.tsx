@@ -217,44 +217,42 @@ console.log('[SignIn] Component rendering, theme:', theme);
         console.warn('Remember me save failed:', credErr);
       }
 
-      // Ensure we don't get stuck if AuthContext doesn't receive a SIGNED_IN event
-      // (can happen when switching accounts / existing session edge cases).
-      // Add timeout to prevent infinite hang
-      const routeTimeout = setTimeout(() => {
-        console.warn('[SignIn] routeAfterLogin timeout - forcing navigation');
+      // NOTE: Do NOT call routeAfterLogin here!
+      // AuthContext's onAuthStateChange handler already calls routeAfterLogin
+      // on SIGNED_IN events. Calling it twice creates a race condition that
+      // can cause navigation to hang.
+      
+      // Add a timeout to ensure we don't get stuck if AuthContext doesn't navigate
+      const navigationTimeout = setTimeout(() => {
+        console.warn('[SignIn] Navigation timeout - AuthContext may have failed to route');
         setLoading(false);
-        // Force navigation to dashboard as fallback
+        // Force navigation to tabs as fallback
         try {
           router.replace('/(tabs)' as any);
         } catch (navErr) {
           console.warn('[SignIn] Fallback navigation failed:', navErr);
         }
-      }, 5000); // 5 second timeout
+      }, 8000); // 8 second timeout
       
-      try {
-        const { data } = await assertSupabase().auth.getUser();
-        await Promise.race([
-          routeAfterLogin(data.user, null),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('routeAfterLogin timeout')), 4000)
-          )
-        ]);
-        clearTimeout(routeTimeout);
-      } catch (routeErr) {
-        clearTimeout(routeTimeout);
-        console.warn('[SignIn] routeAfterLogin failed (non-fatal):', routeErr);
-        // Force navigation as fallback
-        try {
-          router.replace('/(tabs)' as any);
-        } catch (fallbackErr) {
-          console.warn('[SignIn] Fallback navigation failed:', fallbackErr);
-        }
-      } finally {
-        clearTimeout(routeTimeout);
-        // If navigation doesn't happen for any reason, never keep the UI stuck.
-        // AuthContext may still redirect; setting loading false is safe.
+      // Let AuthContext handle navigation via onAuthStateChange SIGNED_IN event
+      // Just wait and clear loading state if navigation happens
+      const checkNavigationInterval = setInterval(() => {
+        // Check if we've navigated away (component might unmount)
+        // The interval will be cleared when component unmounts
+      }, 100);
+      
+      // Cleanup function that runs on component unmount
+      const cleanup = () => {
+        clearTimeout(navigationTimeout);
+        clearInterval(checkNavigationInterval);
+      };
+      
+      // Give AuthContext time to handle the SIGNED_IN event
+      // If we're still mounted after 6 seconds, something went wrong
+      setTimeout(() => {
         setLoading(false);
-      }
+        cleanup();
+      }, 6000);
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
       console.error('=== SIGN IN ERROR DEBUG ===');

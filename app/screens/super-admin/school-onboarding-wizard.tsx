@@ -23,7 +23,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 // Form data interfaces
 interface SchoolData {
   name: string;
-  schoolType: 'preschool' | 'k12_school' | 'hybrid';
+  schoolType: 'preschool' | 'k12_school';
   gradeLevels: string[];
   contactEmail: string;
   contactPhone: string;
@@ -61,16 +61,6 @@ const GRADE_LEVELS = {
     { id: 'reception', label: 'Reception (4-5 years)' }
   ],
   k12_school: [
-    { id: 'foundation', label: 'Foundation Phase (Grade R-3)' },
-    { id: 'intermediate', label: 'Intermediate Phase (Grade 4-6)' },
-    { id: 'senior', label: 'Senior Phase (Grade 7-9)' },
-    { id: 'fet', label: 'FET Phase (Grade 10-12)' }
-  ],
-  hybrid: [
-    { id: 'infants', label: 'Infants (6m-12m)' },
-    { id: 'toddlers', label: 'Toddlers (1-2 years)' },
-    { id: 'pre_k', label: 'Pre-K (3-4 years)' },
-    { id: 'reception', label: 'Reception (4-5 years)' },
     { id: 'foundation', label: 'Foundation Phase (Grade R-3)' },
     { id: 'intermediate', label: 'Intermediate Phase (Grade 4-6)' },
     { id: 'senior', label: 'Senior Phase (Grade 7-9)' },
@@ -387,7 +377,7 @@ export default function SuperAdminSchoolOnboardingWizard() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>School Type *</Text>
               <View style={styles.segmentedControl}>
-                {(['preschool', 'k12_school', 'hybrid'] as const).map(type => (
+                {(['preschool', 'k12_school'] as const).map(type => (
                   <TouchableOpacity
                     key={type}
                     style={[
@@ -402,7 +392,6 @@ export default function SuperAdminSchoolOnboardingWizard() {
                     ]}>
                       {type === 'preschool' && 'Preschool'}
                       {type === 'k12_school' && 'K-12 School'}
-                      {type === 'hybrid' && 'Hybrid'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -634,7 +623,6 @@ export default function SuperAdminSchoolOnboardingWizard() {
                 <Text style={styles.reviewValue}>
                   {schoolData.schoolType === 'preschool' && 'Preschool'}
                   {schoolData.schoolType === 'k12_school' && 'K-12 School'}
-                  {schoolData.schoolType === 'hybrid' && 'Hybrid Institution'}
                 </Text>
               </View>
               <View style={styles.reviewItem}>

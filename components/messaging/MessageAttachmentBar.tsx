@@ -4,11 +4,11 @@
  * Provides media attachment options for messaging:
  * - Image picker (gallery)
  * - Camera capture
- * - Audio recording with glowing mic animation
+ * - Audio recording with glowing mic animation (using expo-audio)
  * - Document picker
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { AudioModule } from 'expo-audio';
+import {
+  useAudioRecorder,
+  useAudioRecorderState,
+  RecordingPresets,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+} from 'expo-audio';
 
 export interface MessageAttachment {
   id: string;
@@ -61,8 +67,13 @@ export function MessageAttachmentBar({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
   
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  // Use expo-audio hooks for recording
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder, 100); // Poll every 100ms
+  
+  // Animation refs (keep these as refs for performance)
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -305,39 +316,40 @@ export function MessageAttachmentBar({
     }
   };
   
-  // Start audio recording
-  const startRecording = async () => {
+  // Start audio recording using expo-audio hooks
+  const startRecording = useCallback(async () => {
     setShowOptions(false);
     
     try {
-      // Request permissions
-      const { status } = await Audio.requestPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          t('common.permissionRequired', { defaultValue: 'Permission Required' }),
-          t('messages.micPermission', { defaultValue: 'Please grant microphone access to record audio.' })
-        );
-        return;
+      // Request permissions if not already granted
+      if (!hasPermission) {
+        const { granted } = await requestRecordingPermissionsAsync();
+        
+        if (!granted) {
+          Alert.alert(
+            t('common.permissionRequired', { defaultValue: 'Permission Required' }),
+            t('messages.micPermission', { defaultValue: 'Please grant microphone access to record audio.' })
+          );
+          return;
+        }
+        setHasPermission(true);
       }
       
-      // Configure audio mode
-      await Audio.setAudioModeAsync({
+      // Configure audio mode for recording
+      await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
       });
       
-      // Start recording
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      // Prepare and start recording using expo-audio hook
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       
-      recordingRef.current = recording;
       setIsRecording(true);
       setRecordingDuration(0);
       startPulseAnimation();
       
-      // Start duration timer
+      // Start duration timer (backup to recorderState.durationMillis)
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
@@ -352,11 +364,11 @@ export function MessageAttachmentBar({
         t('messages.recordingError', { defaultValue: 'Failed to start recording. Please try again.' })
       );
     }
-  };
+  }, [recorder, hasPermission, onStartRecording, t]);
   
-  // Stop audio recording
-  const stopRecording = async () => {
-    if (!recordingRef.current) return;
+  // Stop audio recording using expo-audio hook
+  const stopRecording = useCallback(async () => {
+    if (!recorderState?.isRecording) return;
     
     try {
       stopPulseAnimation();
@@ -367,17 +379,20 @@ export function MessageAttachmentBar({
         recordingTimerRef.current = null;
       }
       
-      // Stop and get URI
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      const duration = recordingDuration * 1000; // Convert to ms
+      // Stop recording using expo-audio hook
+      await recorder.stop();
+      
+      // Get URI from recorder (property, not method in expo-audio)
+      const uri = recorder.uri;
+      // Use recorderState duration or fallback to our timer
+      const duration = recorderState?.durationMillis || (recordingDuration * 1000);
       
       // Reset audio mode
-      await Audio.setAudioModeAsync({
+      await setAudioModeAsync({
         allowsRecording: false,
+        playsInSilentMode: true,
       });
       
-      recordingRef.current = null;
       setIsRecording(false);
       setRecordingDuration(0);
       
@@ -402,11 +417,11 @@ export function MessageAttachmentBar({
       setIsRecording(false);
       setRecordingDuration(0);
     }
-  };
+  }, [recorder, recorderState, recordingDuration, onStopRecording, onAttach]);
   
-  // Cancel recording
-  const cancelRecording = async () => {
-    if (!recordingRef.current) return;
+  // Cancel recording using expo-audio hook
+  const cancelRecording = useCallback(async () => {
+    if (!recorderState?.isRecording) return;
     
     try {
       stopPulseAnimation();
@@ -416,12 +431,15 @@ export function MessageAttachmentBar({
         recordingTimerRef.current = null;
       }
       
-      await recordingRef.current.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({
+      // Stop recording (discarding the result)
+      await recorder.stop();
+      
+      // Reset audio mode
+      await setAudioModeAsync({
         allowsRecording: false,
+        playsInSilentMode: true,
       });
       
-      recordingRef.current = null;
       setIsRecording(false);
       setRecordingDuration(0);
     } catch (error) {
@@ -429,7 +447,7 @@ export function MessageAttachmentBar({
       setIsRecording(false);
       setRecordingDuration(0);
     }
-  };
+  }, [recorder, recorderState]);
   
   // Format duration for display
   const formatDuration = (seconds: number): string => {

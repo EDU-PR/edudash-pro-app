@@ -47,6 +47,7 @@ let useAuth: () => { user: any; profile: any };
 let useThreadMessages: (id: string | null) => { data: any[]; isLoading: boolean; error: any; refetch: () => void };
 let useSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isLoading: boolean };
 let useMarkThreadRead: () => { mutate: (args: any) => void };
+let assertSupabase: () => any;
 
 // Component imports with fallbacks
 let ChatWallpaperPicker: React.FC<any> | null = null;
@@ -97,6 +98,12 @@ try {
   useAuth = require('@/contexts/AuthContext').useAuth;
 } catch {
   useAuth = () => ({ user: null, profile: null });
+}
+
+try {
+  assertSupabase = require('@/lib/supabase').assertSupabase;
+} catch {
+  assertSupabase = () => { throw new Error('Supabase not available'); };
 }
 
 try {
@@ -230,12 +237,26 @@ export default function ParentMessageThreadScreen() {
     );
   }, [messages, optimisticMsgs]);
 
-  // Mark thread as read
+  // Mark thread as read and delivered
   useEffect(() => {
-    if (threadId && messages.length > 0 && !loading) {
+    if (threadId && messages.length > 0 && !loading && user?.id) {
+      // Mark as read
       try { markRead({ threadId }); } catch {}
+      
+      // Mark undelivered messages as delivered (user has opened the thread and is online)
+      (async () => {
+        try {
+          const client = assertSupabase();
+          await client.rpc('mark_messages_delivered', {
+            p_thread_id: threadId,
+            p_user_id: user.id
+          });
+        } catch (err) {
+          console.warn('[ParentThread] Failed to mark messages as delivered:', err);
+        }
+      })();
     }
-  }, [threadId, messages.length, loading]);
+  }, [threadId, messages.length, loading, user?.id]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -640,19 +661,40 @@ export default function ParentMessageThreadScreen() {
       const showDateSeparator = dateKey !== lastDateKey;
       lastDateKey = dateKey;
       
+      // Calculate voice message index for this message
+      const voiceIndex = msg.voice_url ? voiceMessageIds.indexOf(msg.id) : -1;
+      const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIds.length - 1;
+      const hasPreviousVoice = voiceIndex > 0;
+      
       // Handler for when voice playback finishes - play next voice message
       const handleVoiceFinished = msg.voice_url ? () => {
-        const currentIndex = voiceMessageIds.indexOf(msg.id);
-        if (currentIndex >= 0 && currentIndex < voiceMessageIds.length - 1) {
-          // There's a next voice message - set it as current to trigger playback
-          setCurrentlyPlayingVoiceId(voiceMessageIds[currentIndex + 1]);
+        console.log('[ParentThread] Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
+        if (hasNextVoice) {
+          const nextId = voiceMessageIds[voiceIndex + 1];
+          console.log('[ParentThread] Auto-playing next voice message:', nextId);
+          setCurrentlyPlayingVoiceId(nextId);
         } else {
+          console.log('[ParentThread] No more voice messages to play');
           setCurrentlyPlayingVoiceId(null);
         }
       } : undefined;
       
+      // Handler for media control "next" button
+      const handlePlayNext = hasNextVoice ? () => {
+        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex + 1]);
+      } : undefined;
+      
+      // Handler for media control "previous" button
+      const handlePlayPrevious = hasPreviousVoice ? () => {
+        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex - 1]);
+      } : undefined;
+      
       // Check if this voice message should auto-play (continuous playback)
       const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
+      
+      if (shouldAutoPlay) {
+        console.log('[ParentThread] Auto-play enabled for message:', msg.id);
+      }
       
       return (
         <React.Fragment key={msg.id}>
@@ -662,6 +704,10 @@ export default function ParentMessageThreadScreen() {
             isOwn={msg.sender_id === user?.id} 
             onLongPress={() => handleMessageLongPress(msg)}
             onPlaybackFinished={handleVoiceFinished}
+            onPlayNext={handlePlayNext}
+            onPlayPrevious={handlePlayPrevious}
+            hasNextVoice={hasNextVoice}
+            hasPreviousVoice={hasPreviousVoice}
             autoPlayVoice={shouldAutoPlay}
             onReactionPress={handleReactionPress}
           />

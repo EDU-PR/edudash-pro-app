@@ -1,7 +1,7 @@
 /**
  * AudioModeCoordinator - Central audio mode management
  * 
- * Coordinates all expo-av Audio.setAudioModeAsync calls to prevent conflicts
+ * Coordinates all expo-audio setAudioModeAsync calls to prevent conflicts
  * between WebRTC streaming, TTS playback, and notification sounds.
  * 
  * Priority order (highest to lowest):

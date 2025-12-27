@@ -72,26 +72,56 @@ export default function SuperAdminUsersScreen() {
     try {
       setLoading(true);
 
-      // Use the existing super admin function to get all users
+      // Query profiles table directly (superadmin has read access via RLS)
       const { data: usersData, error: usersError } = await assertSupabase()
-        .rpc('get_all_users_for_superadmin');
+        .from('profiles')
+        .select(`
+          id,
+          email,
+          first_name,
+          last_name,
+          role,
+          preschool_id,
+          organization_id,
+          is_active,
+          created_at,
+          last_login_at,
+          avatar_url
+        `)
+        .order('created_at', { ascending: false })
+        .limit(500);
 
       if (usersError) {
         console.error('Users fetch error:', usersError);
-        Alert.alert('Error', 'Failed to load users');
+        Alert.alert('Error', 'Failed to load users: ' + usersError.message);
         return;
+      }
+
+      // Also fetch preschool names for display
+      const preschoolIds = [...new Set(usersData?.filter(u => u.preschool_id).map(u => u.preschool_id) || [])];
+      let preschoolMap: Record<string, string> = {};
+      
+      if (preschoolIds.length > 0) {
+        const { data: preschools } = await assertSupabase()
+          .from('preschools')
+          .select('id, name')
+          .in('id', preschoolIds);
+        
+        if (preschools) {
+          preschoolMap = Object.fromEntries(preschools.map(p => [p.id, p.name]));
+        }
       }
 
       if (usersData) {
         const userRecords: UserRecord[] = usersData.map((user: any) => ({
           id: user.id,
           email: user.email || '',
-          name: user.name || user.full_name || null,
+          name: [user.first_name, user.last_name].filter(Boolean).join(' ') || null,
           role: user.role || 'parent',
-          school_id: user.school_id,
-          school_name: user.school_name,
+          school_id: user.preschool_id || user.organization_id,
+          school_name: user.preschool_id ? preschoolMap[user.preschool_id] : null,
           created_at: user.created_at,
-          last_sign_in_at: user.last_sign_in_at,
+          last_sign_in_at: user.last_login_at,
           is_active: user.is_active !== false,
           avatar_url: user.avatar_url,
         }));
@@ -99,10 +129,6 @@ export default function SuperAdminUsersScreen() {
         setUsers(userRecords);
         setTotalUsers(userRecords.length);
       }
-
-      // Get schools for filtering (reserved for future use)
-      // const { data: schoolsData } = await assertSupabase()
-      //   .rpc('get_all_schools_for_superadmin');
 
     } catch (error) {
       console.error('Failed to fetch users:', error);

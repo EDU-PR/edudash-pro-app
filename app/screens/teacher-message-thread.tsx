@@ -52,6 +52,7 @@ let useTeacherThreadMessages: (id: string | null) => { data: any[]; isLoading: b
 let useTeacherSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isPending: boolean };
 let useTeacherMarkThreadRead: () => { mutate: (threadId: string) => void };
 let useTeacherMessagesRealtime: (id: string | null) => void = () => {};
+let assertSupabase: () => any;
 
 // Component imports
 let ChatWallpaperPicker: React.FC<any> | null = null;
@@ -83,6 +84,7 @@ const defaultTheme = {
 
 try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
+try { assertSupabase = require('@/lib/supabase').assertSupabase; } catch { assertSupabase = () => { throw new Error('Supabase not available'); }; }
 try {
   const h = require('@/hooks/useTeacherMessaging');
   useTeacherThreadMessages = h.useTeacherThreadMessages;
@@ -165,10 +167,26 @@ export default function TeacherMessageThreadScreen() {
   
   const otherIds = useMemo(() => parentId ? [parentId] : [], [parentId]);
   
-  // Effects
+  // Effects - Mark as read and delivered
   useEffect(() => {
-    if (threadId) markRead(threadId);
-  }, [threadId, markRead]);
+    if (threadId && user?.id) {
+      // Mark as read
+      markRead(threadId);
+      
+      // Mark undelivered messages as delivered (user has opened the thread and is online)
+      (async () => {
+        try {
+          const client = assertSupabase();
+          await client.rpc('mark_messages_delivered', {
+            p_thread_id: threadId,
+            p_user_id: user.id
+          });
+        } catch (err) {
+          console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
+        }
+      })();
+    }
+  }, [threadId, markRead, user?.id]);
   
   useEffect(() => {
     if (getStoredWallpaper) getStoredWallpaper().then(setWallpaper);
@@ -345,18 +363,40 @@ export default function TeacherMessageThreadScreen() {
       const showDateSep = dateKey !== lastDateKey;
       lastDateKey = dateKey;
       
+      // Calculate voice message index for this message
+      const voiceIndex = msg.voice_url ? voiceMessageIds.indexOf(msg.id) : -1;
+      const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIds.length - 1;
+      const hasPreviousVoice = voiceIndex > 0;
+      
       // Handler for when voice playback finishes - play next voice message
       const handleVoiceFinished = msg.voice_url ? () => {
-        const currentIndex = voiceMessageIds.indexOf(msg.id);
-        if (currentIndex >= 0 && currentIndex < voiceMessageIds.length - 1) {
-          setCurrentlyPlayingVoiceId(voiceMessageIds[currentIndex + 1]);
+        console.log('[TeacherThread] Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
+        if (hasNextVoice) {
+          const nextId = voiceMessageIds[voiceIndex + 1];
+          console.log('[TeacherThread] Auto-playing next voice message:', nextId);
+          setCurrentlyPlayingVoiceId(nextId);
         } else {
+          console.log('[TeacherThread] No more voice messages to play');
           setCurrentlyPlayingVoiceId(null);
         }
       } : undefined;
       
+      // Handler for media control "next" button
+      const handlePlayNext = hasNextVoice ? () => {
+        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex + 1]);
+      } : undefined;
+      
+      // Handler for media control "previous" button
+      const handlePlayPrevious = hasPreviousVoice ? () => {
+        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex - 1]);
+      } : undefined;
+      
       // Check if this voice message should auto-play
       const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
+      
+      if (shouldAutoPlay) {
+        console.log('[TeacherThread] Auto-play enabled for message:', msg.id);
+      }
       
       return (
         <React.Fragment key={msg.id}>
@@ -366,6 +406,10 @@ export default function TeacherMessageThreadScreen() {
             isOwn={msg.sender_id === user?.id} 
             onLongPress={() => handleLongPress(msg)}
             onPlaybackFinished={handleVoiceFinished}
+            onPlayNext={handlePlayNext}
+            onPlayPrevious={handlePlayPrevious}
+            hasNextVoice={hasNextVoice}
+            hasPreviousVoice={hasPreviousVoice}
             autoPlayVoice={shouldAutoPlay}
             otherParticipantIds={otherIds}
             onReactionPress={handleReactionPress}

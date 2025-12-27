@@ -204,7 +204,7 @@ export function useVoiceController(dash: DashAIAssistant | null, opts: Options =
       if (state !== 'listening' && state !== 'prewarm') return;
       clearTimers();
 
-      // Local file recording removed: skip waiting for expo-av recorder
+      // Local file recording: use expo-audio useAudioRecorder hook if needed
 
       setState('transcribing');
       
@@ -253,7 +253,7 @@ export function useVoiceController(dash: DashAIAssistant | null, opts: Options =
         }
       } else {
         // Non-streaming path no longer supported
-        console.warn('[VoiceController] Non-streaming voice note is disabled (expo-av removed)');
+        console.warn('[VoiceController] Non-streaming voice note is disabled - use expo-audio useAudioRecorder hook instead');
         setState('error');
         try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); } catch { /* Intentional: non-fatal */ }
         return;

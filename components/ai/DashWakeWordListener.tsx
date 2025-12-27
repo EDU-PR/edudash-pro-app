@@ -2,15 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { WakeWordModelLoader } from '@/lib/services/WakeWordModelLoader';
 
 /**
  * DashWakeWordListener
  *
  * Foreground-only wake-word listener (in-app) with graceful fallback when
  * native wake-word packages are not installed. When enabled and the app is
- * active, it listens for a wake phrase (e.g., "Hello Dash") and navigates to
+ * active, it listens for "Hello Dash" wake phrase and navigates to
  * the Dash Assistant screen.
  *
+ * Uses custom trained Porcupine model from /assets/wake-words/
+ * 
  * Notes:
  * - Background wake word is NOT supported here. This only runs in-app.
  * - Implementation attempts to load '@picovoice/porcupine-react-native' if available.
@@ -75,8 +78,7 @@ export default function DashWakeWordListener() {
 
     try {
       // Dynamic import to avoid hard dependency when module isn't installed
-       
-      const Porcupine = require('@picovoice/porcupine-react-native');
+      const { Porcupine } = require('@picovoice/porcupine-react-native');
       const accessKey = process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY || '';
 
       if (!accessKey) {
@@ -84,15 +86,33 @@ export default function DashWakeWordListener() {
         return false;
       }
 
-      // Initialize with a generic built-in keyword as a placeholder. Replace with a
-      // custom trained phrase for best accuracy (e.g., "Hello Dash").
-      porcupineRef.current = await Porcupine.create(accessKey, [{ builtin: 'Porcupine', sensitivity: 0.65 }]);
+      // Load custom "Hello Dash" model from assets
+      let modelPath: string | null = null;
+      try {
+        modelPath = await WakeWordModelLoader.loadHelloDashModel();
+        console.log('[DashWakeWord] Loaded custom Hello Dash model:', modelPath);
+      } catch (e) {
+        console.debug('[DashWakeWord] Custom model not available, falling back to built-in:', e);
+      }
 
-      // Minimal audio engine from the same lib (implementation may vary per SDK version)
-      audioEngineRef.current = await Porcupine.createAudioEngine();
-      await audioEngineRef.current.start();
+      // Initialize with custom model or fallback to built-in
+      if (modelPath) {
+        // Use custom "Hello Dash" model
+        porcupineRef.current = await Porcupine.fromKeywordPaths(
+          accessKey,
+          [modelPath],
+          [0.65] // sensitivity
+        );
+      } else {
+        // Fallback to built-in "Porcupine" keyword
+        porcupineRef.current = await Porcupine.fromBuiltInKeywords(
+          accessKey,
+          [Porcupine.BuiltInKeyword.PORCUPINE],
+          [0.65]
+        );
+      }
 
-      console.log('[DashWakeWord] Porcupine initialized');
+      console.log('[DashWakeWord] Porcupine initialized', modelPath ? 'with custom model' : 'with built-in keyword');
       return true;
     } catch (e) {
       console.debug('[DashWakeWord] Wake word engine not available or failed to init:', e);
@@ -108,16 +128,22 @@ export default function DashWakeWordListener() {
     if (!ok) return;
 
     try {
-      const Porcupine = require('@picovoice/porcupine-react-native');
-      await Porcupine.start();
-      Porcupine.setDetectionCallback(async () => {
-        try {
+      // Start the Porcupine engine
+      if (porcupineRef.current && porcupineRef.current.start) {
+        await porcupineRef.current.start();
+      }
+      
+      // Set up the detection callback
+      if (porcupineRef.current && porcupineRef.current.onDetection) {
+        porcupineRef.current.onDetection((keywordIndex: number) => {
+          console.log('[DashWakeWord] Wake word detected! Index:', keywordIndex);
           // Navigate to Dash Assistant when wake word is detected
           router.push('/screens/dash-assistant');
-        } catch { /* Intentional: non-fatal */ }
-      });
+        });
+      }
+      
       isListeningRef.current = true;
-      console.log('[DashWakeWord] Listening (in app)');
+      console.log('[DashWakeWord] Listening for "Hello Dash" (in app)');
     } catch (e) {
       console.debug('[DashWakeWord] Failed to start listening:', e);
     }
@@ -126,8 +152,9 @@ export default function DashWakeWordListener() {
   const stopListening = async () => {
     if (!isListeningRef.current) return;
     try {
-      const Porcupine = require('@picovoice/porcupine-react-native');
-      await Porcupine.stop();
+      if (porcupineRef.current && porcupineRef.current.stop) {
+        await porcupineRef.current.stop();
+      }
       isListeningRef.current = false;
       console.log('[DashWakeWord] Stopped listening');
     } catch { /* Intentional: non-fatal */ }
@@ -135,8 +162,8 @@ export default function DashWakeWordListener() {
 
   const release = async () => {
     try {
-      if (audioEngineRef.current?.stop) await audioEngineRef.current.stop();
-      if (porcupineRef.current?.release) await porcupineRef.current.release();
+      if (porcupineRef.current?.delete) await porcupineRef.current.delete();
+      porcupineRef.current = null;
     } catch { /* Intentional: non-fatal */ }
   };
 

@@ -31,6 +31,7 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
+import DashOrb from '@/components/super-admin/DashOrb';
 
 interface Integration {
   id: string;
@@ -391,6 +392,22 @@ export default function SuperAdminDevOpsScreen() {
         
         <View style={styles.bottomPadding} />
       </ScrollView>
+      
+      {/* Dash AI Orb - Floating DevOps Assistant */}
+      <DashOrb 
+        position="bottom-right"
+        size={56}
+        suggestions={[
+          'Build Android APK',
+          'Check build status',
+          'Search for useAuth in code',
+          'Show recent commits',
+          'Deploy OTA update',
+        ]}
+        onCommandExecuted={(cmd, result) => {
+          track('dash_orb_command', { command: cmd });
+        }}
+      />
     </View>
   );
 }

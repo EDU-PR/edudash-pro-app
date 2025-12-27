@@ -55,6 +55,7 @@ export interface Message {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  delivered_at?: string | null;
   read_by?: string[];
   voice_url?: string | null;
   voice_duration?: number | null;
@@ -236,6 +237,7 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
           content,
           content_type,
           created_at,
+          delivered_at,
           read_by,
           deleted_at,
           voice_url,

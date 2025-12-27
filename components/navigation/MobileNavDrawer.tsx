@@ -258,7 +258,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
                 activeOpacity={0.7}
               >
                 <Ionicons
-                  name={(active ? item.icon : `${item.icon}-outline`) as any}
+                  name={(active || item.icon.startsWith('logo-') ? item.icon : `${item.icon}-outline`) as any}
                   size={20}
                   color={active ? theme.primary : theme.textSecondary}
                 />
