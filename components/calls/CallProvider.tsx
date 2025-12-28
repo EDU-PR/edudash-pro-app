@@ -224,6 +224,35 @@ export function CallProvider({ children }: CallProviderProps) {
       }
       
       if (pendingCall) {
+        // CRITICAL: Verify call is still active before showing incoming call UI
+        // The caller may have hung up while the app was closed/offline
+        console.log('[CallProvider] Verifying call status in database:', pendingCall.call_id);
+        
+        const { data: callStatus, error: statusError } = await getSupabase()
+          .from('active_calls')
+          .select('status, ended_at')
+          .eq('call_id', pendingCall.call_id)
+          .single();
+        
+        if (statusError) {
+          console.log('[CallProvider] Call not found in database (may have been deleted):', statusError.message);
+          return;
+        }
+        
+        // Check if call is still ringing (not ended, rejected, missed, or answered)
+        const validStatuses = ['ringing', 'pending'];
+        if (!validStatuses.includes(callStatus.status) || callStatus.ended_at) {
+          console.log('[CallProvider] Call is no longer active:', {
+            callId: pendingCall.call_id,
+            status: callStatus.status,
+            ended_at: callStatus.ended_at,
+          });
+          // Call has ended - don't show incoming call UI
+          return;
+        }
+        
+        console.log('[CallProvider] Call is still active, showing incoming call UI:', pendingCall.call_id);
+        
         // Set as incoming call
         setIncomingCall({
           id: pendingCall.call_id,
