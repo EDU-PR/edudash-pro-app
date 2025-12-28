@@ -52,13 +52,23 @@ export function useVoiceCallAudio({
     try {
       console.log('[VoiceCallAudio] Initializing audio for', isOwner ? 'caller' : 'callee');
       
-      // Start InCallManager in audio mode (no ringback ringtone)
-      // We handle ringing UI separately with Expo Audio
-      InCallManager.start({ 
-        media: 'audio',
-        auto: false, // Prevent auto focus release
-        ringback: '' // No ringback tone to prevent ringtone changes
-      });
+      if (isOwner) {
+        // Caller: Use system default ringback tone while waiting for answer
+        InCallManager.start({ 
+          media: 'audio',
+          auto: false,
+          ringback: '_DEFAULT_' // System default ringback (KRING KRING)
+        });
+        console.log('[VoiceCallAudio] Caller: Playing system ringback tone');
+      } else {
+        // Callee: No ringback needed, just setup audio routing
+        InCallManager.start({ 
+          media: 'audio',
+          auto: false,
+          ringback: '' // No ringback for callee
+        });
+        console.log('[VoiceCallAudio] Callee: Audio routing only, no ringback');
+      }
       
       // Default to earpiece (WhatsApp-like)
       InCallManager.setForceSpeakerphoneOn(false);
@@ -71,6 +81,18 @@ export function useVoiceCallAudio({
       console.error('[VoiceCallAudio] Failed to start InCallManager:', error);
     }
   }, [callState, isOwner, setIsSpeakerEnabled]);
+
+  // Stop ringback when call connects
+  useEffect(() => {
+    if (callState === 'connected' && InCallManager && isOwner) {
+      try {
+        InCallManager.stopRingback();
+        console.log('[VoiceCallAudio] Stopped ringback - call connected');
+      } catch (error) {
+        console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
+      }
+    }
+  }, [callState, isOwner]);
 
   // Toggle speaker
   const toggleSpeaker = useCallback(() => {

@@ -45,7 +45,6 @@
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.edudashpro.app",
-      "googleServicesFile": "./android/app/google-services.json",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -171,10 +170,7 @@
           "mode": "production",
           "androidMode": "default",
           "iosDisplayInForeground": true,
-          "defaultChannel": "incoming-calls",
-          "sounds": [
-            "./assets/sounds/notification.wav"
-          ]
+          "defaultChannel": "incoming-calls"
         }
       ],
       [
@@ -190,6 +186,7 @@
           "appName": "EduDash Pro"
         }
       ],
+      "./plugins/withGoogleServices.js",
       "./plugins/withAndroidManifestFix.js"
     ],
     "experiments": {
