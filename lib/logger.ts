@@ -56,6 +56,17 @@ export const logger = {
       console.info(`[${tag}]`, ...args);
     }
   },
+
+  /**
+   * Force error logging - always logged regardless of __DEV__
+   * Used for critical errors that must be logged in production
+   * @param tag - Component or module name
+   * @param args - Error data to log
+   */
+  forceError: (tag: string, ...args: any[]) => {
+    console.error(`[${tag}]`, ...args);
+    // TODO: Send to Sentry in production
+  },
 };
 
 /**
