@@ -37,7 +37,6 @@ Thumbs.db
 
 # Credentials (NEVER COMMIT)
 credentials-backup/
-google-services.json
 *.p12
 *.pem
 *.key

@@ -21,8 +21,8 @@ module.exports = ({ config }) => {
   const isDevBuild = profile === 'development' || appVariant === 'development';
   const isWeb = process.env.EXPO_PUBLIC_PLATFORM === 'web';
   
-  // Google Services file: use EAS env file path if available, fallback to local
-  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON || './android/app/google-services.json';
+  // Google Services file: use EAS env file path if available, fallback to local root file
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON || './google-services.json';
 
   // Get AdMob IDs from environment (fallback to test IDs)
   const androidAdMobId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || 'ca-app-pub-3940256099942544~3347511713';
