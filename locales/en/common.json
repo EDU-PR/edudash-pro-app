@@ -1505,7 +1505,24 @@
     "confirmChange": "Confirm Change"
   },
   "calls": {
-    "live_classes": "Live Classes"
+    "title": "Calls",
+    "live_classes": "Live Classes",
+    "history": "Call History",
+    "all": "All",
+    "missed": "Missed",
+    "incoming": "Incoming",
+    "outgoing": "Outgoing",
+    "no_answer": "No Answer",
+    "declined": "Declined",
+    "voice_call": "Voice Call",
+    "video_call": "Video Call",
+    "duration": "Duration",
+    "no_calls": "No calls yet",
+    "call_ended": "Call Ended",
+    "calling": "Calling...",
+    "ringing": "Ringing...",
+    "connecting": "Connecting...",
+    "connected": "Connected"
   },
   "lessons_create": {
     "title": "Create Lesson",
