@@ -96,9 +96,13 @@ export interface DailyParticipant {
   tracks: {
     audio?: {
       state: 'playable' | 'loading' | 'off' | 'interrupted' | 'blocked';
+      track?: any; // MediaStreamTrack
+      persistentTrack?: any; // persistentTrack for React Native
     };
     video?: {
       state: 'playable' | 'loading' | 'off' | 'interrupted' | 'blocked';
+      track?: any; // MediaStreamTrack
+      persistentTrack?: any; // persistentTrack for React Native
     };
   };
 }
