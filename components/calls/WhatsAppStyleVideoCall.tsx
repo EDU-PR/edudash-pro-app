@@ -38,6 +38,14 @@ const getSupabase = () => assertSupabase();
 // KeepAwake tag for video calls
 const VIDEO_CALL_KEEP_AWAKE_TAG = 'active-video-call';
 
+// InCallManager for audio routing and ringback tones
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+} catch (error) {
+  console.warn('[VideoCall] InCallManager not available:', error);
+}
+
 // Note: Daily.co React Native SDK is conditionally imported
 let Daily: any = null;
 let DailyMediaView: any = null;
@@ -275,6 +283,18 @@ export function WhatsAppStyleVideoCall({
 
   // Cleanup call resources
   const cleanupCall = useCallback(() => {
+    // Stop InCallManager
+    if (InCallManager) {
+      try {
+        InCallManager.stopRingback();
+        InCallManager.stop();
+        console.log('[VideoCall] InCallManager stopped');
+      } catch (err) {
+        console.warn('[VideoCall] InCallManager cleanup error:', err);
+      }
+    }
+    
+    // Stop Daily
     if (dailyRef.current) {
       try {
         dailyRef.current.leave();
@@ -337,6 +357,61 @@ export function WhatsAppStyleVideoCall({
     setLocalParticipant(local);
     setRemoteParticipants(remote);
   }, []);
+
+  // InCallManager: Start ringback for caller, stop when connected
+  useEffect(() => {
+    if (!InCallManager) return;
+
+    if (callState === 'connecting' || callState === 'ringing') {
+      // Start audio with ringback for caller
+      if (isOwner) {
+        try {
+          InCallManager.start({ 
+            media: 'video',
+            auto: false,
+            ringback: '_DEFAULT_' // System default ringback tone
+          });
+          InCallManager.setKeepScreenOn(true);
+          console.log('[VideoCall] Started InCallManager with system ringback for caller');
+        } catch (err) {
+          console.warn('[VideoCall] Failed to start InCallManager:', err);
+        }
+      } else {
+        // Callee: no ringback
+        try {
+          InCallManager.start({ 
+            media: 'video',
+            auto: false,
+            ringback: ''
+          });
+          InCallManager.setKeepScreenOn(true);
+          console.log('[VideoCall] Started InCallManager for callee (no ringback)');
+        } catch (err) {
+          console.warn('[VideoCall] Failed to start InCallManager:', err);
+        }
+      }
+    } else if (callState === 'connected') {
+      // Stop ringback when connected
+      try {
+        InCallManager.stopRingback();
+        console.log('[VideoCall] Stopped ringback - call connected');
+      } catch (err) {
+        console.warn('[VideoCall] Failed to stop ringback:', err);
+      }
+    }
+
+    return () => {
+      // Cleanup on unmount or state change
+      if (callState === 'ended' || callState === 'failed') {
+        try {
+          InCallManager.stopRingback();
+          InCallManager.stop();
+        } catch (err) {
+          // Ignore cleanup errors
+        }
+      }
+    };
+  }, [callState, isOwner]);
 
   // Initialize call
   useEffect(() => {
