@@ -23,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
 import { assertSupabase } from '../lib/supabase';
+import { logger } from '@/lib/logger';
 import * as Notifications from 'expo-notifications';
 
 // ============================================================================

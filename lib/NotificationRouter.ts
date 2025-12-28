@@ -15,6 +15,7 @@ import {
   deactivateCurrentUserTokens as deactivateTokens,
   reactivateUserTokens as reactivateTokens 
 } from './pushTokenUtils';
+import { logger } from './logger';
 
 // Re-export for backwards compatibility
 export { 
