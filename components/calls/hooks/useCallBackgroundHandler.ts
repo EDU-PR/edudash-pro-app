@@ -134,8 +134,10 @@ export function useCallBackgroundHandler({
           sound: null, // No sound for ongoing notification
           sticky: true, // Sticky notification (harder to dismiss)
           autoDismiss: false, // Don't auto-dismiss
+          priority: Notifications.AndroidNotificationPriority.HIGH,
         },
         trigger: null, // Show immediately
+        identifier: `ongoing-call-${callId || 'active'}`, // Unique identifier
       });
       
       ongoingNotificationIdRef.current = notificationId;

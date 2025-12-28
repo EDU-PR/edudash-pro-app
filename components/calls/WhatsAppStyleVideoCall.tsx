@@ -29,6 +29,7 @@ import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { assertSupabase } from '@/lib/supabase';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
+import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
@@ -125,6 +126,21 @@ export function WhatsAppStyleVideoCall({
   const RING_TIMEOUT_MS = 30000;
   const minimizedPosition = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - MINIMIZED_SIZE - 20, y: 100 })).current;
   const localVideoPosition = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - LOCAL_VIDEO_WIDTH - 16, y: insets.top + 16 })).current;
+
+  // Picture-in-Picture mode for background video calls (Android)
+  const { isInPipMode, isPipSupported, enterPipMode } = usePictureInPicture({
+    // Auto-enter PiP when call is connected and app goes to background
+    autoEnterOnBackground: isOpen && callState === 'connected',
+    onEnterPiP: () => {
+      console.log('[VideoCall] Entered PiP mode - video continues in floating window');
+    },
+    onExitPiP: () => {
+      console.log('[VideoCall] Exited PiP mode');
+    },
+    // 16:9 landscape aspect ratio for video calls
+    aspectRatioWidth: 16,
+    aspectRatioHeight: 9,
+  });
 
   // Local video draggable
   const localVideoPanResponder = useRef(
@@ -941,17 +957,26 @@ export function WhatsAppStyleVideoCall({
   const hasRemoteParticipant = remoteParticipants.length > 0;
   const showLocalInMainView = !hasRemoteParticipant && hasLocalVideo;
 
-  // DEBUG: Log video rendering decision
+  // Get the actual video track for local video (with fallbacks)
+  const localVideoTrack = localParticipant?.tracks?.video?.persistentTrack 
+    || localParticipant?.tracks?.video?.track 
+    || null;
+
+  // DEBUG: Log video rendering decision with full track details
   console.log('[VideoCall] Render decision:', {
     hasRemoteVideo,
     hasLocalVideo,
     hasRemoteParticipant,
     showLocalInMainView,
+    isVideoEnabled,
+    DailyMediaViewAvailable: !!DailyMediaView,
+    localParticipantExists: !!localParticipant,
+    localVideoState: localParticipant?.tracks?.video?.state,
+    localHasPersistentTrack: !!localParticipant?.tracks?.video?.persistentTrack,
+    localHasTrack: !!localParticipant?.tracks?.video?.track,
+    localVideoTrackExists: !!localVideoTrack,
     remoteParticipantsCount: remoteParticipants.length,
     remoteVideoState: remoteParticipants[0]?.tracks?.video?.state,
-    localVideoState: localParticipant?.tracks?.video?.state,
-    showingRemote: hasRemoteVideo && DailyMediaView,
-    showingLocalMain: showLocalInMainView && DailyMediaView,
   });
 
   // Minimized view (Picture-in-Picture)
@@ -1047,7 +1072,7 @@ export function WhatsAppStyleVideoCall({
       {/* Show local video when:
           1. We have local video AND remote participants (PiP mode), OR
           2. We have local video AND no remote participants yet (show in main view area as preview) */}
-      {hasLocalVideo && DailyMediaView && (
+      {hasLocalVideo && DailyMediaView ? (
         <Animated.View
           style={[
             styles.localVideoContainer,
@@ -1058,11 +1083,19 @@ export function WhatsAppStyleVideoCall({
           <DailyMediaView
             videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
             audioTrack={null}
-            style={styles.localVideo}
+            style={[styles.localVideo, { width: LOCAL_VIDEO_WIDTH - 4, height: LOCAL_VIDEO_HEIGHT - 4 }]}
             objectFit="cover"
             mirror={isFrontCamera}
+            zOrder={1}
           />
         </Animated.View>
+      ) : (
+        // Debug: Show placeholder if local video conditions not met
+        hasLocalVideo === false && callState === 'connected' && (
+          <View style={[styles.localVideoContainer, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
+            <Text style={{ color: '#fff', fontSize: 10 }}>No local video</Text>
+          </View>
+        )
       )}
 
       {/* Top Bar */}
@@ -1207,9 +1240,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 10,
+    backgroundColor: '#000',
+    zIndex: 100,
   },
   localVideo: {
     flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a1a2e',
   },
   topBar: {
     position: 'absolute',

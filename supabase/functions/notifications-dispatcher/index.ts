@@ -99,6 +99,7 @@ interface NotificationTemplate {
   body: string
   data?: any
   sound?: 'default' | null
+  badge?: number
   priority?: 'default' | 'normal' | 'high'
   channelId?: string
   // Special options for calls
@@ -121,6 +122,7 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
         screen: 'messages'
       },
       sound: 'default',
+      badge: 1,
       priority: 'high',
       channelId: 'messages'
     },
@@ -133,6 +135,7 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
         screen: 'announcements'
       },
       sound: 'default',
+      badge: 1,
       priority: 'high',
       channelId: 'announcements'
     },
@@ -149,6 +152,7 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
         screen: 'homework-details'
       },
       sound: 'default',
+      badge: 1,
       priority: 'normal',
       channelId: 'homework'
     },
@@ -414,6 +418,7 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
         screen: 'incoming-call'
       },
       sound: 'default',
+      badge: 1,
       priority: 'high',
       channelId: 'incoming-calls', // Match the channel we create in CallHeadlessTask
       _contentAvailable: true, // Wake app in background (iOS) / triggers data handling (Android)
@@ -1333,6 +1338,7 @@ async function dispatchNotification(request: Request): Promise<Response> {
         target_user_id: tokenInfo.user_id, // Another alias for clarity
       },
       sound: template.sound,
+      badge: template.badge, // App icon badge count
       priority: template.priority,
       channelId: template.channelId,
       ttl: 86400, // 24 hours

@@ -70,6 +70,9 @@ export const useNewEnhancedTeacherState = () => {
       case 'ai_assistant':
         router.push('/screens/dash-assistant');
         break;
+      case 'call_parent':
+        router.push('/screens/calls');
+        break;
       default:
         Alert.alert(t('common.coming_soon'), t('dashboard.feature_coming_soon'));
     }
@@ -151,6 +154,12 @@ export const useNewEnhancedTeacherState = () => {
       color: theme.accent,
       onPress: () => handleQuickAction('ai_assistant'),
       disabled: tier === 'free'
+    },
+    {
+      title: t('teacher.call_parent', { defaultValue: '📞 Call Parent' }),
+      icon: 'call',
+      color: '#10B981',
+      onPress: () => handleQuickAction('call_parent')
     }
   ];
 
