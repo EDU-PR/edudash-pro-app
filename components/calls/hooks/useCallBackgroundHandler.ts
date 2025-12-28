@@ -5,7 +5,13 @@
  * - Keeps screen awake during active calls (prevents screen lock from dropping call)
  * - Handles app state changes (foreground/background transitions)
  * - Ensures audio continues in background via InCallManager
- * - Integrates with CallKeep for native call persistence
+ * - Shows ongoing call notification for Android foreground service
+ * 
+ * NOTE: CallKeep has been removed due to Expo SDK 54+ compatibility issues.
+ * Background call persistence now relies on:
+ * 1. expo-keep-awake for screen wake
+ * 2. InCallManager for audio routing
+ * 3. Ongoing notification for Android foreground service requirement
  * 
  * @module useCallBackgroundHandler
  */
@@ -13,7 +19,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { callKeepManager } from '@/lib/calls/callkeep-manager';
+import * as Notifications from 'expo-notifications';
 import type { CallState } from '../types';
 
 // Unique tag for KeepAwake during calls
@@ -58,6 +64,7 @@ export function useCallBackgroundHandler({
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const keepAwakeActiveRef = useRef(false);
   const wasInBackgroundRef = useRef(false);
+  const ongoingNotificationIdRef = useRef<string | null>(null);
 
   // Determine if call is in an active audio state
   const isAudioActive = callState === 'connected' || callState === 'connecting' || callState === 'ringing';
@@ -111,19 +118,67 @@ export function useCallBackgroundHandler({
     }
   }, []);
 
-  // Manage KeepAwake based on call state
+  /**
+   * Show ongoing call notification (Android foreground service)
+   * This keeps the app alive when backgrounded on Android
+   */
+  const showOngoingCallNotification = useCallback(async (callerName?: string) => {
+    if (Platform.OS !== 'android' || ongoingNotificationIdRef.current) return;
+    
+    try {
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '📞 Call in progress',
+          body: callerName ? `Connected with ${callerName}` : 'Voice call active',
+          data: { type: 'ongoing_call', call_id: callId },
+          sound: null, // No sound for ongoing notification
+          sticky: true, // Sticky notification (harder to dismiss)
+          autoDismiss: false, // Don't auto-dismiss
+        },
+        trigger: null, // Show immediately
+      });
+      
+      ongoingNotificationIdRef.current = notificationId;
+      console.log('[CallBackgroundHandler] Ongoing call notification shown:', notificationId);
+    } catch (error) {
+      console.warn('[CallBackgroundHandler] Failed to show ongoing notification:', error);
+    }
+  }, [callId]);
+
+  /**
+   * Dismiss ongoing call notification
+   */
+  const dismissOngoingCallNotification = useCallback(async () => {
+    if (!ongoingNotificationIdRef.current) return;
+    
+    try {
+      await Notifications.dismissNotificationAsync(ongoingNotificationIdRef.current);
+      console.log('[CallBackgroundHandler] Ongoing call notification dismissed');
+      ongoingNotificationIdRef.current = null;
+    } catch (error) {
+      console.warn('[CallBackgroundHandler] Failed to dismiss notification:', error);
+    }
+  }, []);
+
+  // Manage KeepAwake and ongoing notification based on call state
   useEffect(() => {
     if (isAudioActive && isCallActive) {
       activateCallKeepAwake();
       configureBackgroundAudio();
+      // Show ongoing notification when call connects (for Android foreground service)
+      if (callState === 'connected') {
+        showOngoingCallNotification();
+      }
     } else {
       deactivateCallKeepAwake();
+      dismissOngoingCallNotification();
     }
 
     return () => {
       deactivateCallKeepAwake();
+      dismissOngoingCallNotification();
     };
-  }, [isAudioActive, isCallActive, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio]);
+  }, [isAudioActive, isCallActive, callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, showOngoingCallNotification, dismissOngoingCallNotification]);
 
   // Handle app state changes (background/foreground)
   useEffect(() => {
@@ -140,10 +195,10 @@ export function useCallBackgroundHandler({
         if (isAudioActive && callId) {
           console.log('[CallBackgroundHandler] Call active, app going to background');
           
-          // Report to CallKeep that call is still active (keeps foreground service running)
+          // The ongoing notification serves as our foreground service
+          // Android will keep the app alive due to the sticky notification
           if (Platform.OS === 'android') {
-            // The call should continue via foreground service
-            console.log('[CallBackgroundHandler] Android foreground service will maintain call');
+            console.log('[CallBackgroundHandler] Ongoing notification will maintain call in background');
           }
         }
       }
@@ -154,15 +209,14 @@ export function useCallBackgroundHandler({
           console.log('[CallBackgroundHandler] Returning from background with active call');
           wasInBackgroundRef.current = false;
           
-          // Re-establish audio routing when returning from background
+          // Restore audio settings when returning from background
+          // IMPORTANT: Don't call start() again - just restore settings
           if (InCallManager) {
             try {
-              // Restart InCallManager to ensure proper audio routing
-              InCallManager.start({ media: 'audio', auto: false });
               InCallManager.setKeepScreenOn(true);
-              console.log('[CallBackgroundHandler] Audio routing restored after background return');
+              console.log('[CallBackgroundHandler] Audio settings restored after background return');
             } catch (error) {
-              console.warn('[CallBackgroundHandler] Failed to restore audio:', error);
+              console.warn('[CallBackgroundHandler] Failed to restore settings:', error);
             }
           }
           

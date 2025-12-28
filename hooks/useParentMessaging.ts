@@ -1,4 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { usePathname } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -237,6 +240,149 @@ export const useThreadMessages = (threadId: string | null) => {
     enabled: !!threadId && !!user?.id,
     staleTime: 1000 * 30, // 30 seconds
   });
+};
+
+/**
+ * Hook for real-time message and reaction updates in a thread
+ * Subscribes to new messages and reactions, updating the query cache incrementally
+ */
+export const useParentMessagesRealtime = (threadId: string | null) => {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!threadId || !user?.id) return;
+
+    const channel = assertSupabase()
+      .channel(`messages:thread:${threadId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${threadId}`,
+        },
+        async (payload: any) => {
+          console.log('[ParentMessagesRealtime] New message received:', payload.new.id);
+          
+          // Show banner notification if message is from someone else and app is in foreground
+          // Only show if user is not currently viewing this thread
+          if (payload.new.sender_id !== user?.id) {
+            try {
+              // Check if app is in foreground
+              const appState = AppState.currentState;
+              if (appState === 'active') {
+                // Check if user is viewing this thread (check pathname)
+                const isViewingThread = pathname?.includes(`threadId=${threadId}`) || 
+                                       pathname?.includes(`thread=${threadId}`);
+                
+                if (!isViewingThread) {
+                  // Fetch sender name
+                  const { data: senderProfile } = await assertSupabase()
+                    .from('profiles')
+                    .select('first_name, last_name')
+                    .eq('id', payload.new.sender_id)
+                    .single();
+                  
+                  const senderName = senderProfile 
+                    ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
+                    : 'Someone';
+                  
+                  const messagePreview = payload.new.content?.length > 50 
+                    ? payload.new.content.substring(0, 47) + '...'
+                    : payload.new.content || 'New message';
+                  
+                  await Notifications.scheduleNotificationAsync({
+                    identifier: `message-${payload.new.id}`,
+                    content: {
+                      title: `💬 ${senderName}`,
+                      body: messagePreview,
+                      data: {
+                        type: 'message',
+                        thread_id: threadId,
+                        message_id: payload.new.id,
+                        sender_id: payload.new.sender_id,
+                        sender_name: senderName,
+                      },
+                      sound: 'default',
+                    },
+                    trigger: null, // Show immediately
+                  });
+                  console.log('[ParentMessagesRealtime] ✅ Banner notification shown for new message');
+                }
+              }
+            } catch (notifError) {
+              console.warn('[ParentMessagesRealtime] Failed to show banner notification:', notifError);
+            }
+          }
+          
+          // Invalidate to refetch with new message
+          queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+          queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+        }
+      )
+      // Subscribe to message UPDATE events for delivery and read status changes
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${threadId}`,
+        },
+        async (payload: any) => {
+          console.log('[ParentMessagesRealtime] Message updated:', payload.new.id);
+          
+          // Update message in cache with new delivery/read status
+          queryClient.setQueryData(
+            ['messages', threadId],
+            (old: any[] | undefined) => {
+              if (!old) return old;
+              return old.map(msg => 
+                msg.id === payload.new.id 
+                  ? { ...msg, delivered_at: payload.new.delivered_at, read_by: payload.new.read_by }
+                  : msg
+              );
+            }
+          );
+        }
+      )
+      // Subscribe to message_reactions changes for real-time reaction updates
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        async (payload: any) => {
+          console.log('[ParentMessagesRealtime] Reaction change:', payload.eventType, payload.new?.message_id);
+          
+          // Get the message_id from the reaction
+          const messageId = payload.new?.message_id || payload.old?.message_id;
+          if (!messageId) return;
+          
+          // Check if this reaction is for a message in this thread
+          const { data: message } = await assertSupabase()
+            .from('messages')
+            .select('thread_id')
+            .eq('id', messageId)
+            .single();
+          
+          if (!message || message.thread_id !== threadId) return;
+          
+          // Invalidate the messages query to refetch with updated reactions
+          queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      assertSupabase().removeChannel(channel);
+    };
+  }, [threadId, user?.id, queryClient, pathname]);
 };
 
 /**

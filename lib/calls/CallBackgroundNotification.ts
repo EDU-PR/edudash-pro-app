@@ -33,13 +33,9 @@ export interface IncomingCallNotificationData {
   meeting_url?: string;
 }
 
-// Conditionally import CallKeep
-let RNCallKeep: any = null;
-try {
-  RNCallKeep = require('react-native-callkeep').default;
-} catch (error) {
-  console.warn('[CallBackgroundNotification] CallKeep not available');
-}
+// NOTE: react-native-callkeep has been removed due to Expo SDK 54+ incompatibility
+// See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
+// Using expo-notifications foreground service instead
 
 /**
  * Save pending call for the main app to pick up when foregrounded
@@ -191,49 +187,12 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
 
 /**
  * Try to show native call screen via CallKeep
+ * DISABLED: CallKeep is broken with Expo SDK 54+ (duplicate method exports bug)
+ * See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
  */
-async function showCallKeepNotification(callData: IncomingCallNotificationData): Promise<boolean> {
-  if (!RNCallKeep) return false;
-  
-  try {
-    // Setup CallKeep if needed
-    await RNCallKeep.setup({
-      ios: {
-        appName: 'EduDash Pro',
-        supportsVideo: true,
-        maximumCallGroups: '1',
-        maximumCallsPerCallGroup: '1',
-      },
-      android: {
-        alertTitle: 'Permissions Required',
-        alertDescription: 'This app needs access to phone accounts for calls.',
-        cancelButton: 'Cancel',
-        okButton: 'OK',
-        selfManaged: true,
-        foregroundService: {
-          channelId: 'com.edudashpro.app.calls',
-          channelName: 'Voice & Video Calls',
-          notificationTitle: 'EduDash Call',
-          notificationIcon: 'ic_launcher',
-        },
-      },
-    });
-    
-    // Display incoming call screen
-    await RNCallKeep.displayIncomingCall(
-      callData.call_id,
-      callData.caller_name || 'Unknown',
-      callData.caller_name || 'Unknown',
-      'generic',
-      callData.call_type === 'video'
-    );
-    
-    console.log('[CallBackgroundNotification] CallKeep notification shown');
-    return true;
-  } catch (error) {
-    console.error('[CallBackgroundNotification] CallKeep failed:', error);
-    return false;
-  }
+async function showCallKeepNotification(_callData: IncomingCallNotificationData): Promise<boolean> {
+  // CallKeep removed - always return false so we use notification-based approach
+  return false;
 }
 
 /**
@@ -245,13 +204,7 @@ export async function cancelIncomingCallNotification(callId: string): Promise<vo
     await Notifications.dismissNotificationAsync(`incoming-call-${callId}`);
     Vibration.cancel();
     
-    if (RNCallKeep) {
-      try {
-        await RNCallKeep.endCall(callId);
-      } catch (e) {
-        // Ignore if CallKeep fails
-      }
-    }
+    // Note: CallKeep removal - no native call screen to dismiss
     
     console.log('[CallBackgroundNotification] Cancelled notification for:', callId);
   } catch (error) {
@@ -262,7 +215,13 @@ export async function cancelIncomingCallNotification(callId: string): Promise<vo
 /**
  * Handle background notification
  */
-async function handleBackgroundNotification(notification: Notifications.Notification): Promise<void> {
+async function handleBackgroundNotification(notification: Notifications.Notification | null | undefined): Promise<void> {
+  // Guard against null/undefined notification
+  if (!notification?.request?.content?.data) {
+    console.warn('[CallBackgroundNotification] Invalid notification received:', notification);
+    return;
+  }
+  
   const data = notification.request.content.data as any;
   
   console.log('[CallBackgroundNotification] Background notification received:', {
@@ -271,31 +230,53 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
     appState: AppState.currentState,
   });
   
-  // Only handle incoming calls
-  if (data?.type !== 'incoming_call') {
+  // Handle incoming calls
+  if (data?.type === 'incoming_call') {
+    const callData: IncomingCallNotificationData = {
+      type: 'incoming_call',
+      call_id: data.call_id,
+      caller_id: data.caller_id,
+      caller_name: data.caller_name || 'Unknown',
+      call_type: data.call_type || 'voice',
+      meeting_url: data.meeting_url,
+    };
+    
+    // Save for when app opens
+    await savePendingCall(callData);
+    
+    // If app is backgrounded (not killed), show notification
+    if (AppState.currentState !== 'active') {
+      // Try CallKeep first for native call screen
+      const callKeepSuccess = await showCallKeepNotification(callData);
+      
+      // Always show notification as backup
+      if (!callKeepSuccess) {
+        await showIncomingCallNotification(callData);
+      }
+    }
     return;
   }
   
-  const callData: IncomingCallNotificationData = {
-    type: 'incoming_call',
-    call_id: data.call_id,
-    caller_id: data.caller_id,
-    caller_name: data.caller_name || 'Unknown',
-    call_type: data.call_type || 'voice',
-    meeting_url: data.meeting_url,
-  };
-  
-  // Save for when app opens
-  await savePendingCall(callData);
-  
-  // If app is backgrounded (not killed), show notification
-  if (AppState.currentState !== 'active') {
-    // Try CallKeep first for native call screen
-    const callKeepSuccess = await showCallKeepNotification(callData);
-    
-    // Always show notification as backup
-    if (!callKeepSuccess) {
-      await showIncomingCallNotification(callData);
+  // Handle message notifications - mark as delivered when notification is received
+  // This works even when app is backgrounded or killed (WhatsApp-style)
+  if (data?.type === 'message' || data?.type === 'chat') {
+    try {
+      const { assertSupabase } = require('./supabase');
+      const supabase = assertSupabase();
+      
+      // Get current user from session (if available)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUserId = sessionData?.session?.user?.id;
+      
+      if (currentUserId && data.thread_id) {
+        await supabase.rpc('mark_messages_delivered', {
+          p_thread_id: data.thread_id,
+          p_user_id: currentUserId,
+        });
+        console.log('[CallBackgroundNotification] ✅ Marked messages as delivered (background)');
+      }
+    } catch (err) {
+      console.warn('[CallBackgroundNotification] Failed to mark messages as delivered:', err);
     }
   }
 }

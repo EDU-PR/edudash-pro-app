@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { usePathname } from 'expo-router';
 import { assertSupabase, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -405,6 +408,7 @@ export const useTeacherMarkThreadRead = () => {
 export const useTeacherMessagesRealtime = (threadId: string | null) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!threadId || !user?.id) return;
@@ -434,6 +438,50 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
             sender: senderProfile,
           };
           
+          // Show banner notification if message is from someone else and app is in foreground
+          // Only show if user is not currently viewing this thread
+          if (payload.new.sender_id !== user?.id) {
+            try {
+              // Check if app is in foreground
+              const appState = AppState.currentState;
+              if (appState === 'active') {
+                // Check if user is viewing this thread (check pathname)
+                const isViewingThread = pathname?.includes(`threadId=${threadId}`) || 
+                                       pathname?.includes(`thread=${threadId}`);
+                
+                if (!isViewingThread) {
+                  const senderName = senderProfile 
+                    ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Someone'
+                    : 'Someone';
+                  
+                  const messagePreview = payload.new.content?.length > 50 
+                    ? payload.new.content.substring(0, 47) + '...'
+                    : payload.new.content || 'New message';
+                  
+                  await Notifications.scheduleNotificationAsync({
+                    identifier: `message-${payload.new.id}`,
+                    content: {
+                      title: `💬 ${senderName}`,
+                      body: messagePreview,
+                      data: {
+                        type: 'message',
+                        thread_id: threadId,
+                        message_id: payload.new.id,
+                        sender_id: payload.new.sender_id,
+                        sender_name: senderName,
+                      },
+                      sound: 'default',
+                    },
+                    trigger: null, // Show immediately
+                  });
+                  console.log('[MessagesRealtime] ✅ Banner notification shown for new message');
+                }
+              }
+            } catch (notifError) {
+              console.warn('[MessagesRealtime] Failed to show banner notification:', notifError);
+            }
+          }
+          
           // Update query cache incrementally (no full refetch)
           queryClient.setQueryData(
             ['teacher', 'messages', threadId],
@@ -449,12 +497,66 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
           queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
         }
       )
+      // Subscribe to message UPDATE events for delivery and read status changes
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${threadId}`,
+        },
+        async (payload: any) => {
+          console.log('[MessagesRealtime] Message updated:', payload.new.id);
+          
+          // Update message in cache with new delivery/read status
+          queryClient.setQueryData(
+            ['teacher', 'messages', threadId],
+            (old: any[] | undefined) => {
+              if (!old) return old;
+              return old.map(msg => 
+                msg.id === payload.new.id 
+                  ? { ...msg, delivered_at: payload.new.delivered_at, read_by: payload.new.read_by }
+                  : msg
+              );
+            }
+          );
+        }
+      )
+      // Subscribe to message_reactions changes for real-time reaction updates
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        async (payload: any) => {
+          console.log('[MessagesRealtime] Reaction change:', payload.eventType, payload.new?.message_id);
+          
+          // Get the message_id from the reaction
+          const messageId = payload.new?.message_id || payload.old?.message_id;
+          if (!messageId) return;
+          
+          // Check if this reaction is for a message in this thread
+          const { data: message } = await supabase
+            .from('messages')
+            .select('thread_id')
+            .eq('id', messageId)
+            .single();
+          
+          if (!message || message.thread_id !== threadId) return;
+          
+          // Invalidate the messages query to refetch with updated reactions
+          queryClient.invalidateQueries({ queryKey: ['teacher', 'messages', threadId] });
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [threadId, user?.id, queryClient]);
+  }, [threadId, user?.id, queryClient, pathname]);
 };
 
 /**

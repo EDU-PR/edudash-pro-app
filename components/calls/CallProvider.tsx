@@ -13,17 +13,19 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState, AppStateStatus, Platform, Alert, Vibration } from 'react-native';
+import { AppState, AppStateStatus, Platform, Alert, Vibration, BackHandler } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
-import { callKeepManager } from '@/lib/calls/callkeep-manager';
+// CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
+// See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
 import { getPendingCall, cancelIncomingCallNotification, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
 import { 
   checkForIncomingCallOnLaunch, 
   cancelIncomingCallNotification as cancelBackgroundCallNotification 
 } from '@/lib/calls/CallBackgroundNotification';
 import { setupIncomingCallNotifications } from '@/lib/calls/setupPushNotifications';
+import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -118,30 +120,18 @@ export function CallProvider({ children }: CallProviderProps) {
   const getLastSeenText = callsEnabled ? presence.getLastSeenText : () => '';
   const refreshPresence = callsEnabled ? presence.refreshPresence : async () => {};
 
-  // Setup CallKeep and get current user
+  // Setup push notifications and get current user
+  // NOTE: CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
   useEffect(() => {
     if (!callsEnabled) return;
 
-    // Initialize CallKeep for native call UI (lock screen support)
-    const setupCallKeep = async () => {
-      const success = await callKeepManager.setup({
-        appName: 'EduDash Pro',
-        supportsVideo: true,
-        imageName: 'AppIcon',
-        ringtoneSound: 'ringtone.mp3',
-      });
-      
-      if (success) {
-        console.log('[CallProvider] CallKeep initialized successfully');
-      } else {
-        // CallKeep not available in development/Expo Go - this is expected
-        if (typeof __DEV__ === 'undefined' || !__DEV__) {
-          console.warn('[CallProvider] CallKeep initialization failed - calls may not work on locked screen');
-        }
-      }
+    // Initialize push notifications for incoming calls
+    const setupPushNotifications = async () => {
+      console.log('[CallProvider] Setting up push notifications for incoming calls');
+      // Push notifications will handle incoming calls via WhatsAppStyleIncomingCall UI
     };
     
-    setupCallKeep();
+    setupPushNotifications();
 
     const getUser = async () => {
       const { data: { user } } = await getSupabase().auth.getUser();
@@ -170,7 +160,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
     return () => {
       subscription.unsubscribe();
-      callKeepManager.cleanup();
+      // CallKeep cleanup removed
     };
   }, [callsEnabled]);
 
@@ -190,6 +180,31 @@ export function CallProvider({ children }: CallProviderProps) {
 
     return () => subscription.remove();
   }, [appState, callsEnabled]);
+
+  // Handle Android hardware back button during calls
+  useEffect(() => {
+    if (!callsEnabled || Platform.OS !== 'android') return;
+    
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If there's an incoming call showing, reject it
+      if (incomingCall && !answeringCall) {
+        console.log('[CallProvider] Back button pressed - rejecting incoming call');
+        rejectCallRef.current();
+        return true; // Prevent default back behavior
+      }
+      
+      // If in a call, minimize instead of ending
+      if (isCallInterfaceOpen && (answeringCall || outgoingCall)) {
+        console.log('[CallProvider] Back button pressed - minimizing call (call continues)');
+        setIsCallInterfaceOpen(false);
+        return true; // Prevent default back behavior
+      }
+      
+      return false; // Let default back behavior happen
+    });
+    
+    return () => backHandler.remove();
+  }, [callsEnabled, incomingCall, answeringCall, outgoingCall, isCallInterfaceOpen]);
   
   // Check for pending calls saved by HeadlessJS task OR background notification handler
   const checkPendingCall = useCallback(async () => {
@@ -228,72 +243,39 @@ export function CallProvider({ children }: CallProviderProps) {
   }, [currentUserId]);
   
   // Listen for CallKeep events (answer/end from native UI)
+  // NOTE: CallKeep event listeners removed - library broken with Expo SDK 54+
+  // Incoming calls now handled via push notifications + WhatsAppStyleIncomingCall UI
   useEffect(() => {
     if (!callsEnabled) return;
     
-    // Handle answer from native call UI (lock screen)
-    const handleAnswerCall = async (callUUID: string) => {
-      console.log('[CallProvider] CallKeep answer event:', callUUID);
-      
-      // Find the matching incoming call
-      if (incomingCall?.call_id === callUUID) {
-        console.log('[CallProvider] Answering call from native UI');
-        await answerCall();
-      } else {
-        // Try to find call in database
-        const { data: call } = await getSupabase()
-          .from('active_calls')
-          .select('*')
-          .eq('call_id', callUUID)
-          .single();
-        
-        if (call) {
-          console.log('[CallProvider] Found call in DB, answering:', call.call_id);
-          setIncomingCall(call);
-          // Small delay to let state update
-          setTimeout(async () => {
-            setAnsweringCall(call);
-            setIsCallInterfaceOpen(true);
-            setIncomingCall(null);
-            setCallState('connecting');
-            await callKeepManager.reportConnected(call.call_id);
-          }, 100);
-        }
-      }
-    };
-    
-    // Handle end from native call UI (lock screen)
-    const handleEndCall = async (callUUID: string) => {
-      console.log('[CallProvider] CallKeep end event:', callUUID);
-      
-      // End the call if it matches current incoming/answering call
-      if (incomingCall?.call_id === callUUID) {
-        await rejectCall();
-      } else if (answeringCall?.call_id === callUUID) {
-        await endCall();
-      }
-    };
-    
-    // Handle mute from native call UI
-    const handleMuteCall = (callUUID: string, muted: boolean) => {
-      console.log('[CallProvider] CallKeep mute event:', callUUID, muted);
-      // This will be handled by VoiceCallInterface
-    };
-    
-    // Subscribe to CallKeep events
-    callKeepManager.on('answerCall', handleAnswerCall);
-    callKeepManager.on('endCall', handleEndCall);
-    callKeepManager.on('muteCall', handleMuteCall);
-    
-    // Check for pending calls on mount
+    // Check for pending calls on mount (from background notification)
     checkPendingCall();
     
-    return () => {
-      callKeepManager.off('answerCall', handleAnswerCall);
-      callKeepManager.off('endCall', handleEndCall);
-      callKeepManager.off('muteCall', handleMuteCall);
-    };
-  }, [callsEnabled, incomingCall, answeringCall, answerCall, rejectCall, endCall, checkPendingCall]);
+    // No cleanup needed - CallKeep removed
+  }, [callsEnabled, checkPendingCall]);
+
+  // Refs for stable callback references in notification listeners
+  const incomingCallRef = React.useRef(incomingCall);
+  incomingCallRef.current = incomingCall;
+  
+  const answerCallRef = React.useRef(answerCall);
+  answerCallRef.current = answerCall;
+  
+  const rejectCallRef = React.useRef(rejectCall);
+  rejectCallRef.current = rejectCall;
+  
+  // Additional refs for notification received listener
+  const answeringCallRef = React.useRef(answeringCall);
+  answeringCallRef.current = answeringCall;
+  
+  const outgoingCallRef = React.useRef(outgoingCall);
+  outgoingCallRef.current = outgoingCall;
+  
+  const currentUserIdRef = React.useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
+  
+  const setIncomingCallRef = React.useRef(setIncomingCall);
+  setIncomingCallRef.current = setIncomingCall;
 
   // Listen for notification responses (Answer/Decline from notification drawer)
   useEffect(() => {
@@ -321,9 +303,9 @@ export function CallProvider({ children }: CallProviderProps) {
         // User tapped Answer or the notification itself
         console.log('[CallProvider] Answering call from notification:', callId);
         
-        // Check if we have this as the current incoming call
-        if (incomingCall?.call_id === callId) {
-          answerCall();
+        // Check if we have this as the current incoming call (using ref for latest value)
+        if (incomingCallRef.current?.call_id === callId) {
+          answerCallRef.current();
         } else {
           // Try to fetch call from DB and set it up
           const { data: call } = await getSupabase()
@@ -359,8 +341,8 @@ export function CallProvider({ children }: CallProviderProps) {
         // User tapped Decline
         console.log('[CallProvider] Declining call from notification:', callId);
         
-        if (incomingCall?.call_id === callId) {
-          rejectCall();
+        if (incomingCallRef.current?.call_id === callId) {
+          rejectCallRef.current();
         } else {
           // Update call status in DB
           await getSupabase()
@@ -372,11 +354,13 @@ export function CallProvider({ children }: CallProviderProps) {
     });
     
     return () => subscription.remove();
-  }, [callsEnabled, incomingCall, answerCall, rejectCall]);
+  }, [callsEnabled]); // Only depend on callsEnabled, use refs for other values
 
   // Listen for notifications RECEIVED (not just tapped) - handles background wake-up
   useEffect(() => {
     if (!callsEnabled) return;
+    
+    console.log('[CallProvider] Setting up notification RECEIVED listener');
     
     const subscription = Notifications.addNotificationReceivedListener(async (notification) => {
       const data = notification.request.content.data;
@@ -387,11 +371,13 @@ export function CallProvider({ children }: CallProviderProps) {
       console.log('[CallProvider] 📱 Notification received:', {
         callId: data.call_id,
         callerName: data.caller_name,
-        appState: appState,
+        hasIncomingCall: !!incomingCallRef.current,
+        hasAnsweringCall: !!answeringCallRef.current,
+        hasOutgoingCall: !!outgoingCallRef.current,
       });
       
-      // If we already have this call or are in a call, ignore
-      if (incomingCall?.call_id === data.call_id || answeringCall || outgoingCall) {
+      // If we already have this call or are in a call, ignore (using refs)
+      if (incomingCallRef.current?.call_id === data.call_id || answeringCallRef.current || outgoingCallRef.current) {
         console.log('[CallProvider] Ignoring notification - already handling call');
         return;
       }
@@ -402,7 +388,7 @@ export function CallProvider({ children }: CallProviderProps) {
         id: data.call_id as string,
         call_id: data.call_id as string,
         caller_id: data.caller_id as string,
-        callee_id: currentUserId || '',
+        callee_id: currentUserIdRef.current || '',
         caller_name: data.caller_name as string || 'Unknown',
         call_type: (data.call_type as 'voice' | 'video') || 'voice',
         status: 'ringing',
@@ -411,14 +397,17 @@ export function CallProvider({ children }: CallProviderProps) {
       };
       
       console.log('[CallProvider] Setting incoming call from notification:', activeCall.call_id);
-      setIncomingCall(activeCall);
+      setIncomingCallRef.current(activeCall);
       
       // Start vibration for incoming call
       Vibration.vibrate([0, 1000, 500, 1000, 500, 1000], true);
     });
     
-    return () => subscription.remove();
-  }, [callsEnabled, currentUserId, appState, incomingCall, answeringCall, outgoingCall]);
+    return () => {
+      console.log('[CallProvider] Removing notification RECEIVED listener');
+      subscription.remove();
+    };
+  }, [callsEnabled]); // Only depend on callsEnabled, use refs for other values
 
   // Listen for incoming calls via Supabase Realtime
   useEffect(() => {

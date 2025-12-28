@@ -180,12 +180,6 @@
           "microphonePermission": "EduDash Pro needs microphone access for voice and video calls"
         }
       ],
-      [
-        "@config-plugins/react-native-callkeep",
-        {
-          "appName": "EduDash Pro"
-        }
-      ],
       "./plugins/withAndroidManifestFix.js"
     ],
     "experiments": {

@@ -24,6 +24,14 @@ import { v4 as uuidv4 } from 'uuid';
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
 
+// InCallManager for audio routing
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+} catch (error) {
+  console.warn('[VideoCall] InCallManager not available:', error);
+}
+
 // Note: Daily.co React Native SDK is conditionally imported
 let Daily: any = null;
 let DailyMediaView: any = null;
@@ -156,6 +164,16 @@ export function VideoCallInterface({
 
   // Cleanup call resources
   const cleanupCall = useCallback(() => {
+    // Stop InCallManager
+    if (InCallManager) {
+      try {
+        InCallManager.stop();
+        console.log('[VideoCall] InCallManager stopped');
+      } catch (err) {
+        console.warn('[VideoCall] InCallManager cleanup error:', err);
+      }
+    }
+    
     if (dailyRef.current) {
       try {
         dailyRef.current.leave();
@@ -167,15 +185,60 @@ export function VideoCallInterface({
     }
   }, []);
 
+  // InCallManager: Start audio routing for video calls
+  // NOTE: We use media: 'audio' even for video calls because:
+  // - media: 'video' defaults to speaker which we don't want
+  // - media: 'audio' defaults to earpiece (WhatsApp-like behavior)
+  // - Video display is handled by Daily.co, InCallManager only handles audio routing
+  useEffect(() => {
+    if (!InCallManager) return;
+    if (!isOpen) return;
+
+    if (callState === 'connecting' || callState === 'ringing') {
+      try {
+        // Use 'audio' media type to default to earpiece
+        InCallManager.start({ 
+          media: 'audio', // NOT 'video' - this defaults to earpiece
+          auto: false,
+          ringback: '' // No ringback for video calls
+        });
+        InCallManager.setForceSpeakerphoneOn(false);
+        InCallManager.setKeepScreenOn(true);
+        console.log('[VideoCall] Started InCallManager for video call (earpiece)');
+      } catch (err) {
+        console.warn('[VideoCall] Failed to start InCallManager:', err);
+      }
+    }
+
+    return () => {
+      // Cleanup on unmount or when call ends
+      if (callState === 'ended' || callState === 'failed') {
+        try {
+          InCallManager.stop();
+        } catch (err) {
+          // Ignore cleanup errors
+        }
+      }
+    };
+  }, [callState, isOpen]);
+
   // Update participants state
   const updateParticipants = useCallback(() => {
     if (!dailyRef.current) return;
 
     const participants = dailyRef.current.participants();
     const local = participants.local;
-    const remote = Object.values(participants).filter(
-      (p: any) => !p.local
-    ) as DailyParticipant[];
+    
+    // Filter correctly - exclude 'local' key AND participants where local===true
+    const remote = Object.entries(participants)
+      .filter(([key, p]: [string, any]) => key !== 'local' && !p.local)
+      .map(([_, p]) => p) as DailyParticipant[];
+    
+    console.log('[VideoCall] Participants updated:', {
+      localSessionId: local?.session_id,
+      remoteCount: remote.length,
+      remoteSessionIds: remote.map((p: any) => p.session_id),
+    });
 
     setLocalParticipant(local);
     setRemoteParticipants(remote);
@@ -377,10 +440,13 @@ export function VideoCallInterface({
           setCallState('failed');
         });
 
-        // Join the call (no token needed for rooms created with enable_knocking: false)
+        // Join the call with explicit options
         console.log('[VideoCall] Joining room:', roomUrl);
         await daily.join({
           url: roomUrl,
+          subscribeToTracksAutomatically: true,
+          audioSource: true,
+          videoSource: true,
         });
       } catch (err) {
         console.error('[VideoCall] Init error:', err);
@@ -448,7 +514,10 @@ export function VideoCallInterface({
 
   if (!isOpen) return null;
 
-  const mainParticipant = remoteParticipants[0] || localParticipant;
+  // Show remote participant if available, otherwise show local
+  // Don't fallback to local if remote exists but has no video
+  const hasRemoteParticipant = remoteParticipants.length > 0;
+  const mainParticipant = hasRemoteParticipant ? remoteParticipants[0] : localParticipant;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -457,7 +526,7 @@ export function VideoCallInterface({
         {mainParticipant && DailyMediaView ? (
           <DailyMediaView
             videoTrack={mainParticipant.tracks?.video?.state === 'playable' ? (mainParticipant.tracks?.video?.persistentTrack || mainParticipant.tracks?.video?.track || null) : null}
-            audioTrack={null}
+            audioTrack={mainParticipant.tracks?.audio?.persistentTrack || mainParticipant.tracks?.audio?.track || null}
             style={styles.mainVideo}
             objectFit="cover"
           />

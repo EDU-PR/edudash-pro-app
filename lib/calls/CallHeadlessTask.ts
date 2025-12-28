@@ -18,13 +18,9 @@ import { AppRegistry, Platform, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
-// Conditionally import CallKeep
-let RNCallKeep: any = null;
-try {
-  RNCallKeep = require('react-native-callkeep').default;
-} catch (error) {
-  console.warn('[CallHeadlessTask] react-native-callkeep not available');
-}
+// CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
+// See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
+// Incoming calls now handled via push notifications + WhatsAppStyleIncomingCall UI
 
 // Conditionally import Firebase Messaging
 let messaging: any = null;
@@ -96,47 +92,14 @@ export async function getPendingCall(): Promise<IncomingCallData | null> {
 
 /**
  * Setup CallKeep for headless operation
+ * NOTE: CallKeep removed - broken with Expo SDK 54+
+ * This function is kept as a stub for backward compatibility
  */
 async function setupCallKeepHeadless(): Promise<boolean> {
-  if (!RNCallKeep) {
-    console.warn('[CallHeadlessTask] CallKeep not available');
-    return false;
-  }
-  
-  try {
-    await RNCallKeep.setup({
-      ios: {
-        appName: 'EduDash Pro',
-        imageName: 'AppIcon',
-        // Use empty string to use device's default ringtone
-        // Or omit ringtoneSound entirely for system default
-        supportsVideo: true,
-        maximumCallGroups: '1',
-        maximumCallsPerCallGroup: '1',
-      },
-      android: {
-        alertTitle: 'Permissions Required',
-        alertDescription: 'This application needs access to your phone accounts to make calls.',
-        cancelButton: 'Cancel',
-        okButton: 'OK',
-        imageName: 'ic_launcher',
-        additionalPermissions: [],
-        selfManaged: true,
-        foregroundService: {
-          channelId: 'com.edudashpro.app.calls',
-          channelName: 'Voice & Video Calls',
-          notificationTitle: 'EduDash Call in progress',
-          notificationIcon: 'ic_launcher',
-        },
-      },
-    });
-    
-    console.log('[CallHeadlessTask] CallKeep setup complete');
-    return true;
-  } catch (error) {
-    console.error('[CallHeadlessTask] CallKeep setup failed:', error);
-    return false;
-  }
+  // CallKeep has been removed due to Expo SDK 54+ compatibility issues
+  // Incoming calls are now handled via push notifications + WhatsAppStyleIncomingCall UI
+  console.log('[CallHeadlessTask] CallKeep disabled - using notifications only');
+  return false;
 }
 
 /**
@@ -305,31 +268,12 @@ async function CallHeadlessTask(remoteMessage: any): Promise<void> {
   // Save call data for when the app opens
   await savePendingCall(callData);
   
-  // ALWAYS show notification first - this works reliably in background
-  // This ensures user sees the call even if CallKeep fails
+  // Show notification - this is the primary way to handle incoming calls now
+  // CallKeep has been removed due to Expo SDK 54+ compatibility issues
   await showIncomingCallNotification(callData);
   
-  // Also try CallKeep for native call UI (lock screen experience)
-  // CallKeep provides better UX but isn't always reliable
-  const setupSuccess = await setupCallKeepHeadless();
-  
-  if (setupSuccess && RNCallKeep) {
-    try {
-      await RNCallKeep.displayIncomingCall(
-        callData.call_id,
-        callData.caller_name,
-        callData.caller_name,
-        'generic',
-        callData.call_type === 'video'
-      );
-      
-      console.log('[CallHeadlessTask] Incoming call also displayed via CallKeep');
-    } catch (error) {
-      console.error('[CallHeadlessTask] CallKeep display failed (notification fallback active):', error);
-    }
-  } else {
-    console.log('[CallHeadlessTask] CallKeep not available, using notification only');
-  }
+  // Log that CallKeep is disabled
+  console.log('[CallHeadlessTask] Call notification shown (CallKeep disabled)');
 }
 
 /**

@@ -8,56 +8,29 @@
  * - Call signaling via Supabase
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { AudioModule } from 'expo-audio';
 import { assertSupabase } from '@/lib/supabase';
-import { callKeepManager } from '@/lib/calls/callkeep-manager';
+import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
+// CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
+// See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
 import type { CallState } from '../types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
-// CRITICAL: Ensure Promise.any is available for Daily.co SDK
-// This must run before Daily.co is imported
-if (typeof Promise.any !== 'function') {
-  (Promise as any).any = function promiseAny<T>(iterable: Iterable<T | PromiseLike<T>>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const promises = Array.from(iterable);
-      if (promises.length === 0) {
-        reject(new AggregateError([], 'All promises were rejected'));
-        return;
-      }
-      const errors: unknown[] = new Array(promises.length);
-      let rejectionCount = 0;
-      let resolved = false;
-      promises.forEach((promise, index) => {
-        Promise.resolve(promise).then(
-          (value) => {
-            if (!resolved) {
-              resolved = true;
-              resolve(value as T);
-            }
-          },
-          (reason) => {
-            if (!resolved) {
-              errors[index] = reason;
-              rejectionCount++;
-              if (rejectionCount === promises.length) {
-                reject(new AggregateError(errors, 'All promises were rejected'));
-              }
-            }
-          }
-        );
-      });
-    });
-  };
-  console.log('[VoiceCallDaily] Promise.any polyfill installed');
+// InCallManager for audio routing
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+} catch (error) {
+  console.warn('[VoiceCallDaily] InCallManager not available:', error);
 }
 
-// Also ensure global has it (for bundled code)
-if (typeof global !== 'undefined' && typeof (global as any).Promise?.any !== 'function') {
-  (global as any).Promise.any = (Promise as any).any;
-}
+// NOTE: Promise.any polyfill is loaded via Metro's getModulesRunBeforeMainModule
+// in metro.config.js, which ensures it runs BEFORE any module initialization.
+// This ensures Daily.co SDK gets the polyfilled Promise at module load time.
 
 // Lazy Supabase getter
 const getSupabase = () => assertSupabase();
@@ -116,8 +89,11 @@ export function useVoiceCallDaily({
   onClose,
 }: VoiceCallDailyOptions): VoiceCallDailyReturn {
   
+  // Audio mode session ref for cleanup
+  const audioSessionRef = useRef<AudioModeSession | null>(null);
+  
   // Cleanup call resources
-  const cleanupCall = useCallback(() => {
+  const cleanupCall = useCallback(async () => {
     console.log('[VoiceCallDaily] Cleaning up call resources');
     
     if (dailyRef.current) {
@@ -129,6 +105,17 @@ export function useVoiceCallDaily({
         console.warn('[VoiceCallDaily] Cleanup error:', err);
       }
       dailyRef.current = null;
+    }
+    
+    // Release audio mode session
+    if (audioSessionRef.current) {
+      try {
+        await audioSessionRef.current.release();
+        console.log('[VoiceCallDaily] Audio session released');
+        audioSessionRef.current = null;
+      } catch (err) {
+        console.warn('[VoiceCallDaily] Audio session release error:', err);
+      }
     }
     
     stopAudio();
@@ -324,11 +311,8 @@ export function useVoiceCallDaily({
               console.warn('[VoiceCallDaily] Failed to send push notification:', err);
             });
 
-            // OPTIMIZATION: Defer CallKeep registration (non-blocking)
-            callKeepManager.startCall(newCallId, userName || 'Unknown', false)
-              .catch((err) => {
-                console.warn('[VoiceCallDaily] Failed to start CallKeep call:', err);
-              });
+            // NOTE: CallKeep removed - library broken with Expo SDK 54+ (duplicate method exports)
+            // Incoming calls now rely on push notifications + WhatsAppStyleIncomingCall UI
 
             // Send signal
             await getSupabase().from('call_signals').insert({
@@ -425,9 +409,8 @@ export function useVoiceCallDaily({
           console.log('[VoiceCallDaily] Remote participant joined - connected');
           setCallState('connected');
 
-          if (callIdRef.current) {
-            callKeepManager.reportConnected(callIdRef.current).catch(() => {});
-          }
+          // NOTE: CallKeep removed - library broken with Expo SDK 54+
+          // Call connected state handled via setCallState above
 
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
         });
@@ -601,6 +584,44 @@ export function useVoiceCallDaily({
         // We pass subscribeToTracksAutomatically: true in the join options instead
         console.log('[VoiceCallDaily] Preparing to join with auto-subscribe enabled...');
 
+        // CRITICAL: Request streaming audio mode from AudioModeCoordinator
+        // This ensures WebRTC can properly capture and play audio, and coordinates
+        // with other audio consumers (TTS, notifications) to prevent conflicts
+        try {
+          console.log('[VoiceCallDaily] Requesting streaming audio mode from coordinator...');
+          audioSessionRef.current = await AudioModeCoordinator.requestAudioMode('streaming');
+          console.log('[VoiceCallDaily] ✅ Audio session acquired:', audioSessionRef.current.id);
+          
+          // CRITICAL: Re-enforce earpiece AFTER AudioModeCoordinator applies settings
+          // Wait a bit for audio routing to stabilize, then ensure InCallManager takes precedence
+          setTimeout(() => {
+            if (InCallManager) {
+              try {
+                InCallManager.setForceSpeakerphoneOn(false);
+                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator');
+              } catch (err) {
+                console.warn('[VoiceCallDaily] Failed to re-enforce earpiece:', err);
+              }
+            }
+          }, 200);
+        } catch (audioModeError) {
+          console.warn('[VoiceCallDaily] ⚠️ Failed to acquire audio mode (non-fatal):', audioModeError);
+          // Fallback: try direct AudioModule call
+          try {
+            await AudioModule.setAudioModeAsync({
+              allowsRecording: true,
+              playsInSilentMode: true,
+              shouldPlayInBackground: true,
+              shouldRouteThroughEarpiece: true,
+              interruptionMode: 'doNotMix',
+              interruptionModeAndroid: 'doNotMix',
+            });
+            console.log('[VoiceCallDaily] ✅ Audio session activated via fallback');
+          } catch (fallbackError) {
+            console.warn('[VoiceCallDaily] ⚠️ Fallback audio mode also failed:', fallbackError);
+          }
+        }
+
         // Join the call with explicit audio settings
         console.log('[VoiceCallDaily] Joining room:', roomUrl);
         await daily.join({ 
@@ -613,7 +634,21 @@ export function useVoiceCallDaily({
 
         // Note: InCallManager is now managed by useVoiceCallAudio hook
         // to prevent duplicate initialization and ringtone changes
+        // The useVoiceCallAudio hook handles earpiece enforcement when call connects
         console.log('[VoiceCallDaily] Joined successfully, audio managed by useVoiceCallAudio');
+        
+        // CRITICAL: Final earpiece enforcement after Daily.co join
+        // This ensures InCallManager settings take precedence over any audio mode changes
+        setTimeout(() => {
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallDaily] ✅ Final earpiece enforcement after join');
+            } catch (err) {
+              console.warn('[VoiceCallDaily] Failed final earpiece enforcement:', err);
+            }
+          }
+        }, 300);
 
         // Enable microphone with robust retry logic
         let micEnabled = false;

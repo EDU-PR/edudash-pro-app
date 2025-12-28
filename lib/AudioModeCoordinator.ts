@@ -74,7 +74,7 @@ export class AudioModeCoordinator {
       interruptionMode: 'doNotMix', // Don't mix during streaming
       interruptionModeAndroid: 'doNotMix',
       shouldPlayInBackground: true,
-      shouldRouteThroughEarpiece: false,
+      shouldRouteThroughEarpiece: true, // Default to earpiece for calls (WhatsApp-like)
     },
     tts: {
       allowsRecording: true, // Keep recording enabled for quick transitions
@@ -96,7 +96,7 @@ export class AudioModeCoordinator {
       playsInSilentMode: true,
       interruptionMode: 'duckOthers',
       interruptionModeAndroid: 'duckOthers',
-      shouldRouteThroughEarpiece: false,
+      shouldRouteThroughEarpiece: false, // Speaker for non-call audio (TTS, notifications)
     },
   };
 

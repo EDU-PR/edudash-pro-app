@@ -27,9 +27,8 @@ config.serializer = {
   getModulesRunBeforeMainModule: () => [
     // React Native's polyfills (required)
     require.resolve('react-native/Libraries/Core/InitializeCore'),
-    // Official promise.any polyfill from npm
-    require.resolve('promise.any/auto'),
-    // Our backup Promise.any polyfill MUST run after InitializeCore but before app code
+    // Our Promise.any polyfill MUST run after InitializeCore but before app code
+    // This patches ALL Promise references including Hermes native Promise
     require.resolve('./polyfills/promise-shim.js'),
   ],
 };

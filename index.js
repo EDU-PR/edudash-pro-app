@@ -7,7 +7,7 @@
 
 // CRITICAL: Install Promise.any polyfill FIRST (before any other imports)
 // This must be imported before any library that uses Promise.any (like Daily.co)
-import 'promise.any/auto';
+import './polyfills/promise';
 
 // Load React polyfills before expo-router
 import './polyfills/react-use';

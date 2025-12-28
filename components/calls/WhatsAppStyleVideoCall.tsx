@@ -28,50 +28,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { assertSupabase } from '@/lib/supabase';
+import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
-// CRITICAL: Ensure Promise.any is available for Daily.co SDK
-if (typeof Promise.any !== 'function') {
-  (Promise as any).any = function promiseAny<T>(iterable: Iterable<T | PromiseLike<T>>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const promises = Array.from(iterable);
-      if (promises.length === 0) {
-        reject(new AggregateError([], 'All promises were rejected'));
-        return;
-      }
-      const errors: unknown[] = new Array(promises.length);
-      let rejectionCount = 0;
-      let resolved = false;
-      promises.forEach((promise, index) => {
-        Promise.resolve(promise).then(
-          (value) => {
-            if (!resolved) {
-              resolved = true;
-              resolve(value as T);
-            }
-          },
-          (reason) => {
-            if (!resolved) {
-              errors[index] = reason;
-              rejectionCount++;
-              if (rejectionCount === promises.length) {
-                reject(new AggregateError(errors, 'All promises were rejected'));
-              }
-            }
-          }
-        );
-      });
-    });
-  };
-  console.log('[VideoCall] Promise.any polyfill installed');
-}
-
-// Also ensure global has it
-if (typeof global !== 'undefined' && typeof (global as any).Promise?.any !== 'function') {
-  (global as any).Promise.any = (Promise as any).any;
-}
+// NOTE: Promise.any polyfill is loaded via Metro's getModulesRunBeforeMainModule
+// in metro.config.js, which ensures it runs BEFORE any module initialization.
+// No need for inline polyfill here.
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -153,6 +117,7 @@ export function WhatsAppStyleVideoCall({
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioSessionRef = useRef<AudioModeSession | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const controlsAnim = useRef(new Animated.Value(1)).current;
   
@@ -323,7 +288,18 @@ export function WhatsAppStyleVideoCall({
   }, [callState, onClose]);
 
   // Cleanup call resources
-  const cleanupCall = useCallback(() => {
+  const cleanupCall = useCallback(async () => {
+    // Release audio mode session
+    if (audioSessionRef.current) {
+      try {
+        await audioSessionRef.current.release();
+        console.log('[VideoCall] Audio session released');
+        audioSessionRef.current = null;
+      } catch (err) {
+        console.warn('[VideoCall] Audio session release error:', err);
+      }
+    }
+    
     // Stop InCallManager
     if (InCallManager) {
       try {
@@ -394,6 +370,23 @@ export function WhatsAppStyleVideoCall({
     const remote = Object.values(participants).filter(
       (p: any) => !p.local
     ) as DailyParticipant[];
+
+    // DEBUG: Log participant details
+    console.log('[VideoCall] updateParticipants:', {
+      totalParticipants: Object.keys(participants).length,
+      participantKeys: Object.keys(participants),
+      localSessionId: local?.session_id,
+      localVideoState: local?.tracks?.video?.state,
+      remoteCount: remote.length,
+      remoteParticipants: remote.map((p: any) => ({
+        sessionId: p.session_id,
+        local: p.local,
+        videoState: p.tracks?.video?.state,
+        audioState: p.tracks?.audio?.state,
+        hasVideoTrack: !!p.tracks?.video?.track,
+        hasPersistentTrack: !!p.tracks?.video?.persistentTrack,
+      })),
+    });
 
     setLocalParticipant(local);
     setRemoteParticipants(remote);
@@ -633,6 +626,22 @@ export function WhatsAppStyleVideoCall({
         daily.on('joined-meeting', async () => {
           console.log('[VideoCall] Joined meeting');
           
+          // CRITICAL: Subscribe to all tracks automatically (required for receiving remote video/audio)
+          try {
+            await daily.setSubscribeToTracksAutomatically(true);
+            console.log('[VideoCall] ✅ Set auto-subscribe to tracks');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to set auto-subscribe:', err);
+          }
+          
+          // CRITICAL: Explicitly enable receiving video and audio from all participants
+          try {
+            await daily.updateReceiveSettings({ '*': { video: true, audio: true } });
+            console.log('[VideoCall] ✅ Updated receive settings for video and audio');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to update receive settings:', err);
+          }
+          
           // Explicitly enable camera and microphone after joining
           try {
             await daily.setLocalVideo(true);
@@ -686,12 +695,29 @@ export function WhatsAppStyleVideoCall({
           updateParticipants();
         });
         
-        daily.on('track-started', (event: any) => {
+        daily.on('track-started', async (event: any) => {
+          const { participant, track } = event || {};
+          
           console.log('[VideoCall] Track started:', {
-            participant: event?.participant?.session_id,
-            track: event?.track?.kind,
+            participant: participant?.session_id,
+            track: track?.kind,
+            isLocal: participant?.local,
           });
+          
           updateParticipants();
+          
+          // For remote participants, ensure we're subscribed to their tracks
+          if (!participant?.local && track?.kind) {
+            try {
+              // Verify receive settings are correct
+              await daily.updateReceiveSettings({
+                [participant.session_id]: { video: true, audio: true },
+              });
+              console.log('[VideoCall] ✅ Updated receive settings for remote participant:', participant.session_id);
+            } catch (err) {
+              console.warn('[VideoCall] Failed to update receive settings for participant:', err);
+            }
+          }
         });
         
         daily.on('track-stopped', (event: any) => {
@@ -713,7 +739,49 @@ export function WhatsAppStyleVideoCall({
           setIsVideoEnabled(false);
         });
 
-        await daily.join({ url: roomUrl });
+        // CRITICAL: Request streaming audio mode from AudioModeCoordinator
+        // This ensures WebRTC can properly capture and play audio, and coordinates
+        // with other audio consumers (TTS, notifications) to prevent conflicts
+        try {
+          console.log('[VideoCall] Requesting streaming audio mode from coordinator...');
+          audioSessionRef.current = await AudioModeCoordinator.requestAudioMode('streaming');
+          console.log('[VideoCall] ✅ Audio session acquired:', audioSessionRef.current.id);
+          
+          // CRITICAL: Re-enforce earpiece AFTER AudioModeCoordinator applies settings
+          // Wait a bit for audio routing to stabilize, then ensure InCallManager takes precedence
+          setTimeout(() => {
+            if (InCallManager) {
+              try {
+                InCallManager.setForceSpeakerphoneOn(false);
+                console.log('[VideoCall] ✅ Re-enforced earpiece after AudioModeCoordinator');
+              } catch (err) {
+                console.warn('[VideoCall] Failed to re-enforce earpiece:', err);
+              }
+            }
+          }, 200);
+        } catch (audioModeError) {
+          console.warn('[VideoCall] ⚠️ Failed to acquire audio mode (non-fatal):', audioModeError);
+        }
+
+        await daily.join({ 
+          url: roomUrl,
+          subscribeToTracksAutomatically: true,
+          audioSource: true,
+          videoSource: true,
+        });
+        
+        // CRITICAL: Final earpiece enforcement after Daily.co join
+        // This ensures InCallManager settings take precedence over any audio mode changes
+        setTimeout(() => {
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VideoCall] ✅ Final earpiece enforcement after join');
+            } catch (err) {
+              console.warn('[VideoCall] Failed final earpiece enforcement:', err);
+            }
+          }
+        }, 300);
       } catch (err) {
         console.error('[VideoCall] Init error:', err);
         setError(err instanceof Error ? err.message : 'Failed to start call');
@@ -779,9 +847,17 @@ export function WhatsAppStyleVideoCall({
 
   // Toggle speaker
   const toggleSpeaker = useCallback(async () => {
-    // Note: This would require native module integration
-    setIsSpeakerOn(!isSpeakerOn);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const newState = !isSpeakerOn;
+    try {
+      if (InCallManager) {
+        InCallManager.setForceSpeakerphoneOn(newState);
+        console.log('[VideoCall] Speaker toggled to:', newState ? 'speaker' : 'earpiece');
+      }
+      setIsSpeakerOn(newState);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (err) {
+      console.error('[VideoCall] Toggle speaker error:', err);
+    }
   }, [isSpeakerOn]);
 
   // End call
@@ -812,6 +888,23 @@ export function WhatsAppStyleVideoCall({
   const mainParticipant = remoteParticipants[0] || localParticipant;
   const hasRemoteVideo = remoteParticipants[0]?.tracks?.video?.state === 'playable';
   const hasLocalVideo = localParticipant?.tracks?.video?.state === 'playable' && isVideoEnabled;
+  // CRITICAL: Only show local video in main view if there are NO remote participants
+  // If remote participant exists but video is off, show "Camera off" - NOT local video
+  const hasRemoteParticipant = remoteParticipants.length > 0;
+  const showLocalInMainView = !hasRemoteParticipant && hasLocalVideo;
+
+  // DEBUG: Log video rendering decision
+  console.log('[VideoCall] Render decision:', {
+    hasRemoteVideo,
+    hasLocalVideo,
+    hasRemoteParticipant,
+    showLocalInMainView,
+    remoteParticipantsCount: remoteParticipants.length,
+    remoteVideoState: remoteParticipants[0]?.tracks?.video?.state,
+    localVideoState: localParticipant?.tracks?.video?.state,
+    showingRemote: hasRemoteVideo && DailyMediaView,
+    showingLocalMain: showLocalInMainView && DailyMediaView,
+  });
 
   // Minimized view (Picture-in-Picture)
   if (isMinimized) {
@@ -832,7 +925,7 @@ export function WhatsAppStyleVideoCall({
           {hasRemoteVideo && DailyMediaView ? (
             <DailyMediaView
               videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
-              audioTrack={null}
+              audioTrack={remoteParticipants[0]?.tracks?.audio?.persistentTrack || remoteParticipants[0]?.tracks?.audio?.track || null}
               style={styles.minimizedVideo}
               objectFit="cover"
             />
@@ -864,7 +957,7 @@ export function WhatsAppStyleVideoCall({
         onPress={handleScreenTap}
         style={styles.mainVideoContainer}
       >
-        {/* Main Video View */}
+        {/* Main Video View - Show remote participant if available, otherwise local only if NO remote exists */}
         {hasRemoteVideo && DailyMediaView ? (
           <DailyMediaView
             videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
@@ -872,7 +965,7 @@ export function WhatsAppStyleVideoCall({
             style={styles.mainVideo}
             objectFit="cover"
           />
-        ) : hasLocalVideo && DailyMediaView ? (
+        ) : showLocalInMainView && DailyMediaView ? (
           <DailyMediaView
             videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
             audioTrack={null}
