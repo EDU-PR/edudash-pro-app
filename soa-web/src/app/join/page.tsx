@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
 import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import { getSupabase } from '@/lib/supabase';
+import { generateDeepLink, getPlatformDownloadUrl, isMobileDevice } from '@/lib/deepLinks';
 import {
   Leaf,
   Ticket,
@@ -24,6 +25,7 @@ import {
   X,
   Building2,
   Heart,
+  Smartphone,
 } from 'lucide-react';
 
 // Organization info returned from database
@@ -218,24 +220,28 @@ export default function JoinPage() {
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
       // 3. Create membership record with proper UUIDs
-      const { error: memberError } = await supabase.from('organization_members').insert({
-        user_id: authData.user?.id,
-        organization_id: orgInfo?.organization_id,
-        region_id: orgInfo?.region_id,
-        member_number: generatedMemberNumber,
-        member_type: formData.member_type,
-        membership_tier: 'standard',
-        membership_status: 'pending',
-        seat_status: 'active',
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email.toLowerCase(),
-        phone: formData.phone,
-        join_date: new Date().toISOString().split('T')[0],
-        notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
-      });
+      const { data: newMember, error: memberError } = await supabase
+        .from('organization_members')
+        .insert({
+          user_id: authData.user?.id,
+          organization_id: orgInfo?.organization_id,
+          region_id: orgInfo?.region_id,
+          member_number: generatedMemberNumber,
+          member_type: formData.member_type,
+          membership_tier: 'standard',
+          membership_status: 'pending',
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          email: formData.email.toLowerCase(),
+          phone: formData.phone,
+          joined_date: new Date().toISOString().split('T')[0],
+          notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
+        })
+        .select('id')
+        .single();
 
       if (memberError) throw memberError;
+      if (!newMember?.id) throw new Error('Failed to create membership record');
 
       // 4. Increment the usage count on the invite code
       await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
@@ -309,17 +315,43 @@ export default function JoinPage() {
                 </ul>
               </div>
 
-              {/* Download App CTA */}
+              {/* Open App / Download CTA */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a
-                  href={process.env.NEXT_PUBLIC_PLAY_STORE_URL || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
-                >
-                  <Download className="w-5 h-5" />
-                  Get the App
-                </a>
+                {isMobileDevice() ? (
+                  <>
+                    <a
+                      href={generateDeepLink({
+                        flow: 'join',
+                        email: formData.email.toLowerCase(),
+                        memberNumber: memberNumber,
+                        organizationId: orgInfo?.organization_id,
+                      })}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-soa-primary text-white rounded-xl font-medium hover:bg-soa-dark transition"
+                    >
+                      <Smartphone className="w-5 h-5" />
+                      Open in App
+                    </a>
+                    <a
+                      href={getPlatformDownloadUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download App
+                    </a>
+                  </>
+                ) : (
+                  <a
+                    href={getPlatformDownloadUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                  >
+                    <Download className="w-5 h-5" />
+                    Download the App
+                  </a>
+                )}
                 <Link
                   href="/"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 text-gray-700 border border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition"

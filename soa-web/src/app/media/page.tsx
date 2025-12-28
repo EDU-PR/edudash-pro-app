@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
-import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
+import { FadeIn, SlideIn, ScaleIn, StaggerChildren, HoverCard, ScrollReveal, MagneticCard, InteractiveButton } from '@/components/animations';
+import { YouTubeVideo, formatDuration } from '@/lib/youtube';
+import { VideoModal } from '@/components/VideoModal';
 import {
   Play,
   Image as ImageIcon,
@@ -22,6 +24,7 @@ import {
   Facebook,
   Twitter,
   Music2,
+  AlertCircle,
 } from 'lucide-react';
 
 // Platform types
@@ -46,8 +49,8 @@ interface MediaItem {
   };
 }
 
-// Sample media content - In production, this would come from social media APIs
-const mediaItems: MediaItem[] = [
+// Legacy media items (fallback)
+const legacyMediaItems: MediaItem[] = [
   {
     id: '1',
     platform: 'twitter',
@@ -130,8 +133,88 @@ const platforms = [
 export default function MediaPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>('all');
   const [selectedType, setSelectedType] = useState<MediaType>('all');
+  const [youtubeVideos, setYoutubeVideos] = useState<YouTubeVideo[]>([]);
+  const [socialMediaPosts, setSocialMediaPosts] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<MediaItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const filteredMedia = mediaItems.filter((item) => {
+  // Fetch YouTube videos and social media content on mount
+  useEffect(() => {
+    async function loadContent() {
+      try {
+        setLoading(true);
+        
+        // Fetch YouTube videos (increased to 30) and social media in parallel
+        const [youtubeResponse, socialResponse] = await Promise.allSettled([
+          fetch('/api/youtube?maxResults=30&order=date'),
+          fetch('/api/social-media?maxResults=20'),
+        ]);
+
+        // Process YouTube videos
+        if (youtubeResponse.status === 'fulfilled' && youtubeResponse.value.ok) {
+          const videos = await youtubeResponse.value.json();
+          setYoutubeVideos(videos);
+        } else {
+          setYoutubeVideos([]);
+        }
+
+        // Process social media posts
+        if (socialResponse.status === 'fulfilled' && socialResponse.value.ok) {
+          const posts = await socialResponse.value.json();
+          // Convert to MediaItem format
+          const socialItems: MediaItem[] = posts.map((post: any) => ({
+            id: post.id,
+            platform: post.platform,
+            type: post.type,
+            title: post.title,
+            description: post.description,
+            thumbnail: post.thumbnail,
+            url: post.url,
+            embedUrl: post.embedUrl,
+            date: post.date,
+            stats: post.stats,
+          }));
+          setSocialMediaPosts(socialItems);
+        } else {
+          setSocialMediaPosts([]);
+        }
+      } catch (err: any) {
+        console.error('Error loading media content:', err);
+        setError(err.message);
+        setYoutubeVideos([]);
+        setSocialMediaPosts([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadContent();
+  }, []);
+
+  // Convert YouTube videos to MediaItem format
+  const youtubeMediaItems: MediaItem[] = youtubeVideos.map((video) => ({
+    id: video.id,
+    platform: 'youtube' as Platform,
+    type: 'video' as MediaType,
+    title: video.title,
+    description: video.description.substring(0, 150) + (video.description.length > 150 ? '...' : ''),
+    thumbnail: video.thumbnail,
+    url: video.url,
+    embedUrl: video.embedUrl,
+    date: new Date(video.publishedAt).toISOString().split('T')[0],
+    stats: {
+      views: video.viewCount,
+      likes: video.likeCount,
+      comments: video.commentCount,
+    },
+  }));
+
+  // Combine YouTube videos, social media posts, and legacy items
+  // Priority: YouTube videos first, then social media, then legacy
+  const allMediaItems = [...youtubeMediaItems, ...socialMediaPosts, ...legacyMediaItems];
+
+  const filteredMedia = allMediaItems.filter((item) => {
     const platformMatch = selectedPlatform === 'all' || item.platform === selectedPlatform;
     const typeMatch = selectedType === 'all' || item.type === selectedType;
     return platformMatch && typeMatch;
@@ -177,19 +260,18 @@ export default function MediaPage() {
           {/* Social Platform Links */}
           <StaggerChildren className="flex flex-wrap justify-center gap-4 mt-8" staggerDelay={0.1}>
             {platforms.slice(1).map((platform) => (
-              <motion.a
-                key={platform.id}
-                href={platform.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center gap-2 px-5 py-3 ${platform.color} text-white rounded-xl font-medium hover:opacity-90 transition shadow-lg`}
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <platform.icon className="w-5 h-5" />
-                {platform.name}
-                <ExternalLink className="w-4 h-4 opacity-60" />
-              </motion.a>
+              <HoverCard key={platform.id} scale={1.1} glow glowColor="rgba(255, 255, 255, 0.2)">
+                <a
+                  href={platform.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-2 px-5 py-3 ${platform.color} text-white rounded-xl font-medium transition shadow-lg`}
+                >
+                  <platform.icon className="w-5 h-5" />
+                  {platform.name}
+                  <ExternalLink className="w-4 h-4 opacity-60" />
+                </a>
+              </HoverCard>
             ))}
           </StaggerChildren>
         </div>
@@ -246,7 +328,28 @@ export default function MediaPage() {
       {/* Media Grid */}
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {filteredMedia.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-20">
+              <motion.div
+                className="w-20 h-20 bg-soa-primary/10 rounded-full flex items-center justify-center mx-auto mb-4"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              >
+                <Video className="w-10 h-10 text-soa-primary" />
+              </motion.div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Loading videos...</h3>
+              <p className="text-gray-500">Fetching latest content from YouTube</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-10 h-10 text-red-500" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Unable to load videos</h3>
+              <p className="text-gray-500">{error}</p>
+              <p className="text-sm text-gray-400 mt-2">Using fallback content</p>
+            </div>
+          ) : filteredMedia.length === 0 ? (
             <div className="text-center py-20">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Video className="w-10 h-10 text-gray-400" />
@@ -260,86 +363,149 @@ export default function MediaPage() {
                 const PlatformIcon = getPlatformIcon(item.platform);
                 
                 return (
-                  <motion.a
-                    key={item.id}
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition group"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.1 }}
-                    whileHover={{ y: -5 }}
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video bg-gray-100">
-                      {item.thumbnail ? (
-                        <div className="w-full h-full bg-gradient-to-br from-soa-primary/20 to-soa-secondary/20 flex items-center justify-center">
-                          {item.type === 'video' && (
-                            <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-hover:scale-110 transition">
-                              <Play className="w-8 h-8 text-soa-primary ml-1" />
+                  <ScrollReveal key={item.id} direction="up" delay={index * 0.1}>
+                    <MagneticCard>
+                      <HoverCard scale={1.03} glow glowColor="rgba(217, 119, 6, 0.2)">
+                        <div
+                          className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition group cursor-pointer"
+                          onClick={() => {
+                            if (item.type === 'video') {
+                              setSelectedVideo(item);
+                              setIsModalOpen(true);
+                            } else {
+                              window.open(item.url, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          {/* Thumbnail */}
+                          <div 
+                            className="relative aspect-video bg-gray-100 overflow-hidden cursor-pointer"
+                            onClick={() => {
+                              if (item.type === 'video') {
+                                setSelectedVideo(item);
+                                setIsModalOpen(true);
+                              } else {
+                                window.open(item.url, '_blank', 'noopener,noreferrer');
+                              }
+                            }}
+                          >
+                            {item.thumbnail ? (
+                              <motion.img
+                                src={item.thumbnail}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                                whileHover={{ scale: 1.1 }}
+                                transition={{ duration: 0.3 }}
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-soa-primary/20 to-soa-secondary/20 flex items-center justify-center">
+                                {item.type === 'video' && (
+                                  <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-hover:scale-110 transition">
+                                    <Play className="w-8 h-8 text-soa-primary ml-1" />
+                                  </div>
+                                )}
+                                {item.type === 'image' && (
+                                  <ImageIcon className="w-12 h-12 text-soa-primary/50" />
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Video Play Overlay */}
+                            {item.type === 'video' && (
+                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <motion.div
+                                  className="w-20 h-20 bg-white/95 rounded-full flex items-center justify-center shadow-xl"
+                                  whileHover={{ scale: 1.1 }}
+                                  whileTap={{ scale: 0.9 }}
+                                >
+                                  <Play className="w-10 h-10 text-soa-primary ml-1" />
+                                </motion.div>
+                                <div className="absolute bottom-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
+                                  Click to play
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Platform Badge */}
+                            <div className={`absolute top-3 left-3 ${getPlatformColor(item.platform)} text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-lg`}>
+                              <PlatformIcon className="w-3.5 h-3.5" />
+                              {platforms.find(p => p.id === item.platform)?.name}
                             </div>
-                          )}
-                          {item.type === 'image' && (
-                            <ImageIcon className="w-12 h-12 text-soa-primary/50" />
-                          )}
+
+                            {/* Type Badge */}
+                            <div className="absolute top-3 right-3 bg-black/70 text-white px-2 py-1 rounded text-xs capitalize font-medium">
+                              {item.type}
+                            </div>
+                          </div>
+
+                          {/* Content */}
+                          <div className="p-4">
+                            <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-soa-primary transition">
+                              {item.title}
+                            </h3>
+                            <p className="text-sm text-gray-600 line-clamp-2 mb-4">
+                              {item.description}
+                            </p>
+
+                            {/* Stats */}
+                            <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                              <div className="flex items-center gap-4">
+                                {item.stats.views && (
+                                  <span className="flex items-center gap-1">
+                                    <Eye className="w-4 h-4" />
+                                    {formatNumber(item.stats.views)}
+                                  </span>
+                                )}
+                                {item.stats.likes && (
+                                  <span className="flex items-center gap-1">
+                                    <Heart className="w-4 h-4" />
+                                    {formatNumber(item.stats.likes)}
+                                  </span>
+                                )}
+                                {item.stats.shares && (
+                                  <span className="flex items-center gap-1">
+                                    <Share2 className="w-4 h-4" />
+                                    {formatNumber(item.stats.shares)}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-4 h-4" />
+                                {new Date(item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2">
+                              {item.type === 'video' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedVideo(item);
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-soa-primary text-white rounded-lg font-medium hover:bg-soa-dark transition text-sm shadow-sm"
+                                >
+                                  <Play className="w-4 h-4" />
+                                  Play Video
+                                </button>
+                              )}
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition text-sm"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                {item.type === 'video' ? 'View on' : 'Open on'} {platforms.find(p => p.id === item.platform)?.name || item.platform}
+                              </a>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                          <MessageCircle className="w-12 h-12 text-gray-400" />
-                        </div>
-                      )}
-
-                      {/* Platform Badge */}
-                      <div className={`absolute top-3 left-3 ${getPlatformColor(item.platform)} text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5`}>
-                        <PlatformIcon className="w-3.5 h-3.5" />
-                        {platforms.find(p => p.id === item.platform)?.name}
-                      </div>
-
-                      {/* Type Badge */}
-                      <div className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-xs capitalize">
-                        {item.type}
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-soa-primary transition">
-                        {item.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 line-clamp-2 mb-4">
-                        {item.description}
-                      </p>
-
-                      {/* Stats */}
-                      <div className="flex items-center justify-between text-sm text-gray-500">
-                        <div className="flex items-center gap-4">
-                          {item.stats.views && (
-                            <span className="flex items-center gap-1">
-                              <Eye className="w-4 h-4" />
-                              {formatNumber(item.stats.views)}
-                            </span>
-                          )}
-                          {item.stats.likes && (
-                            <span className="flex items-center gap-1">
-                              <Heart className="w-4 h-4" />
-                              {formatNumber(item.stats.likes)}
-                            </span>
-                          )}
-                          {item.stats.shares && (
-                            <span className="flex items-center gap-1">
-                              <Share2 className="w-4 h-4" />
-                              {formatNumber(item.stats.shares)}
-                            </span>
-                          )}
-                        </div>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {new Date(item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.a>
+                      </HoverCard>
+                    </MagneticCard>
+                  </ScrollReveal>
                 );
               })}
             </div>
@@ -347,38 +513,71 @@ export default function MediaPage() {
         </div>
       </section>
 
-      {/* Featured Video Section */}
+      {/* Featured Video Section - SABC News Coverage */}
       <section className="py-16 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            Featured: SABC News Coverage
-          </h2>
+          <FadeIn>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+              Featured: SABC News Coverage
+            </h2>
+          </FadeIn>
           
-          <div className="bg-gray-900 rounded-2xl overflow-hidden aspect-video flex items-center justify-center">
-            {/* This would be an embedded video player */}
-            <div className="text-center text-white">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 hover:bg-white/20 cursor-pointer transition">
-                <Play className="w-10 h-10 ml-1" />
+          <ScrollReveal direction="up">
+            <HoverCard scale={1.01} glow glowColor="rgba(0, 0, 0, 0.2)">
+              <div className="bg-gray-900 rounded-2xl overflow-hidden aspect-video relative">
+                {/* Twitter/X Video Embed */}
+                <div className="w-full h-full flex items-center justify-center p-4">
+                  <blockquote 
+                    className="twitter-tweet" 
+                    data-theme="dark"
+                    data-conversation="none"
+                    data-width="550"
+                  >
+                    <a href="https://twitter.com/SABCNews/status/1949862717621178383?ref_src=twsrc%5Etfw">
+                      March 28, 2025
+                    </a>
+                  </blockquote>
+                  
+                  {/* Fallback if embed doesn't load - shows on hover */}
+                  <a
+                    href="https://twitter.com/SABCNews/status/1949862717621178383"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-10"
+                  >
+                    <div className="text-center text-white">
+                      <motion.div
+                        className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 hover:bg-white/20 cursor-pointer transition"
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        <Play className="w-10 h-10 ml-1" />
+                      </motion.div>
+                      <p className="font-medium">SOA March Coverage - SABC News</p>
+                      <p className="text-sm text-gray-400 mt-1">Click to watch on X/Twitter</p>
+                    </div>
+                  </a>
+                </div>
               </div>
-              <p className="font-medium">SOA March Coverage - SABC News</p>
-              <p className="text-sm text-gray-400 mt-1">Click to watch</p>
-            </div>
-          </div>
+            </HoverCard>
+          </ScrollReveal>
 
-          <div className="mt-4 text-center">
-            <p className="text-gray-600">
-              The Soil of Africa leading the fight for employment rights in Mamelodi, Pretoria.
-            </p>
-            <a 
-              href="https://twitter.com/SABCNews/status/1949862717621178383" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-soa-primary hover:underline mt-2 font-medium"
-            >
-              Watch on X/Twitter
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
+          <FadeIn delay={0.2}>
+            <div className="mt-4 text-center">
+              <p className="text-gray-600">
+                The Soil of Africa leading the fight for employment rights in Mamelodi, Pretoria.
+              </p>
+              <a 
+                href="https://twitter.com/SABCNews/status/1949862717621178383" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-soa-primary hover:underline mt-2 font-medium"
+              >
+                Watch on X/Twitter
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          </FadeIn>
         </div>
       </section>
 
@@ -412,6 +611,22 @@ export default function MediaPage() {
       </section>
 
       <Footer />
+
+      {/* Video Modal */}
+      <VideoModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedVideo(null);
+        }}
+        video={selectedVideo ? {
+          title: selectedVideo.title,
+          embedUrl: selectedVideo.embedUrl,
+          url: selectedVideo.url,
+          platform: selectedVideo.platform,
+          thumbnail: selectedVideo.thumbnail,
+        } : null}
+      />
     </div>
   );
 }

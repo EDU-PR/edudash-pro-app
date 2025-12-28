@@ -50,19 +50,21 @@ soilofafrica.org (This site)     edudashpro.org.za (Main app)
 
 ## Environment Variables
 
-Copy `.env.example` to `.env.local` and fill in:
+**📋 For comprehensive setup instructions, see [ENV_SETUP.md](./ENV_SETUP.md)**
 
-```bash
-# Connect to EduDash Pro's Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://bppuzibjlxgfwrufjfsz.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+**Quick Start:**
+1. Copy the template: `cp env.local.example .env.local`
+2. Fill in your values (see `ENV_SETUP.md` for details)
+3. Required variables:
+   - `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
+   - `NEXT_PUBLIC_SOA_ORGANIZATION_ID` - SOA organization UUID (default provided)
 
-# Site URLs
-NEXT_PUBLIC_SITE_URL=https://soilofafrica.org
-NEXT_PUBLIC_EDUDASH_URL=https://edudashpro.org.za
-NEXT_PUBLIC_APP_STORE_URL=https://apps.apple.com/app/edudash-pro/id123456789
-NEXT_PUBLIC_PLAY_STORE_URL=https://play.google.com/store/apps/details?id=com.edudashpro.app
-```
+**Optional but Recommended:**
+- `NEXT_PUBLIC_YOUTUBE_API_KEY` - For media hub video integration
+- `NEXT_PUBLIC_YOUTUBE_CHANNEL_ID` - YouTube channel handle/ID
+
+**Full template:** See `env.local.example` for all available variables with descriptions.
 
 ## Development
 
@@ -147,6 +149,9 @@ This site writes to these tables in EduDash Pro's Supabase:
 
 ## Related Documentation
 
+- **[ENV_SETUP.md](./ENV_SETUP.md)** - Comprehensive environment variables setup guide
+- **[MEDIA_HUB_README.md](./MEDIA_HUB_README.md)** - How the media hub loads and displays content
+- **[../ENV_VARS.md](../ENV_VARS.md)** - Main EduDash Pro environment variables documentation
 - [SOIL_OF_AFRICA_MEMBERSHIP.md](../docs/features/SOIL_OF_AFRICA_MEMBERSHIP.md) - Full system documentation
 - Mobile app screens: `/app/screens/membership/`
 - Database migration: `/supabase/migrations/20251223013241_organization_membership_system.sql`

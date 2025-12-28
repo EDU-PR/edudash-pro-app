@@ -382,6 +382,23 @@ export function CallProvider({ children }: CallProviderProps) {
         return;
       }
       
+      // Verify the call is still active (not ended) before showing UI
+      try {
+        const { data: callRecord } = await getSupabase()
+          .from('active_calls')
+          .select('status, ended_at')
+          .eq('call_id', data.call_id)
+          .single();
+        
+        if (callRecord && (callRecord.status === 'ended' || callRecord.ended_at)) {
+          console.log('[CallProvider] Ignoring notification - call already ended:', data.call_id);
+          return;
+        }
+      } catch (err) {
+        console.warn('[CallProvider] Error checking call status:', err);
+        // Continue anyway - might be a race condition
+      }
+      
       // Show incoming call UI when notification is received
       // This handles the case where the app was woken by the notification
       const activeCall: ActiveCall = {
@@ -428,6 +445,12 @@ export function CallProvider({ children }: CallProviderProps) {
         async (payload: { new: ActiveCall }) => {
           console.log('[CallProvider] ✅ Incoming call INSERT detected:', payload.new);
           const call = payload.new;
+
+          // Ignore calls that are already ended or have ended_at set
+          if (call.status === 'ended' || call.ended_at) {
+            console.log('[CallProvider] Ignoring ended call:', call.call_id);
+            return;
+          }
 
           if (call.status === 'ringing') {
             // Fetch full call record to ensure we have meeting_url
@@ -704,10 +727,37 @@ export function CallProvider({ children }: CallProviderProps) {
     }
 
     if (answeringCall?.call_id) {
+      // Update call status with ended_at timestamp to prevent race conditions
       await getSupabase()
         .from('active_calls')
-        .update({ status: 'ended' })
+        .update({ 
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
         .eq('call_id', answeringCall.call_id);
+    }
+
+    // Also update outgoing call if it exists
+    if (outgoingCall?.userId) {
+      const { data: callRecord } = await getSupabase()
+        .from('active_calls')
+        .select('call_id')
+        .eq('caller_id', currentUserId)
+        .eq('callee_id', outgoingCall.userId)
+        .eq('status', 'ringing')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (callRecord?.call_id) {
+        await getSupabase()
+          .from('active_calls')
+          .update({ 
+            status: 'ended',
+            ended_at: new Date().toISOString(),
+          })
+          .eq('call_id', callRecord.call_id);
+      }
     }
 
     setIsCallInterfaceOpen(false);
@@ -717,7 +767,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
     // Reset state after a short delay
     setTimeout(() => setCallState('idle'), 1000);
-  }, [answeringCall, outgoingCall]);
+  }, [answeringCall, outgoingCall, currentUserId]);
 
   // Return to active call (for minimized calls)
   const returnToCall = useCallback(() => {

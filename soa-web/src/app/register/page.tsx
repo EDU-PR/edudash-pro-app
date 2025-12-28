@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
 import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
 import { getSupabase } from '@/lib/supabase';
+import { generateDeepLink, generateUniversalLink, getPlatformDownloadUrl, isMobileDevice } from '@/lib/deepLinks';
 import {
   Leaf,
   ArrowRight,
@@ -25,10 +26,11 @@ import {
   Loader2,
   Download,
   ExternalLink,
+  Smartphone,
 } from 'lucide-react';
 
-// Soil of Africa Organization ID
-const SOA_ORGANIZATION_ID = '63b6139a-e21f-447c-b322-376fb0828992';
+// Soil of Africa Organization ID - should be in env var for production
+const SOA_ORGANIZATION_ID = process.env.NEXT_PUBLIC_SOA_ORGANIZATION_ID || '63b6139a-e21f-447c-b322-376fb0828992';
 
 // South African Regions with database IDs
 const regions = [
@@ -277,10 +279,11 @@ function RegisterPageContent() {
     try {
       const supabase = getSupabase();
       
-      // 1. Check if email is already registered as a member
+      // 1. Check if email is already registered as a member in SOA organization
       const { data: existingEmail } = await supabase
         .from('organization_members')
         .select('id, email, member_number')
+        .eq('organization_id', SOA_ORGANIZATION_ID)
         .eq('email', formData.email.toLowerCase().trim())
         .maybeSingle();
       
@@ -288,11 +291,12 @@ function RegisterPageContent() {
         throw new Error(`This email address is already registered with member number ${existingEmail.member_number}. You cannot register in multiple regions.`);
       }
       
-      // 2. Check if ID number is already registered (if provided)
+      // 2. Check if ID number is already registered in SOA organization (if provided)
       if (formData.id_number && formData.id_number.trim()) {
         const { data: existingIdNumber } = await supabase
           .from('organization_members')
           .select('id, id_number, member_number, first_name, last_name')
+          .eq('organization_id', SOA_ORGANIZATION_ID)
           .eq('id_number', formData.id_number.trim())
           .maybeSingle();
         
@@ -328,42 +332,65 @@ function RegisterPageContent() {
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
       // 5. Create membership record with correct UUIDs
-      const { error: memberError } = await supabase.from('organization_members').insert({
-        user_id: authData.user?.id,
-        organization_id: SOA_ORGANIZATION_ID,
-        region_id: selectedRegion.id,
-        member_number: generatedMemberNumber,
-        member_type: formData.member_type,
-        membership_tier: formData.membership_tier,
-        membership_status: 'pending',
-        seat_status: 'active',
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email.toLowerCase().trim(),
-        phone: formData.phone,
-        id_number: formData.id_number || null,
-        date_of_birth: formData.date_of_birth || null,
-        physical_address: formData.address,
-        city: formData.city,
-        province: selectedRegion.name,
-        emergency_contact_name: formData.emergency_name,
-        emergency_contact_phone: formData.emergency_phone,
-        notes: formData.emergency_relationship ? `Emergency contact relationship: ${formData.emergency_relationship}` : null,
-        join_date: new Date().toISOString().split('T')[0],
-      });
+      const { data: newMember, error: memberError } = await supabase
+        .from('organization_members')
+        .insert({
+          user_id: authData.user?.id,
+          organization_id: SOA_ORGANIZATION_ID,
+          region_id: selectedRegion.id,
+          member_number: generatedMemberNumber,
+          member_type: formData.member_type,
+          membership_tier: formData.membership_tier,
+          membership_status: 'pending',
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          email: formData.email.toLowerCase().trim(),
+          phone: formData.phone,
+          id_number: formData.id_number || null,
+          date_of_birth: formData.date_of_birth || null,
+          physical_address: formData.address,
+          city: formData.city,
+          province: selectedRegion.name,
+          emergency_contact_name: formData.emergency_name,
+          emergency_contact_phone: formData.emergency_phone,
+          emergency_contact_relationship: formData.emergency_relationship || null,
+          notes: null,
+          joined_date: new Date().toISOString().split('T')[0],
+        })
+        .select('id')
+        .single();
 
       if (memberError) throw memberError;
+      if (!newMember?.id) throw new Error('Failed to create membership record');
 
-      // 6. Create invoice
+      // 6. Create invoice (only if tier has a price)
       const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
-      if (selectedTier) {
-        await supabase.from('member_invoices').insert({
-          member_id: authData.user?.id,
-          amount: selectedTier.price,
+      if (selectedTier && selectedTier.price > 0) {
+        const { error: invoiceError } = await supabase.from('member_invoices').insert({
+          organization_id: SOA_ORGANIZATION_ID,
+          member_id: newMember.id, // Use organization_members.id, not user_id
+          invoice_number: `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${Math.floor(Math.random() * 10000).toString().padStart(5, '0')}`,
           description: `${selectedTier.name} Membership - Annual`,
-          status: 'pending',
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          line_items: [{
+            description: `${selectedTier.name} Membership`,
+            quantity: 1,
+            unit_price: selectedTier.price,
+            total: selectedTier.price,
+          }],
+          subtotal: selectedTier.price,
+          tax_amount: 0,
+          discount_amount: 0,
+          total_amount: selectedTier.price,
+          currency: 'ZAR',
+          status: 'draft',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         });
+        
+        if (invoiceError) {
+          console.error('Failed to create invoice:', invoiceError);
+          // Don't throw - invoice creation failure shouldn't block registration
+        }
       }
 
       setMemberNumber(generatedMemberNumber);
@@ -853,17 +880,43 @@ function RegisterPageContent() {
                   </ul>
                 </div>
 
-                {/* Download App CTA */}
+                {/* Open App / Download CTA */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <a
-                    href={process.env.NEXT_PUBLIC_PLAY_STORE_URL || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
-                  >
-                    <Download className="w-5 h-5" />
-                    Get the App
-                  </a>
+                  {isMobileDevice() ? (
+                    <>
+                      <a
+                        href={generateDeepLink({
+                          flow: 'registration',
+                          email: formData.email.toLowerCase().trim(),
+                          memberNumber: memberNumber,
+                          organizationId: SOA_ORGANIZATION_ID,
+                        })}
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-soa-primary text-white rounded-xl font-medium hover:bg-soa-dark transition"
+                      >
+                        <Smartphone className="w-5 h-5" />
+                        Open in App
+                      </a>
+                      <a
+                        href={getPlatformDownloadUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                      >
+                        <Download className="w-5 h-5" />
+                        Download App
+                      </a>
+                    </>
+                  ) : (
+                    <a
+                      href={getPlatformDownloadUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download the App
+                    </a>
+                  )}
                   <Link
                     href="/"
                     className="inline-flex items-center justify-center gap-2 px-6 py-3 text-gray-700 border border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition"

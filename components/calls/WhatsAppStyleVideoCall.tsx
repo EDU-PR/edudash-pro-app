@@ -436,14 +436,48 @@ export function WhatsAppStyleVideoCall({
       }
     } else if (callState === 'connected') {
       // Stop ringback when connected and enforce earpiece
+      // CRITICAL: Enforce earpiece BEFORE stopping ringback to prevent auto-switch to speaker
       try {
-        if (isOwner) {
-          InCallManager.stopRingback();
-        }
-        // Re-enforce earpiece after ringback stops
+        // STEP 1: Enforce earpiece BEFORE stopping ringback (prevents speaker switch)
         InCallManager.setForceSpeakerphoneOn(false);
         setIsSpeakerOn(false);
-        console.log('[VideoCall] Stopped ringback - call connected (earpiece enforced)');
+        console.log('[VideoCall] Pre-enforced earpiece before stopping ringback');
+        
+        // STEP 2: Small delay to let earpiece setting take effect
+        setTimeout(() => {
+          if (isOwner && InCallManager) {
+            try {
+              InCallManager.stopRingback();
+              console.log('[VideoCall] Stopped ringback - call connected');
+            } catch (err) {
+              console.warn('[VideoCall] Failed to stop ringback:', err);
+            }
+          }
+          
+          // STEP 3: Re-enforce earpiece immediately after stopping ringback
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              setIsSpeakerOn(false);
+              console.log('[VideoCall] Post-enforced earpiece after stopping ringback');
+            } catch (err) {
+              console.warn('[VideoCall] Failed to post-enforce earpiece:', err);
+            }
+          }
+        }, 50); // Small delay to let pre-enforcement take effect
+        
+        // STEP 4: Additional enforcement after a longer delay to catch any late switches
+        setTimeout(() => {
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              setIsSpeakerOn(false);
+              console.log('[VideoCall] Final earpiece enforcement (delayed)');
+            } catch (err) {
+              console.warn('[VideoCall] Failed final earpiece enforcement:', err);
+            }
+          }
+        }, 300);
       } catch (err) {
         console.warn('[VideoCall] Failed to stop ringback:', err);
       }
@@ -865,9 +899,13 @@ export function WhatsAppStyleVideoCall({
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
     if (callIdRef.current) {
+      // Update call status with ended_at timestamp to prevent race conditions
       await getSupabase()
         .from('active_calls')
-        .update({ status: 'ended' })
+        .update({ 
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
         .eq('call_id', callIdRef.current);
     }
 
@@ -996,7 +1034,10 @@ export function WhatsAppStyleVideoCall({
       </TouchableOpacity>
 
       {/* Local Video Preview (Draggable) */}
-      {hasLocalVideo && DailyMediaView && remoteParticipants.length > 0 && (
+      {/* Show local video when:
+          1. We have local video AND remote participants (PiP mode), OR
+          2. We have local video AND no remote participants yet (show in main view area as preview) */}
+      {hasLocalVideo && DailyMediaView && (
         <Animated.View
           style={[
             styles.localVideoContainer,

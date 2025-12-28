@@ -1,6 +1,7 @@
 export { Header } from './Header';
 export { Footer } from './Footer';
 export { default as MerchandiseSlider } from './MerchandiseSlider';
+export { VideoModal } from './VideoModal';
 
 // Animations
 export { 
@@ -11,5 +12,9 @@ export {
   SlideIn, 
   FloatingElement, 
   CountUp,
-  ParallaxSection 
+  ParallaxSection,
+  HoverCard,
+  ScrollReveal,
+  InteractiveButton,
+  MagneticCard
 } from './animations';

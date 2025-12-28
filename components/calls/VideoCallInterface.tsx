@@ -501,9 +501,13 @@ export function VideoCallInterface({
     console.log('[VideoCall] Ending call');
 
     if (callIdRef.current) {
+      // Update call status with ended_at timestamp to prevent race conditions
       await getSupabase()
         .from('active_calls')
-        .update({ status: 'ended' })
+        .update({ 
+          status: 'ended',
+          ended_at: new Date().toISOString(),
+        })
         .eq('call_id', callIdRef.current);
     }
 
