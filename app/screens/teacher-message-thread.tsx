@@ -167,26 +167,28 @@ export default function TeacherMessageThreadScreen() {
   
   const otherIds = useMemo(() => parentId ? [parentId] : [], [parentId]);
   
-  // Effects - Mark as read and delivered
+  // Mark messages as delivered and read when thread is opened
+  // Delivered (gray ticks): When user comes online or opens thread
+  // Read (blue ticks): When user actively views the thread
   useEffect(() => {
-    if (threadId && user?.id) {
-      // Mark as read
-      markRead(threadId);
-      
-      // Mark undelivered messages as delivered (user has opened the thread and is online)
-      (async () => {
-        try {
-          const client = assertSupabase();
-          await client.rpc('mark_messages_delivered', {
-            p_thread_id: threadId,
-            p_user_id: user.id
-          });
-        } catch (err) {
+    if (threadId && messages.length > 0 && !isLoading && user?.id) {
+      // First, mark messages as delivered (if not already)
+      // This ensures ticks update even if no push notification was received
+      try {
+        assertSupabase().rpc('mark_messages_delivered', {
+          p_thread_id: threadId,
+          p_user_id: user.id,
+        }).then(() => {
+          console.log('[TeacherThread] ✅ Marked messages as delivered');
+        }).catch((err: any) => {
           console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
-        }
-      })();
+        });
+      } catch {}
+      
+      // Then mark as read (this adds user to read_by array, showing blue ticks)
+      markRead(threadId);
     }
-  }, [threadId, markRead, user?.id]);
+  }, [threadId, messages.length, isLoading, markRead, user?.id]);
   
   useEffect(() => {
     if (getStoredWallpaper) getStoredWallpaper().then(setWallpaper);

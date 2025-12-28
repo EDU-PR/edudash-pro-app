@@ -181,6 +181,43 @@ export function setupNotificationRouter(): () => void {
   const foregroundSubscription = Notifications.addNotificationReceivedListener(
     async (notification) => {
       console.log('[NotificationRouter] Foreground notification received');
+      const data = notification.request.content.data as NotificationPayload;
+      
+      // IMPORTANT: Let CallProvider handle incoming_call notifications
+      // Don't interfere with the call system
+      if (data?.type === 'incoming_call') {
+        console.log('[NotificationRouter] Incoming call notification - letting CallProvider handle it');
+        return;
+      }
+      
+      // Mark message as delivered when notification is received (WhatsApp-style)
+      // This happens even if app is backgrounded - the notification delivery means message reached device
+      if (data?.type === 'message' || data?.type === 'chat') {
+        const currentUserId = await getCurrentUserId();
+        if (currentUserId && data.thread_id) {
+          try {
+            await assertSupabase().rpc('mark_messages_delivered', {
+              p_thread_id: data.thread_id,
+              p_user_id: currentUserId,
+            });
+            console.log('[NotificationRouter] ✅ Marked messages as delivered for thread:', data.thread_id);
+          } catch (err) {
+            console.warn('[NotificationRouter] Failed to mark messages as delivered:', err);
+          }
+        }
+      }
+      
+      // For message notifications, always show banner (WhatsApp-style)
+      // The routeNotification check is for account switching, not for suppressing notifications
+      if (data?.type === 'message' || data?.type === 'chat') {
+        // Message notifications should always show as banners
+        console.log('[NotificationRouter] Message notification - will show banner');
+        // The notification handler in lib/notifications.ts will show it
+        // We just mark as delivered and check for account switching
+        await routeNotification(notification);
+        return; // Don't suppress message notifications
+      }
+      
       const shouldShow = await routeNotification(notification);
       
       if (!shouldShow) {
@@ -196,6 +233,23 @@ export function setupNotificationRouter(): () => void {
       console.log('[NotificationRouter] Notification interaction received');
       const notification = response.notification;
       const data = notification.request.content.data as NotificationPayload;
+      
+      // Mark message as delivered when notification is tapped (if not already delivered)
+      // This handles the case where app was killed and notification wakes it
+      if (data?.type === 'message' || data?.type === 'chat') {
+        const currentUserId = await getCurrentUserId();
+        if (currentUserId && data.thread_id) {
+          try {
+            await assertSupabase().rpc('mark_messages_delivered', {
+              p_thread_id: data.thread_id,
+              p_user_id: currentUserId,
+            });
+            console.log('[NotificationRouter] ✅ Marked messages as delivered (from notification tap)');
+          } catch (err) {
+            console.warn('[NotificationRouter] Failed to mark messages as delivered:', err);
+          }
+        }
+      }
       
       // Extract target user ID
       const targetUserId = data.user_id || data.recipient_id || data.target_user_id;
@@ -248,10 +302,16 @@ function handleNotificationInteraction(data: NotificationPayload): void {
       }
       break;
       
+    case 'incoming_call':
+      // IMPORTANT: Let CallProvider handle incoming call notifications
+      // Don't navigate here - the CallProvider will show the incoming call UI
+      console.log('[NotificationRouter] Incoming call tap - CallProvider handles this');
+      break;
+      
     case 'call':
     case 'video_call':
     case 'voice_call':
-      // Handle incoming call
+      // Handle incoming call (legacy types)
       if (data.call_id) {
         router.push(`/screens/incoming-call?id=${data.call_id}` as any);
       }

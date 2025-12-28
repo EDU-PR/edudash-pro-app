@@ -13,17 +13,8 @@ const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230
 // This is useful when the project ID changes or token format updates
 const TOKEN_VERSION = 2
 
-// Show notifications while app is foregrounded (customize as needed)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    // SDK >= 51 supports banner/list behavior on iOS
-    shouldShowBanner: true,
-    shouldShowList: true,
-  } as Notifications.NotificationBehavior),
-})
+// NOTE: Notification handler is configured in lib/NotificationService.ts
+// to ensure message notifications show as banners (WhatsApp-style)
 
 export type PushRegistrationResult = {
   status: 'registered' | 'denied' | 'skipped' | 'error'

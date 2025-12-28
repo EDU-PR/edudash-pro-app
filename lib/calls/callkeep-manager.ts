@@ -1,48 +1,27 @@
 /**
- * CallKeep Manager
+ * CallKeep Manager (STUBBED)
  * 
- * Manages native call UI integration for iOS and Android
- * Enables calls to display and ring even when device is locked
+ * DISABLED: react-native-callkeep has been removed due to Expo SDK 54+ incompatibility.
+ * The library has a bug causing duplicate method exports on Android, which breaks builds.
+ * See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
  * 
- * Features:
- * - Native call screen (lock screen UI)
- * - Wake screen for incoming calls
- * - Audio routing through system call UI
- * - Integrates with VoiceCallInterface and WhatsAppStyleIncomingCall
- * - Event emitter for answer/end actions from native UI
+ * This file provides stub implementations for backward compatibility with any code
+ * that may still reference the callKeepManager singleton.
+ * 
+ * Alternative approach: Using expo-notifications foreground service for maintaining
+ * calls when the app is backgrounded.
  */
 
-import { Platform } from 'react-native';
 import { EventEmitter } from 'events';
 
 /**
- * Events emitted by CallKeepManager
- * - 'answerCall': User answered call from native UI (callUUID: string)
- * - 'endCall': User ended call from native UI (callUUID: string)
- * - 'muteCall': User toggled mute from native UI (callUUID: string, muted: boolean)
- * - 'holdCall': User toggled hold from native UI (callUUID: string, hold: boolean)
+ * Events that would be emitted by CallKeepManager
  */
 export interface CallKeepEvents {
   answerCall: (callUUID: string) => void;
   endCall: (callUUID: string) => void;
   muteCall: (callUUID: string, muted: boolean) => void;
   holdCall: (callUUID: string, hold: boolean) => void;
-}
-
-// Conditionally import CallKeep (may not be available in some environments)
-let RNCallKeep: any = null;
-try {
-  RNCallKeep = require('react-native-callkeep').default;
-} catch (error) {
-  console.warn('[CallKeepManager] react-native-callkeep not available:', error);
-}
-
-// Conditionally import InCallManager
-let InCallManager: any = null;
-try {
-  InCallManager = require('react-native-incall-manager').default;
-} catch (error) {
-  console.warn('[CallKeepManager] InCallManager not available:', error);
 }
 
 export interface CallKeepConfig {
@@ -52,279 +31,97 @@ export interface CallKeepConfig {
   ringtoneSound?: string;
 }
 
+/**
+ * Stubbed CallKeepManager class
+ * All methods are no-ops that return safe default values
+ */
 class CallKeepManager extends EventEmitter {
-  private isSetup = false;
-  private activeCallId: string | null = null;
-  
   constructor() {
     super();
-    // Set max listeners to avoid warnings with multiple CallProvider instances
     this.setMaxListeners(20);
+    console.log('[CallKeepManager] STUBBED - CallKeep is disabled due to Expo SDK 54+ incompatibility');
   }
   
   /**
-   * Initialize CallKeep with app configuration
+   * Setup is a no-op - always returns false indicating CallKeep is not available
    */
-  async setup(config: CallKeepConfig): Promise<boolean> {
-    if (!RNCallKeep) {
-      // Only log warning in production - expected in development/Expo Go
-      if (typeof __DEV__ === 'undefined' || !__DEV__) {
-        console.warn('[CallKeepManager] CallKeep not available');
-      }
-      return false;
-    }
-    
-    if (this.isSetup) {
-      return true;
-    }
-    
-    try {
-      const options = {
-        ios: {
-          appName: config.appName,
-          imageName: config.imageName || 'AppIcon',
-          // Omit ringtoneSound to use device's default system ringtone
-          // For custom ringtone: ringtoneSound: 'custom_ringtone.mp3',
-          supportsVideo: config.supportsVideo,
-          maximumCallGroups: '1',
-          maximumCallsPerCallGroup: '1',
-        },
-        android: {
-          alertTitle: 'Permissions Required',
-          alertDescription: 'This application needs access to your phone accounts to make calls.',
-          cancelButton: 'Cancel',
-          okButton: 'OK',
-          imageName: config.imageName || 'ic_launcher',
-          additionalPermissions: [],
-          selfManaged: true, // Important for Android 11+
-          foregroundService: {
-            channelId: 'com.edudashpro.app.calls',
-            channelName: 'Voice & Video Calls',
-            notificationTitle: 'EduDash Call in progress',
-            notificationIcon: 'ic_launcher',
-          },
-        },
-      };
-      
-      await RNCallKeep.setup(options);
-      
-      // Register event listeners
-      this.registerEventListeners();
-      
-      // Request permissions
-      if (Platform.OS === 'android') {
-        const granted = await RNCallKeep.checkPhoneAccountPermission();
-        if (!granted) {
-          await RNCallKeep.requestPhoneAccountPermission();
-        }
-      }
-      
-      this.isSetup = true;
-      console.log('[CallKeepManager] Setup complete');
-      return true;
-    } catch (error) {
-      console.error('[CallKeepManager] Setup failed:', error);
-      return false;
-    }
+  async setup(_config: CallKeepConfig): Promise<boolean> {
+    console.warn('[CallKeepManager] setup() called but CallKeep is disabled');
+    return false;
   }
   
   /**
-   * Register CallKeep event listeners
-   */
-  private registerEventListeners() {
-    if (!RNCallKeep) return;
-    
-    RNCallKeep.addEventListener('answerCall', ({ callUUID }: { callUUID: string }) => {
-      console.log('[CallKeepManager] Answer call from native UI:', callUUID);
-      // Emit event so CallProvider can handle the answer
-      this.emit('answerCall', callUUID);
-    });
-    
-    RNCallKeep.addEventListener('endCall', ({ callUUID }: { callUUID: string }) => {
-      console.log('[CallKeepManager] End call from native UI:', callUUID);
-      // Emit event so CallProvider can handle the end
-      this.emit('endCall', callUUID);
-      // Also end the call in CallKeep
-      this.endCall(callUUID);
-    });
-    
-    RNCallKeep.addEventListener('didPerformDTMFAction', ({ callUUID, digits }: { callUUID: string; digits: string }) => {
-      console.log('[CallKeepManager] DTMF:', callUUID, digits);
-    });
-    
-    RNCallKeep.addEventListener('didToggleHoldCallAction', ({ callUUID, hold }: { callUUID: string; hold: boolean }) => {
-      console.log('[CallKeepManager] Hold toggled from native UI:', callUUID, hold);
-      this.emit('holdCall', callUUID, hold);
-    });
-    
-    RNCallKeep.addEventListener('didPerformSetMutedCallAction', ({ callUUID, muted }: { callUUID: string; muted: boolean }) => {
-      console.log('[CallKeepManager] Mute toggled from native UI:', callUUID, muted);
-      this.emit('muteCall', callUUID, muted);
-    });
-  }
-  
-  /**
-   * Display incoming call screen (works even when device is locked)
+   * Display incoming call - no-op
    */
   async displayIncomingCall(
-    callId: string,
-    callerName: string,
-    hasVideo: boolean = false
+    _callId: string,
+    _callerName: string,
+    _hasVideo: boolean = false
   ): Promise<void> {
-    if (!RNCallKeep) {
-      console.warn('[CallKeepManager] CallKeep not available for incoming call');
-      return;
-    }
-    
-    try {
-      this.activeCallId = callId;
-      
-      await RNCallKeep.displayIncomingCall(
-        callId,
-        callerName,
-        callerName,
-        'generic',
-        hasVideo
-      );
-      
-      console.log('[CallKeepManager] Incoming call displayed:', {
-        callId,
-        callerName,
-        hasVideo,
-      });
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to display incoming call:', error);
-    }
+    console.warn('[CallKeepManager] displayIncomingCall() called but CallKeep is disabled');
   }
   
   /**
-   * Start outgoing call
+   * Start outgoing call - no-op
    */
-  async startCall(callId: string, calleeName: string, hasVideo: boolean = false): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      this.activeCallId = callId;
-      
-      await RNCallKeep.startCall(callId, calleeName, calleeName, 'generic', hasVideo);
-      
-      console.log('[CallKeepManager] Outgoing call started:', {
-        callId,
-        calleeName,
-        hasVideo,
-      });
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to start call:', error);
-    }
+  async startCall(_callId: string, _calleeName: string, _hasVideo: boolean = false): Promise<void> {
+    console.warn('[CallKeepManager] startCall() called but CallKeep is disabled');
   }
   
   /**
-   * Report call connected
+   * Report call connected - no-op
    */
-  async reportConnected(callId: string): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      await RNCallKeep.reportConnectedOutgoingCallWithUUID(callId);
-      console.log('[CallKeepManager] Call connected:', callId);
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to report connected:', error);
-    }
+  async reportConnected(_callId: string): Promise<void> {
+    console.warn('[CallKeepManager] reportConnected() called but CallKeep is disabled');
   }
   
   /**
-   * End call and remove from system UI
+   * End call - no-op
    */
-  async endCall(callId: string): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      await RNCallKeep.endCall(callId);
-      
-      if (this.activeCallId === callId) {
-        this.activeCallId = null;
-      }
-      
-      console.log('[CallKeepManager] Call ended:', callId);
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to end call:', error);
-    }
+  async endCall(_callId: string): Promise<void> {
+    console.warn('[CallKeepManager] endCall() called but CallKeep is disabled');
   }
   
   /**
-   * End all active calls
+   * End all calls - no-op
    */
   async endAllCalls(): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      await RNCallKeep.endAllCalls();
-      this.activeCallId = null;
-      console.log('[CallKeepManager] All calls ended');
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to end all calls:', error);
-    }
+    console.warn('[CallKeepManager] endAllCalls() called but CallKeep is disabled');
   }
   
   /**
-   * Set call on hold
+   * Set on hold - no-op
    */
-  async setOnHold(callId: string, hold: boolean): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      await RNCallKeep.setOnHold(callId, hold);
-      console.log('[CallKeepManager] Call hold:', callId, hold);
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to set hold:', error);
-    }
+  async setOnHold(_callId: string, _hold: boolean): Promise<void> {
+    console.warn('[CallKeepManager] setOnHold() called but CallKeep is disabled');
   }
   
   /**
-   * Set call muted
+   * Set muted - no-op
    */
-  async setMuted(callId: string, muted: boolean): Promise<void> {
-    if (!RNCallKeep) return;
-    
-    try {
-      await RNCallKeep.setMutedCall(callId, muted);
-      console.log('[CallKeepManager] Call muted:', callId, muted);
-    } catch (error) {
-      console.error('[CallKeepManager] Failed to set mute:', error);
-    }
+  async setMuted(_callId: string, _muted: boolean): Promise<void> {
+    console.warn('[CallKeepManager] setMuted() called but CallKeep is disabled');
   }
   
   /**
-   * Check if CallKeep is available and setup
+   * Always returns false - CallKeep is not available
    */
   isAvailable(): boolean {
-    return !!RNCallKeep && this.isSetup;
+    return false;
   }
   
   /**
-   * Get current active call ID
+   * Always returns null - no active call via CallKeep
    */
   getActiveCallId(): string | null {
-    return this.activeCallId;
+    return null;
   }
   
   /**
-   * Cleanup - remove all listeners
+   * Cleanup - no-op
    */
-  cleanup() {
-    if (!RNCallKeep) return;
-    
-    try {
-      RNCallKeep.removeEventListener('answerCall');
-      RNCallKeep.removeEventListener('endCall');
-      RNCallKeep.removeEventListener('didPerformDTMFAction');
-      RNCallKeep.removeEventListener('didToggleHoldCallAction');
-      RNCallKeep.removeEventListener('didPerformSetMutedCallAction');
-      
-      console.log('[CallKeepManager] Cleanup complete');
-    } catch (error) {
-      console.error('[CallKeepManager] Cleanup failed:', error);
-    }
+  cleanup(): void {
+    // No-op
   }
 }
 

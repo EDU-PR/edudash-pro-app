@@ -111,6 +111,10 @@ try {
   useThreadMessages = hooks.useThreadMessages;
   useSendMessage = hooks.useSendMessage;
   useMarkThreadRead = hooks.useMarkThreadRead;
+  // Real-time hook for messages and reactions
+  if (hooks.useParentMessagesRealtime) {
+    // Will be used in component
+  }
 } catch {
   useThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} });
   useSendMessage = () => ({ mutateAsync: async () => ({}), isLoading: false });
@@ -237,24 +241,41 @@ export default function ParentMessageThreadScreen() {
     );
   }, [messages, optimisticMsgs]);
 
-  // Mark thread as read and delivered
+  // Real-time subscription for messages and reactions
+  useEffect(() => {
+    if (threadId && user?.id) {
+      try {
+        const hooks = require('@/hooks/useParentMessaging');
+        if (hooks.useParentMessagesRealtime) {
+          // This hook handles real-time updates internally
+          hooks.useParentMessagesRealtime(threadId);
+        }
+      } catch (err) {
+        console.warn('[ParentThread] Real-time hook not available:', err);
+      }
+    }
+  }, [threadId, user?.id]);
+
+  // Mark messages as delivered and read when thread is opened
+  // Delivered (gray ticks): When user comes online or opens thread
+  // Read (blue ticks): When user actively views the thread
   useEffect(() => {
     if (threadId && messages.length > 0 && !loading && user?.id) {
-      // Mark as read
-      try { markRead({ threadId }); } catch {}
-      
-      // Mark undelivered messages as delivered (user has opened the thread and is online)
-      (async () => {
-        try {
-          const client = assertSupabase();
-          await client.rpc('mark_messages_delivered', {
-            p_thread_id: threadId,
-            p_user_id: user.id
-          });
-        } catch (err) {
+      // First, mark messages as delivered (if not already)
+      // This ensures ticks update even if no push notification was received
+      try {
+        assertSupabase().rpc('mark_messages_delivered', {
+          p_thread_id: threadId,
+          p_user_id: user.id,
+        }).then(() => {
+          console.log('[ParentThread] ✅ Marked messages as delivered');
+        }).catch((err: any) => {
           console.warn('[ParentThread] Failed to mark messages as delivered:', err);
-        }
-      })();
+        });
+      } catch {}
+      
+      // Then mark as read (this adds user to read_by array, showing blue ticks)
+      try { markRead({ threadId }); } catch {}
     }
   }, [threadId, messages.length, loading, user?.id]);
 

@@ -93,30 +93,60 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 async function fetchUnreadMessageCount(userId: string): Promise<number> {
   const client = assertSupabase();
 
-  // Get all thread participations with last_read_at
-  const { data: participantData } = await client
-    .from('message_participants')
-    .select('thread_id, last_read_at')
-    .eq('user_id', userId);
+  try {
+    // Get all thread participations with last_read_at
+    const { data: participantData, error: participantError } = await client
+      .from('message_participants')
+      .select('thread_id, last_read_at')
+      .eq('user_id', userId);
 
-  if (!participantData || participantData.length === 0) return 0;
+    if (participantError) {
+      console.error('[NotificationContext] Error fetching message participants:', participantError);
+      return 0;
+    }
 
-  // Count unread messages across all threads
-  let totalUnread = 0;
+    if (!participantData || participantData.length === 0) {
+      console.log(`[NotificationContext] No message threads for user ${userId}`);
+      return 0;
+    }
 
-  for (const participant of participantData) {
-    const { count } = await client
-      .from('messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('thread_id', participant.thread_id)
-      .gt('created_at', participant.last_read_at)
-      .neq('sender_id', userId)
-      .is('deleted_at', null);
+    // Count unread messages across all threads
+    let totalUnread = 0;
+    const threadCounts: Array<{ thread_id: string; unread: number }> = [];
 
-    totalUnread += count || 0;
+    for (const participant of participantData) {
+      const { count, error: messageError } = await client
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('thread_id', participant.thread_id)
+        .gt('created_at', participant.last_read_at || '1970-01-01')
+        .neq('sender_id', userId)
+        .is('deleted_at', null);
+
+      if (messageError) {
+        console.warn(`[NotificationContext] Error counting messages for thread ${participant.thread_id}:`, messageError);
+        continue;
+      }
+
+      const unread = count || 0;
+      totalUnread += unread;
+      if (unread > 0) {
+        threadCounts.push({ thread_id: participant.thread_id, unread });
+      }
+    }
+
+    console.log(`[NotificationContext] Unread messages count for user ${userId}:`, {
+      totalUnread,
+      threadCount: participantData.length,
+      threadsWithUnread: threadCounts.length,
+      sampleThreads: threadCounts.slice(0, 3),
+    });
+
+    return totalUnread;
+  } catch (error) {
+    console.error('[NotificationContext] Exception fetching unread messages:', error);
+    return 0;
   }
-
-  return totalUnread;
 }
 
 /**
@@ -127,21 +157,52 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
   const lastSeenKey = ASYNC_STORAGE_KEYS.callsLastSeen(userId);
   const lastSeen = await AsyncStorage.getItem(lastSeenKey);
 
-  // Build query for missed calls (unanswered calls to this user)
-  let query = client
-    .from('active_calls')
-    .select('id', { count: 'exact', head: true })
-    .eq('callee_id', userId)
-    .in('status', ['missed', 'ended'])
-    .is('answered_at', null);
+  try {
+    // Build query for missed calls (unanswered calls to this user)
+    // A call is missed if:
+    // 1. User is the callee (incoming call)
+    // 2. Status is 'missed' OR (status is 'ended' AND answered_at is null)
+    let query = client
+      .from('active_calls')
+      .select('id, status, answered_at, duration_seconds', { count: 'exact' })
+      .eq('callee_id', userId)
+      .or('status.eq.missed,and(status.eq.ended,answered_at.is.null)');
 
-  // Only count calls after last seen timestamp
-  if (lastSeen) {
-    query = query.gt('started_at', lastSeen);
+    // Only count calls after last seen timestamp
+    if (lastSeen) {
+      query = query.gt('started_at', lastSeen);
+    }
+
+    const { data, count, error } = await query;
+    
+    if (error) {
+      console.error('[NotificationContext] Error fetching missed calls:', error);
+      return 0;
+    }
+    
+    // Filter to ensure we only count truly missed calls
+    // (status='missed' OR (status='ended' AND answered_at IS NULL AND duration is 0 or null))
+    const missedCount = data?.filter(call => 
+      call.status === 'missed' || 
+      (call.status === 'ended' && !call.answered_at && (call.duration_seconds === null || call.duration_seconds === 0))
+    ).length || 0;
+    
+    console.log(`[NotificationContext] Missed calls count for user ${userId}:`, {
+      rawCount: count,
+      filteredCount: missedCount,
+      lastSeen: lastSeen || 'never',
+      sampleCalls: data?.slice(0, 3).map(c => ({ 
+        status: c.status, 
+        answered_at: c.answered_at, 
+        duration: c.duration_seconds 
+      }))
+    });
+    
+    return missedCount;
+  } catch (error) {
+    console.error('[NotificationContext] Exception fetching missed calls:', error);
+    return 0;
   }
-
-  const { count } = await query;
-  return count || 0;
 }
 
 /**
@@ -255,14 +316,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const syncBadge = useCallback(async () => {
     try {
       if (Platform.OS !== 'web') {
-        await Notifications.setBadgeCountAsync(counts.total);
+        const badgeCount = counts.total;
+        await Notifications.setBadgeCountAsync(badgeCount);
+        console.log(`[NotificationContext] Badge synced: ${badgeCount} (messages: ${counts.messages}, calls: ${counts.calls}, announcements: ${counts.announcements})`);
       }
       // For PWA, we could update document.title or use the Badging API
       // when running in browser context
-    } catch {
-      // Silent fail - badge sync is not critical
+    } catch (error) {
+      // Log error instead of silent fail - badge sync is important
+      console.error('[NotificationContext] Failed to sync badge:', error);
     }
-  }, [counts.total]);
+  }, [counts.total, counts.messages, counts.calls, counts.announcements]);
 
   // Sync badge whenever total changes
   useEffect(() => {

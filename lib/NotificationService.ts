@@ -42,14 +42,25 @@ Notifications.setNotificationHandler({
     // Always show incoming call notifications (high priority)
     const isIncomingCall = data?.type === 'incoming_call';
     
+    // Show message notifications as banners (WhatsApp-style)
+    const isMessage = data?.type === 'message' || data?.type === 'chat';
+    
     // Determine if we should show the notification when app is in foreground
-    const shouldShow = isIncomingCall || data?.forceShow === true;
+    // Show calls, messages, and forced notifications
+    const shouldShow = isIncomingCall || isMessage || data?.forceShow === true;
     
     return {
       shouldShowAlert: shouldShow,
       shouldPlaySound: shouldShow,
       shouldSetBadge: true,
-      priority: isIncomingCall ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.DEFAULT,
+      // SDK >= 51 supports banner/list behavior on iOS
+      shouldShowBanner: shouldShow,
+      shouldShowList: shouldShow,
+      priority: isIncomingCall 
+        ? Notifications.AndroidNotificationPriority.MAX 
+        : isMessage
+        ? Notifications.AndroidNotificationPriority.HIGH
+        : Notifications.AndroidNotificationPriority.DEFAULT,
     };
   },
 });

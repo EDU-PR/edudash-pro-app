@@ -1,5 +1,7 @@
-// CRITICAL: Load Promise polyfills FIRST (required by Daily.co SDK)
-import '../polyfills/promise';
+// NOTE: Promise.any polyfill is loaded via Metro's getModulesRunBeforeMainModule
+// in metro.config.js, which ensures it runs BEFORE any module initialization.
+// No need to import it here.
+
 import '../polyfills/react-use';
 
 import 'react-native-get-random-values';
