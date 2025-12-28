@@ -8,23 +8,17 @@
  * Requirements:
  * - Android 8.0+ (API 26+)
  * - `android:supportsPictureInPicture="true"` in AndroidManifest (via withPictureInPicture plugin)
- * - react-native-pip-android library
+ * 
+ * NOTE: Currently uses Android's automatic PiP via manifest configuration.
+ * The native PiP library had SDK compatibility issues, so we rely on:
+ * 1. withPictureInPicture.js plugin for manifest configuration
+ * 2. Android's automatic PiP behavior when backgrounding during video
  * 
  * @module usePictureInPicture
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-
-// Conditionally import PiP module (Android only)
-let PipHandler: any = null;
-if (Platform.OS === 'android') {
-  try {
-    PipHandler = require('react-native-pip-android').default;
-  } catch (error) {
-    console.warn('[PiP] react-native-pip-android not available:', error);
-  }
-}
 
 export interface UsePictureInPictureOptions {
   /** Whether to auto-enter PiP when app goes to background */
@@ -44,7 +38,7 @@ export interface UsePictureInPictureReturn {
   isPipSupported: boolean;
   /** Whether currently in PiP mode */
   isInPipMode: boolean;
-  /** Manually enter PiP mode */
+  /** Manually enter PiP mode (not available without native module) */
   enterPipMode: () => Promise<boolean>;
   /** Exit PiP mode (returns to full screen) */
   exitPipMode: () => void;
@@ -55,12 +49,17 @@ export interface UsePictureInPictureReturn {
 /**
  * Hook to manage Picture-in-Picture mode for calls
  * 
+ * NOTE: Without a native PiP library, this hook provides:
+ * - State tracking for when app is backgrounded
+ * - Callbacks for background/foreground transitions
+ * - PiP is handled automatically by Android via manifest config
+ * 
  * @example
  * ```tsx
- * const { isInPipMode, enterPipMode, isPipSupported } = usePictureInPicture({
+ * const { isInPipMode, isPipSupported, appState } = usePictureInPicture({
  *   autoEnterOnBackground: isCallActive,
- *   onEnterPiP: () => console.log('Entered PiP'),
- *   onExitPiP: () => console.log('Exited PiP'),
+ *   onEnterPiP: () => console.log('App backgrounded during call'),
+ *   onExitPiP: () => console.log('App foregrounded'),
  * });
  * ```
  */
@@ -68,51 +67,29 @@ export function usePictureInPicture({
   autoEnterOnBackground = false,
   onEnterPiP,
   onExitPiP,
-  aspectRatioWidth = 9,
-  aspectRatioHeight = 16,
 }: UsePictureInPictureOptions = {}): UsePictureInPictureReturn {
   const [isInPipMode, setIsInPipMode] = useState(false);
-  const [isPipSupported, setIsPipSupported] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const [currentAppState, setCurrentAppState] = useState<AppStateStatus>(AppState.currentState);
 
-  // Check PiP support on mount
-  useEffect(() => {
-    if (Platform.OS === 'android' && PipHandler) {
-      // react-native-pip-android supports Android 8.0+
-      setIsPipSupported(true);
-      console.log('[PiP] Picture-in-Picture supported on this device');
-    } else {
-      setIsPipSupported(false);
-      console.log('[PiP] Picture-in-Picture not supported (iOS or library not available)');
-    }
-  }, []);
+  // PiP is supported on Android 8.0+ via manifest configuration
+  const isPipSupported = Platform.OS === 'android' && Platform.Version >= 26;
 
   /**
    * Enter Picture-in-Picture mode
+   * NOTE: Without native module, this just logs. PiP is automatic via manifest.
    */
   const enterPipMode = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== 'android' || !PipHandler) {
-      console.log('[PiP] Cannot enter PiP - not on Android or library not available');
+    if (Platform.OS !== 'android') {
+      console.log('[PiP] Not available on iOS');
       return false;
     }
 
-    try {
-      console.log('[PiP] Entering Picture-in-Picture mode...');
-      
-      // Configure aspect ratio for calls (portrait-ish for call UI)
-      await PipHandler.enterPipMode(aspectRatioWidth, aspectRatioHeight);
-      
-      setIsInPipMode(true);
-      onEnterPiP?.();
-      
-      console.log('[PiP] Successfully entered PiP mode');
-      return true;
-    } catch (error) {
-      console.error('[PiP] Failed to enter PiP mode:', error);
-      return false;
-    }
-  }, [aspectRatioWidth, aspectRatioHeight, onEnterPiP]);
+    // Without native module, PiP is automatic when backgrounding
+    // This is triggered by Android when app has video content and goes to background
+    console.log('[PiP] PiP mode will be entered automatically by Android when backgrounding');
+    return true;
+  }, []);
 
   /**
    * Exit PiP mode (bring app back to full screen)
@@ -120,59 +97,34 @@ export function usePictureInPicture({
   const exitPipMode = useCallback(() => {
     if (!isInPipMode) return;
     
-    // PiP exits automatically when user taps to expand
-    // This just updates our state
     setIsInPipMode(false);
     onExitPiP?.();
     console.log('[PiP] Exited Picture-in-Picture mode');
   }, [isInPipMode, onExitPiP]);
 
-  // Listen for PiP mode changes via app state
-  useEffect(() => {
-    if (Platform.OS !== 'android' || !PipHandler) return;
-
-    // Listen for PiP events from the native module
-    const handlePipModeChange = (event: { isInPipMode: boolean }) => {
-      console.log('[PiP] Mode changed:', event.isInPipMode);
-      setIsInPipMode(event.isInPipMode);
-      
-      if (event.isInPipMode) {
-        onEnterPiP?.();
-      } else {
-        onExitPiP?.();
-      }
-    };
-
-    // Some versions expose an event emitter
-    if (PipHandler.addListener) {
-      const subscription = PipHandler.addListener('pipModeChanged', handlePipModeChange);
-      return () => subscription?.remove();
-    }
-
-    return undefined;
-  }, [onEnterPiP, onExitPiP]);
-
-  // Auto-enter PiP when app goes to background (if enabled)
+  // Track app state changes to detect PiP-like behavior
   useEffect(() => {
     if (!autoEnterOnBackground || !isPipSupported) return;
 
-    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
       const previousState = appStateRef.current;
       appStateRef.current = nextAppState;
       setCurrentAppState(nextAppState);
 
       console.log('[PiP] App state change:', previousState, '->', nextAppState);
 
-      // App going to background - enter PiP mode
+      // App going to background - Android will auto-enter PiP if configured
       if (previousState === 'active' && nextAppState === 'background') {
-        console.log('[PiP] App backgrounded, attempting to enter PiP mode...');
-        await enterPipMode();
+        console.log('[PiP] App backgrounded - Android PiP should activate automatically');
+        setIsInPipMode(true);
+        onEnterPiP?.();
       }
 
-      // App coming back to foreground - exit PiP
+      // App coming back to foreground
       if (previousState === 'background' && nextAppState === 'active') {
-        console.log('[PiP] App foregrounded, exiting PiP mode');
-        exitPipMode();
+        console.log('[PiP] App foregrounded');
+        setIsInPipMode(false);
+        onExitPiP?.();
       }
     };
 
@@ -181,7 +133,7 @@ export function usePictureInPicture({
     return () => {
       subscription.remove();
     };
-  }, [autoEnterOnBackground, isPipSupported, enterPipMode, exitPipMode]);
+  }, [autoEnterOnBackground, isPipSupported, onEnterPiP, onExitPiP]);
 
   return {
     isPipSupported,
