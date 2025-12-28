@@ -10,13 +10,13 @@ interface DateSeparatorProps {
   label: string;
 }
 
-export const DateSeparator: React.FC<DateSeparatorProps> = ({ label }) => (
+export const DateSeparator: React.FC<DateSeparatorProps> = React.memo(({ label }) => (
   <View style={styles.container}>
     <View style={styles.pill}>
       <Text style={styles.text}>{label}</Text>
     </View>
   </View>
-);
+));
 
 const styles = StyleSheet.create({
   container: {

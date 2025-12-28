@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { usePathname } from 'expo-router';
 import { assertSupabase, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 
 // Types (shared with parent messaging)
 export interface MessageThread {
@@ -424,7 +425,7 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
           filter: `thread_id=eq.${threadId}`,
         },
         async (payload: any) => {
-          console.log('[MessagesRealtime] New message received:', payload.new.id);
+          logger.debug('MessagesRealtime', 'New message received:', payload.new.id);
           
           // Fetch sender profile for the new message
           const { data: senderProfile } = await supabase
@@ -474,11 +475,11 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
                     },
                     trigger: null, // Show immediately
                   });
-                  console.log('[MessagesRealtime] ✅ Banner notification shown for new message');
+                  logger.debug('MessagesRealtime', '✅ Banner notification shown for new message');
                 }
               }
             } catch (notifError) {
-              console.warn('[MessagesRealtime] Failed to show banner notification:', notifError);
+              logger.warn('MessagesRealtime', 'Failed to show banner notification:', notifError);
             }
           }
           
@@ -507,7 +508,7 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
           filter: `thread_id=eq.${threadId}`,
         },
         async (payload: any) => {
-          console.log('[MessagesRealtime] Message updated:', payload.new.id);
+          logger.debug('MessagesRealtime', 'Message updated:', payload.new.id);
           
           // Update message in cache with new delivery/read status
           queryClient.setQueryData(
@@ -532,23 +533,47 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
           table: 'message_reactions',
         },
         async (payload: any) => {
-          console.log('[MessagesRealtime] Reaction change:', payload.eventType, payload.new?.message_id);
+          logger.debug('MessagesRealtime', 'Reaction change:', payload.eventType, payload.new?.message_id);
           
           // Get the message_id from the reaction
           const messageId = payload.new?.message_id || payload.old?.message_id;
           if (!messageId) return;
           
-          // Check if this reaction is for a message in this thread
-          const { data: message } = await supabase
-            .from('messages')
-            .select('thread_id')
-            .eq('id', messageId)
-            .single();
+          // Fetch updated reactions for this specific message
+          const { data: reactions } = await supabase
+            .from('message_reactions')
+            .select('emoji, user_id')
+            .eq('message_id', messageId);
           
-          if (!message || message.thread_id !== threadId) return;
+          // Aggregate reactions by emoji
+          const reactionMap = new Map<string, { count: number; users: string[] }>();
+          (reactions || []).forEach((r: { emoji: string; user_id: string }) => {
+            if (!reactionMap.has(r.emoji)) {
+              reactionMap.set(r.emoji, { count: 0, users: [] });
+            }
+            const emojiData = reactionMap.get(r.emoji)!;
+            emojiData.count++;
+            emojiData.users.push(r.user_id);
+          });
           
-          // Invalidate the messages query to refetch with updated reactions
-          queryClient.invalidateQueries({ queryKey: ['teacher', 'messages', threadId] });
+          const reactionsArray = Array.from(reactionMap.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.users.includes(user?.id || ''),
+          }));
+          
+          // Update message in cache with new reactions
+          queryClient.setQueryData(
+            ['teacher', 'messages', threadId],
+            (old: any[] | undefined) => {
+              if (!old) return old;
+              return old.map(msg => 
+                msg.id === messageId 
+                  ? { ...msg, reactions: reactionsArray }
+                  : msg
+              );
+            }
+          );
         }
       )
       .subscribe();

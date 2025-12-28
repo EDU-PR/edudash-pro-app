@@ -109,7 +109,7 @@ export async function routeNotification(
     
     if (!targetUserId) {
       // No user targeting - show to current user
-      console.log('[NotificationRouter] No target user, showing notification');
+      logger.debug('NotificationRouter', 'No target user, showing notification');
       return true;
     }
     
@@ -118,18 +118,18 @@ export async function routeNotification(
     
     if (!currentUserId) {
       // No user logged in - show notification with prompt to sign in
-      console.log('[NotificationRouter] No user logged in, showing notification');
+      logger.debug('NotificationRouter', 'No user logged in, showing notification');
       return true;
     }
     
     if (targetUserId === currentUserId) {
       // Notification is for current user - show it
-      console.log('[NotificationRouter] Notification for current user, showing');
+      logger.debug('NotificationRouter', 'Notification for current user, showing');
       return true;
     }
     
     // Notification is for a different user
-    console.log('[NotificationRouter] Notification for different user:', {
+    logger.debug('NotificationRouter', 'Notification for different user:', {
       target: targetUserId,
       current: currentUserId
     });
@@ -146,13 +146,13 @@ export async function routeNotification(
           text: 'Ignore',
           style: 'cancel',
           onPress: () => {
-            console.log('[NotificationRouter] User chose to ignore notification');
+            logger.debug('NotificationRouter', 'User chose to ignore notification');
           }
         },
         {
           text: 'Switch Account',
           onPress: async () => {
-            console.log('[NotificationRouter] User chose to switch accounts');
+            logger.debug('NotificationRouter', 'User chose to switch accounts');
             await handleAccountSwitch(targetUserId);
           }
         }
@@ -175,18 +175,18 @@ export async function routeNotification(
  * Call this during app initialization
  */
 export function setupNotificationRouter(): () => void {
-  console.log('[NotificationRouter] Setting up notification router');
+  logger.debug('NotificationRouter', 'Setting up notification router');
   
   // Listen for notifications received while app is in foreground
   const foregroundSubscription = Notifications.addNotificationReceivedListener(
     async (notification) => {
-      console.log('[NotificationRouter] Foreground notification received');
+      logger.debug('NotificationRouter', 'Foreground notification received');
       const data = notification.request.content.data as NotificationPayload;
       
       // IMPORTANT: Let CallProvider handle incoming_call notifications
       // Don't interfere with the call system
       if (data?.type === 'incoming_call') {
-        console.log('[NotificationRouter] Incoming call notification - letting CallProvider handle it');
+        logger.debug('NotificationRouter', 'Incoming call notification - letting CallProvider handle it');
         return;
       }
       
@@ -200,9 +200,9 @@ export function setupNotificationRouter(): () => void {
               p_thread_id: data.thread_id,
               p_user_id: currentUserId,
             });
-            console.log('[NotificationRouter] ✅ Marked messages as delivered for thread:', data.thread_id);
+            logger.debug('NotificationRouter', '✅ Marked messages as delivered for thread:', data.thread_id);
           } catch (err) {
-            console.warn('[NotificationRouter] Failed to mark messages as delivered:', err);
+            logger.warn('NotificationRouter', 'Failed to mark messages as delivered:', err);
           }
         }
       }
@@ -211,7 +211,7 @@ export function setupNotificationRouter(): () => void {
       // The routeNotification check is for account switching, not for suppressing notifications
       if (data?.type === 'message' || data?.type === 'chat') {
         // Message notifications should always show as banners
-        console.log('[NotificationRouter] Message notification - will show banner');
+        logger.debug('NotificationRouter', 'Message notification - will show banner');
         // The notification handler in lib/notifications.ts will show it
         // We just mark as delivered and check for account switching
         await routeNotification(notification);
@@ -222,7 +222,7 @@ export function setupNotificationRouter(): () => void {
       
       if (!shouldShow) {
         // Notification was handled (wrong user), don't show it
-        console.log('[NotificationRouter] Notification suppressed (wrong user)');
+        logger.debug('NotificationRouter', 'Notification suppressed (wrong user)');
       }
     }
   );
@@ -230,7 +230,7 @@ export function setupNotificationRouter(): () => void {
   // Listen for notification interactions (user tapped notification)
   const responseSubscription = Notifications.addNotificationResponseReceivedListener(
     async (response) => {
-      console.log('[NotificationRouter] Notification interaction received');
+      logger.debug('NotificationRouter', 'Notification interaction received');
       const notification = response.notification;
       const data = notification.request.content.data as NotificationPayload;
       
@@ -244,9 +244,9 @@ export function setupNotificationRouter(): () => void {
               p_thread_id: data.thread_id,
               p_user_id: currentUserId,
             });
-            console.log('[NotificationRouter] ✅ Marked messages as delivered (from notification tap)');
+            logger.debug('NotificationRouter', '✅ Marked messages as delivered (from notification tap)');
           } catch (err) {
-            console.warn('[NotificationRouter] Failed to mark messages as delivered:', err);
+            logger.warn('NotificationRouter', 'Failed to mark messages as delivered:', err);
           }
         }
       }
@@ -283,7 +283,7 @@ export function setupNotificationRouter(): () => void {
   return () => {
     foregroundSubscription.remove();
     responseSubscription.remove();
-    console.log('[NotificationRouter] Notification router cleaned up');
+    logger.debug('NotificationRouter', 'Notification router cleaned up');
   };
 }
 
@@ -305,7 +305,7 @@ function handleNotificationInteraction(data: NotificationPayload): void {
     case 'incoming_call':
       // IMPORTANT: Let CallProvider handle incoming call notifications
       // Don't navigate here - the CallProvider will show the incoming call UI
-      console.log('[NotificationRouter] Incoming call tap - CallProvider handles this');
+      logger.debug('NotificationRouter', 'Incoming call tap - CallProvider handles this');
       break;
       
     case 'call':

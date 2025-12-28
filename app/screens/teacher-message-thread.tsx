@@ -179,9 +179,13 @@ export default function TeacherMessageThreadScreen() {
           p_thread_id: threadId,
           p_user_id: user.id,
         }).then(() => {
-          console.log('[TeacherThread] ✅ Marked messages as delivered');
+          if (__DEV__) {
+            console.log('[TeacherThread] ✅ Marked messages as delivered');
+          }
         }).catch((err: any) => {
-          console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
+          if (__DEV__) {
+            console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
+          }
         });
       } catch {}
       

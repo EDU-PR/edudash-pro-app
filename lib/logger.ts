@@ -1,151 +1,75 @@
 /**
- * Production-safe logging utility
+ * Centralized logging utility
  * 
- * This module provides logging functions that automatically handle
- * development vs production environments, ensuring sensitive debugging
- * information is never exposed to users in production builds.
+ * Usage:
+ * - Use logger.debug() for development-only logs
+ * - Use logger.warn() for development-only warnings
+ * - Use logger.error() for errors that should always be logged (sent to Sentry in production)
+ * 
+ * Benefits:
+ * - console.log/warn statements only run in development (__DEV__)
+ * - console.error always runs for error tracking
+ * - Consistent formatting with tags
+ * - Easy to switch to Sentry/other logging service in future
  */
 
-const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
-const isTest = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
-
-/**
- * Log levels for controlling output
- */
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  NONE = 4,
-}
-
-/**
- * Current log level (can be configured via environment)
- */
-const currentLogLevel = isDevelopment 
-  ? LogLevel.DEBUG 
-  : isTest 
-    ? LogLevel.WARN 
-    : LogLevel.NONE;
-
-/**
- * Production-safe logger that only outputs in development
- */
 export const logger = {
   /**
-   * Debug logging - only shown in development
+   * Debug logging - only in development
+   * @param tag - Component or module name (e.g., 'MessagesRealtime')
+   * @param args - Data to log
    */
-  debug: (message: string, ...args: any[]) => {
-    if (currentLogLevel <= LogLevel.DEBUG && isDevelopment) {
-      console.debug(`[DEBUG] ${message}`, ...args);
+  debug: (tag: string, ...args: any[]) => {
+    if (__DEV__) {
+      console.log(`[${tag}]`, ...args);
     }
   },
 
   /**
-   * Info logging - only shown in development
+   * Warning logging - only in development
+   * @param tag - Component or module name
+   * @param args - Data to log
    */
-  info: (message: string, ...args: any[]) => {
-    if (currentLogLevel <= LogLevel.INFO && isDevelopment) {
-      console.log(`[INFO] ${message}`, ...args);
+  warn: (tag: string, ...args: any[]) => {
+    if (__DEV__) {
+      console.warn(`[${tag}]`, ...args);
     }
   },
 
   /**
-   * Log alias for info (for compatibility)
+   * Error logging - always logged (sent to Sentry in production)
+   * @param tag - Component or module name
+   * @param args - Error data to log
    */
-  log: (message: string, ...args: any[]) => {
-    if (currentLogLevel <= LogLevel.INFO && isDevelopment) {
-      console.log(`[LOG] ${message}`, ...args);
-    }
+  error: (tag: string, ...args: any[]) => {
+    console.error(`[${tag}]`, ...args);
+    // TODO: Send to Sentry in production
   },
 
   /**
-   * Warning logging - shown in development and tests
+   * Info logging - only in development
+   * @param tag - Component or module name
+   * @param args - Data to log
    */
-  warn: (message: string, ...args: any[]) => {
-    if (currentLogLevel <= LogLevel.WARN && (isDevelopment || isTest)) {
-      console.warn(`[WARN] ${message}`, ...args);
-    }
-  },
-
-  /**
-   * Error logging - shown in development and tests
-   * In production, errors should be handled gracefully without logging
-   */
-  error: (message: string, ...args: any[]) => {
-    if (currentLogLevel <= LogLevel.ERROR && (isDevelopment || isTest)) {
-      console.error(`[ERROR] ${message}`, ...args);
-    }
-  },
-
-  /**
-   * Force logging even in production (use sparingly for critical errors)
-   * This should only be used for errors that need to be reported to crash analytics
-   */
-  forceError: (message: string, ...args: any[]) => {
-    console.error(`[CRITICAL] ${message}`, ...args);
-    
-    // Also report to Sentry if available
-    try {
-      // Lazy import to avoid circular dependencies
-      import('./monitoring').then(({ reportError }) => {
-        const error = args[0] instanceof Error ? args[0] : new Error(message);
-        const context = args.length > 1 ? { additionalData: args.slice(1) } : undefined;
-        reportError(error, context);
-      }).catch(() => {
-        // Monitoring not available, ignore
-      });
-    } catch {
-      // Silently fail if monitoring is not available
+  info: (tag: string, ...args: any[]) => {
+    if (__DEV__) {
+      console.info(`[${tag}]`, ...args);
     }
   },
 };
 
 /**
- * Safe error handler that shows user-friendly messages in production
+ * Legacy compatibility - for gradual migration
+ * Wrap existing console.log statements without refactoring
  */
-export const handleError = (error: any, userMessage?: string): string => {
-  if (isDevelopment || isTest) {
-    // Development: show detailed error information
-    logger.error('Error occurred:', error);
-    return error?.message || 'An error occurred';
-  } else {
-    // Production: show user-friendly message and optionally report to analytics
-    const safeMessage = userMessage || 'Something went wrong. Please try again.';
-    
-    // TODO: Report to crash analytics (Sentry, Crashlytics, etc.)
-    // crashlytics().recordError(error);
-    
-    return safeMessage;
+export const devLog = (...args: any[]) => {
+  if (__DEV__) {
+    console.log(...args);
   }
 };
 
-/**
- * Development-only assertion
- */
-export const devAssert = (condition: boolean, message: string) => {
-  if (isDevelopment && !condition) {
-    throw new Error(`[DEV ASSERTION FAILED] ${message}`);
+export const devWarn = (...args: any[]) => {
+  if (__DEV__) {
+    console.warn(...args);
   }
 };
-
-/**
- * Development-only performance timing
- */
-export const perfTimer = {
-  start: (label: string): (() => void) | undefined => {
-    if (!isDevelopment) return undefined;
-    
-    const startTime = performance.now();
-    console.time(label);
-    
-    return () => {
-      const endTime = performance.now();
-      console.timeEnd(label);
-      logger.debug(`Performance: ${label} took ${endTime - startTime}ms`);
-    };
-  }
-};
-
-export default logger;

@@ -44,7 +44,7 @@ interface MessageComposerProps {
   placeholder?: string;
 }
 
-export const MessageComposer: React.FC<MessageComposerProps> = ({
+export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   onSend,
   onVoiceRecording,
   sending,
@@ -218,7 +218,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

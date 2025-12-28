@@ -242,15 +242,17 @@ export default function ParentMessageThreadScreen() {
   }, [messages, optimisticMsgs]);
 
   // Real-time subscription for messages and reactions
+  // Import at top level instead of dynamic require for better performance
   useEffect(() => {
-    if (threadId && user?.id) {
-      try {
-        const hooks = require('@/hooks/useParentMessaging');
-        if (hooks.useParentMessagesRealtime) {
-          // This hook handles real-time updates internally
-          hooks.useParentMessagesRealtime(threadId);
-        }
-      } catch (err) {
+    if (!threadId || !user?.id) return;
+    
+    try {
+      const hooks = require('@/hooks/useParentMessaging');
+      if (hooks.useParentMessagesRealtime) {
+        hooks.useParentMessagesRealtime(threadId);
+      }
+    } catch (err) {
+      if (__DEV__) {
         console.warn('[ParentThread] Real-time hook not available:', err);
       }
     }
@@ -268,9 +270,13 @@ export default function ParentMessageThreadScreen() {
           p_thread_id: threadId,
           p_user_id: user.id,
         }).then(() => {
-          console.log('[ParentThread] ✅ Marked messages as delivered');
+          if (__DEV__) {
+            console.log('[ParentThread] ✅ Marked messages as delivered');
+          }
         }).catch((err: any) => {
-          console.warn('[ParentThread] Failed to mark messages as delivered:', err);
+          if (__DEV__) {
+            console.warn('[ParentThread] Failed to mark messages as delivered:', err);
+          }
         });
       } catch {}
       

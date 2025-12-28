@@ -37,6 +37,7 @@ import { TermsProvider } from '../contexts/TerminologyContext';
 import { OnboardingProvider } from '../contexts/OnboardingContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../components/ui/StyledAlert';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import DashWakeWordListener from '../components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
 import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
@@ -176,39 +177,41 @@ export default function RootLayout() {
   }, []);
   
   return (
-    <SafeAreaProvider>
-      <QueryProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <SubscriptionProvider>
-              <UpdatesProvider>
-                <AppPreferencesProvider>
-                  <NotificationProvider>
-                    <CallProvider>
-                      <OnboardingProvider>
-                        <OrganizationBrandingProvider>
-                        <DashboardPreferencesProvider>
-                        <TermsProvider>
-                          <ToastProvider>
-                            <AlertProvider>
-                              <GestureHandlerRootView style={{ flex: 1 }}>
-                                <RootLayoutContent />
-                              </GestureHandlerRootView>
-                            </AlertProvider>
-                          </ToastProvider>
-                        </TermsProvider>
-                      </DashboardPreferencesProvider>
-                      </OrganizationBrandingProvider>
-                      </OnboardingProvider>
-                    </CallProvider>
-                  </NotificationProvider>
-                </AppPreferencesProvider>
-              </UpdatesProvider>
-            </SubscriptionProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </QueryProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <QueryProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <SubscriptionProvider>
+                <UpdatesProvider>
+                  <AppPreferencesProvider>
+                    <NotificationProvider>
+                      <CallProvider>
+                        <OnboardingProvider>
+                          <OrganizationBrandingProvider>
+                          <DashboardPreferencesProvider>
+                          <TermsProvider>
+                            <ToastProvider>
+                              <AlertProvider>
+                                <GestureHandlerRootView style={{ flex: 1 }}>
+                                  <RootLayoutContent />
+                                </GestureHandlerRootView>
+                              </AlertProvider>
+                            </ToastProvider>
+                          </TermsProvider>
+                        </DashboardPreferencesProvider>
+                        </OrganizationBrandingProvider>
+                        </OnboardingProvider>
+                      </CallProvider>
+                    </NotificationProvider>
+                  </AppPreferencesProvider>
+                </UpdatesProvider>
+              </SubscriptionProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </QueryProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
