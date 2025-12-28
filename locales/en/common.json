@@ -1475,6 +1475,12 @@
     }
   },
   "subscription": {
+    "starter": "Starter",
+    "basic": "Basic",
+    "pro": "Pro",
+    "enterprise": "Enterprise",
+    "parent_starter": "Parent Starter",
+    "parent_plus": "Parent Plus",
     "plus_feature": "Plus",
     "free": "Free",
     "currentPlan": "Current Plan",
