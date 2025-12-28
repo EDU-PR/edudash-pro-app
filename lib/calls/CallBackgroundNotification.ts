@@ -254,16 +254,22 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
     // Save for when app opens
     await savePendingCall(callData);
     
-    // If app is backgrounded (not killed), show notification
+    // NOTE: We do NOT show a local notification here anymore!
+    // The push notification from the server is already displayed by the system.
+    // Creating another local notification causes duplicate notifications.
+    // We only save the pending call for when the app opens.
+    
+    // Start vibration for incoming call (if app is backgrounded, not killed)
     if (AppState.currentState !== 'active') {
-      // Try CallKeep first for native call screen
-      const callKeepSuccess = await showCallKeepNotification(callData);
+      Vibration.vibrate(RINGTONE_VIBRATION_PATTERN, true);
       
-      // Always show notification as backup
-      if (!callKeepSuccess) {
-        await showIncomingCallNotification(callData);
-      }
+      // Stop vibration after 30 seconds
+      setTimeout(() => {
+        Vibration.cancel();
+      }, 30000);
     }
+    
+    console.log('[CallBackgroundNotification] Call saved for app open, no duplicate notification created');
     return;
   }
   

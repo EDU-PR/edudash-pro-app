@@ -180,7 +180,8 @@
           "microphonePermission": "EduDash Pro needs microphone access for voice and video calls"
         }
       ],
-      "./plugins/withAndroidManifestFix.js"
+      "./plugins/withAndroidManifestFix.js",
+      "./plugins/withPictureInPicture.js"
     ],
     "experiments": {
       "typedRoutes": false

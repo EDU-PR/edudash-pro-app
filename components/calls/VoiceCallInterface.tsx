@@ -35,6 +35,7 @@ import {
   useVoiceCallTimeout,
   useCallBackgroundHandler,
 } from './hooks';
+import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 
 // Components
 import { VoiceCallControls } from './VoiceCallControls';
@@ -130,6 +131,21 @@ export function VoiceCallInterface({
         }
       }
     },
+  });
+
+  // Picture-in-Picture mode for background calls (Android)
+  const { isInPipMode, isPipSupported } = usePictureInPicture({
+    // Auto-enter PiP when call is connected and app goes to background
+    autoEnterOnBackground: isOpen && state.callState === 'connected',
+    onEnterPiP: () => {
+      console.log('[VoiceCallInterface] Entered PiP mode - call continues in floating window');
+    },
+    onExitPiP: () => {
+      console.log('[VoiceCallInterface] Exited PiP mode');
+    },
+    // Portrait aspect ratio for voice call UI
+    aspectRatioWidth: 9,
+    aspectRatioHeight: 16,
   });
 
   // Handlers
