@@ -456,7 +456,7 @@ export function VideoCallInterface({
       <View style={styles.mainVideoContainer}>
         {mainParticipant && DailyMediaView ? (
           <DailyMediaView
-            videoTrack={mainParticipant.tracks?.video?.state === 'playable' ? mainParticipant : null}
+            videoTrack={mainParticipant.tracks?.video?.state === 'playable' ? (mainParticipant.tracks?.video?.persistentTrack || mainParticipant.tracks?.video?.track || null) : null}
             audioTrack={null}
             style={styles.mainVideo}
             objectFit="cover"
@@ -475,7 +475,7 @@ export function VideoCallInterface({
       {localParticipant && isVideoEnabled && DailyMediaView && (
         <View style={styles.localVideoContainer}>
           <DailyMediaView
-            videoTrack={localParticipant}
+            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
             audioTrack={null}
             style={styles.localVideo}
             objectFit="cover"

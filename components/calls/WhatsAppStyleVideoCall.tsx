@@ -700,7 +700,7 @@ export function WhatsAppStyleVideoCall({
         >
           {hasRemoteVideo && DailyMediaView ? (
             <DailyMediaView
-              videoTrack={remoteParticipants[0]}
+              videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
               audioTrack={null}
               style={styles.minimizedVideo}
               objectFit="cover"
@@ -736,14 +736,14 @@ export function WhatsAppStyleVideoCall({
         {/* Main Video View */}
         {hasRemoteVideo && DailyMediaView ? (
           <DailyMediaView
-            videoTrack={remoteParticipants[0]}
-            audioTrack={remoteParticipants[0]}
+            videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
+            audioTrack={remoteParticipants[0]?.tracks?.audio?.persistentTrack || remoteParticipants[0]?.tracks?.audio?.track || null}
             style={styles.mainVideo}
             objectFit="cover"
           />
         ) : hasLocalVideo && DailyMediaView ? (
           <DailyMediaView
-            videoTrack={localParticipant}
+            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
             audioTrack={null}
             style={styles.mainVideo}
             objectFit="cover"
@@ -781,7 +781,7 @@ export function WhatsAppStyleVideoCall({
           {...localVideoPanResponder.panHandlers}
         >
           <DailyMediaView
-            videoTrack={localParticipant}
+            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
             audioTrack={null}
             style={styles.localVideo}
             objectFit="cover"
