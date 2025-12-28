@@ -83,18 +83,50 @@ export function useVoiceCallAudio({
   }, [callState, isOwner, setIsSpeakerEnabled]);
 
   // Stop ringback when call connects and ensure earpiece mode
+  // CRITICAL: Enforce earpiece BEFORE stopping ringback to prevent auto-switch to speaker
   useEffect(() => {
     if (callState === 'connected' && InCallManager) {
       try {
-        if (isOwner) {
-          InCallManager.stopRingback();
-          console.log('[VoiceCallAudio] Stopped ringback - call connected');
-        }
-        // IMPORTANT: Re-enforce earpiece mode after ringback stops
-        // This prevents auto-switch to speaker
+        // STEP 1: Enforce earpiece BEFORE stopping ringback (prevents speaker switch)
         InCallManager.setForceSpeakerphoneOn(false);
         setIsSpeakerEnabled(false);
-        console.log('[VoiceCallAudio] Enforced earpiece mode on connect');
+        console.log('[VoiceCallAudio] Pre-enforced earpiece before stopping ringback');
+        
+        // STEP 2: Small delay to let earpiece setting take effect
+        setTimeout(() => {
+          if (isOwner && InCallManager) {
+            try {
+              InCallManager.stopRingback();
+              console.log('[VoiceCallAudio] Stopped ringback - call connected');
+            } catch (err) {
+              console.warn('[VoiceCallAudio] Failed to stop ringback:', err);
+            }
+          }
+          
+          // STEP 3: Re-enforce earpiece immediately after stopping ringback
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              setIsSpeakerEnabled(false);
+              console.log('[VoiceCallAudio] Post-enforced earpiece after stopping ringback');
+            } catch (err) {
+              console.warn('[VoiceCallAudio] Failed to post-enforce earpiece:', err);
+            }
+          }
+        }, 50); // Small delay to let pre-enforcement take effect
+        
+        // STEP 4: Additional enforcement after a longer delay to catch any late switches
+        setTimeout(() => {
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              setIsSpeakerEnabled(false);
+              console.log('[VoiceCallAudio] Final earpiece enforcement (delayed)');
+            } catch (err) {
+              console.warn('[VoiceCallAudio] Failed final earpiece enforcement:', err);
+            }
+          }
+        }, 300);
       } catch (error) {
         console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
       }

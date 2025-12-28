@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
 import { FadeIn, SlideIn, ScaleIn, StaggerChildren } from '@/components/animations';
+import { getAppDownloadUrls } from '@/lib/deepLinks';
 import {
   Smartphone,
   Download,
@@ -22,6 +23,7 @@ import {
 export default function DownloadPage() {
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const downloadUrls = getAppDownloadUrls();
 
   const handleEarlyAccess = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,9 +72,6 @@ export default function DownloadPage() {
               className="bg-white rounded-2xl shadow-sm p-8 relative overflow-hidden"
               whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
             >
-              <div className="absolute top-4 right-4 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                Coming Soon
-              </div>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-soa-light rounded-xl flex items-center justify-center">
                   <svg viewBox="0 0 24 24" className="w-8 h-8 text-soa-primary" fill="currentColor">
@@ -85,14 +84,15 @@ export default function DownloadPage() {
                 </div>
               </div>
 
-              <div className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-200 text-gray-500 rounded-xl font-semibold cursor-not-allowed mb-4">
-                <Bell className="w-5 h-5" />
-                Notify Me When Available
-              </div>
-
-              <p className="text-xs text-gray-500 text-center">
-                Expected Q1 2026
-              </p>
+              <a
+                href={downloadUrls.android}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-soa-primary text-white rounded-xl font-semibold hover:bg-soa-dark transition mb-4"
+              >
+                <Download className="w-5 h-5" />
+                Download on Google Play
+              </a>
             </motion.div>
 
             {/* iOS */}
@@ -100,9 +100,6 @@ export default function DownloadPage() {
               className="bg-white rounded-2xl shadow-sm p-8 relative overflow-hidden"
               whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
             >
-              <div className="absolute top-4 right-4 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                Coming Soon
-              </div>
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center">
                   <Apple className="w-8 h-8 text-gray-900" />
@@ -113,12 +110,15 @@ export default function DownloadPage() {
                 </div>
               </div>
 
-              <div className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-gray-200 text-gray-500 rounded-xl font-semibold cursor-not-allowed mb-4">
-                <Bell className="w-5 h-5" />
-                Notify Me When Available
-              </div>
-
-              <p className="text-xs text-gray-500 text-center">Expected Q1 2026</p>
+              <a
+                href={downloadUrls.ios}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 bg-soa-primary text-white rounded-xl font-semibold hover:bg-soa-dark transition mb-4"
+              >
+                <Download className="w-5 h-5" />
+                Download on App Store
+              </a>
             </motion.div>
           </StaggerChildren>
 

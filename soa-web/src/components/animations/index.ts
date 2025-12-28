@@ -5,3 +5,7 @@ export { SlideIn } from './SlideIn';
 export { FloatingElement } from './FloatingElement';
 export { CountUp } from './CountUp';
 export { ParallaxSection } from './ParallaxSection';
+export { HoverCard } from './HoverCard';
+export { ScrollReveal } from './ScrollReveal';
+export { InteractiveButton } from './InteractiveButton';
+export { MagneticCard } from './MagneticCard';
