@@ -186,7 +186,6 @@
           "appName": "EduDash Pro"
         }
       ],
-      "./plugins/withGoogleServices.js",
       "./plugins/withAndroidManifestFix.js"
     ],
     "experiments": {

@@ -11,6 +11,7 @@ require('dotenv').config();
  * 1. Conditionally include expo-dev-client (only for development builds)
  * 2. Dynamic AdMob IDs from environment variables (for different environments)
  * 3. App variant suffix for dev builds (allows both dev and preview on same device)
+ * 4. Google Services file from EAS env for Firebase (when building on EAS)
  * 
  * @param {import('@expo/config').ConfigContext} ctx
  */
@@ -19,6 +20,9 @@ module.exports = ({ config }) => {
   const appVariant = process.env.APP_VARIANT || '';
   const isDevBuild = profile === 'development' || appVariant === 'development';
   const isWeb = process.env.EXPO_PUBLIC_PLATFORM === 'web';
+  
+  // Google Services file: use EAS env file path if available, fallback to local
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON || './android/app/google-services.json';
 
   // Get AdMob IDs from environment (fallback to test IDs)
   const androidAdMobId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || 'ca-app-pub-3940256099942544~3347511713';
@@ -51,12 +55,19 @@ module.exports = ({ config }) => {
     android: {
       ...config.android,
       package: 'com.edudashpro.app.dev',
+      googleServicesFile,
     },
     ios: {
       ...config.ios,
       bundleIdentifier: 'com.k1ngdevops.edudashpro.dev',
     },
-  } : {};
+  } : {
+    // Production config also needs googleServicesFile
+    android: {
+      ...config.android,
+      googleServicesFile,
+    },
+  };
 
   return {
     ...config,
