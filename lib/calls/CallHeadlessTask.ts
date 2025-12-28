@@ -125,10 +125,11 @@ async function setupIncomingCallChannel(): Promise<void> {
     });
     
     // Setup notification category with answer/decline actions
+    // These buttons appear when user expands the notification (swipes down)
     await Notifications.setNotificationCategoryAsync('incoming_call', [
       {
         identifier: 'ANSWER',
-        buttonTitle: 'Answer',
+        buttonTitle: '✓ Answer',
         options: {
           opensAppToForeground: true,
           isAuthenticationRequired: false,
@@ -136,7 +137,7 @@ async function setupIncomingCallChannel(): Promise<void> {
       },
       {
         identifier: 'DECLINE',
-        buttonTitle: 'Decline',
+        buttonTitle: '✕ Decline',
         options: {
           opensAppToForeground: false,
           isAuthenticationRequired: false,
@@ -166,14 +167,15 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
     
     const callTypeEmoji = callData.call_type === 'video' ? '📹' : '📞';
     const callTypeText = callData.call_type === 'video' ? 'Video Call' : 'Voice Call';
+    const callerName = callData.caller_name || 'Someone';
     
     // Schedule the notification immediately with highest priority
     await Notifications.scheduleNotificationAsync({
       identifier: `incoming-call-${callData.call_id}`,
       content: {
-        title: `${callTypeEmoji} Incoming ${callTypeText}`,
-        body: `${callData.caller_name} is calling...`,
-        subtitle: 'EduDash Pro',
+        title: `${callTypeEmoji} ${callerName}`,
+        body: `Incoming ${callTypeText} • Tap to answer`,
+        subtitle: 'Swipe down for Answer/Decline',
         categoryIdentifier: 'incoming_call',
         data: {
           type: 'incoming_call',

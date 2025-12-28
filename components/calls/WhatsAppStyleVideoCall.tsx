@@ -392,11 +392,51 @@ export function WhatsAppStyleVideoCall({
     setRemoteParticipants(remote);
   }, []);
 
+  // Continuous earpiece enforcement during ringing/connecting
+  // This prevents Android from auto-switching to speaker during ringback
+  const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  useEffect(() => {
+    if (!InCallManager) return;
+    
+    const shouldEnforceEarpiece = (callState === 'connecting' || callState === 'ringing') && !isSpeakerOn;
+    
+    if (shouldEnforceEarpiece) {
+      console.log('[VideoCall] Starting continuous earpiece enforcement');
+      
+      // Immediately enforce earpiece
+      try {
+        InCallManager.setForceSpeakerphoneOn(false);
+      } catch (e) {
+        console.warn('[VideoCall] Initial earpiece enforcement failed:', e);
+      }
+      
+      // Set up periodic enforcement every 500ms during ringing
+      earpieceEnforcerRef.current = setInterval(() => {
+        try {
+          InCallManager.setForceSpeakerphoneOn(false);
+        } catch (e) {
+          // Ignore errors during enforcement
+        }
+      }, 500);
+    } else {
+      // Clear the enforcer when not needed
+      if (earpieceEnforcerRef.current) {
+        clearInterval(earpieceEnforcerRef.current);
+        earpieceEnforcerRef.current = null;
+        console.log('[VideoCall] Stopped continuous earpiece enforcement');
+      }
+    }
+    
+    return () => {
+      if (earpieceEnforcerRef.current) {
+        clearInterval(earpieceEnforcerRef.current);
+        earpieceEnforcerRef.current = null;
+      }
+    };
+  }, [callState, isSpeakerOn]);
+
   // InCallManager: Start ringback for caller, stop when connected
-  // NOTE: We use media: 'audio' even for video calls because:
-  // - media: 'video' defaults to speaker which we don't want
-  // - media: 'audio' defaults to earpiece (WhatsApp-like behavior)
-  // - Video display is handled by Daily.co, InCallManager only handles audio routing
   useEffect(() => {
     if (!InCallManager) return;
 
@@ -404,13 +444,17 @@ export function WhatsAppStyleVideoCall({
       // Start audio with ringback for caller
       if (isOwner) {
         try {
+          // CRITICAL: Set earpiece BEFORE starting to prevent any speaker routing
+          InCallManager.setForceSpeakerphoneOn(false);
+          
           // Use 'audio' media type to default to earpiece
           InCallManager.start({ 
             media: 'audio', // NOT 'video' - this defaults to earpiece
             auto: false,
             ringback: '_DEFAULT_' // System default ringback tone
           });
-          // Explicitly ensure earpiece
+          
+          // Immediately re-enforce earpiece after start
           InCallManager.setForceSpeakerphoneOn(false);
           setIsSpeakerOn(false);
           InCallManager.setKeepScreenOn(true);
@@ -421,6 +465,7 @@ export function WhatsAppStyleVideoCall({
       } else {
         // Callee: no ringback
         try {
+          InCallManager.setForceSpeakerphoneOn(false);
           InCallManager.start({ 
             media: 'audio', // NOT 'video' - this defaults to earpiece
             auto: false,
@@ -435,15 +480,14 @@ export function WhatsAppStyleVideoCall({
         }
       }
     } else if (callState === 'connected') {
-      // Stop ringback when connected and enforce earpiece
+      // Stop ringback when connected
       try {
         if (isOwner) {
           InCallManager.stopRingback();
         }
-        // Re-enforce earpiece after ringback stops
-        InCallManager.setForceSpeakerphoneOn(false);
-        setIsSpeakerOn(false);
-        console.log('[VideoCall] Stopped ringback - call connected (earpiece enforced)');
+        // Apply current speaker state (earpiece by default, unless user toggled)
+        InCallManager.setForceSpeakerphoneOn(isSpeakerOn);
+        console.log('[VideoCall] Stopped ringback - call connected, audio on:', isSpeakerOn ? 'speaker' : 'earpiece');
       } catch (err) {
         console.warn('[VideoCall] Failed to stop ringback:', err);
       }
@@ -460,7 +504,7 @@ export function WhatsAppStyleVideoCall({
         }
       }
     };
-  }, [callState, isOwner]);
+  }, [callState, isOwner, isSpeakerOn]);
 
   // Initialize call
   useEffect(() => {

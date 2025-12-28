@@ -85,9 +85,12 @@ async function setupIncomingCallChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   
   try {
+    // CRITICAL: Create channel with MAX importance for full-screen intent
+    // This enables the notification to show as a heads-up notification
+    // and allows full-screen intent on Android 10+
     await Notifications.setNotificationChannelAsync('incoming-calls', {
       name: 'Incoming Calls',
-      description: 'Voice and video call notifications with high priority',
+      description: 'Voice and video call notifications with high priority and full-screen intent',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: RINGTONE_VIBRATION_PATTERN,
       lightColor: '#00f5ff',
@@ -100,6 +103,8 @@ async function setupIncomingCallChannel(): Promise<void> {
     });
     
     // Setup notification category with answer/decline actions
+    // These buttons appear when user expands the notification
+    // On some devices, they also appear in heads-up notifications
     await Notifications.setNotificationCategoryAsync('incoming_call', [
       {
         identifier: 'ANSWER',
@@ -128,6 +133,10 @@ async function setupIncomingCallChannel(): Promise<void> {
 
 /**
  * Show full-screen incoming call notification
+ * 
+ * On Android, this shows a heads-up notification with Answer/Decline buttons.
+ * Users need to expand the notification to see the action buttons on most devices.
+ * On Samsung/OneUI devices, buttons may appear directly in the heads-up notification.
  */
 async function showIncomingCallNotification(callData: IncomingCallNotificationData): Promise<void> {
   try {
@@ -135,13 +144,14 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
     
     const callTypeEmoji = callData.call_type === 'video' ? '📹' : '📞';
     const callTypeText = callData.call_type === 'video' ? 'Video Call' : 'Voice Call';
+    const callerName = callData.caller_name || 'Someone';
     
     await Notifications.scheduleNotificationAsync({
       identifier: `incoming-call-${callData.call_id}`,
       content: {
-        title: `${callTypeEmoji} Incoming ${callTypeText}`,
-        body: `${callData.caller_name || 'Someone'} is calling...`,
-        subtitle: 'EduDash Pro',
+        title: `${callTypeEmoji} ${callerName}`,
+        body: `Incoming ${callTypeText} • Tap to answer`,
+        subtitle: 'Swipe down for Answer/Decline',
         categoryIdentifier: 'incoming_call',
         data: {
           type: 'incoming_call',
