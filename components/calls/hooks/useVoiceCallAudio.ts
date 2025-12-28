@@ -82,17 +82,24 @@ export function useVoiceCallAudio({
     }
   }, [callState, isOwner, setIsSpeakerEnabled]);
 
-  // Stop ringback when call connects
+  // Stop ringback when call connects and ensure earpiece mode
   useEffect(() => {
-    if (callState === 'connected' && InCallManager && isOwner) {
+    if (callState === 'connected' && InCallManager) {
       try {
-        InCallManager.stopRingback();
-        console.log('[VoiceCallAudio] Stopped ringback - call connected');
+        if (isOwner) {
+          InCallManager.stopRingback();
+          console.log('[VoiceCallAudio] Stopped ringback - call connected');
+        }
+        // IMPORTANT: Re-enforce earpiece mode after ringback stops
+        // This prevents auto-switch to speaker
+        InCallManager.setForceSpeakerphoneOn(false);
+        setIsSpeakerEnabled(false);
+        console.log('[VoiceCallAudio] Enforced earpiece mode on connect');
       } catch (error) {
         console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
       }
     }
-  }, [callState, isOwner]);
+  }, [callState, isOwner, setIsSpeakerEnabled]);
 
   // Toggle speaker
   const toggleSpeaker = useCallback(() => {

@@ -157,37 +157,63 @@ export function WhatsAppStyleIncomingCall({
       : [400, 200, 400];
     Vibration.vibrate(vibrationPattern, true);
 
-    const playRingtone = async () => {
+    // Use InCallManager to play system default ringtone
+    const playSystemRingtone = async () => {
       try {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-        });
-
-        let soundFile;
+        // Import InCallManager for ringtone
+        let InCallManager: any = null;
         try {
-          soundFile = require('@/assets/sounds/ringtone.mp3');
+          InCallManager = require('react-native-incall-manager').default;
         } catch {
-          try {
-            soundFile = require('@/assets/sounds/notification.wav');
-          } catch {
-            return;
-          }
+          console.warn('[IncomingCall] InCallManager not available');
         }
         
-        const player = createAudioPlayer(soundFile);
-        player.loop = true;
-        player.volume = 1.0;
-        soundRef.current = player;
-        player.play();
+        if (InCallManager) {
+          // Start ringtone with system default
+          InCallManager.startRingtone('_DEFAULT_');
+          console.log('[IncomingCall] Playing system default ringtone');
+        } else {
+          // Fallback to custom audio if InCallManager not available
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+          });
+          
+          let soundFile;
+          try {
+            soundFile = require('@/assets/sounds/ringtone.mp3');
+          } catch {
+            try {
+              soundFile = require('@/assets/sounds/notification.wav');
+            } catch {
+              return;
+            }
+          }
+          
+          const player = createAudioPlayer(soundFile);
+          player.loop = true;
+          player.volume = 1.0;
+          soundRef.current = player;
+          player.play();
+        }
       } catch (error) {
         console.warn('[IncomingCall] Failed to play ringtone:', error);
       }
     };
 
-    playRingtone();
+    playSystemRingtone();
 
     return () => {
+      // Stop system ringtone
+      try {
+        const InCallManager = require('react-native-incall-manager').default;
+        InCallManager.stopRingtone();
+        console.log('[IncomingCall] Stopped system ringtone');
+      } catch {
+        // InCallManager not available, no-op
+      }
+      
+      // Stop custom audio fallback if used
       if (soundRef.current) {
         soundRef.current.pause();
         soundRef.current.remove();

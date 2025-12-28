@@ -99,7 +99,7 @@ export function WhatsAppStyleVideoCall({
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -371,8 +371,11 @@ export function WhatsAppStyleVideoCall({
             auto: false,
             ringback: '_DEFAULT_' // System default ringback tone
           });
+          // Start with earpiece, user can toggle to speaker
+          InCallManager.setForceSpeakerphoneOn(false);
+          setIsSpeakerOn(false);
           InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager with system ringback for caller');
+          console.log('[VideoCall] Started InCallManager with system ringback for caller (earpiece)');
         } catch (err) {
           console.warn('[VideoCall] Failed to start InCallManager:', err);
         }
@@ -384,17 +387,24 @@ export function WhatsAppStyleVideoCall({
             auto: false,
             ringback: ''
           });
+          InCallManager.setForceSpeakerphoneOn(false);
+          setIsSpeakerOn(false);
           InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager for callee (no ringback)');
+          console.log('[VideoCall] Started InCallManager for callee (no ringback, earpiece)');
         } catch (err) {
           console.warn('[VideoCall] Failed to start InCallManager:', err);
         }
       }
     } else if (callState === 'connected') {
-      // Stop ringback when connected
+      // Stop ringback when connected and enforce earpiece
       try {
-        InCallManager.stopRingback();
-        console.log('[VideoCall] Stopped ringback - call connected');
+        if (isOwner) {
+          InCallManager.stopRingback();
+        }
+        // Re-enforce earpiece after ringback stops
+        InCallManager.setForceSpeakerphoneOn(false);
+        setIsSpeakerOn(false);
+        console.log('[VideoCall] Stopped ringback - call connected (earpiece enforced)');
       } catch (err) {
         console.warn('[VideoCall] Failed to stop ringback:', err);
       }
