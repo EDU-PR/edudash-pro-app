@@ -17,6 +17,48 @@ import type { CallState } from '../types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
+// CRITICAL: Ensure Promise.any is available for Daily.co SDK
+// This must run before Daily.co is imported
+if (typeof Promise.any !== 'function') {
+  (Promise as any).any = function promiseAny<T>(iterable: Iterable<T | PromiseLike<T>>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const promises = Array.from(iterable);
+      if (promises.length === 0) {
+        reject(new AggregateError([], 'All promises were rejected'));
+        return;
+      }
+      const errors: unknown[] = new Array(promises.length);
+      let rejectionCount = 0;
+      let resolved = false;
+      promises.forEach((promise, index) => {
+        Promise.resolve(promise).then(
+          (value) => {
+            if (!resolved) {
+              resolved = true;
+              resolve(value as T);
+            }
+          },
+          (reason) => {
+            if (!resolved) {
+              errors[index] = reason;
+              rejectionCount++;
+              if (rejectionCount === promises.length) {
+                reject(new AggregateError(errors, 'All promises were rejected'));
+              }
+            }
+          }
+        );
+      });
+    });
+  };
+  console.log('[VoiceCallDaily] Promise.any polyfill installed');
+}
+
+// Also ensure global has it (for bundled code)
+if (typeof global !== 'undefined' && typeof (global as any).Promise?.any !== 'function') {
+  (global as any).Promise.any = (Promise as any).any;
+}
+
 // Lazy Supabase getter
 const getSupabase = () => assertSupabase();
 
