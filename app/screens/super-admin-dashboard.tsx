@@ -225,9 +225,13 @@ export default function SuperAdminDashboardScreen() {
       // Process AI usage cost data
       if (aiCostResponse.data?.success && aiCostResponse.data.data) {
         aiUsageCost = aiCostResponse.data.data.monthly_cost || 0;
-        console.log(`AI usage cost for last 30 days: $${aiUsageCost}`);
+        if (__DEV__) {
+          console.log(`AI usage cost for last 30 days: $${aiUsageCost}`);
+        }
       } else if (aiCostResponse.error) {
-        console.warn('AI cost RPC error:', aiCostResponse.error);
+        if (__DEV__) {
+          console.warn('AI cost RPC error:', aiCostResponse.error);
+        }
       }
       
       // Fetch data in parallel - hybrid system for preschools AND K-12 schools
@@ -247,7 +251,9 @@ export default function SuperAdminDashboardScreen() {
       const schoolCount = (schoolsResponse.data || []).length;
       totalOrgs = preschoolCount + schoolCount;
       
-      console.log(`Dashboard tenant count: ${preschoolCount} preschools + ${schoolCount} K-12 schools = ${totalOrgs} total`);
+      if (__DEV__) {
+        console.log(`Dashboard tenant count: ${preschoolCount} preschools + ${schoolCount} K-12 schools = ${totalOrgs} total`);
+      }
       
       // Process subscriptions for seats and revenue (supports both preschools and K-12 schools)
       const subscriptions = subscriptionsResponse.data || [];
@@ -285,7 +291,9 @@ export default function SuperAdminDashboardScreen() {
         }
       }
       
-      console.log(`Dashboard subscription summary: ${subscriptions.length} active subscriptions, ${activeSeats} seats, R${Math.round(monthlyRevenue)} monthly revenue`);
+      if (__DEV__) {
+        console.log(`Dashboard subscription summary: ${subscriptions.length} active subscriptions, ${activeSeats} seats, R${Math.round(monthlyRevenue)} monthly revenue`);
+      }
       
       // Process recent alerts from error logs
       const alerts: RecentAlert[] = [];
@@ -312,7 +320,7 @@ export default function SuperAdminDashboardScreen() {
       setRecentAlerts(alerts);
       
       if (dashboardResponse.error) {
-        console.error('Dashboard RPC error:', dashboardResponse.error);
+        console.error('[SuperAdminDashboard] Dashboard RPC error:', dashboardResponse.error);
       }
       
       // Use direct user count like old dashboard, with RPC as backup
@@ -401,8 +409,8 @@ export default function SuperAdminDashboardScreen() {
       
       setFeatureFlags(flags);
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      // Minimal fallback
+      console.error('[SuperAdminDashboard] Failed to fetch dashboard data:', error);
+      // Minimal fallback with error alert
       setDashboardStats({
         total_users: 0,
         active_users: 0,
@@ -415,10 +423,20 @@ export default function SuperAdminDashboardScreen() {
       });
       setRecentAlerts([{
         id: 'error',
-        message: 'Failed to load dashboard data',
+        message: 'Failed to load dashboard data - check connection',
         severity: 'high',
         timestamp: new Date().toISOString()
       }]);
+      
+      // Show user-friendly error
+      Alert.alert(
+        'Dashboard Error',
+        'Unable to load dashboard data. Please check your connection and try again.',
+        [
+          { text: 'Retry', onPress: () => fetchDashboardData() },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
     } finally {
       setLoading(false);
     }

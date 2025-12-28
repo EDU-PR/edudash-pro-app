@@ -106,7 +106,7 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
     }
 
     if (!participantData || participantData.length === 0) {
-      console.log(`[NotificationContext] No message threads for user ${userId}`);
+      logger.debug('NotificationContext', `No message threads for user ${userId}`);
       return 0;
     }
 
@@ -124,7 +124,7 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
         .is('deleted_at', null);
 
       if (messageError) {
-        console.warn(`[NotificationContext] Error counting messages for thread ${participant.thread_id}:`, messageError);
+        logger.warn('NotificationContext', `Error counting messages for thread ${participant.thread_id}:`, messageError);
         continue;
       }
 
@@ -187,7 +187,7 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
       (call.status === 'ended' && !call.answered_at && (call.duration_seconds === null || call.duration_seconds === 0))
     ).length || 0;
     
-    console.log(`[NotificationContext] Missed calls count for user ${userId}:`, {
+    logger.debug('NotificationContext', `Missed calls count for user ${userId}:`, {
       rawCount: count,
       filteredCount: missedCount,
       lastSeen: lastSeen || 'never',
@@ -258,7 +258,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
     
-    console.log('[NotificationContext] Cleared old notification caches for user:', userId);
+    logger.debug('NotificationContext', 'Cleared old notification caches for user:', userId);
   }, [userId, queryClient]);
 
   // -------------------------------------------------------------------------
@@ -318,7 +318,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       if (Platform.OS !== 'web') {
         const badgeCount = counts.total;
         await Notifications.setBadgeCountAsync(badgeCount);
-        console.log(`[NotificationContext] Badge synced: ${badgeCount} (messages: ${counts.messages}, calls: ${counts.calls}, announcements: ${counts.announcements})`);
+        logger.debug('NotificationContext', `Badge synced: ${badgeCount} (messages: ${counts.messages}, calls: ${counts.calls}, announcements: ${counts.announcements})`);
       }
       // For PWA, we could update document.title or use the Badging API
       // when running in browser context

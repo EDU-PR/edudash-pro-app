@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { usePathname } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 
 // Types
 export interface MessageThread {
@@ -238,7 +239,9 @@ export const useThreadMessages = (threadId: string | null) => {
       return messagesWithReactions;
     },
     enabled: !!threadId && !!user?.id,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 30 * 1000, // Consider data fresh for 30s
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 min (formerly cacheTime)
+    refetchOnWindowFocus: false, // Don't refetch on window focus for messages
   });
 };
 
@@ -265,7 +268,7 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
           filter: `thread_id=eq.${threadId}`,
         },
         async (payload: any) => {
-          console.log('[ParentMessagesRealtime] New message received:', payload.new.id);
+          logger.debug('ParentMessagesRealtime', 'New message received:', payload.new.id);
           
           // Show banner notification if message is from someone else and app is in foreground
           // Only show if user is not currently viewing this thread
@@ -310,11 +313,11 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
                     },
                     trigger: null, // Show immediately
                   });
-                  console.log('[ParentMessagesRealtime] ✅ Banner notification shown for new message');
+                  logger.debug('ParentMessagesRealtime', '✅ Banner notification shown for new message');
                 }
               }
             } catch (notifError) {
-              console.warn('[ParentMessagesRealtime] Failed to show banner notification:', notifError);
+              logger.warn('ParentMessagesRealtime', 'Failed to show banner notification:', notifError);
             }
           }
           
@@ -333,7 +336,7 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
           filter: `thread_id=eq.${threadId}`,
         },
         async (payload: any) => {
-          console.log('[ParentMessagesRealtime] Message updated:', payload.new.id);
+          logger.debug('ParentMessagesRealtime', 'Message updated:', payload.new.id);
           
           // Update message in cache with new delivery/read status
           queryClient.setQueryData(
@@ -358,23 +361,47 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
           table: 'message_reactions',
         },
         async (payload: any) => {
-          console.log('[ParentMessagesRealtime] Reaction change:', payload.eventType, payload.new?.message_id);
+          logger.debug('ParentMessagesRealtime', 'Reaction change:', payload.eventType, payload.new?.message_id);
           
           // Get the message_id from the reaction
           const messageId = payload.new?.message_id || payload.old?.message_id;
           if (!messageId) return;
           
-          // Check if this reaction is for a message in this thread
-          const { data: message } = await assertSupabase()
-            .from('messages')
-            .select('thread_id')
-            .eq('id', messageId)
-            .single();
+          // Fetch updated reactions for this specific message
+          const { data: reactions } = await assertSupabase()
+            .from('message_reactions')
+            .select('emoji, user_id')
+            .eq('message_id', messageId);
           
-          if (!message || message.thread_id !== threadId) return;
+          // Aggregate reactions by emoji
+          const reactionMap = new Map<string, { count: number; users: string[] }>();
+          (reactions || []).forEach((r: { emoji: string; user_id: string }) => {
+            if (!reactionMap.has(r.emoji)) {
+              reactionMap.set(r.emoji, { count: 0, users: [] });
+            }
+            const emojiData = reactionMap.get(r.emoji)!;
+            emojiData.count++;
+            emojiData.users.push(r.user_id);
+          });
           
-          // Invalidate the messages query to refetch with updated reactions
-          queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+          const reactionsArray = Array.from(reactionMap.entries()).map(([emoji, data]) => ({
+            emoji,
+            count: data.count,
+            hasReacted: data.users.includes(user?.id || ''),
+          }));
+          
+          // Update message in cache with new reactions
+          queryClient.setQueryData(
+            ['messages', threadId],
+            (old: any[] | undefined) => {
+              if (!old) return old;
+              return old.map(msg => 
+                msg.id === messageId 
+                  ? { ...msg, reactions: reactionsArray }
+                  : msg
+              );
+            }
+          );
         }
       )
       .subscribe();
