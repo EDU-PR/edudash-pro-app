@@ -64,9 +64,12 @@
     </service>
     <service android:name="io.wazo.callkeep.RNCallKeepBackgroundMessagingService" android:exported="true"/>
     <!-- Notifee Foreground Service for call persistence -->
+    <!-- CRITICAL: Service types must match what code requests -->
+    <!-- For voice calls: phoneCall only (simplest, most compatible) -->
+    <!-- For video calls: phoneCall|camera (add when needed) -->
     <service
         android:name="app.notifee.core.ForegroundService"
-        android:foregroundServiceType="phoneCall|mediaPlayback|microphone|camera"
+        android:foregroundServiceType="phoneCall"
         android:exported="false">
     </service>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|locale|layoutDirection" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
