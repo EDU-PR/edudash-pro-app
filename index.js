@@ -9,6 +9,17 @@
 // This must be imported before any library that uses Promise.any (like Daily.co)
 import './polyfills/promise';
 
+// Suppress known harmless warnings from third-party libraries
+import { LogBox, Platform } from 'react-native';
+if (Platform.OS !== 'web') {
+  // Suppress NativeEventEmitter warnings from react-native-webrtc and similar modules
+  // These are harmless warnings from third-party libraries with incomplete bridge implementations
+  LogBox.ignoreLogs([
+    'new NativeEventEmitter',
+    'Require cycle:',
+  ]);
+}
+
 // Load React polyfills before expo-router
 import './polyfills/react-use';
 
