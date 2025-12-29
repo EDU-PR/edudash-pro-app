@@ -73,6 +73,16 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
   }, OVERALL_SIGNOUT_TIMEOUT);
   
   try {
+    // CRITICAL: Clear all navigation locks before sign-out to prevent stale locks
+    // This prevents sign-in freeze caused by leftover locks from previous session
+    try {
+      const { clearAllNavigationLocks } = await import('./routeAfterLogin');
+      clearAllNavigationLocks();
+      console.log('[authActions] All navigation locks cleared before sign-out');
+    } catch (lockErr) {
+      console.warn('[authActions] Failed to clear navigation locks (non-fatal):', lockErr);
+    }
+    
     // Deactivate push notification tokens for this user before sign-out (with timeout)
     if (Platform.OS !== 'web') {
       try {

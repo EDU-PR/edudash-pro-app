@@ -23,6 +23,7 @@ import { initializeSession } from '@/lib/sessionManager';
 import { securityAuditor } from '@/lib/security-audit';
 import { initializeVisibilityHandler, destroyVisibilityHandler } from '@/lib/visibilityHandler';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
+import { router } from 'expo-router';
 import type { Session, User } from '@supabase/supabase-js';
 
 export interface SessionState {
@@ -366,11 +367,26 @@ async function handleAuthStateChange(
           role: enhancedProfile?.role,
         });
 
-        // Route user after successful sign in
+        // Route user after successful sign in with timeout protection
         try {
-          await routeAfterLogin(s.user, enhancedProfile);
+          // Wrap routeAfterLogin in timeout to prevent hanging
+          const routeTimeout = setTimeout(() => {
+            console.error('[AuthContext] routeAfterLogin timeout (12s) - forcing fallback navigation');
+            router.replace('/profiles-gate');
+          }, 12000); // 12 second timeout
+          
+          try {
+            await routeAfterLogin(s.user, enhancedProfile);
+            clearTimeout(routeTimeout);
+          } catch (routeError) {
+            clearTimeout(routeTimeout);
+            console.error('[AuthContext] Post-login routing failed:', routeError);
+            // Fallback navigation
+            router.replace('/profiles-gate');
+          }
         } catch (error) {
-          console.error('Post-login routing failed:', error);
+          console.error('[AuthContext] Error in routeAfterLogin wrapper:', error);
+          router.replace('/profiles-gate');
         }
       }
     }
