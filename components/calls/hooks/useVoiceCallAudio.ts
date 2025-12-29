@@ -42,7 +42,9 @@ export function useVoiceCallAudio({
   const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Continuous earpiece enforcement during ringing/connecting
-  // This is needed because Android can switch to speaker when playing ringback
+  // NOTE: Android's default behavior is to play ringback tone on speaker initially
+  // This is standard Android behavior for outgoing calls. We enforce earpiece to override this.
+  // The periodic enforcement catches any automatic speaker switches during ringback playback.
   useEffect(() => {
     if (!InCallManager) return;
     
