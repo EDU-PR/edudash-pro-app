@@ -9,7 +9,6 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { Platform } from 'react-native';
 import type { CallState } from '../types';
 
@@ -42,94 +41,35 @@ export function useVoiceCallAudio({
 }: VoiceCallAudioOptions): VoiceCallAudioReturn {
   const audioInitializedRef = useRef(false);
   const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ringbackPlayerRef = useRef<AudioPlayer | null>(null);
+  const ringbackStartedRef = useRef(false);
 
-  // Custom ringback playback function (respects earpiece routing)
-  // Uses expo-audio which respects InCallManager's audio routing settings
+  // Ringback playback using InCallManager (matches incoming call pattern)
+  // This is the reliable way to play ringback that respects earpiece routing
   const playCustomRingback = useCallback(async () => {
-    // Stop any existing ringback first
-    if (ringbackPlayerRef.current) {
-      try {
-        ringbackPlayerRef.current.pause();
-        ringbackPlayerRef.current.release();
-      } catch (e) {
-        // Ignore errors
-      }
-      ringbackPlayerRef.current = null;
-    }
-
+    if (!InCallManager || ringbackStartedRef.current) return;
+    
     try {
-      // Configure audio mode for call audio (respects InCallManager routing)
-      if (Platform.OS !== 'web') {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          interruptionMode: 'doNotMix', // Don't mix with other audio
-          interruptionModeAndroid: 'doNotMix',
-        });
-      }
-
-      // Create audio player with ringback.mp3 as ringback tone
-      // This will respect the earpiece routing set by InCallManager
-      const ringbackPlayer = createAudioPlayer(
-        require('@/assets/sounds/ringback.mp3')
-      );
-      
-      // Configure for ringback: loop, moderate volume
-      ringbackPlayer.loop = true;
-      ringbackPlayer.volume = 0.7; // Slightly louder for ringback
-      
-      ringbackPlayerRef.current = ringbackPlayer;
-      
-      // Play ringback - expo-audio respects InCallManager routing
-      // Note: play() is synchronous but playback starts async
-      ringbackPlayer.play();
-      
-      // Verify playback started after a brief delay
-      setTimeout(() => {
-        if (ringbackPlayerRef.current) {
-          console.log('[VoiceCallAudio] Ringback playback check:', {
-            playing: ringbackPlayerRef.current.playing,
-            currentTime: ringbackPlayerRef.current.currentTime,
-          });
-          // If not playing, try again
-          if (!ringbackPlayerRef.current.playing) {
-            console.log('[VoiceCallAudio] Ringback not playing, retrying...');
-            ringbackPlayerRef.current.play();
-          }
-        }
-      }, 200);
-      
-      console.log('[VoiceCallAudio] ✅ Playing custom ringback via expo-audio (respects earpiece routing)');
-      console.log('[VoiceCallAudio] Ringback player state:', {
-        playing: ringbackPlayer.playing,
-        volume: ringbackPlayer.volume,
-        loop: ringbackPlayer.loop,
-      });
+      // Use InCallManager's built-in ringback (same as incoming calls use startRingtone)
+      // This respects earpiece routing and works reliably
+      InCallManager.startRingback('_DEFAULT_');
+      ringbackStartedRef.current = true;
+      console.log('[VoiceCallAudio] ✅ Playing ringback via InCallManager (respects earpiece routing)');
     } catch (error) {
-      console.error('[VoiceCallAudio] ❌ Failed to play custom ringback:', error);
-      console.error('[VoiceCallAudio] Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      ringbackPlayerRef.current = null;
+      console.error('[VoiceCallAudio] ❌ Failed to start ringback:', error);
     }
   }, []);
 
-  // Stop custom ringback when call connects
+  // Stop ringback when call connects
   const stopCustomRingback = useCallback(async () => {
-    if (ringbackPlayerRef.current) {
-      const player = ringbackPlayerRef.current;
-      ringbackPlayerRef.current = null; // Clear ref first to prevent double cleanup
-      
-      try {
-        // Pause and release - don't call seekTo as it may fail if player is being released
-        player.pause();
-        player.release();
-        console.log('[VoiceCallAudio] Stopped custom ringback');
-      } catch (error) {
-        // Ignore errors during cleanup (player may already be released)
-        console.warn('[VoiceCallAudio] Cleanup warning (non-critical):', error);
-      }
+    if (!InCallManager || !ringbackStartedRef.current) return;
+    
+    try {
+      InCallManager.stopRingback();
+      ringbackStartedRef.current = false;
+      console.log('[VoiceCallAudio] Stopped ringback');
+    } catch (error) {
+      console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
+      ringbackStartedRef.current = false;
     }
   }, []);
 
