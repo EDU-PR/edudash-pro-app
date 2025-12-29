@@ -11,6 +11,7 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * Permissions added:
  * - FOREGROUND_SERVICE (for starting foreground service)
  * - FOREGROUND_SERVICE_PHONE_CALL (for VoIP calls - Android 14+)
+ * - MANAGE_OWN_CALLS (required for phoneCall service type on Android 15+)
  * - FOREGROUND_SERVICE_MEDIA_PLAYBACK (for audio in background - Android 14+)
  * - FOREGROUND_SERVICE_MICROPHONE (for microphone in foreground service - Android 14+)
  * - FOREGROUND_SERVICE_CAMERA (for camera in foreground service - Android 14+)
@@ -34,6 +35,7 @@ const withForegroundService = (config) => {
     const requiredPermissions = [
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_PHONE_CALL',
+      'android.permission.MANAGE_OWN_CALLS', // Required for phoneCall service type on Android 15+ (API 36+)
       'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
       'android.permission.FOREGROUND_SERVICE_MICROPHONE',
       'android.permission.FOREGROUND_SERVICE_CAMERA',
