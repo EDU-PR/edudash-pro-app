@@ -181,7 +181,8 @@
         }
       ],
       "./plugins/withAndroidManifestFix.js",
-      "./plugins/withPictureInPicture.js"
+      "./plugins/withPictureInPicture.js",
+      "./plugins/withForegroundService.js"
     ],
     "experiments": {
       "typedRoutes": false

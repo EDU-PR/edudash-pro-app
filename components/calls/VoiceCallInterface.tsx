@@ -115,11 +115,13 @@ export function VoiceCallInterface({
     onClose,
   });
 
-  // Background handling (KeepAwake + app state management)
+  // Background handling (KeepAwake + foreground service for background calls)
   useCallBackgroundHandler({
     callState: state.callState,
     isCallActive: isOpen,
     callId: state.callIdRef.current,
+    callerName: remoteUserName,
+    callType: 'voice',
     onReturnFromBackground: () => {
       console.log('[VoiceCallInterface] Returned from background');
       // Re-enable audio when returning from background
