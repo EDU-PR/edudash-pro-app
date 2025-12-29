@@ -81,7 +81,23 @@ export function useVoiceCallAudio({
       ringbackPlayerRef.current = ringbackPlayer;
       
       // Play ringback - expo-audio respects InCallManager routing
+      // Note: play() is synchronous but playback starts async
       ringbackPlayer.play();
+      
+      // Verify playback started after a brief delay
+      setTimeout(() => {
+        if (ringbackPlayerRef.current) {
+          console.log('[VoiceCallAudio] Ringback playback check:', {
+            playing: ringbackPlayerRef.current.playing,
+            currentTime: ringbackPlayerRef.current.currentTime,
+          });
+          // If not playing, try again
+          if (!ringbackPlayerRef.current.playing) {
+            console.log('[VoiceCallAudio] Ringback not playing, retrying...');
+            ringbackPlayerRef.current.play();
+          }
+        }
+      }, 200);
       
       console.log('[VoiceCallAudio] ✅ Playing custom ringback via expo-audio (respects earpiece routing)');
       console.log('[VoiceCallAudio] Ringback player state:', {
