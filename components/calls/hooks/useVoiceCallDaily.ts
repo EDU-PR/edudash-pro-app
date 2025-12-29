@@ -594,16 +594,29 @@ export function useVoiceCallDaily({
           
           // CRITICAL: Re-enforce earpiece AFTER AudioModeCoordinator applies settings
           // Wait a bit for audio routing to stabilize, then ensure InCallManager takes precedence
+          // Use multiple timeouts to catch any delayed audio routing changes
           setTimeout(() => {
             if (InCallManager) {
               try {
                 InCallManager.setForceSpeakerphoneOn(false);
-                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator');
+                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator (200ms)');
               } catch (err) {
                 console.warn('[VoiceCallDaily] Failed to re-enforce earpiece:', err);
               }
             }
           }, 200);
+          
+          // Additional enforcement after longer delay to catch any delayed routing changes
+          setTimeout(() => {
+            if (InCallManager) {
+              try {
+                InCallManager.setForceSpeakerphoneOn(false);
+                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator (500ms)');
+              } catch (err) {
+                // Silent - this is a secondary enforcement
+              }
+            }
+          }, 500);
         } catch (audioModeError) {
           console.warn('[VoiceCallDaily] ⚠️ Failed to acquire audio mode (non-fatal):', audioModeError);
           // Fallback: try direct AudioModule call
@@ -622,15 +635,41 @@ export function useVoiceCallDaily({
           }
         }
 
-        // Join the call with explicit audio settings
+        // Join the call with explicit audio-only settings
+        // CRITICAL: Explicitly disable video to prevent Daily.co from treating this as video call
         console.log('[VoiceCallDaily] Joining room:', roomUrl);
         await daily.join({ 
           url: roomUrl,
           audioSource: true,
-          videoSource: false,
+          videoSource: false, // Explicitly false for voice-only calls
           // Ensure we receive all participant audio
           subscribeToTracksAutomatically: true,
+          // Explicitly set local video to false to prevent any video initialization
+          startVideoOff: true,
+          startAudioOff: false,
         });
+        
+        // CRITICAL: Explicitly disable video after join to ensure it stays audio-only
+        try {
+          await daily.setLocalVideo(false);
+          console.log('[VoiceCallDaily] ✅ Explicitly disabled local video (audio-only call)');
+        } catch (videoError) {
+          console.warn('[VoiceCallDaily] Failed to disable video (non-fatal):', videoError);
+        }
+
+        // CRITICAL: Re-enforce earpiece after Daily.co join
+        // Daily.co may change audio routing, so we need to enforce earpiece again
+        // Wait a bit for Daily.co to initialize audio, then enforce
+        setTimeout(() => {
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallDaily] ✅ Final earpiece enforcement after join');
+            } catch (err) {
+              console.warn('[VoiceCallDaily] Failed final earpiece enforcement:', err);
+            }
+          }
+        }, 300); // Wait 300ms for Daily.co audio to initialize
 
         // Note: InCallManager is now managed by useVoiceCallAudio hook
         // to prevent duplicate initialization and ringtone changes
