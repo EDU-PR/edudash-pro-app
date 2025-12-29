@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { assertSupabase } from './supabase';
+import { getFCMToken, onFCMTokenRefresh } from './calls/CallHeadlessTask';
 
 export interface NotificationData {
   id: string;
@@ -68,6 +69,8 @@ Notifications.setNotificationHandler({
 class NotificationService {
   private static instance: NotificationService;
   private pushToken: string | null = null;
+  private fcmToken: string | null = null;
+  private fcmTokenRefreshUnsubscribe: (() => void) | null = null;
   private isInitialized = false;
   
   public static getInstance(): NotificationService {
@@ -126,6 +129,8 @@ class NotificationService {
 
   /**
    * Register device for push notifications and store token
+   * Registers both Expo Push Token (for general notifications) and 
+   * FCM Token (for wake-on-call when app is killed)
    */
   public async registerForPushNotifications(userId: string, appVersion: string): Promise<string | null> {
     try {
@@ -136,12 +141,33 @@ class NotificationService {
         }
       }
 
-      // Get push token
+      // Get Expo push token (for general notifications)
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig?.extra?.eas?.projectId, // From app.json
       });
 
       this.pushToken = tokenData.data;
+
+      // Get FCM token (for wake-on-call when app is killed) - Android only
+      if (Platform.OS === 'android') {
+        try {
+          this.fcmToken = await getFCMToken();
+          if (this.fcmToken) {
+            console.log('[NotificationService] ✅ FCM token obtained for wake-on-call');
+            
+            // Subscribe to FCM token refresh
+            this.fcmTokenRefreshUnsubscribe = onFCMTokenRefresh(async (newToken) => {
+              this.fcmToken = newToken;
+              // Update FCM token in database
+              await this.updateFCMToken(userId, newToken);
+            });
+          } else {
+            console.warn('[NotificationService] ⚠️ FCM token not available - wake-on-call may not work');
+          }
+        } catch (fcmError) {
+          console.warn('[NotificationService] FCM token retrieval failed:', fcmError);
+        }
+      }
 
       // Get device info
       const deviceInfo = {
@@ -166,6 +192,7 @@ class NotificationService {
         .upsert(
           {
             ...pushTokenData,
+            fcm_token: this.fcmToken, // Also store FCM token for wake-on-call
             updated_at: new Date().toISOString(),
           },
           { 
@@ -185,6 +212,39 @@ class NotificationService {
       console.error('Failed to register for push notifications:', error);
       return null;
     }
+  }
+
+  /**
+   * Update FCM token in database (called on token refresh)
+   */
+  private async updateFCMToken(userId: string, fcmToken: string): Promise<void> {
+    try {
+      const { error } = await assertSupabase()
+        .from('push_devices')
+        .update({
+          fcm_token: fcmToken,
+          updated_at: new Date().toISOString(),
+        })
+        .match({
+          user_id: userId,
+          token: this.pushToken,
+        });
+
+      if (error) {
+        console.warn('[NotificationService] Failed to update FCM token:', error);
+      } else {
+        console.log('[NotificationService] FCM token updated successfully');
+      }
+    } catch (error) {
+      console.warn('[NotificationService] FCM token update error:', error);
+    }
+  }
+
+  /**
+   * Get current FCM token (for wake-on-call)
+   */
+  public getFCMToken(): string | null {
+    return this.fcmToken;
   }
 
   /**

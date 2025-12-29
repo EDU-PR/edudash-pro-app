@@ -288,21 +288,78 @@ export function registerCallHeadlessTask(): void {
     return;
   }
   
-  // Register the HeadlessJS task
+  // Register the HeadlessJS task with React Native
+  // This allows Android to wake the app in headless mode when FCM message arrives
   AppRegistry.registerHeadlessTask('CallHeadlessTask', () => CallHeadlessTask);
   console.log('[CallHeadlessTask] HeadlessJS task registered');
   
   // Register FCM background message handler if available
+  // This is the PRIMARY mechanism for wake-on-call functionality
   if (messaging) {
     messaging().setBackgroundMessageHandler(async (remoteMessage: any) => {
-      console.log('[CallHeadlessTask] FCM background message:', JSON.stringify(remoteMessage));
+      console.log('[CallHeadlessTask] 📱 FCM background message received:', JSON.stringify(remoteMessage));
       
       if (remoteMessage?.data?.type === 'incoming_call') {
+        console.log('[CallHeadlessTask] 📞 Processing incoming call in background');
         await CallHeadlessTask(remoteMessage);
       }
     });
-    console.log('[CallHeadlessTask] FCM background handler registered');
+    console.log('[CallHeadlessTask] ✅ FCM background handler registered - wake-on-call enabled');
+  } else {
+    console.warn('[CallHeadlessTask] ⚠️ FCM not available - wake-on-call will NOT work when app is killed');
   }
+}
+
+/**
+ * Get the FCM token for this device
+ * This token must be sent to your server to send push notifications for incoming calls
+ * 
+ * @returns The FCM token or null if unavailable
+ */
+export async function getFCMToken(): Promise<string | null> {
+  if (!messaging) {
+    console.warn('[CallHeadlessTask] Firebase messaging not available');
+    return null;
+  }
+  
+  try {
+    // Check if we have permission
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    
+    if (!enabled) {
+      console.warn('[CallHeadlessTask] Push notification permission denied');
+      return null;
+    }
+    
+    // Get the FCM token
+    const token = await messaging().getToken();
+    console.log('[CallHeadlessTask] FCM token obtained:', token?.substring(0, 20) + '...');
+    return token;
+  } catch (error) {
+    console.error('[CallHeadlessTask] Failed to get FCM token:', error);
+    return null;
+  }
+}
+
+/**
+ * Subscribe to FCM token refresh events
+ * When the token changes, you must update it on your server
+ * 
+ * @param onTokenRefresh Callback with the new token
+ * @returns Unsubscribe function
+ */
+export function onFCMTokenRefresh(onTokenRefresh: (token: string) => void): (() => void) | null {
+  if (!messaging) {
+    return null;
+  }
+  
+  return messaging().onTokenRefresh((token: string) => {
+    console.log('[CallHeadlessTask] FCM token refreshed:', token?.substring(0, 20) + '...');
+    onTokenRefresh(token);
+  });
 }
 
 /**
