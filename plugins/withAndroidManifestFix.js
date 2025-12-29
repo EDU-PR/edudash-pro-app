@@ -85,6 +85,31 @@ const withAndroidManifestFix = (config) => {
       if (audioService) {
         audioService.$['android:foregroundServiceType'] = 'mediaPlayback';
       }
+      
+      // Add Notifee foreground service for call persistence (Android 14+)
+      // This service is used by @notifee/react-native to keep calls alive in background
+      const notifeeServiceName = 'app.notifee.core.ForegroundService';
+      let notifeeService = application.service.find(
+        (s) => s.$['android:name'] === notifeeServiceName
+      );
+      
+      if (!notifeeService) {
+        // Create new service declaration
+        notifeeService = {
+          $: {
+            'android:name': notifeeServiceName,
+            'android:foregroundServiceType': 'phoneCall',
+            'android:exported': 'false',
+          },
+        };
+        application.service.push(notifeeService);
+        console.log('[withAndroidManifestFix] ✅ Added Notifee service with phoneCall type');
+      } else {
+        // Update existing service to ensure correct type
+        notifeeService.$['android:foregroundServiceType'] = 'phoneCall';
+        notifeeService.$['android:exported'] = 'false';
+        console.log('[withAndroidManifestFix] ✅ Updated Notifee service with phoneCall type');
+      }
     }
     
     return config;
