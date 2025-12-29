@@ -33,20 +33,36 @@ try {
 }
 
 // Conditionally import Notifee for foreground service (Android only)
+// Using lazy loading to prevent crashes during module initialization
 let notifee: typeof import('@notifee/react-native').default | null = null;
 let AndroidImportance: typeof import('@notifee/react-native').AndroidImportance | null = null;
 let AndroidCategory: typeof import('@notifee/react-native').AndroidCategory | null = null;
 let AndroidForegroundServiceType: typeof import('@notifee/react-native').AndroidForegroundServiceType | null = null;
+let notifeeLoaded = false;
+let notifeeLoadError: Error | null = null;
 
-if (Platform.OS === 'android') {
+/**
+ * Lazy-load notifee to prevent app crashes during initialization
+ * Returns true if notifee is available
+ */
+function ensureNotifeeLoaded(): boolean {
+  if (Platform.OS !== 'android') return false;
+  if (notifeeLoaded) return notifee !== null;
+  
   try {
     const notifeeModule = require('@notifee/react-native');
     notifee = notifeeModule.default;
     AndroidImportance = notifeeModule.AndroidImportance;
     AndroidCategory = notifeeModule.AndroidCategory;
     AndroidForegroundServiceType = notifeeModule.AndroidForegroundServiceType;
+    notifeeLoaded = true;
+    console.log('[CallBackgroundHandler] Notifee loaded successfully');
+    return true;
   } catch (error) {
+    notifeeLoadError = error as Error;
+    notifeeLoaded = true; // Mark as attempted
     console.warn('[CallBackgroundHandler] Notifee not available:', error);
+    return false;
   }
 }
 
@@ -151,7 +167,14 @@ export function useCallBackgroundHandler({
    * Uses Notifee's foreground service API (2025 best practice)
    */
   const startForegroundService = useCallback(async () => {
-    if (Platform.OS !== 'android' || !notifee || foregroundServiceActiveRef.current) {
+    // Skip if not Android or already active
+    if (Platform.OS !== 'android' || foregroundServiceActiveRef.current) {
+      return;
+    }
+    
+    // Lazy-load notifee to prevent crashes
+    if (!ensureNotifeeLoaded() || !notifee) {
+      console.log('[CallBackgroundHandler] Notifee not available, skipping foreground service');
       return;
     }
     
@@ -216,7 +239,14 @@ export function useCallBackgroundHandler({
    * Stop the foreground service when call ends
    */
   const stopForegroundService = useCallback(async () => {
-    if (Platform.OS !== 'android' || !notifee || !foregroundServiceActiveRef.current) {
+    // Skip if not Android or not active
+    if (Platform.OS !== 'android' || !foregroundServiceActiveRef.current) {
+      return;
+    }
+    
+    // Check if notifee is available
+    if (!notifee) {
+      foregroundServiceActiveRef.current = false;
       return;
     }
     

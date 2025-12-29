@@ -120,7 +120,7 @@ export function VoiceCallInterface({
     callState: state.callState,
     isCallActive: isOpen,
     callId: state.callIdRef.current,
-    callerName: remoteUserName,
+    callerName: userName,
     callType: 'voice',
     onReturnFromBackground: () => {
       console.log('[VoiceCallInterface] Returned from background');
