@@ -70,6 +70,66 @@ function ensureNotifeeLoaded(): boolean {
 const CALL_CHANNEL_ID = 'ongoing-calls';
 const CALL_NOTIFICATION_ID = 'ongoing-call-notification';
 
+// Module-level handler registry for background events
+// This allows the root-level background handler to call the hook's action handler
+let globalActionHandler: ((actionId: string | undefined) => Promise<void>) | null = null;
+
+export function setGlobalNotificationActionHandler(
+  handler: (actionId: string | undefined) => Promise<void>
+): void {
+  globalActionHandler = handler;
+  console.log('[CallBackgroundHandler] Global action handler registered');
+}
+
+export function getGlobalNotificationActionHandler():
+  ((actionId: string | undefined) => Promise<void>) | null {
+  return globalActionHandler;
+}
+
+/**
+ * Register root-level background event handler for call notifications
+ * This MUST be called at app root (index.js) to work when app is backgrounded/killed
+ */
+export function registerCallNotificationBackgroundHandler(): void {
+  if (Platform.OS !== 'android') return;
+  
+  // Lazy-load notifee
+  let notifee: any = null;
+  try {
+    notifee = require('@notifee/react-native').default;
+  } catch (error) {
+    console.warn('[CallBackgroundHandler] Notifee not available for background handler');
+    return;
+  }
+
+  console.log('[CallBackgroundHandler] Registering root-level background event handler');
+  
+  // Register background event handler at root level
+  // This persists even when app is killed and is called when notification actions are pressed
+  notifee.onBackgroundEvent(async ({ type, detail }: any) => {
+    const { notification, pressAction } = detail;
+    
+    // Only handle our call notification
+    if (notification?.id !== CALL_NOTIFICATION_ID) return;
+    
+    // Handle both PRESS (type 1 - notification body tap) and ACTION_PRESS (type 2 - action button)
+    if (type === 1 || type === 2) { // PRESS event (body tap) or ACTION_PRESS event (button)
+      const actionId = pressAction?.id;
+      console.log('[CallBackgroundHandler] Root-level background event received:', { type, actionId });
+      
+      // Get the global handler (set by the hook)
+      const handler = getGlobalNotificationActionHandler();
+      if (handler) {
+        await handler(actionId);
+      } else {
+        console.warn('[CallBackgroundHandler] No global handler registered - hook may not be mounted');
+      }
+    }
+  });
+  
+  console.log('[CallBackgroundHandler] ✅ Root-level background handler registered');
+}
+
 export interface CallBackgroundHandlerOptions {
   /** Current call state */
   callState: CallState;
@@ -128,44 +188,97 @@ export function useCallBackgroundHandler({
   // Determine if call is in an active audio state
   const isAudioActive = callState === 'connected' || callState === 'connecting' || callState === 'ringing';
 
+  // Store callbacks in refs to prevent handler re-registration
+  const onToggleMuteRef = useRef(onToggleMute);
+  const onToggleSpeakerRef = useRef(onToggleSpeaker);
+  const onEndCallRef = useRef(onEndCall);
+  const updateNotificationRef = useRef(updateForegroundServiceNotification);
+
+  // Update refs when callbacks change
+  // CRITICAL: This ensures refs are always current when background handler is called
+  useEffect(() => {
+    console.log('[CallBackgroundHandler] Updating callback refs');
+    onToggleMuteRef.current = onToggleMute;
+    onToggleSpeakerRef.current = onToggleSpeaker;
+    onEndCallRef.current = onEndCall;
+    updateNotificationRef.current = updateForegroundServiceNotification;
+  }, [onToggleMute, onToggleSpeaker, onEndCall, updateForegroundServiceNotification]);
+
   // Shared handler function for both foreground and background events
+  // Uses refs to always access latest callbacks without re-registering handlers
   const handleNotificationAction = useCallback(async (actionId: string | undefined) => {
-    if (!actionId) return;
+    if (!actionId) {
+      console.log('[CallBackgroundHandler] No actionId provided');
+      return;
+    }
     
     console.log('[CallBackgroundHandler] Notification action pressed:', actionId);
+    console.log('[CallBackgroundHandler] Callback refs status:', {
+      hasToggleMute: !!onToggleMuteRef.current,
+      hasToggleSpeaker: !!onToggleSpeakerRef.current,
+      hasEndCall: !!onEndCallRef.current,
+      hasUpdateNotification: !!updateNotificationRef.current,
+    });
     
     switch (actionId) {
       case 'toggle-mute':
-        onToggleMute?.();
+        console.log('[CallBackgroundHandler] Executing toggle-mute callback');
+        if (onToggleMuteRef.current) {
+          onToggleMuteRef.current();
+        } else {
+          console.warn('[CallBackgroundHandler] toggle-mute callback not available');
+        }
         // Update notification after brief delay to reflect new state
         if (foregroundServiceActiveRef.current) {
-          setTimeout(() => updateForegroundServiceNotification(), 100);
+          setTimeout(() => {
+            if (updateNotificationRef.current) {
+              updateNotificationRef.current();
+            }
+          }, 100);
         }
         break;
       case 'toggle-speaker':
-        onToggleSpeaker?.();
+        console.log('[CallBackgroundHandler] Executing toggle-speaker callback');
+        if (onToggleSpeakerRef.current) {
+          onToggleSpeakerRef.current();
+        } else {
+          console.warn('[CallBackgroundHandler] toggle-speaker callback not available');
+        }
         if (foregroundServiceActiveRef.current) {
-          setTimeout(() => updateForegroundServiceNotification(), 100);
+          setTimeout(() => {
+            if (updateNotificationRef.current) {
+              updateNotificationRef.current();
+            }
+          }, 100);
         }
         break;
       case 'end-call':
         console.log('[CallBackgroundHandler] End call action triggered');
-        onEndCall?.();
+        if (onEndCallRef.current) {
+          onEndCallRef.current();
+        } else {
+          console.warn('[CallBackgroundHandler] end-call callback not available');
+        }
         break;
       case 'default':
         // User tapped notification body - app is brought to foreground automatically
-        console.log('[CallBackgroundHandler] User tapped notification body');
+        console.log('[CallBackgroundHandler] User tapped notification body - app should open');
         break;
+      default:
+        console.warn('[CallBackgroundHandler] Unknown action ID:', actionId);
     }
-  }, [onToggleMute, onToggleSpeaker, onEndCall, updateForegroundServiceNotification]);
+  }, []); // Empty deps - uses refs for callbacks
 
-  // Setup notification action handlers at mount (not in startForegroundService)
-  // This ensures handlers are registered before notifications are shown
+  // Setup notification action handlers ONCE at mount (before any notifications)
+  // This ensures handlers are registered before foreground service starts
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     if (!ensureNotifeeLoaded() || !notifee) return;
 
-    console.log('[CallBackgroundHandler] Setting up notification action handlers (foreground + background)');
+    console.log('[CallBackgroundHandler] Setting up notification action handlers');
+    
+    // Register global handler for root-level background events
+    setGlobalNotificationActionHandler(handleNotificationAction);
     
     // Register foreground event handler (when app is in foreground)
     const unsubscribeForeground = notifee.onForegroundEvent(async ({ type, detail }) => {
@@ -174,31 +287,20 @@ export function useCallBackgroundHandler({
       // Only handle our call notification
       if (notification?.id !== CALL_NOTIFICATION_ID) return;
       
-      if (type === 1) { // PRESS event
-        await handleNotificationAction(pressAction?.id);
-      }
-    });
-
-    // Register background event handler (when app is backgrounded or killed)
-    // This is CRITICAL for notification actions to work when app is not in foreground
-    notifee.onBackgroundEvent(async ({ type, detail }) => {
-      const { notification, pressAction } = detail;
-      
-      // Only handle our call notification
-      if (notification?.id !== CALL_NOTIFICATION_ID) return;
-      
-      if (type === 1) { // PRESS event
-        console.log('[CallBackgroundHandler] Background event received:', pressAction?.id);
-        await handleNotificationAction(pressAction?.id);
+      // Handle both PRESS (type 1 - notification body tap) and ACTION_PRESS (type 2 - action button)
+      if (type === 1 || type === 2) { // PRESS event (body tap) or ACTION_PRESS event (button)
+        const actionId = pressAction?.id;
+        console.log('[CallBackgroundHandler] Foreground event received:', { type, actionId });
+        await handleNotificationAction(actionId);
       }
     });
 
     return () => {
       unsubscribeForeground();
-      // Note: onBackgroundEvent doesn't return an unsubscribe function
-      // It's registered globally and persists until app restart
+      // Clear global handler on unmount
+      setGlobalNotificationActionHandler(null);
     };
-  }, [handleNotificationAction]);
+  }, [handleNotificationAction]); // Include handleNotificationAction to re-register if it changes
 
   /**
    * Activate KeepAwake to prevent screen from sleeping during call
@@ -342,8 +444,8 @@ export function useCallBackgroundHandler({
         category: AndroidCategory?.CALL,
         ongoing: true, // Persistent notification - cannot be swiped away
         autoCancel: false, // Don't auto-cancel when tapped
-        smallIcon: 'ic_notification', // Shows in status bar
-        largeIcon: 'ic_notification', // Shows in expanded notification/system drawer
+        smallIcon: 'notification_icon', // Shows in status bar (must exist in drawable folders)
+        largeIcon: 'notification_icon', // Shows in expanded notification/system drawer
         color: '#00f5ff', // Accent color for notification
         // Show in status bar and system drawer
         visibility: 1, // PUBLIC - show on lock screen and status bar
@@ -351,9 +453,10 @@ export function useCallBackgroundHandler({
         // fullScreenIntent: Show notification even when screen is off (Android 10+)
         // This is CRITICAL for ringing state visibility
         fullScreenIntent: callState === 'ringing', // Only during ringing for maximum visibility
+        // Press action on notification body - opens app to foreground
         pressAction: {
           id: 'default',
-          launchActivity: 'default', // Brings app to foreground
+          launchActivity: 'default',
         },
         // Media controls as notification actions
         // These appear in the notification drawer and lock screen
@@ -372,6 +475,18 @@ export function useCallBackgroundHandler({
       if (importance !== undefined) {
         androidConfig.importance = importance;
       }
+      
+      // Debug logging to understand notification configuration
+      console.log('[CallBackgroundHandler] Displaying notification:', {
+        title: notificationTitle,
+        body: notificationBody,
+        hasActions: actions.length > 0,
+        actionIds: actions.map(a => a.pressAction.id),
+        actionTitles: actions.map(a => a.title),
+        channelId: CALL_CHANNEL_ID,
+        callState,
+        asForegroundService: androidConfig.asForegroundService,
+      });
       
       await notifee.displayNotification({
         id: CALL_NOTIFICATION_ID,

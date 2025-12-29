@@ -30,5 +30,10 @@ registerBackgroundNotificationTask()
     console.error('[App] ❌ Background notification setup failed:', error);
   });
 
+// Register Notifee background event handler for call notification actions
+// This MUST be at root level to work when app is backgrounded/killed
+import { registerCallNotificationBackgroundHandler } from './components/calls/hooks/useCallBackgroundHandler';
+registerCallNotificationBackgroundHandler();
+
 // Load expo-router entry
 import 'expo-router/entry';
