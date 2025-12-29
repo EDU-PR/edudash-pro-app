@@ -282,24 +282,14 @@ export function useCallBackgroundHandler({
       }
       
       // Build foreground service types - must match AndroidManifest.xml declaration
-      // Manifest declares: phoneCall|mediaPlayback|microphone|camera
+      // Manifest declares: phoneCall only (simplest, most compatible)
       // Only use enum values (no fallback hex) to prevent manifest mismatch crashes
       const serviceTypes: number[] = [];
       
       if (AndroidForegroundServiceType) {
-        // Always include phoneCall for voice/video calls
+        // Use ONLY phoneCall type (matches manifest declaration)
+        // This is sufficient for voice/video calls and avoids manifest mismatch errors
         serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
-        
-        // Include mediaPlayback for audio streaming
-        serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-        
-        // Include microphone for voice input
-        serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_MICROPHONE);
-        
-        // Add CAMERA type for video calls (Android 14+)
-        if (callType === 'video') {
-          serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_CAMERA);
-        }
       } else {
         // If enum not available, log warning but don't crash
         console.warn('[CallBackgroundHandler] AndroidForegroundServiceType not available - service types may not work');
