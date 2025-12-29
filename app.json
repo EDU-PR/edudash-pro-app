@@ -180,9 +180,12 @@
           "microphonePermission": "EduDash Pro needs microphone access for voice and video calls"
         }
       ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
       "./plugins/withAndroidManifestFix.js",
       "./plugins/withPictureInPicture.js",
-      "./plugins/withForegroundService.js"
+      "./plugins/withForegroundService.js",
+      "./plugins/withFirebaseMessaging.js"
     ],
     "experiments": {
       "typedRoutes": false

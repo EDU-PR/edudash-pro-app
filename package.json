@@ -111,6 +111,8 @@
     "@react-native-community/datetimepicker": "8.4.1",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native-community/slider": "5.0.1",
+    "@react-native-firebase/app": "^23.7.0",
+    "@react-native-firebase/messaging": "^23.7.0",
     "@react-native-masked-view/masked-view": "0.3.2",
     "@react-native-picker/picker": "2.11.1",
     "@react-native-voice/voice": "^3.2.4",

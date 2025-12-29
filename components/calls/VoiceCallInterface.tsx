@@ -122,8 +122,6 @@ export function VoiceCallInterface({
     callId: state.callIdRef.current,
     callerName: userName,
     callType: 'voice',
-    isAudioEnabled: state.isAudioEnabled,
-    isSpeakerEnabled: state.isSpeakerEnabled,
     onReturnFromBackground: () => {
       console.log('[VoiceCallInterface] Returned from background');
       // Re-enable audio when returning from background
@@ -135,9 +133,6 @@ export function VoiceCallInterface({
         }
       }
     },
-    onToggleMute: daily.toggleAudio,
-    onToggleSpeaker: audio.toggleSpeaker,
-    onEndCall: daily.endCall,
   });
 
   // Picture-in-Picture mode for background calls (Android)
