@@ -176,7 +176,7 @@ export default function TeacherMessageThreadScreen() {
       // This ensures ticks update even if no push notification was received
       try {
         assertSupabase().rpc('mark_messages_delivered', {
-          p_thread_id: threadId,
+            p_thread_id: threadId,
           p_user_id: user.id,
         }).then(() => {
           if (__DEV__) {
@@ -184,8 +184,8 @@ export default function TeacherMessageThreadScreen() {
           }
         }).catch((err: any) => {
           if (__DEV__) {
-            console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
-          }
+          console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
+        }
         });
       } catch {}
       

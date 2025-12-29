@@ -62,7 +62,7 @@ export function Footer() {
                 className="inline-flex items-center gap-2 group"
               >
                 <span className="text-base font-bold text-edudash-primary group-hover:text-edudash-secondary transition-colors">
-                  EduDash Pro
+                EduDash Pro
                 </span>
                 <ExternalLink className="w-4 h-4 text-edudash-primary group-hover:text-edudash-secondary transition-colors group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </Link>

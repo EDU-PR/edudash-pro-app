@@ -251,7 +251,7 @@ export default function ParentMessageThreadScreen() {
       if (hooks.useParentMessagesRealtime) {
         hooks.useParentMessagesRealtime(threadId);
       }
-    } catch (err) {
+        } catch (err) {
       if (__DEV__) {
         console.warn('[ParentThread] Real-time hook not available:', err);
       }
@@ -275,8 +275,8 @@ export default function ParentMessageThreadScreen() {
           }
         }).catch((err: any) => {
           if (__DEV__) {
-            console.warn('[ParentThread] Failed to mark messages as delivered:', err);
-          }
+          console.warn('[ParentThread] Failed to mark messages as delivered:', err);
+        }
         });
       } catch {}
       

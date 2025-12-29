@@ -105,8 +105,8 @@
           installedCount++;
         } catch (e) {
           // Fallback if defineProperty fails
-          target.Promise.any = createPromiseAny(target.Promise, target.AggregateError || g.AggregateError);
-          installedCount++;
+      target.Promise.any = createPromiseAny(target.Promise, target.AggregateError || g.AggregateError);
+      installedCount++;
         }
       }
     }
@@ -125,9 +125,9 @@
         });
         installedCount++;
       } catch (e) {
-        Promise.any = createPromiseAny(Promise, g.AggregateError);
-        installedCount++;
-      }
+    Promise.any = createPromiseAny(Promise, g.AggregateError);
+    installedCount++;
+  }
     }
   }
   

@@ -226,11 +226,11 @@ export default function SuperAdminDashboardScreen() {
       if (aiCostResponse.data?.success && aiCostResponse.data.data) {
         aiUsageCost = aiCostResponse.data.data.monthly_cost || 0;
         if (__DEV__) {
-          console.log(`AI usage cost for last 30 days: $${aiUsageCost}`);
+        console.log(`AI usage cost for last 30 days: $${aiUsageCost}`);
         }
       } else if (aiCostResponse.error) {
         if (__DEV__) {
-          console.warn('AI cost RPC error:', aiCostResponse.error);
+        console.warn('AI cost RPC error:', aiCostResponse.error);
         }
       }
       
@@ -252,7 +252,7 @@ export default function SuperAdminDashboardScreen() {
       totalOrgs = preschoolCount + schoolCount;
       
       if (__DEV__) {
-        console.log(`Dashboard tenant count: ${preschoolCount} preschools + ${schoolCount} K-12 schools = ${totalOrgs} total`);
+      console.log(`Dashboard tenant count: ${preschoolCount} preschools + ${schoolCount} K-12 schools = ${totalOrgs} total`);
       }
       
       // Process subscriptions for seats and revenue (supports both preschools and K-12 schools)
@@ -292,7 +292,7 @@ export default function SuperAdminDashboardScreen() {
       }
       
       if (__DEV__) {
-        console.log(`Dashboard subscription summary: ${subscriptions.length} active subscriptions, ${activeSeats} seats, R${Math.round(monthlyRevenue)} monthly revenue`);
+      console.log(`Dashboard subscription summary: ${subscriptions.length} active subscriptions, ${activeSeats} seats, R${Math.round(monthlyRevenue)} monthly revenue`);
       }
       
       // Process recent alerts from error logs
