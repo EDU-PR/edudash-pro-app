@@ -5,13 +5,13 @@
  * - Keeps screen awake during active calls (prevents screen lock from dropping call)
  * - Handles app state changes (foreground/background transitions)
  * - Ensures audio continues in background via InCallManager
- * - Shows ongoing call notification for Android foreground service
+ * - Starts Android foreground service to keep WebRTC alive in background
  * 
  * NOTE: CallKeep has been removed due to Expo SDK 54+ compatibility issues.
  * Background call persistence now relies on:
  * 1. expo-keep-awake for screen wake
  * 2. InCallManager for audio routing
- * 3. Ongoing notification for Android foreground service requirement
+ * 3. @voximplant/react-native-foreground-service for Android background execution
  * 
  * @module useCallBackgroundHandler
  */
@@ -19,7 +19,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import * as Notifications from 'expo-notifications';
 import type { CallState } from '../types';
 
 // Unique tag for KeepAwake during calls
@@ -33,6 +32,16 @@ try {
   console.warn('[CallBackgroundHandler] InCallManager not available');
 }
 
+// Conditionally import Voximplant Foreground Service (Android only)
+let VoximplantForegroundService: any = null;
+if (Platform.OS === 'android') {
+  try {
+    VoximplantForegroundService = require('@voximplant/react-native-foreground-service').default;
+  } catch (error) {
+    console.warn('[CallBackgroundHandler] VoximplantForegroundService not available:', error);
+  }
+}
+
 export interface CallBackgroundHandlerOptions {
   /** Current call state */
   callState: CallState;
@@ -40,6 +49,10 @@ export interface CallBackgroundHandlerOptions {
   isCallActive: boolean;
   /** Call ID for CallKeep integration */
   callId?: string | null;
+  /** Name of the person in the call (for notification) */
+  callerName?: string;
+  /** Type of call */
+  callType?: 'voice' | 'video';
   /** Callback when app returns from background during call */
   onReturnFromBackground?: () => void;
 }
@@ -59,12 +72,14 @@ export function useCallBackgroundHandler({
   callState,
   isCallActive,
   callId,
+  callerName,
+  callType = 'voice',
   onReturnFromBackground,
 }: CallBackgroundHandlerOptions): CallBackgroundHandlerReturn {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const keepAwakeActiveRef = useRef(false);
   const wasInBackgroundRef = useRef(false);
-  const ongoingNotificationIdRef = useRef<string | null>(null);
+  const foregroundServiceActiveRef = useRef(false);
 
   // Determine if call is in an active audio state
   const isAudioActive = callState === 'connected' || callState === 'connecting' || callState === 'ringing';
@@ -119,68 +134,82 @@ export function useCallBackgroundHandler({
   }, []);
 
   /**
-   * Show ongoing call notification (Android foreground service)
-   * This keeps the app alive when backgrounded on Android
+   * Start Android foreground service to keep WebRTC alive in background
+   * This is REQUIRED for voice/video calls to continue when app is backgrounded
    */
-  const showOngoingCallNotification = useCallback(async (callerName?: string) => {
-    if (Platform.OS !== 'android' || ongoingNotificationIdRef.current) return;
+  const startForegroundService = useCallback(async () => {
+    if (Platform.OS !== 'android' || !VoximplantForegroundService || foregroundServiceActiveRef.current) {
+      return;
+    }
     
     try {
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '📞 Call in progress',
-          body: callerName ? `Connected with ${callerName}` : 'Voice call active',
-          data: { type: 'ongoing_call', call_id: callId },
-          sound: null, // No sound for ongoing notification
-          sticky: true, // Sticky notification (harder to dismiss)
-          autoDismiss: false, // Don't auto-dismiss
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-        },
-        trigger: null, // Show immediately
-        identifier: `ongoing-call-${callId || 'active'}`, // Unique identifier
-      });
+      // Create notification channel for the foreground service
+      const channelConfig = {
+        id: 'ongoing-calls',
+        name: 'Ongoing Calls',
+        description: 'Notification for active voice/video calls',
+        enableVibration: false,
+        importance: 4, // HIGH importance
+      };
+      await VoximplantForegroundService.createNotificationChannel(channelConfig);
       
-      ongoingNotificationIdRef.current = notificationId;
-      console.log('[CallBackgroundHandler] Ongoing call notification shown:', notificationId);
+      // Start the foreground service with a notification
+      const callTypeEmoji = callType === 'video' ? '📹' : '📞';
+      const callTypeText = callType === 'video' ? 'Video call' : 'Voice call';
+      const notificationConfig = {
+        channelId: 'ongoing-calls',
+        id: 1001, // Unique notification ID
+        title: `${callTypeEmoji} ${callTypeText} in progress`,
+        text: callerName ? `Connected with ${callerName}` : 'Tap to return to call',
+        icon: 'ic_notification', // Use app's notification icon
+        priority: 1, // HIGH priority
+      };
+      
+      await VoximplantForegroundService.startService(notificationConfig);
+      foregroundServiceActiveRef.current = true;
+      
+      console.log('[CallBackgroundHandler] ✅ Foreground service started - call will persist in background');
     } catch (error) {
-      console.warn('[CallBackgroundHandler] Failed to show ongoing notification:', error);
+      console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
     }
-  }, [callId]);
+  }, [callerName, callType]);
 
   /**
-   * Dismiss ongoing call notification
+   * Stop the foreground service when call ends
    */
-  const dismissOngoingCallNotification = useCallback(async () => {
-    if (!ongoingNotificationIdRef.current) return;
+  const stopForegroundService = useCallback(async () => {
+    if (Platform.OS !== 'android' || !VoximplantForegroundService || !foregroundServiceActiveRef.current) {
+      return;
+    }
     
     try {
-      await Notifications.dismissNotificationAsync(ongoingNotificationIdRef.current);
-      console.log('[CallBackgroundHandler] Ongoing call notification dismissed');
-      ongoingNotificationIdRef.current = null;
+      await VoximplantForegroundService.stopService();
+      foregroundServiceActiveRef.current = false;
+      console.log('[CallBackgroundHandler] Foreground service stopped');
     } catch (error) {
-      console.warn('[CallBackgroundHandler] Failed to dismiss notification:', error);
+      console.warn('[CallBackgroundHandler] Failed to stop foreground service:', error);
     }
   }, []);
 
-  // Manage KeepAwake and ongoing notification based on call state
+  // Manage KeepAwake and foreground service based on call state
   useEffect(() => {
     if (isAudioActive && isCallActive) {
       activateCallKeepAwake();
       configureBackgroundAudio();
-      // Show ongoing notification when call connects (for Android foreground service)
+      // Start foreground service when call connects to keep WebRTC alive in background
       if (callState === 'connected') {
-        showOngoingCallNotification();
+        startForegroundService();
       }
     } else {
       deactivateCallKeepAwake();
-      dismissOngoingCallNotification();
+      stopForegroundService();
     }
 
     return () => {
       deactivateCallKeepAwake();
-      dismissOngoingCallNotification();
+      stopForegroundService();
     };
-  }, [isAudioActive, isCallActive, callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, showOngoingCallNotification, dismissOngoingCallNotification]);
+  }, [isAudioActive, isCallActive, callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, startForegroundService, stopForegroundService]);
 
   // Handle app state changes (background/foreground)
   useEffect(() => {
@@ -196,12 +225,7 @@ export function useCallBackgroundHandler({
         
         if (isAudioActive && callId) {
           console.log('[CallBackgroundHandler] Call active, app going to background');
-          
-          // The ongoing notification serves as our foreground service
-          // Android will keep the app alive due to the sticky notification
-          if (Platform.OS === 'android') {
-            console.log('[CallBackgroundHandler] Ongoing notification will maintain call in background');
-          }
+          console.log('[CallBackgroundHandler] Foreground service active:', foregroundServiceActiveRef.current);
         }
       }
       
@@ -212,7 +236,6 @@ export function useCallBackgroundHandler({
           wasInBackgroundRef.current = false;
           
           // Restore audio settings when returning from background
-          // IMPORTANT: Don't call start() again - just restore settings
           if (InCallManager) {
             try {
               InCallManager.setKeepScreenOn(true);

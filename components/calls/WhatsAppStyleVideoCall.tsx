@@ -30,6 +30,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { assertSupabase } from '@/lib/supabase';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
+import { useCallBackgroundHandler } from './hooks';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
@@ -140,6 +141,26 @@ export function WhatsAppStyleVideoCall({
     // 16:9 landscape aspect ratio for video calls
     aspectRatioWidth: 16,
     aspectRatioHeight: 9,
+  });
+
+  // Background handling with foreground service for video calls
+  useCallBackgroundHandler({
+    callState,
+    isCallActive: isOpen,
+    callId: callIdRef.current,
+    callerName: remoteUserName,
+    callType: 'video',
+    onReturnFromBackground: () => {
+      console.log('[VideoCall] Returned from background');
+      // Re-enable video when returning from background
+      if (dailyRef.current && isVideoEnabled) {
+        try {
+          dailyRef.current.setLocalVideo(true);
+        } catch (err) {
+          console.warn('[VideoCall] Failed to re-enable video after background:', err);
+        }
+      }
+    },
   });
 
   // Local video draggable

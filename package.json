@@ -119,6 +119,7 @@
     "@tanstack/query-async-storage-persister": "^5.87.4",
     "@tanstack/react-query": "^5.87.4",
     "@tanstack/react-query-persist-client": "^5.87.4",
+    "@voximplant/react-native-foreground-service": "^3.0.2",
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-plugin-transform-inline-environment-variables": "^0.4.4",
     "babel-plugin-transform-remove-console": "^6.9.4",
