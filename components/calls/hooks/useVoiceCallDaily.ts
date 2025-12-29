@@ -223,7 +223,7 @@ export function useVoiceCallDaily({
                   name: `voice-${Date.now()}`,
                   isPrivate: true,
                   expiryMinutes: 60,
-                  maxParticipants: 2,
+                  maxParticipants: 10, // Support group calls (3-10 participants)
                 }),
               }
             ),

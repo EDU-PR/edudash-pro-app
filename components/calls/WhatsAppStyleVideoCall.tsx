@@ -21,6 +21,8 @@ import {
   Platform,
   StatusBar,
   Image,
+  Share,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -106,13 +108,15 @@ export function WhatsAppStyleVideoCall({
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Video calls default to speaker
   const [isMinimized, setIsMinimized] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [viewMode, setViewMode] = useState<'remote-primary' | 'local-primary'>('remote-primary');
 
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
@@ -150,6 +154,8 @@ export function WhatsAppStyleVideoCall({
     callId: callIdRef.current,
     callerName: remoteUserName,
     callType: 'video',
+    isAudioEnabled,
+    isSpeakerEnabled: isSpeakerOn,
     onReturnFromBackground: () => {
       console.log('[VideoCall] Returned from background');
       // Re-enable video when returning from background
@@ -161,6 +167,9 @@ export function WhatsAppStyleVideoCall({
         }
       }
     },
+    onToggleMute: toggleAudio,
+    onToggleSpeaker: toggleSpeaker,
+    onEndCall: handleEndCall,
   });
 
   // Local video draggable
@@ -429,46 +438,50 @@ export function WhatsAppStyleVideoCall({
     setRemoteParticipants(remote);
   }, []);
 
-  // Continuous earpiece enforcement during ringing/connecting
-  // This prevents Android from auto-switching to speaker during ringback
-  const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Continuous speaker enforcement during ringing/connecting
+  // Video calls default to speaker (user can toggle to earpiece if needed)
+  const speakerEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   useEffect(() => {
     if (!InCallManager) return;
     
-    const shouldEnforceEarpiece = (callState === 'connecting' || callState === 'ringing') && !isSpeakerOn;
+    // Enforce speaker during connecting/ringing if speaker is enabled
+    const shouldEnforceSpeaker = (callState === 'connecting' || callState === 'ringing') && isSpeakerOn;
     
-    if (shouldEnforceEarpiece) {
-      console.log('[VideoCall] Starting continuous earpiece enforcement');
+    if (shouldEnforceSpeaker) {
+      console.log('[VideoCall] Starting continuous speaker enforcement');
       
-      // Immediately enforce earpiece
+      // Immediately enforce speaker
       try {
-        InCallManager.setForceSpeakerphoneOn(false);
+        InCallManager.setForceSpeakerphoneOn(true);
       } catch (e) {
-        console.warn('[VideoCall] Initial earpiece enforcement failed:', e);
+        console.warn('[VideoCall] Initial speaker enforcement failed:', e);
       }
       
-      // Set up periodic enforcement every 500ms during ringing
-      earpieceEnforcerRef.current = setInterval(() => {
+      // Set up periodic enforcement every 500ms during ringing to maintain speaker
+      speakerEnforcerRef.current = setInterval(() => {
         try {
-          InCallManager.setForceSpeakerphoneOn(false);
+          // Only enforce if speaker is still enabled
+          if (isSpeakerOn) {
+            InCallManager.setForceSpeakerphoneOn(true);
+          }
         } catch (e) {
           // Ignore errors during enforcement
         }
       }, 500);
     } else {
       // Clear the enforcer when not needed
-      if (earpieceEnforcerRef.current) {
-        clearInterval(earpieceEnforcerRef.current);
-        earpieceEnforcerRef.current = null;
-        console.log('[VideoCall] Stopped continuous earpiece enforcement');
+      if (speakerEnforcerRef.current) {
+        clearInterval(speakerEnforcerRef.current);
+        speakerEnforcerRef.current = null;
+        console.log('[VideoCall] Stopped continuous speaker enforcement');
       }
     }
     
     return () => {
-      if (earpieceEnforcerRef.current) {
-        clearInterval(earpieceEnforcerRef.current);
-        earpieceEnforcerRef.current = null;
+      if (speakerEnforcerRef.current) {
+        clearInterval(speakerEnforcerRef.current);
+        speakerEnforcerRef.current = null;
       }
     };
   }, [callState, isSpeakerOn]);
@@ -481,37 +494,37 @@ export function WhatsAppStyleVideoCall({
       // Start audio with ringback for caller
       if (isOwner) {
         try {
-          // CRITICAL: Set earpiece BEFORE starting to prevent any speaker routing
-          InCallManager.setForceSpeakerphoneOn(false);
+          // Video calls default to speaker (like FaceTime, WhatsApp video)
+          InCallManager.setForceSpeakerphoneOn(true);
           
-          // Use 'audio' media type to default to earpiece
+          // Use 'video' media type to default to speaker
           InCallManager.start({ 
-            media: 'audio', // NOT 'video' - this defaults to earpiece
+            media: 'video', // Video calls default to speaker
             auto: false,
             ringback: '_DEFAULT_' // System default ringback tone
           });
           
-          // Immediately re-enforce earpiece after start
-          InCallManager.setForceSpeakerphoneOn(false);
-          setIsSpeakerOn(false);
+          // Ensure speaker is on after start
+          InCallManager.setForceSpeakerphoneOn(true);
+          setIsSpeakerOn(true);
           InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager with system ringback for caller (earpiece)');
+          console.log('[VideoCall] Started InCallManager with system ringback for caller (speaker)');
         } catch (err) {
           console.warn('[VideoCall] Failed to start InCallManager:', err);
         }
       } else {
-        // Callee: no ringback
+        // Callee: no ringback, default to speaker
         try {
-          InCallManager.setForceSpeakerphoneOn(false);
+          InCallManager.setForceSpeakerphoneOn(true);
           InCallManager.start({ 
-            media: 'audio', // NOT 'video' - this defaults to earpiece
+            media: 'video', // Video calls default to speaker
             auto: false,
             ringback: ''
           });
-          InCallManager.setForceSpeakerphoneOn(false);
-          setIsSpeakerOn(false);
+          InCallManager.setForceSpeakerphoneOn(true);
+          setIsSpeakerOn(true);
           InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager for callee (no ringback, earpiece)');
+          console.log('[VideoCall] Started InCallManager for callee (no ringback, speaker)');
         } catch (err) {
           console.warn('[VideoCall] Failed to start InCallManager:', err);
         }
@@ -598,7 +611,7 @@ export function WhatsAppStyleVideoCall({
                 name: `video-${Date.now()}`,
                 isPrivate: true,
                 expiryMinutes: 60,
-                maxParticipants: 2,
+                maxParticipants: 10, // Support group calls (3-10 participants)
               }),
             }
           );
@@ -809,6 +822,23 @@ export function WhatsAppStyleVideoCall({
           updateParticipants();
         });
 
+        // Handle screen share events
+        daily.on('active-speaker-change', () => {
+          updateParticipants();
+        });
+
+        daily.on('screen-share-started', (event: any) => {
+          console.log('[VideoCall] Screen share started:', event?.participant?.session_id);
+          setIsScreenSharing(true);
+          updateParticipants();
+        });
+
+        daily.on('screen-share-stopped', (event: any) => {
+          console.log('[VideoCall] Screen share stopped:', event?.participant?.session_id);
+          setIsScreenSharing(false);
+          updateParticipants();
+        });
+
         daily.on('error', (event: any) => {
           console.error('[VideoCall] Error:', event);
           setError(event?.errorMsg || 'Call error');
@@ -828,15 +858,16 @@ export function WhatsAppStyleVideoCall({
           audioSessionRef.current = await AudioModeCoordinator.requestAudioMode('streaming');
           console.log('[VideoCall] ✅ Audio session acquired:', audioSessionRef.current.id);
           
-          // CRITICAL: Re-enforce earpiece AFTER AudioModeCoordinator applies settings
-          // Wait a bit for audio routing to stabilize, then ensure InCallManager takes precedence
+          // CRITICAL: Re-enforce speaker AFTER AudioModeCoordinator applies settings
+          // Video calls default to speaker (user can toggle to earpiece if needed)
           setTimeout(() => {
             if (InCallManager) {
               try {
-                InCallManager.setForceSpeakerphoneOn(false);
-                console.log('[VideoCall] ✅ Re-enforced earpiece after AudioModeCoordinator');
+                InCallManager.setForceSpeakerphoneOn(true);
+                setIsSpeakerOn(true);
+                console.log('[VideoCall] ✅ Re-enforced speaker after AudioModeCoordinator');
               } catch (err) {
-                console.warn('[VideoCall] Failed to re-enforce earpiece:', err);
+                console.warn('[VideoCall] Failed to re-enforce speaker:', err);
               }
             }
           }, 200);
@@ -851,15 +882,16 @@ export function WhatsAppStyleVideoCall({
           videoSource: true,
         });
         
-        // CRITICAL: Final earpiece enforcement after Daily.co join
-        // This ensures InCallManager settings take precedence over any audio mode changes
+        // CRITICAL: Final speaker enforcement after Daily.co join
+        // Video calls default to speaker (user can toggle to earpiece if needed)
         setTimeout(() => {
           if (InCallManager) {
             try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              console.log('[VideoCall] ✅ Final earpiece enforcement after join');
+              InCallManager.setForceSpeakerphoneOn(true);
+              setIsSpeakerOn(true);
+              console.log('[VideoCall] ✅ Final speaker enforcement after join');
             } catch (err) {
-              console.warn('[VideoCall] Failed final earpiece enforcement:', err);
+              console.warn('[VideoCall] Failed final speaker enforcement:', err);
             }
           }
         }, 300);
@@ -940,6 +972,53 @@ export function WhatsAppStyleVideoCall({
       console.error('[VideoCall] Toggle speaker error:', err);
     }
   }, [isSpeakerOn]);
+
+  // Toggle screen sharing
+  const toggleScreenShare = useCallback(async () => {
+    if (!dailyRef.current) return;
+    try {
+      if (isScreenSharing) {
+        await dailyRef.current.stopScreenShare();
+        setIsScreenSharing(false);
+        console.log('[VideoCall] Screen sharing stopped');
+      } else {
+        await dailyRef.current.startScreenShare();
+        setIsScreenSharing(true);
+        console.log('[VideoCall] Screen sharing started');
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      console.error('[VideoCall] Toggle screen share error:', err);
+      Alert.alert('Screen Share Error', 'Failed to toggle screen sharing. Please try again.');
+    }
+  }, [isScreenSharing]);
+
+  // Toggle view mode (swap local/remote video)
+  const toggleView = useCallback(() => {
+    setViewMode(prev => prev === 'remote-primary' ? 'local-primary' : 'remote-primary');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  // Share meeting URL to add participants
+  const shareMeetingUrl = useCallback(async () => {
+    if (!dailyRef.current) return;
+    try {
+      const meetingUrl = dailyRef.current.room()?.url;
+      if (!meetingUrl) {
+        Alert.alert('Error', 'Meeting URL not available');
+        return;
+      }
+      
+      await Share.share({
+        message: `Join my video call: ${meetingUrl}`,
+        url: meetingUrl,
+        title: 'Join Video Call',
+      });
+    } catch (err) {
+      console.error('[VideoCall] Share meeting URL error:', err);
+      Alert.alert('Error', 'Failed to share meeting URL');
+    }
+  }, []);
 
   // End call
   const handleEndCall = useCallback(async () => {
@@ -1051,42 +1130,81 @@ export function WhatsAppStyleVideoCall({
         onPress={handleScreenTap}
         style={styles.mainVideoContainer}
       >
-        {/* Main Video View - Show remote participant if available, otherwise local only if NO remote exists */}
-        {hasRemoteVideo && DailyMediaView ? (
-          <DailyMediaView
-            videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
-            audioTrack={remoteParticipants[0]?.tracks?.audio?.persistentTrack || remoteParticipants[0]?.tracks?.audio?.track || null}
-            style={styles.mainVideo}
-            objectFit="cover"
-          />
-        ) : showLocalInMainView && DailyMediaView ? (
-          <DailyMediaView
-            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
-            audioTrack={null}
-            style={styles.mainVideo}
-            objectFit="cover"
-            mirror={isFrontCamera}
-          />
-        ) : (
-          <LinearGradient
-            colors={['#1a1a2e', '#16213e', '#0f3460']}
-            style={styles.noVideoContainer}
-          >
-            {remoteUserPhoto ? (
-              <Image source={{ uri: remoteUserPhoto }} style={styles.noVideoAvatar} />
-            ) : (
-              <View style={styles.noVideoAvatarPlaceholder}>
-                <Ionicons name="person" size={80} color="rgba(255,255,255,0.5)" />
-              </View>
-            )}
-            <Text style={styles.noVideoName}>{remoteUserName}</Text>
-            <Text style={styles.noVideoStatus}>
-              {callState === 'connecting' ? 'Connecting...' : 
-               callState === 'ringing' ? 'Ringing...' :
-               remoteParticipants.length === 0 ? 'Waiting for participant...' : 'Camera off'}
-            </Text>
-          </LinearGradient>
-        )}
+        {/* Main Video View - Support view mode toggle and screen sharing */}
+        {(() => {
+          // Check for screen share first (highest priority)
+          const screenShareParticipant = remoteParticipants.find(p => p.tracks?.screenVideo?.state === 'playable');
+          if (screenShareParticipant && DailyMediaView) {
+            return (
+              <DailyMediaView
+                videoTrack={screenShareParticipant.tracks?.screenVideo?.persistentTrack || screenShareParticipant.tracks?.screenVideo?.track || null}
+                audioTrack={screenShareParticipant.tracks?.screenAudio?.persistentTrack || screenShareParticipant.tracks?.screenAudio?.track || null}
+                style={styles.mainVideo}
+                objectFit="contain"
+              />
+            );
+          }
+          
+          // Then check view mode toggle
+          if (viewMode === 'local-primary' && hasLocalVideo && DailyMediaView) {
+            return (
+              <DailyMediaView
+                videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
+                audioTrack={null}
+                style={styles.mainVideo}
+                objectFit="cover"
+                mirror={isFrontCamera}
+              />
+            );
+          }
+          
+          // Default: show remote video if available
+          if (hasRemoteVideo && DailyMediaView) {
+            return (
+              <DailyMediaView
+                videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
+                audioTrack={remoteParticipants[0]?.tracks?.audio?.persistentTrack || remoteParticipants[0]?.tracks?.audio?.track || null}
+                style={styles.mainVideo}
+                objectFit="cover"
+              />
+            );
+          }
+          
+          // Fallback: show local if no remote
+          if (showLocalInMainView && DailyMediaView) {
+            return (
+              <DailyMediaView
+                videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
+                audioTrack={null}
+                style={styles.mainVideo}
+                objectFit="cover"
+                mirror={isFrontCamera}
+              />
+            );
+          }
+          
+          // No video available
+          return (
+            <LinearGradient
+              colors={['#1a1a2e', '#16213e', '#0f3460']}
+              style={styles.noVideoContainer}
+            >
+              {remoteUserPhoto ? (
+                <Image source={{ uri: remoteUserPhoto }} style={styles.noVideoAvatar} />
+              ) : (
+                <View style={styles.noVideoAvatarPlaceholder}>
+                  <Ionicons name="person" size={80} color="rgba(255,255,255,0.5)" />
+                </View>
+              )}
+              <Text style={styles.noVideoName}>{remoteUserName}</Text>
+              <Text style={styles.noVideoStatus}>
+                {callState === 'connecting' ? 'Connecting...' : 
+                 callState === 'ringing' ? 'Ringing...' :
+                 remoteParticipants.length === 0 ? 'Waiting for participant...' : 'Camera off'}
+              </Text>
+            </LinearGradient>
+          );
+        })()}
       </TouchableOpacity>
 
       {/* Local Video Preview (Draggable) */}
@@ -1163,6 +1281,29 @@ export function WhatsAppStyleVideoCall({
           <TouchableOpacity style={styles.secondaryButton} onPress={flipCamera}>
             <Ionicons name="camera-reverse" size={24} color="#fff" />
             <Text style={styles.secondaryLabel}>Flip</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.secondaryButton, isScreenSharing && styles.secondaryButtonActive]} 
+            onPress={toggleScreenShare}
+            disabled={callState !== 'connected'}
+          >
+            <Ionicons 
+              name={isScreenSharing ? 'stop-circle' : 'share-outline'} 
+              size={24} 
+              color={isScreenSharing ? '#4ade80' : '#fff'} 
+            />
+            <Text style={styles.secondaryLabel}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={toggleView}>
+            <Ionicons name="swap-horizontal" size={24} color="#fff" />
+            <Text style={styles.secondaryLabel}>View</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={shareMeetingUrl}>
+            <Ionicons name="person-add" size={24} color="#fff" />
+            <Text style={styles.secondaryLabel}>Add</Text>
           </TouchableOpacity>
         </View>
 
@@ -1333,6 +1474,9 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     alignItems: 'center',
+  },
+  secondaryButtonActive: {
+    opacity: 1,
   },
   secondaryLabel: {
     color: 'rgba(255,255,255,0.7)',

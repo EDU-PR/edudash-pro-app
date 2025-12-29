@@ -186,25 +186,24 @@ export function VideoCallInterface({
   }, []);
 
   // InCallManager: Start audio routing for video calls
-  // NOTE: We use media: 'audio' even for video calls because:
-  // - media: 'video' defaults to speaker which we don't want
-  // - media: 'audio' defaults to earpiece (WhatsApp-like behavior)
-  // - Video display is handled by Daily.co, InCallManager only handles audio routing
+  // NOTE: Video calls default to speaker (like FaceTime, WhatsApp video)
+  // User can toggle to earpiece for privacy if needed
+  // Video display is handled by Daily.co, InCallManager only handles audio routing
   useEffect(() => {
     if (!InCallManager) return;
     if (!isOpen) return;
 
     if (callState === 'connecting' || callState === 'ringing') {
       try {
-        // Use 'audio' media type to default to earpiece
+        // Use 'video' media type to default to speaker
         InCallManager.start({ 
-          media: 'audio', // NOT 'video' - this defaults to earpiece
+          media: 'video', // Video calls default to speaker
           auto: false,
           ringback: '' // No ringback for video calls
         });
-        InCallManager.setForceSpeakerphoneOn(false);
+        InCallManager.setForceSpeakerphoneOn(true);
         InCallManager.setKeepScreenOn(true);
-        console.log('[VideoCall] Started InCallManager for video call (earpiece)');
+        console.log('[VideoCall] Started InCallManager for video call (speaker)');
       } catch (err) {
         console.warn('[VideoCall] Failed to start InCallManager:', err);
       }
@@ -301,7 +300,7 @@ export function VideoCallInterface({
                 name: `video-${Date.now()}`,
                 isPrivate: true,
                 expiryMinutes: 60,
-                maxParticipants: 2,
+                maxParticipants: 10, // Support group calls (3-10 participants)
               }),
             }
           );
