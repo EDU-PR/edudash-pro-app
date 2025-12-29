@@ -64,6 +64,16 @@ export function useSignOut(
         console.warn('[AuthContext] Query cache clear failed:', cacheErr);
       }
       
+      // CRITICAL: Clear all navigation locks before sign-out to prevent stale locks
+      // This prevents sign-in freeze caused by leftover locks from previous session
+      try {
+        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
+        clearAllNavigationLocks();
+        console.log('[AuthContext] All navigation locks cleared before sign-out');
+      } catch (lockErr) {
+        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
+      }
+      
       // Call sessionManager sign out (this clears storage and Supabase session)
       await signOut();
       

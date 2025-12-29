@@ -25,6 +25,7 @@ function isNavigationLocked(userId: string): boolean {
   if (!lockTime) return false;
   // Auto-expire old locks
   if (Date.now() - lockTime > NAVIGATION_LOCK_TIMEOUT) {
+    console.log('🚦 [ROUTE] Auto-expiring stale navigation lock for user:', userId);
     navigationLocks.delete(userId);
     return false;
   }
@@ -33,10 +34,26 @@ function isNavigationLocked(userId: string): boolean {
 
 function setNavigationLock(userId: string): void {
   navigationLocks.set(userId, Date.now());
+  console.log('🚦 [ROUTE] Navigation lock set for user:', userId, 'at', new Date().toISOString());
 }
 
 function clearNavigationLock(userId: string): void {
+  const hadLock = navigationLocks.has(userId);
   navigationLocks.delete(userId);
+  if (hadLock) {
+    console.log('🚦 [ROUTE] Navigation lock cleared for user:', userId);
+  }
+}
+
+/**
+ * Clear ALL navigation locks (used during sign-out to prevent stale locks)
+ */
+export function clearAllNavigationLocks(): void {
+  const count = navigationLocks.size;
+  navigationLocks.clear();
+  if (count > 0) {
+    console.log('🚦 [ROUTE] Cleared all navigation locks:', count, 'locks removed');
+  }
 }
 
 function normalizeRole(r?: string | null): string | null {
@@ -107,20 +124,30 @@ export async function detectRoleAndSchool(user?: User | null): Promise<{ role: s
 /**
  * Enhanced post-login routing with comprehensive RBAC integration
  * Routes users to appropriate dashboard based on their role, capabilities, and organization membership
+ * 
+ * Includes timeout protection to prevent infinite hanging
  */
-export async function routeAfterLogin(user?: User | null, profile?: EnhancedUserProfile | null) {
-  try {
-    const userId = user?.id;
-    if (!userId) {
-      console.error('No user ID provided for post-login routing');
-      router.replace('/(auth)/sign-in');
-      return;
-    }
+export async function routeAfterLogin(user?: User | null, profile?: EnhancedUserProfile | null): Promise<void> {
+  const userId = user?.id;
+  if (!userId) {
+    console.error('No user ID provided for post-login routing');
+    router.replace('/(auth)/sign-in');
+    return;
+  }
 
+  // Wrap entire function in timeout to prevent hanging
+  const overallTimeout = setTimeout(() => {
+    console.error('🚦 [ROUTE] routeAfterLogin overall timeout (15s) - forcing fallback navigation');
+    clearNavigationLock(userId);
+    router.replace('/profiles-gate');
+  }, 15000); // 15 second overall timeout
+
+  try {
     // EARLY CHECK: Prevent concurrent navigation attempts using module-level lock
     // Check at the very start to avoid duplicate work (profile fetch, etc.)
     if (isNavigationLocked(userId)) {
       console.log('🚦 [ROUTE] Navigation already in progress for user (early check), skipping');
+      clearTimeout(overallTimeout);
       return;
     }
     
@@ -247,16 +274,22 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
           }, 1000);
         }
       }, 50);
+      
+      // Clear overall timeout since navigation was initiated
+      clearTimeout(overallTimeout);
     } catch (error) {
       console.error('🚦 [ROUTE] Unexpected error during navigation setup:', error);
+      clearTimeout(overallTimeout);
       // Clear locks on error
       clearNavigationLock(userId);
       if (typeof window !== 'undefined') {
         delete (window as any).dashboardSwitching;
       }
-      throw error;
+      // Fallback navigation
+      router.replace('/profiles-gate');
     }
   } catch (error) {
+    clearTimeout(overallTimeout);
     reportError(new Error('Post-login routing failed'), {
       userId: user?.id,
       error,
@@ -268,7 +301,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
     }
     
     // Fallback to safe route
-    router.replace('/(auth)/sign-in');
+    router.replace('/profiles-gate');
   }
 }
 

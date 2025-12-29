@@ -223,14 +223,29 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // can cause navigation to hang.
       
       // Add a timeout to ensure we don't get stuck if AuthContext doesn't navigate
+      // Also clear any stale navigation locks before sign-in
+      try {
+        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
+        clearAllNavigationLocks();
+        console.log('[SignIn] Cleared all navigation locks before sign-in');
+      } catch (lockErr) {
+        console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', lockErr);
+      }
+      
       const navigationTimeout = setTimeout(() => {
-        console.warn('[SignIn] Navigation timeout - AuthContext may have failed to route');
+        console.warn('[SignIn] Navigation timeout (8s) - AuthContext may have failed to route, forcing fallback');
         setLoading(false);
-        // Force navigation to tabs as fallback
+        // Force navigation to profiles-gate as fallback (safer than tabs)
         try {
-          router.replace('/(tabs)' as any);
+          router.replace('/profiles-gate' as any);
         } catch (navErr) {
           console.warn('[SignIn] Fallback navigation failed:', navErr);
+          // Last resort: try tabs
+          try {
+            router.replace('/(tabs)' as any);
+          } catch (finalErr) {
+            console.error('[SignIn] All fallback navigation attempts failed:', finalErr);
+          }
         }
       }, 8000); // 8 second timeout
       
