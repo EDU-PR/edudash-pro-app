@@ -11,7 +11,7 @@
  * Background call persistence now relies on:
  * 1. expo-keep-awake for screen wake
  * 2. InCallManager for audio routing
- * 3. @voximplant/react-native-foreground-service for Android background execution
+ * 3. @notifee/react-native for Android foreground service (2025 best practice)
  * 
  * @module useCallBackgroundHandler
  */
@@ -32,15 +32,27 @@ try {
   console.warn('[CallBackgroundHandler] InCallManager not available');
 }
 
-// Conditionally import Voximplant Foreground Service (Android only)
-let VoximplantForegroundService: any = null;
+// Conditionally import Notifee for foreground service (Android only)
+let notifee: typeof import('@notifee/react-native').default | null = null;
+let AndroidImportance: typeof import('@notifee/react-native').AndroidImportance | null = null;
+let AndroidCategory: typeof import('@notifee/react-native').AndroidCategory | null = null;
+let AndroidForegroundServiceType: typeof import('@notifee/react-native').AndroidForegroundServiceType | null = null;
+
 if (Platform.OS === 'android') {
   try {
-    VoximplantForegroundService = require('@voximplant/react-native-foreground-service').default;
+    const notifeeModule = require('@notifee/react-native');
+    notifee = notifeeModule.default;
+    AndroidImportance = notifeeModule.AndroidImportance;
+    AndroidCategory = notifeeModule.AndroidCategory;
+    AndroidForegroundServiceType = notifeeModule.AndroidForegroundServiceType;
   } catch (error) {
-    console.warn('[CallBackgroundHandler] VoximplantForegroundService not available:', error);
+    console.warn('[CallBackgroundHandler] Notifee not available:', error);
   }
 }
+
+// Foreground service notification channel ID
+const CALL_CHANNEL_ID = 'ongoing-calls';
+const CALL_NOTIFICATION_ID = 'ongoing-call-notification';
 
 export interface CallBackgroundHandlerOptions {
   /** Current call state */
@@ -136,39 +148,65 @@ export function useCallBackgroundHandler({
   /**
    * Start Android foreground service to keep WebRTC alive in background
    * This is REQUIRED for voice/video calls to continue when app is backgrounded
+   * Uses Notifee's foreground service API (2025 best practice)
    */
   const startForegroundService = useCallback(async () => {
-    if (Platform.OS !== 'android' || !VoximplantForegroundService || foregroundServiceActiveRef.current) {
+    if (Platform.OS !== 'android' || !notifee || foregroundServiceActiveRef.current) {
       return;
     }
     
     try {
-      // Create notification channel for the foreground service
-      const channelConfig = {
-        id: 'ongoing-calls',
+      // Create notification channel for the foreground service (required for Android 8+)
+      await notifee.createChannel({
+        id: CALL_CHANNEL_ID,
         name: 'Ongoing Calls',
         description: 'Notification for active voice/video calls',
-        enableVibration: false,
-        importance: 4, // HIGH importance
-      };
-      await VoximplantForegroundService.createNotificationChannel(channelConfig);
+        importance: AndroidImportance?.HIGH ?? 4,
+        vibration: false,
+        sound: undefined, // No sound for ongoing call notification
+      });
       
-      // Start the foreground service with a notification
+      // Display foreground service notification
       const callTypeEmoji = callType === 'video' ? '📹' : '📞';
       const callTypeText = callType === 'video' ? 'Video call' : 'Voice call';
-      const notificationConfig = {
-        channelId: 'ongoing-calls',
-        id: 1001, // Unique notification ID
+      
+      await notifee.displayNotification({
+        id: CALL_NOTIFICATION_ID,
         title: `${callTypeEmoji} ${callTypeText} in progress`,
-        text: callerName ? `Connected with ${callerName}` : 'Tap to return to call',
-        icon: 'ic_notification', // Use app's notification icon
-        priority: 1, // HIGH priority
-      };
+        body: callerName ? `Connected with ${callerName}` : 'Tap to return to call',
+        android: {
+          channelId: CALL_CHANNEL_ID,
+          asForegroundService: true,
+          // Required for Android 14+ (API 34) - specify foreground service type
+          // Using enum values: PHONE_CALL=4, MEDIA_PLAYBACK=2, MICROPHONE=128
+          foregroundServiceTypes: [
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_PHONE_CALL ?? 4,
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK ?? 2,
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
+          ],
+          category: AndroidCategory?.CALL,
+          ongoing: true,
+          autoCancel: false,
+          smallIcon: 'ic_notification', // Use app's notification icon
+          color: '#00f5ff', // App accent color
+          pressAction: {
+            id: 'default',
+            launchActivity: 'default',
+          },
+          // Show call actions in notification
+          actions: [
+            {
+              title: 'End Call',
+              pressAction: {
+                id: 'end-call',
+              },
+            },
+          ],
+        },
+      });
       
-      await VoximplantForegroundService.startService(notificationConfig);
       foregroundServiceActiveRef.current = true;
-      
-      console.log('[CallBackgroundHandler] ✅ Foreground service started - call will persist in background');
+      console.log('[CallBackgroundHandler] ✅ Notifee foreground service started - call will persist in background');
     } catch (error) {
       console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
     }
@@ -178,12 +216,13 @@ export function useCallBackgroundHandler({
    * Stop the foreground service when call ends
    */
   const stopForegroundService = useCallback(async () => {
-    if (Platform.OS !== 'android' || !VoximplantForegroundService || !foregroundServiceActiveRef.current) {
+    if (Platform.OS !== 'android' || !notifee || !foregroundServiceActiveRef.current) {
       return;
     }
     
     try {
-      await VoximplantForegroundService.stopService();
+      await notifee.stopForegroundService();
+      await notifee.cancelNotification(CALL_NOTIFICATION_ID);
       foregroundServiceActiveRef.current = false;
       console.log('[CallBackgroundHandler] Foreground service stopped');
     } catch (error) {

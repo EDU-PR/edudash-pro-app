@@ -223,19 +223,19 @@ export default function JoinPage() {
       const { data: newMember, error: memberError } = await supabase
         .from('organization_members')
         .insert({
-          user_id: authData.user?.id,
-          organization_id: orgInfo?.organization_id,
-          region_id: orgInfo?.region_id,
-          member_number: generatedMemberNumber,
-          member_type: formData.member_type,
-          membership_tier: 'standard',
-          membership_status: 'pending',
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email.toLowerCase(),
-          phone: formData.phone,
+        user_id: authData.user?.id,
+        organization_id: orgInfo?.organization_id,
+        region_id: orgInfo?.region_id,
+        member_number: generatedMemberNumber,
+        member_type: formData.member_type,
+        membership_tier: 'standard',
+        membership_status: 'pending',
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email.toLowerCase(),
+        phone: formData.phone,
           joined_date: new Date().toISOString().split('T')[0],
-          notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
+        notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
         })
         .select('id')
         .single();
@@ -319,7 +319,7 @@ export default function JoinPage() {
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 {isMobileDevice() ? (
                   <>
-                    <a
+                <a
                       href={generateDeepLink({
                         flow: 'join',
                         email: formData.email.toLowerCase(),
@@ -344,13 +344,13 @@ export default function JoinPage() {
                 ) : (
                   <a
                     href={getPlatformDownloadUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
-                  >
-                    <Download className="w-5 h-5" />
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                >
+                  <Download className="w-5 h-5" />
                     Download the App
-                  </a>
+                </a>
                 )}
                 <Link
                   href="/"

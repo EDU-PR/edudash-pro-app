@@ -178,39 +178,39 @@ export default function RootLayout() {
   
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        <QueryProvider>
-          <ThemeProvider>
-            <AuthProvider>
-              <SubscriptionProvider>
-                <UpdatesProvider>
-                  <AppPreferencesProvider>
-                    <NotificationProvider>
-                      <CallProvider>
-                        <OnboardingProvider>
-                          <OrganizationBrandingProvider>
-                          <DashboardPreferencesProvider>
-                          <TermsProvider>
-                            <ToastProvider>
-                              <AlertProvider>
-                                <GestureHandlerRootView style={{ flex: 1 }}>
-                                  <RootLayoutContent />
-                                </GestureHandlerRootView>
-                              </AlertProvider>
-                            </ToastProvider>
-                          </TermsProvider>
-                        </DashboardPreferencesProvider>
-                        </OrganizationBrandingProvider>
-                        </OnboardingProvider>
-                      </CallProvider>
-                    </NotificationProvider>
-                  </AppPreferencesProvider>
-                </UpdatesProvider>
-              </SubscriptionProvider>
-            </AuthProvider>
-          </ThemeProvider>
-        </QueryProvider>
-      </SafeAreaProvider>
+    <SafeAreaProvider>
+      <QueryProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SubscriptionProvider>
+              <UpdatesProvider>
+                <AppPreferencesProvider>
+                  <NotificationProvider>
+                    <CallProvider>
+                      <OnboardingProvider>
+                        <OrganizationBrandingProvider>
+                        <DashboardPreferencesProvider>
+                        <TermsProvider>
+                          <ToastProvider>
+                            <AlertProvider>
+                              <GestureHandlerRootView style={{ flex: 1 }}>
+                                <RootLayoutContent />
+                              </GestureHandlerRootView>
+                            </AlertProvider>
+                          </ToastProvider>
+                        </TermsProvider>
+                      </DashboardPreferencesProvider>
+                      </OrganizationBrandingProvider>
+                      </OnboardingProvider>
+                    </CallProvider>
+                  </NotificationProvider>
+                </AppPreferencesProvider>
+              </UpdatesProvider>
+            </SubscriptionProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryProvider>
+    </SafeAreaProvider>
     </ErrorBoundary>
   );
 }

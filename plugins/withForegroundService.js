@@ -3,11 +3,21 @@ const { withAndroidManifest } = require('@expo/config-plugins');
 /**
  * Config plugin to enable foreground service for voice/video calls
  * 
- * This adds:
- * - FOREGROUND_SERVICE permission (for starting foreground service)
- * - FOREGROUND_SERVICE_PHONE_CALL permission (for VoIP calls)
- * - FOREGROUND_SERVICE_MEDIA_PLAYBACK permission (for audio in background)
- * - Service declaration for VoximplantForegroundService
+ * This adds Android permissions and service declarations required for:
+ * - @notifee/react-native foreground service (2025 best practice)
+ * - Voice/video calls running in background
+ * - Android 14+ (API 34) foreground service types
+ * 
+ * Permissions added:
+ * - FOREGROUND_SERVICE (for starting foreground service)
+ * - FOREGROUND_SERVICE_PHONE_CALL (for VoIP calls - Android 14+)
+ * - FOREGROUND_SERVICE_MEDIA_PLAYBACK (for audio in background - Android 14+)
+ * - FOREGROUND_SERVICE_MICROPHONE (for microphone in foreground service - Android 14+)
+ * - FOREGROUND_SERVICE_CAMERA (for camera in foreground service - Android 14+)
+ * - WAKE_LOCK (keep device awake during calls)
+ * 
+ * Note: Notifee handles its own service declarations, this plugin
+ * only needs to add the required permissions.
  */
 const withForegroundService = (config) => {
   return withAndroidManifest(config, async (config) => {
@@ -20,11 +30,16 @@ const withForegroundService = (config) => {
     
     const permissions = androidManifest.manifest['uses-permission'];
     
+    // Required permissions for foreground service with voice/video calls
     const requiredPermissions = [
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_PHONE_CALL',
       'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+      'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+      'android.permission.FOREGROUND_SERVICE_CAMERA',
       'android.permission.WAKE_LOCK',
+      // Required for showing notifications
+      'android.permission.POST_NOTIFICATIONS',
     ];
     
     for (const permission of requiredPermissions) {
@@ -36,31 +51,6 @@ const withForegroundService = (config) => {
           $: { 'android:name': permission },
         });
         console.log(`[withForegroundService] ✅ Added permission: ${permission}`);
-      }
-    }
-    
-    // Add the foreground service to the application
-    if (androidManifest.manifest.application) {
-      const application = androidManifest.manifest.application[0];
-      
-      if (!application.service) {
-        application.service = [];
-      }
-      
-      // Check if service already exists
-      const serviceExists = application.service.some(
-        (s) => s.$['android:name'] === 'com.voximplant.foregroundservice.VoximplantForegroundService'
-      );
-      
-      if (!serviceExists) {
-        application.service.push({
-          $: {
-            'android:name': 'com.voximplant.foregroundservice.VoximplantForegroundService',
-            'android:exported': 'false',
-            'android:foregroundServiceType': 'phoneCall|mediaPlayback',
-          },
-        });
-        console.log('[withForegroundService] ✅ Added VoximplantForegroundService');
       }
     }
     

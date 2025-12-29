@@ -335,24 +335,24 @@ function RegisterPageContent() {
       const { data: newMember, error: memberError } = await supabase
         .from('organization_members')
         .insert({
-          user_id: authData.user?.id,
-          organization_id: SOA_ORGANIZATION_ID,
-          region_id: selectedRegion.id,
-          member_number: generatedMemberNumber,
-          member_type: formData.member_type,
-          membership_tier: formData.membership_tier,
-          membership_status: 'pending',
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email.toLowerCase().trim(),
-          phone: formData.phone,
-          id_number: formData.id_number || null,
-          date_of_birth: formData.date_of_birth || null,
-          physical_address: formData.address,
-          city: formData.city,
-          province: selectedRegion.name,
-          emergency_contact_name: formData.emergency_name,
-          emergency_contact_phone: formData.emergency_phone,
+        user_id: authData.user?.id,
+        organization_id: SOA_ORGANIZATION_ID,
+        region_id: selectedRegion.id,
+        member_number: generatedMemberNumber,
+        member_type: formData.member_type,
+        membership_tier: formData.membership_tier,
+        membership_status: 'pending',
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email.toLowerCase().trim(),
+        phone: formData.phone,
+        id_number: formData.id_number || null,
+        date_of_birth: formData.date_of_birth || null,
+        physical_address: formData.address,
+        city: formData.city,
+        province: selectedRegion.name,
+        emergency_contact_name: formData.emergency_name,
+        emergency_contact_phone: formData.emergency_phone,
           emergency_contact_relationship: formData.emergency_relationship || null,
           notes: null,
           joined_date: new Date().toISOString().split('T')[0],
@@ -884,7 +884,7 @@ function RegisterPageContent() {
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   {isMobileDevice() ? (
                     <>
-                      <a
+                  <a
                         href={generateDeepLink({
                           flow: 'registration',
                           email: formData.email.toLowerCase().trim(),
@@ -898,11 +898,11 @@ function RegisterPageContent() {
                       </a>
                       <a
                         href={getPlatformDownloadUrl()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
-                      >
-                        <Download className="w-5 h-5" />
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition"
+                  >
+                    <Download className="w-5 h-5" />
                         Download App
                       </a>
                     </>
@@ -915,7 +915,7 @@ function RegisterPageContent() {
                     >
                       <Download className="w-5 h-5" />
                       Download the App
-                    </a>
+                  </a>
                   )}
                   <Link
                     href="/"

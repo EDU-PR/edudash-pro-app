@@ -95,11 +95,11 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
   const client = assertSupabase();
 
   try {
-    // Get all thread participations with last_read_at
+  // Get all thread participations with last_read_at
     const { data: participantData, error: participantError } = await client
-      .from('message_participants')
-      .select('thread_id, last_read_at')
-      .eq('user_id', userId);
+    .from('message_participants')
+    .select('thread_id, last_read_at')
+    .eq('user_id', userId);
 
     if (participantError) {
       console.error('[NotificationContext] Error fetching message participants:', participantError);
@@ -111,18 +111,18 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
       return 0;
     }
 
-    // Count unread messages across all threads
-    let totalUnread = 0;
+  // Count unread messages across all threads
+  let totalUnread = 0;
     const threadCounts: Array<{ thread_id: string; unread: number }> = [];
 
-    for (const participant of participantData) {
+  for (const participant of participantData) {
       const { count, error: messageError } = await client
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('thread_id', participant.thread_id)
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('thread_id', participant.thread_id)
         .gt('created_at', participant.last_read_at || '1970-01-01')
-        .neq('sender_id', userId)
-        .is('deleted_at', null);
+      .neq('sender_id', userId)
+      .is('deleted_at', null);
 
       if (messageError) {
         logger.warn('NotificationContext', `Error counting messages for thread ${participant.thread_id}:`, messageError);
@@ -143,7 +143,7 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
       sampleThreads: threadCounts.slice(0, 3),
     });
 
-    return totalUnread;
+  return totalUnread;
   } catch (error) {
     console.error('[NotificationContext] Exception fetching unread messages:', error);
     return 0;
@@ -159,20 +159,20 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
   const lastSeen = await AsyncStorage.getItem(lastSeenKey);
 
   try {
-    // Build query for missed calls (unanswered calls to this user)
+  // Build query for missed calls (unanswered calls to this user)
     // A call is missed if:
     // 1. User is the callee (incoming call)
     // 2. Status is 'missed' OR (status is 'ended' AND answered_at is null)
-    let query = client
-      .from('active_calls')
+  let query = client
+    .from('active_calls')
       .select('id, status, answered_at, duration_seconds', { count: 'exact' })
-      .eq('callee_id', userId)
+    .eq('callee_id', userId)
       .or('status.eq.missed,and(status.eq.ended,answered_at.is.null)');
 
-    // Only count calls after last seen timestamp
-    if (lastSeen) {
-      query = query.gt('started_at', lastSeen);
-    }
+  // Only count calls after last seen timestamp
+  if (lastSeen) {
+    query = query.gt('started_at', lastSeen);
+  }
 
     const { data, count, error } = await query;
     
