@@ -130,6 +130,42 @@ export function registerCallNotificationBackgroundHandler(): void {
   console.log('[CallBackgroundHandler] ✅ Root-level background handler registered');
 }
 
+/**
+ * Register the foreground service task with Notifee
+ * CRITICAL: This MUST be called at app root (index.js) BEFORE any asForegroundService notifications
+ * Without this, Notifee will warn: "no registered foreground service has been set"
+ */
+export function registerCallForegroundService(): void {
+  if (Platform.OS !== 'android') return;
+  
+  // Lazy-load notifee
+  let notifee: any = null;
+  try {
+    notifee = require('@notifee/react-native').default;
+  } catch (error) {
+    console.warn('[CallBackgroundHandler] Notifee not available for foreground service');
+    return;
+  }
+
+  console.log('[CallBackgroundHandler] Registering foreground service task');
+  
+  // Register the foreground service runner
+  // This is required for notifications with asForegroundService: true
+  // The task keeps running while the foreground service is active
+  notifee.registerForegroundService((notification: any) => {
+    return new Promise((resolve) => {
+      // This promise should never resolve while the call is active
+      // The foreground service will be stopped when we call stopForegroundService()
+      console.log('[CallBackgroundHandler] Foreground service task running for:', notification?.id);
+      
+      // Keep the service alive - it will be terminated when stopForegroundService() is called
+      // We don't resolve this promise - it stays running until the service is stopped
+    });
+  });
+  
+  console.log('[CallBackgroundHandler] ✅ Foreground service task registered');
+}
+
 export interface CallBackgroundHandlerOptions {
   /** Current call state */
   callState: CallState;
@@ -184,6 +220,19 @@ export function useCallBackgroundHandler({
   const wasInBackgroundRef = useRef(false);
   const foregroundServiceActiveRef = useRef(false);
   const notificationUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // CRITICAL: Store current state values in refs for use in background handlers
+  // This ensures notification updates always use the latest values, not stale closures
+  const callStateRef = useRef(callState);
+  const isAudioEnabledRef = useRef(isAudioEnabled);
+  const isSpeakerEnabledRef = useRef(isSpeakerEnabled);
+  
+  // Update state refs immediately when props change
+  useEffect(() => {
+    callStateRef.current = callState;
+    isAudioEnabledRef.current = isAudioEnabled;
+    isSpeakerEnabledRef.current = isSpeakerEnabled;
+  }, [callState, isAudioEnabled, isSpeakerEnabled]);
 
   // Determine if call is in an active audio state
   const isAudioActive = callState === 'connected' || callState === 'connecting' || callState === 'ringing';
@@ -334,18 +383,18 @@ export function useCallBackgroundHandler({
 
   /**
    * Configure audio session for background playback (Android)
+   * NOTE: We only start InCallManager here - screen and speaker settings are managed by useVoiceCallAudio
+   * to avoid conflicts with proximity sensor and user speaker toggle
    */
   const configureBackgroundAudio = useCallback(() => {
     if (!InCallManager) return;
     
     try {
       // Start InCallManager in media mode for active call
+      // NOTE: Do NOT set keepScreenOn or forceSpeakerphone here - those are managed by useVoiceCallAudio
+      // Setting them here causes conflicts with proximity sensor and user speaker toggle
       InCallManager.start({ media: 'audio' });
-      // Keep screen on during active call
-      InCallManager.setKeepScreenOn(true);
-      // Use earpiece by default
-      InCallManager.setForceSpeakerphoneOn(false);
-      console.log('[CallBackgroundHandler] Background audio configured with InCallManager');
+      console.log('[CallBackgroundHandler] Background audio configured with InCallManager (audio only)');
     } catch (error) {
       console.warn('[CallBackgroundHandler] Failed to configure background audio:', error);
     }
@@ -354,11 +403,18 @@ export function useCallBackgroundHandler({
   /**
    * Update foreground service notification with current call state
    * This updates the notification when mute/speaker state changes
+   * CRITICAL: Uses refs instead of props to always get current values
    */
   const updateForegroundServiceNotification = useCallback(async () => {
     if (Platform.OS !== 'android' || !foregroundServiceActiveRef.current || !notifee) {
       return;
     }
+
+    // CRITICAL: Read current values from refs, not from closure
+    // This ensures we always use the latest state when called from background handlers
+    const currentCallState = callStateRef.current;
+    const currentIsAudioEnabled = isAudioEnabledRef.current;
+    const currentIsSpeakerEnabled = isSpeakerEnabledRef.current;
 
     try {
       const callTypeEmoji = callType === 'video' ? '📹' : '📞';
@@ -369,17 +425,22 @@ export function useCallBackgroundHandler({
       let notificationTitle: string;
       let notificationBody: string;
       
-      if (callState === 'ringing') {
+      if (currentCallState === 'ringing') {
         statusText = 'Ringing...';
         notificationTitle = `${callTypeEmoji} ${callTypeText} - ${statusText}`;
         notificationBody = callerName ? `Calling ${callerName}...` : 'Call in progress...';
-      } else if (callState === 'connecting') {
+      } else if (currentCallState === 'connecting') {
         statusText = 'Connecting...';
         notificationTitle = `${callTypeEmoji} ${callTypeText} - ${statusText}`;
         notificationBody = callerName ? `Connecting to ${callerName}...` : 'Connecting...';
-      } else {
-        statusText = isAudioEnabled ? 'Active' : 'Muted';
+      } else if (currentCallState === 'connected') {
+        statusText = currentIsAudioEnabled ? 'Active' : 'Muted';
         notificationTitle = `${callTypeEmoji} ${callTypeText} - ${statusText}`;
+        notificationBody = callerName ? `With ${callerName}` : 'Tap to return to call';
+      } else {
+        // For any other state (idle, ended, failed), still show notification but with generic text
+        statusText = 'Call';
+        notificationTitle = `${callTypeEmoji} ${callTypeText}`;
         notificationBody = callerName ? `With ${callerName}` : 'Tap to return to call';
       }
       
@@ -400,7 +461,7 @@ export function useCallBackgroundHandler({
       // Determine notification importance based on call state
       // MAX importance during ringing for maximum visibility
       // Use enum values directly - if not available, skip importance (will use channel default)
-      const importance = callState === 'ringing' 
+      const importance = currentCallState === 'ringing' 
         ? (AndroidImportance?.MAX)  // MAX importance during ringing
         : (AndroidImportance?.HIGH); // HIGH importance otherwise
 
@@ -409,9 +470,9 @@ export function useCallBackgroundHandler({
       const actions = [];
       
       // Mute/Unmute action (show for connecting/ringing/connected)
-      if (callState === 'connecting' || callState === 'ringing' || callState === 'connected') {
+      if (currentCallState === 'connecting' || currentCallState === 'ringing' || currentCallState === 'connected') {
         actions.push({
-          title: isAudioEnabled ? '🔇 Mute' : '🔊 Unmute',
+          title: currentIsAudioEnabled ? '🔇 Mute' : '🔊 Unmute',
           pressAction: {
             id: 'toggle-mute',
           },
@@ -420,7 +481,7 @@ export function useCallBackgroundHandler({
         // Speaker toggle (voice calls only, show during all active states)
         if (callType === 'voice') {
           actions.push({
-            title: isSpeakerEnabled ? '📱 Earpiece' : '🔊 Speaker',
+            title: currentIsSpeakerEnabled ? '📱 Earpiece' : '🔊 Speaker',
             pressAction: {
               id: 'toggle-speaker',
             },
@@ -484,7 +545,9 @@ export function useCallBackgroundHandler({
         actionIds: actions.map(a => a.pressAction.id),
         actionTitles: actions.map(a => a.title),
         channelId: CALL_CHANNEL_ID,
-        callState,
+        callState: currentCallState,
+        isAudioEnabled: currentIsAudioEnabled,
+        isSpeakerEnabled: currentIsSpeakerEnabled,
         asForegroundService: androidConfig.asForegroundService,
       });
       
@@ -520,7 +583,7 @@ export function useCallBackgroundHandler({
         console.warn('[CallBackgroundHandler] Failed to update notification:', error);
       }
     }
-  }, [callState, callType, callerName, isAudioEnabled, isSpeakerEnabled]);
+  }, [callType, callerName]); // callState, isAudioEnabled, isSpeakerEnabled are read from refs
 
   /**
    * Start Android foreground service to keep WebRTC alive in background
