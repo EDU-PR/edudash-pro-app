@@ -41,37 +41,51 @@ export function useVoiceCallAudio({
   const audioInitializedRef = useRef(false);
   const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Continuous earpiece enforcement during ringing/connecting
+  // Continuous earpiece enforcement during ringing/connecting AND connected states
   // NOTE: Android's default behavior is to play ringback tone on speaker initially
   // This is standard Android behavior for outgoing calls. We enforce earpiece to override this.
   // The periodic enforcement catches any automatic speaker switches during ringback playback.
+  // CRITICAL: Continue enforcement even after call connects to prevent speaker switching
   useEffect(() => {
     if (!InCallManager) return;
     
-    const shouldEnforceEarpiece = (callState === 'connecting' || callState === 'ringing') && !isSpeakerEnabled;
+    // Enforce earpiece during connecting, ringing, AND connected states if speaker is disabled
+    // This ensures earpiece stays enforced throughout the entire call lifecycle
+    const shouldEnforceEarpiece = (
+      callState === 'connecting' || 
+      callState === 'ringing' || 
+      callState === 'connected'
+    ) && !isSpeakerEnabled;
     
     if (shouldEnforceEarpiece) {
-      console.log('[VoiceCallAudio] Starting continuous earpiece enforcement');
-      
       // Immediately enforce earpiece
       try {
         InCallManager.setForceSpeakerphoneOn(false);
+        console.log('[VoiceCallAudio] Earpiece enforced immediately');
       } catch (e) {
         console.warn('[VoiceCallAudio] Initial earpiece enforcement failed:', e);
       }
       
-      // Set up periodic enforcement every 500ms during ringing
-      // This catches any automatic speaker switches
-      earpieceEnforcerRef.current = setInterval(() => {
-        try {
-          InCallManager.setForceSpeakerphoneOn(false);
-          console.log('[VoiceCallAudio] Earpiece re-enforced (periodic)');
-        } catch (e) {
-          // Ignore errors during enforcement
-        }
-      }, 500);
+      // Set up more aggressive periodic enforcement every 250ms
+      // This catches any automatic speaker switches more quickly
+      // Continue enforcement even after call connects to prevent Daily.co or system from switching to speaker
+      if (!earpieceEnforcerRef.current) {
+        console.log('[VoiceCallAudio] Starting continuous earpiece enforcement');
+        earpieceEnforcerRef.current = setInterval(() => {
+          try {
+            InCallManager.setForceSpeakerphoneOn(false);
+            // Only log occasionally to reduce noise (every 2 seconds = 8 intervals)
+            const shouldLog = Math.random() < 0.125; // 12.5% chance = ~every 2 seconds
+            if (shouldLog) {
+              console.log('[VoiceCallAudio] Earpiece re-enforced (periodic)');
+            }
+          } catch (e) {
+            // Ignore errors during enforcement
+          }
+        }, 250); // More frequent: 250ms instead of 500ms
+      }
     } else {
-      // Clear the enforcer when not needed
+      // Clear the enforcer when speaker is enabled or call ends
       if (earpieceEnforcerRef.current) {
         clearInterval(earpieceEnforcerRef.current);
         earpieceEnforcerRef.current = null;
@@ -140,7 +154,7 @@ export function useVoiceCallAudio({
     }
   }, [callState, isOwner, setIsSpeakerEnabled]);
 
-  // Stop ringback when call connects
+  // Stop ringback when call connects and enforce audio routing
   useEffect(() => {
     if (callState === 'connected' && InCallManager) {
       try {
@@ -150,9 +164,22 @@ export function useVoiceCallAudio({
           console.log('[VoiceCallAudio] Stopped ringback - call connected');
         }
         
-        // Enforce current speaker state (earpiece by default, unless user toggled)
+        // CRITICAL: Enforce current speaker state (earpiece by default, unless user toggled)
+        // The continuous enforcement hook will maintain this, but we set it here immediately
         InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
         console.log('[VoiceCallAudio] Audio routed to:', isSpeakerEnabled ? 'speaker' : 'earpiece');
+        
+        // Additional enforcement after a short delay to catch any routing changes
+        if (!isSpeakerEnabled) {
+          setTimeout(() => {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallAudio] Post-connect earpiece enforcement');
+            } catch (e) {
+              // Silent - continuous enforcement will handle it
+            }
+          }, 200);
+        }
       } catch (error) {
         console.warn('[VoiceCallAudio] Failed to handle connected state:', error);
       }

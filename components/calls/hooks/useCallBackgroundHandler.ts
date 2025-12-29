@@ -281,38 +281,51 @@ export function useCallBackgroundHandler({
         notificationBody = callerName ? `With ${callerName}` : 'Tap to return to call';
       }
       
-      // Build foreground service types - include CAMERA for video calls
-      const serviceTypes = [
-        AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_PHONE_CALL ?? 4,
-        AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK ?? 2,
-        AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
-      ];
+      // Build foreground service types - must match AndroidManifest.xml declaration
+      // Manifest declares: phoneCall|mediaPlayback|microphone|camera
+      // Only use enum values (no fallback hex) to prevent manifest mismatch crashes
+      const serviceTypes: number[] = [];
       
-      // Add CAMERA type for video calls (Android 14+)
-      if (callType === 'video') {
-        serviceTypes.push(AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_CAMERA ?? 256);
+      if (AndroidForegroundServiceType) {
+        // Always include phoneCall for voice/video calls
+        serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+        
+        // Include mediaPlayback for audio streaming
+        serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+        
+        // Include microphone for voice input
+        serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        
+        // Add CAMERA type for video calls (Android 14+)
+        if (callType === 'video') {
+          serviceTypes.push(AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_CAMERA);
+        }
+      } else {
+        // If enum not available, log warning but don't crash
+        console.warn('[CallBackgroundHandler] AndroidForegroundServiceType not available - service types may not work');
       }
       
       // Determine notification importance based on call state
       // MAX importance during ringing for maximum visibility
+      // Use enum values directly - if not available, skip importance (will use channel default)
       const importance = callState === 'ringing' 
-        ? (AndroidImportance?.MAX ?? 5)  // MAX importance during ringing
-        : (AndroidImportance?.HIGH ?? 4); // HIGH importance otherwise
+        ? (AndroidImportance?.MAX)  // MAX importance during ringing
+        : (AndroidImportance?.HIGH); // HIGH importance otherwise
 
       // Build notification actions based on call state
+      // Always show actions so users can control the call from notification
       const actions = [];
       
-      // Mute/Unmute action
-      if (callState === 'connected') {
+      // Mute/Unmute action (show for connecting/ringing/connected)
+      if (callState === 'connecting' || callState === 'ringing' || callState === 'connected') {
         actions.push({
           title: isAudioEnabled ? '🔇 Mute' : '🔊 Unmute',
           pressAction: {
             id: 'toggle-mute',
           },
-          icon: isAudioEnabled ? 'ic_stat_name' : 'ic_stat_name', // Use appropriate icon
         });
         
-        // Speaker toggle (voice calls only)
+        // Speaker toggle (voice calls only, show during all active states)
         if (callType === 'voice') {
           actions.push({
             title: isSpeakerEnabled ? '📱 Earpiece' : '🔊 Speaker',
@@ -323,49 +336,84 @@ export function useCallBackgroundHandler({
         }
       }
       
-      // End call action
+      // End call action (always available)
       actions.push({
         title: '❌ End Call',
         pressAction: {
           id: 'end-call',
         },
-        icon: 'ic_stat_name',
       });
 
+      // Build android notification config
+      // CRITICAL: Only include serviceTypes if they're available (prevents manifest mismatch crash)
+      const androidConfig: any = {
+        channelId: CALL_CHANNEL_ID,
+        asForegroundService: true,
+        category: AndroidCategory?.CALL,
+        ongoing: true, // Persistent notification - cannot be swiped away
+        autoCancel: false, // Don't auto-cancel when tapped
+        smallIcon: 'ic_notification', // Shows in status bar
+        largeIcon: 'ic_notification', // Shows in expanded notification/system drawer
+        color: '#00f5ff', // Accent color for notification
+        // Show in status bar and system drawer
+        visibility: 1, // PUBLIC - show on lock screen and status bar
+        showTimestamp: true,
+        // fullScreenIntent: Show notification even when screen is off (Android 10+)
+        // This is CRITICAL for ringing state visibility
+        fullScreenIntent: callState === 'ringing', // Only during ringing for maximum visibility
+        pressAction: {
+          id: 'default',
+          launchActivity: 'default', // Brings app to foreground
+        },
+        // Media controls as notification actions
+        // These appear in the notification drawer and lock screen
+        actions: actions,
+      };
+      
+      // Only add service types if enum is available and types array is not empty
+      // This prevents the manifest mismatch crash
+      if (serviceTypes.length > 0) {
+        androidConfig.foregroundServiceTypes = serviceTypes;
+      } else {
+        console.warn('[CallBackgroundHandler] No service types available - using default');
+      }
+      
+      // Only add importance if AndroidImportance is available (enum value, not number)
+      if (importance !== undefined) {
+        androidConfig.importance = importance;
+      }
+      
       await notifee.displayNotification({
         id: CALL_NOTIFICATION_ID,
         title: notificationTitle,
         body: notificationBody,
-        android: {
-          channelId: CALL_CHANNEL_ID,
-          asForegroundService: true,
-          foregroundServiceTypes: serviceTypes,
-          category: AndroidCategory?.CALL,
-          ongoing: true,
-          autoCancel: false,
-          smallIcon: 'ic_notification', // Shows in status bar
-          largeIcon: 'ic_notification', // Shows in expanded notification/system drawer
-          color: '#00f5ff', // Accent color for notification
-          // Show in status bar and system drawer
-          visibility: 1, // PUBLIC - show on lock screen and status bar
-          importance: importance, // MAX during ringing, HIGH otherwise
-          showTimestamp: true,
-          // fullScreenIntent: Show notification even when screen is off (Android 10+)
-          // This is CRITICAL for ringing state visibility
-          fullScreenIntent: callState === 'ringing', // Only during ringing for maximum visibility
-          pressAction: {
-            id: 'default',
-            launchActivity: 'default', // Brings app to foreground
-          },
-          // Media controls as notification actions
-          // These appear in the notification drawer and lock screen
-          actions: actions,
-        },
+        android: androidConfig,
       });
       
       console.log('[CallBackgroundHandler] ✅ Notification updated with current state');
-    } catch (error) {
-      console.warn('[CallBackgroundHandler] Failed to update notification:', error);
+    } catch (error: any) {
+      // Check if error is related to service type mismatch
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('foregroundServiceType') || errorMessage.includes('not a subset')) {
+        console.error('[CallBackgroundHandler] CRITICAL: Service type mismatch - check AndroidManifest.xml');
+        console.error('[CallBackgroundHandler] Error details:', errorMessage);
+        // Try again without service types as fallback
+        try {
+          const fallbackConfig = { ...androidConfig };
+          delete fallbackConfig.foregroundServiceTypes;
+          await notifee.displayNotification({
+            id: CALL_NOTIFICATION_ID,
+            title: notificationTitle,
+            body: notificationBody,
+            android: fallbackConfig,
+          });
+          console.warn('[CallBackgroundHandler] Notification displayed without service types (fallback)');
+        } catch (fallbackError) {
+          console.error('[CallBackgroundHandler] Fallback notification also failed:', fallbackError);
+        }
+      } else {
+        console.warn('[CallBackgroundHandler] Failed to update notification:', error);
+      }
     }
   }, [callState, callType, callerName, isAudioEnabled, isSpeakerEnabled]);
 
@@ -387,13 +435,19 @@ export function useCallBackgroundHandler({
     }
     
     try {
+      // Ensure AndroidImportance is available before creating channel
+      if (!AndroidImportance) {
+        console.warn('[CallBackgroundHandler] AndroidImportance not available, cannot create channel');
+        return;
+      }
+      
       // Create notification channel for the foreground service (required for Android 8+)
       // Use MAX importance to allow fullScreenIntent and maximum visibility
       await notifee.createChannel({
         id: CALL_CHANNEL_ID,
         name: 'Ongoing Calls',
         description: 'Notification for active voice/video calls',
-        importance: AndroidImportance?.MAX ?? 5, // MAX importance to support fullScreenIntent
+        importance: AndroidImportance.MAX, // Use enum value directly, not fallback number
         vibration: false,
         sound: undefined, // No sound for ongoing call notification (prevents double sound with ringtone)
         // Show in status bar and lock screen
@@ -405,8 +459,16 @@ export function useCallBackgroundHandler({
       
       foregroundServiceActiveRef.current = true;
       console.log('[CallBackgroundHandler] ✅ Notifee foreground service started - call will persist in background');
-    } catch (error) {
-      console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
+    } catch (error: any) {
+      // Check if error is related to service type mismatch
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('foregroundServiceType') || errorMessage.includes('not a subset')) {
+        console.error('[CallBackgroundHandler] CRITICAL: Service type mismatch in manifest');
+        console.error('[CallBackgroundHandler] Ensure AndroidManifest.xml declares: phoneCall|mediaPlayback|microphone|camera');
+        console.error('[CallBackgroundHandler] Error details:', errorMessage);
+      } else {
+        console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
+      }
     }
   }, [callType, updateForegroundServiceNotification]);
 
@@ -437,24 +499,31 @@ export function useCallBackgroundHandler({
 
   // Manage KeepAwake and foreground service based on call state
   useEffect(() => {
-    if (isAudioActive && isCallActive) {
+    // Determine if call is active based on state (more reliable than isCallActive flag)
+    const isCallInProgress = callState === 'connecting' || callState === 'ringing' || callState === 'connected';
+    
+    if (isCallInProgress) {
       activateCallKeepAwake();
       configureBackgroundAudio();
-      // Start foreground service earlier - on connecting/ringing, not just connected
-      // This protects WebRTC before the call fully connects
-      if (callState === 'connecting' || callState === 'ringing' || callState === 'connected') {
-        startForegroundService();
-      }
+      // Start foreground service for all active call states
+      // This protects WebRTC and shows notification throughout the call
+      startForegroundService();
     } else {
-      deactivateCallKeepAwake();
-      stopForegroundService();
+      // Only stop if call is truly ended/failed
+      if (callState === 'ended' || callState === 'failed') {
+        deactivateCallKeepAwake();
+        stopForegroundService();
+      }
     }
 
+    // Cleanup only on unmount or when call truly ends
     return () => {
-      deactivateCallKeepAwake();
-      stopForegroundService();
+      if (callState === 'ended' || callState === 'failed') {
+        deactivateCallKeepAwake();
+        stopForegroundService();
+      }
     };
-  }, [isAudioActive, isCallActive, callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, startForegroundService, stopForegroundService]);
+  }, [callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, startForegroundService, stopForegroundService]);
 
   // Update notification when call state or audio/speaker state changes
   useEffect(() => {
@@ -488,24 +557,25 @@ export function useCallBackgroundHandler({
       if (previousState.match(/active/) && nextAppState === 'background') {
         wasInBackgroundRef.current = true;
         
-        if (isAudioActive && callId) {
+        // Check if call is in progress based on state (more reliable than flags)
+        const isCallInProgress = callState === 'connecting' || callState === 'ringing' || callState === 'connected';
+        
+        if (isCallInProgress) {
           console.log('[CallBackgroundHandler] Call active, app going to background');
           console.log('[CallBackgroundHandler] Foreground service active:', foregroundServiceActiveRef.current);
           console.log('[CallBackgroundHandler] Call state:', callState);
           
           // PROACTIVE: Start foreground service immediately if call is active but service isn't running
           // This catches cases where service wasn't started yet (e.g., during connecting/ringing)
-          if (!foregroundServiceActiveRef.current && isCallActive) {
+          if (!foregroundServiceActiveRef.current) {
             console.log('[CallBackgroundHandler] ⚠️ Service not active - starting proactively');
             startForegroundService();
-          } else if (foregroundServiceActiveRef.current) {
-            // CRITICAL: Force immediate notification update when backgrounding during ringing
-            // This ensures notification is visible immediately, especially during ringing state
-            if (callState === 'ringing' || callState === 'connecting') {
-              console.log('[CallBackgroundHandler] Forcing immediate notification update during ringing/connecting');
-              // Update notification immediately (no debounce) to ensure visibility
-              updateForegroundServiceNotification();
-            }
+          } else {
+            // CRITICAL: Force immediate notification update when backgrounding
+            // This ensures notification is visible immediately with all controls
+            console.log('[CallBackgroundHandler] Forcing immediate notification update for background visibility');
+            // Update notification immediately (no debounce) to ensure visibility
+            updateForegroundServiceNotification();
           }
         }
       }
