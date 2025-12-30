@@ -20,8 +20,8 @@ export interface UpdatesContextValue extends UpdateState {
   dismissError: () => void;
 }
 
-// Context
-const UpdatesContext = createContext<UpdatesContextValue | undefined>(undefined);
+// Context - exported for safe access patterns
+export const UpdatesContext = createContext<UpdatesContextValue | undefined>(undefined);
 
 // Provider component
 interface UpdatesProviderProps {
