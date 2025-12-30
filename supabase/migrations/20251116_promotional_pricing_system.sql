@@ -336,18 +336,21 @@ ALTER TABLE promotional_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_promotional_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can view active campaigns (for pricing display)
+DROP POLICY IF EXISTS "Anyone can view active campaigns" ON promotional_campaigns;
 CREATE POLICY "Anyone can view active campaigns"
   ON promotional_campaigns FOR SELECT
   TO anon, authenticated
   USING (is_active = true AND NOW() BETWEEN start_date AND end_date);
 
 -- Users can view their own promotional subscriptions
+DROP POLICY IF EXISTS "Users can view own promotional subscriptions" ON user_promotional_subscriptions;
 CREATE POLICY "Users can view own promotional subscriptions"
   ON user_promotional_subscriptions FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
 
 -- Admins can manage campaigns
+DROP POLICY IF EXISTS "Admins can manage campaigns" ON promotional_campaigns;
 CREATE POLICY "Admins can manage campaigns"
   ON promotional_campaigns FOR ALL
   TO authenticated

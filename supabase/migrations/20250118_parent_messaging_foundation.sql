@@ -54,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages (sender_id);
 -- Message Threads: Users can see threads they participate in within their preschool
 ALTER TABLE message_threads ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS message_threads_select_policy ON message_threads;
 CREATE POLICY message_threads_select_policy ON message_threads
 FOR SELECT USING (
   EXISTS (
@@ -64,6 +65,7 @@ FOR SELECT USING (
   )
 );
 
+DROP POLICY IF EXISTS message_threads_insert_policy ON message_threads;
 CREATE POLICY message_threads_insert_policy ON message_threads
 FOR INSERT WITH CHECK (
   EXISTS (
@@ -75,6 +77,7 @@ FOR INSERT WITH CHECK (
   )
 );
 
+DROP POLICY IF EXISTS message_threads_update_policy ON message_threads;
 CREATE POLICY message_threads_update_policy ON message_threads
 FOR UPDATE USING (
   EXISTS (
@@ -88,6 +91,7 @@ FOR UPDATE USING (
 -- Message Participants: Users can see participants in threads they're part of
 ALTER TABLE message_participants ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS message_participants_select_policy ON message_participants;
 CREATE POLICY message_participants_select_policy ON message_participants
 FOR SELECT USING (
   user_id = auth.uid()
@@ -99,6 +103,7 @@ FOR SELECT USING (
   )
 );
 
+DROP POLICY IF EXISTS message_participants_insert_policy ON message_participants;
 CREATE POLICY message_participants_insert_policy ON message_participants
 FOR INSERT WITH CHECK (
   EXISTS (
@@ -118,6 +123,7 @@ FOR INSERT WITH CHECK (
 -- Messages: Users can see messages in threads they participate in
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS messages_select_policy ON messages;
 CREATE POLICY messages_select_policy ON messages
 FOR SELECT USING (
   EXISTS (
@@ -128,6 +134,7 @@ FOR SELECT USING (
   )
 );
 
+DROP POLICY IF EXISTS messages_insert_policy ON messages;
 CREATE POLICY messages_insert_policy ON messages
 FOR INSERT WITH CHECK (
   sender_id = auth.uid()
@@ -139,6 +146,7 @@ FOR INSERT WITH CHECK (
   )
 );
 
+DROP POLICY IF EXISTS messages_update_policy ON messages;
 CREATE POLICY messages_update_policy ON messages
 FOR UPDATE USING (
   sender_id = auth.uid()
