@@ -50,6 +50,8 @@ const withForegroundService = (config) => {
       'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
       'android.permission.FOREGROUND_SERVICE_MICROPHONE',
       'android.permission.FOREGROUND_SERVICE_CAMERA',
+      // CRITICAL for Android 15 (SDK 36): Required for screen sharing via WebRTC
+      'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
       'android.permission.WAKE_LOCK',
       // Required for showing notifications
       'android.permission.POST_NOTIFICATIONS',
