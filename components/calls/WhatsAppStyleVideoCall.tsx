@@ -114,7 +114,9 @@ export function WhatsAppStyleVideoCall({
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
-
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [showAddParticipants, setShowAddParticipants] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -960,6 +962,50 @@ export function WhatsAppStyleVideoCall({
     }
   }, [isSpeakerOn]);
 
+  // Toggle screen sharing
+  const toggleScreenShare = useCallback(async () => {
+    if (!dailyRef.current) return;
+    try {
+      if (isScreenSharing) {
+        await dailyRef.current.stopScreenShare();
+        console.log('[VideoCall] Screen share stopped');
+      } else {
+        await dailyRef.current.startScreenShare();
+        console.log('[VideoCall] Screen share started');
+      }
+      setIsScreenSharing(!isScreenSharing);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err: any) {
+      console.error('[VideoCall] Screen share error:', err);
+      // Show user-friendly error
+      if (err?.message?.includes('permission') || err?.message?.includes('denied')) {
+        setError('Screen share permission denied');
+      } else {
+        setError('Screen sharing not available');
+      }
+      setTimeout(() => setError(null), 3000);
+    }
+  }, [isScreenSharing]);
+
+  // Copy meeting link to invite others
+  const shareCallLink = useCallback(async () => {
+    if (!meetingUrl) {
+      setError('No meeting link available');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    try {
+      const { Share } = require('react-native');
+      await Share.share({
+        message: `Join my video call: ${meetingUrl}`,
+        title: 'Join Video Call',
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error('[VideoCall] Share error:', err);
+    }
+  }, [meetingUrl]);
+
   // End call
   const handleEndCall = useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -1168,7 +1214,7 @@ export function WhatsAppStyleVideoCall({
 
       {/* Bottom Controls */}
       <Animated.View style={[styles.bottomControls, { opacity: controlsAnim, paddingBottom: insets.bottom + 16 }]}>
-        {/* Secondary Controls Row */}
+        {/* Secondary Controls Row - More features */}
         <View style={styles.secondaryControls}>
           <TouchableOpacity style={styles.secondaryButton} onPress={toggleSpeaker}>
             <Ionicons 
@@ -1182,6 +1228,25 @@ export function WhatsAppStyleVideoCall({
           <TouchableOpacity style={styles.secondaryButton} onPress={flipCamera}>
             <Ionicons name="camera-reverse" size={24} color="#fff" />
             <Text style={styles.secondaryLabel}>Flip</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.secondaryButton, isScreenSharing && styles.secondaryButtonActive]} 
+            onPress={toggleScreenShare}
+          >
+            <Ionicons 
+              name={isScreenSharing ? 'stop-circle' : 'share-outline'} 
+              size={24} 
+              color={isScreenSharing ? '#ef4444' : '#fff'} 
+            />
+            <Text style={[styles.secondaryLabel, isScreenSharing && { color: '#ef4444' }]}>
+              {isScreenSharing ? 'Stop' : 'Share'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={shareCallLink}>
+            <Ionicons name="person-add" size={24} color="#fff" />
+            <Text style={styles.secondaryLabel}>Invite</Text>
           </TouchableOpacity>
         </View>
 
@@ -1216,6 +1281,14 @@ export function WhatsAppStyleVideoCall({
             <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
           </TouchableOpacity>
         </View>
+
+        {/* Participant count indicator */}
+        {remoteParticipants.length > 0 && (
+          <View style={styles.participantCount}>
+            <Ionicons name="people" size={16} color="#fff" />
+            <Text style={styles.participantCountText}>{remoteParticipants.length + 1}</Text>
+          </View>
+        )}
       </Animated.View>
     </Animated.View>
   );
@@ -1380,6 +1453,28 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
     backgroundColor: '#FF3B30',
+  },
+  secondaryButtonActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  participantCount: {
+    position: 'absolute',
+    top: 8,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  participantCountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   minimizedContainer: {
     position: 'absolute',

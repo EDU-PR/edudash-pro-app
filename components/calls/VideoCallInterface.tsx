@@ -79,6 +79,8 @@ export function VideoCallInterface({
   const [callDuration, setCallDuration] = useState(0);
   const [localParticipant, setLocalParticipant] = useState<DailyParticipant | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Default speaker for video calls
 
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
@@ -588,6 +590,61 @@ export function VideoCallInterface({
     }
   }, [isFrontCamera]);
 
+  // Toggle speaker
+  const toggleSpeaker = useCallback(() => {
+    const newState = !isSpeakerOn;
+    try {
+      if (InCallManager) {
+        InCallManager.setForceSpeakerphoneOn(newState);
+        console.log('[VideoCall] Speaker toggled to:', newState ? 'speaker' : 'earpiece');
+      }
+      setIsSpeakerOn(newState);
+    } catch (err) {
+      console.error('[VideoCall] Toggle speaker error:', err);
+    }
+  }, [isSpeakerOn]);
+
+  // Toggle screen sharing
+  const toggleScreenShare = useCallback(async () => {
+    if (!dailyRef.current) return;
+    try {
+      if (isScreenSharing) {
+        await dailyRef.current.stopScreenShare();
+        console.log('[VideoCall] Screen share stopped');
+      } else {
+        await dailyRef.current.startScreenShare();
+        console.log('[VideoCall] Screen share started');
+      }
+      setIsScreenSharing(!isScreenSharing);
+    } catch (err: any) {
+      console.error('[VideoCall] Screen share error:', err);
+      if (err?.message?.includes('permission') || err?.message?.includes('denied')) {
+        setError('Screen share permission denied');
+      } else {
+        setError('Screen sharing not available');
+      }
+      setTimeout(() => setError(null), 3000);
+    }
+  }, [isScreenSharing]);
+
+  // Share call link to invite others
+  const shareCallLink = useCallback(async () => {
+    if (!meetingUrl) {
+      setError('No meeting link available');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    try {
+      const { Share } = require('react-native');
+      await Share.share({
+        message: `Join my video call: ${meetingUrl}`,
+        title: 'Join Video Call',
+      });
+    } catch (err) {
+      console.error('[VideoCall] Share error:', err);
+    }
+  }, [meetingUrl]);
+
   // End call
   const handleEndCall = useCallback(async () => {
     console.log('[VideoCall] Ending call');
@@ -675,12 +732,44 @@ export function VideoCallInterface({
 
       {/* Controls */}
       <View style={styles.controlsContainer}>
-        <View style={styles.controls}>
-          {/* Flip Camera */}
-          <TouchableOpacity style={styles.controlButton} onPress={flipCamera}>
-            <Ionicons name="camera-reverse" size={24} color="#ffffff" />
+        {/* Secondary Row - More features */}
+        <View style={styles.secondaryControls}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={toggleSpeaker}>
+            <Ionicons 
+              name={isSpeakerOn ? 'volume-high' : 'volume-mute'} 
+              size={22} 
+              color="#ffffff" 
+            />
+            <Text style={styles.secondaryLabel}>Speaker</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.secondaryButton} onPress={flipCamera}>
+            <Ionicons name="camera-reverse" size={22} color="#ffffff" />
+            <Text style={styles.secondaryLabel}>Flip</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.secondaryButton, isScreenSharing && styles.secondaryButtonActive]} 
+            onPress={toggleScreenShare}
+          >
+            <Ionicons 
+              name={isScreenSharing ? 'stop-circle' : 'share-outline'} 
+              size={22} 
+              color={isScreenSharing ? '#ef4444' : '#ffffff'} 
+            />
+            <Text style={[styles.secondaryLabel, isScreenSharing && { color: '#ef4444' }]}>
+              {isScreenSharing ? 'Stop' : 'Share'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={shareCallLink}>
+            <Ionicons name="person-add" size={22} color="#ffffff" />
+            <Text style={styles.secondaryLabel}>Invite</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Main Controls */}
+        <View style={styles.controls}>
           {/* Toggle Video */}
           <TouchableOpacity
             style={[styles.controlButton, !isVideoEnabled && styles.controlButtonOff]}
@@ -710,9 +799,17 @@ export function VideoCallInterface({
             style={[styles.controlButton, styles.endCallButton]}
             onPress={handleEndCall}
           >
-            <Ionicons name="call" size={24} color="#ffffff" />
+            <Ionicons name="call" size={24} color="#ffffff" style={{ transform: [{ rotate: '135deg' }] }} />
           </TouchableOpacity>
         </View>
+
+        {/* Participant count */}
+        {remoteParticipants.length > 0 && (
+          <View style={styles.participantCount}>
+            <Ionicons name="people" size={14} color="#ffffff" />
+            <Text style={styles.participantCountText}>{remoteParticipants.length + 1}</Text>
+          </View>
+        )}
       </View>
     </Animated.View>
   );
@@ -815,6 +912,25 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
+  secondaryControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 40,
+    marginBottom: 20,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    padding: 4,
+  },
+  secondaryButtonActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderRadius: 8,
+  },
+  secondaryLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    marginTop: 4,
+  },
   controls: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -837,6 +953,23 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
+  },
+  participantCount: {
+    position: 'absolute',
+    top: 8,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  participantCountText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 
