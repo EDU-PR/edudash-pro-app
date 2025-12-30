@@ -9,6 +9,35 @@
 // This must be imported before any library that uses Promise.any (like Daily.co)
 import './polyfills/promise';
 
+// =====================================================
+// SENTRY INITIALIZATION - MUST BE EARLY FOR CRASH TRACKING
+// =====================================================
+import * as Sentry from 'sentry-expo';
+
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (SENTRY_DSN && /https?:\/\/.+@.+/i.test(SENTRY_DSN)) {
+  try {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      enableInExpoDevelopment: true, // Track in dev too for testing
+      debug: __DEV__,
+      environment: process.env.EXPO_PUBLIC_ENVIRONMENT || (__DEV__ ? 'development' : 'production'),
+      tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+      // Enable native crash handling for production
+      enableNative: true,
+      enableNativeCrashHandling: true,
+      enableAutoPerformanceTracing: !__DEV__,
+      // Breadcrumbs for better debugging
+      enableAutoBreadcrumbTracking: true,
+    });
+    console.log('[Sentry] ✅ Initialized at app entry point');
+  } catch (e) {
+    console.warn('[Sentry] ❌ Failed to initialize:', e);
+  }
+} else {
+  console.log('[Sentry] ⚠️ No valid DSN, skipping initialization');
+}
+
 // Suppress known harmless warnings from third-party libraries
 import { LogBox, Platform } from 'react-native';
 if (Platform.OS !== 'web') {
