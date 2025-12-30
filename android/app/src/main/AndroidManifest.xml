@@ -14,6 +14,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -70,6 +71,12 @@
     <service
         android:name="app.notifee.core.ForegroundService"
         android:foregroundServiceType="phoneCall"
+        android:exported="false">
+    </service>
+    <!-- Daily.co Ongoing Meeting Foreground Service for video/audio calls and screen share -->
+    <service
+        android:name="com.daily.reactlibrary.DailyOngoingMeetingForegroundService"
+        android:foregroundServiceType="camera|microphone|mediaProjection"
         android:exported="false">
     </service>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|locale|layoutDirection" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
