@@ -80,11 +80,16 @@ export const useParentThreads = () => {
   return useQuery({
     queryKey: ['parent', 'threads', user?.id],
     queryFn: async (): Promise<MessageThread[]> => {
-      if (!user?.id) throw new Error('User not authenticated');
+      if (!user?.id) {
+        logger.warn('useParentThreads', 'User not authenticated');
+        throw new Error('User not authenticated');
+      }
       
       const client = assertSupabase();
       
       try {
+        logger.debug('useParentThreads', `Fetching threads for user ${user.id}`);
+        
         // Get threads with participants, student info, and last message
         const { data: threads, error } = await client
           .from('message_threads')
@@ -101,9 +106,15 @@ export const useParentThreads = () => {
         if (error) {
           // Check if table doesn't exist - return empty array instead of throwing
           if (error.code === '42P01' || error.message?.includes('does not exist')) {
-            console.warn('[useParentThreads] message_threads table not found, returning empty');
+            logger.warn('useParentThreads', 'message_threads table not found, returning empty');
             return [];
           }
+          // Check for permission/RLS errors
+          if (error.code === '42501' || error.message?.includes('permission denied')) {
+            logger.warn('useParentThreads', `Permission denied for user ${user.id}: ${error.message}`);
+            return []; // Return empty instead of crashing
+          }
+          logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
           throw error;
         }
         
@@ -164,13 +175,17 @@ export const useParentThreads = () => {
         return threadsWithDetails;
       } catch (err: any) {
         // Log error for debugging but don't crash the app
-        console.error('[useParentThreads] Error fetching threads:', err?.message || err);
+        logger.error('useParentThreads', `Error fetching threads: ${err?.message || err}`, {
+          userId: user?.id,
+          errorCode: err?.code,
+        });
         throw err;
       }
     },
     enabled: !!user?.id,
     staleTime: 1000 * 60 * 2, // 2 minutes
-    retry: 1, // Only retry once
+    retry: 2, // Retry twice for network issues
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
   });
 };
 
