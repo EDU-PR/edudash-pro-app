@@ -102,6 +102,16 @@
       "extends": "production",
       "android": { "buildType": "apk" }
     },
+    "playstore": {
+      "extends": "production",
+      "android": {
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
+      },
+      "env": {
+        "EAS_PROJECT_ID": "playstore"
+      }
+    },
     "playstore-apk": {
       "extends": "production",
       "android": { "buildType": "apk" },
@@ -124,6 +134,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "playstore": {
+      "android": {
+        "releaseStatus": "draft",
+        "track": "internal"
+      }
+    }
   }
 }

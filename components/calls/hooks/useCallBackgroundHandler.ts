@@ -29,6 +29,7 @@ const CALL_KEEP_AWAKE_TAG = 'active-voice-call';
 export const CALL_NOTIFICATION_EVENTS = {
   END_CALL: 'call:notification:end-call',
   MUTE: 'call:notification:mute',
+  SPEAKER: 'call:notification:speaker',
 } as const;
 
 // Feature flag to disable foreground service while debugging crash
@@ -145,6 +146,14 @@ export function setupForegroundEventListener(): () => void {
       // DON'T stop the service - just toggle mute
     }
     
+    // Handle "Speaker" action press from notification
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'speaker') {
+      console.log('[CallBackgroundHandler] 🔊 Speaker action pressed from notification (foreground)');
+      // Emit event so CallProvider can toggle speaker
+      DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.SPEAKER);
+      // DON'T stop the service - just toggle speaker
+    }
+    
     // Handle notification body press - open call screen
     if (type === EventType.PRESS && detail?.notification?.id === CALL_NOTIFICATION_ID) {
       console.log('[CallBackgroundHandler] Notification pressed - returning to call');
@@ -190,6 +199,14 @@ export function registerCallNotificationBackgroundHandler(): void {
         // Emit event so CallProvider can toggle mute
         DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.MUTE);
         // DON'T stop the service - mute just toggles audio
+      }
+      
+      // Handle "Speaker" action from notification when app is backgrounded
+      if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'speaker') {
+        console.log('[CallBackgroundHandler] Speaker action pressed (background)');
+        // Emit event so CallProvider can toggle speaker
+        DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.SPEAKER);
+        // DON'T stop the service - speaker just toggles audio routing
       }
       
       // Handle notification press - return to app/call screen
@@ -388,6 +405,12 @@ export function useCallBackgroundHandler({
           },
           // Show call actions in notification
           actions: [
+            {
+              title: '🔊 Speaker',
+              pressAction: {
+                id: 'speaker',
+              },
+            },
             {
               title: '🔇 Mute',
               pressAction: {

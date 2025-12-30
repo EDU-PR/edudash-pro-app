@@ -23,6 +23,11 @@ import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
+import { 
+  prewarmCallSystem, 
+  getPrewarmedCallObject, 
+  disposePrewarmedCallObject 
+} from '@/lib/calls/CallPrewarming';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -122,6 +127,18 @@ export function VideoCallInterface({
       useNativeDriver: true,
     }).start();
   }, [isOpen, fadeAnim]);
+
+  // OPTIMIZATION: Prewarm call system when UI opens (before user initiates)
+  useEffect(() => {
+    if (!isOpen) {
+      disposePrewarmedCallObject();
+      return;
+    }
+    // Prewarm for video call
+    prewarmCallSystem(true).catch((err) => {
+      console.warn('[VideoCall] Prewarm failed (non-fatal):', err);
+    });
+  }, [isOpen]);
 
   // Call duration timer
   useEffect(() => {
@@ -493,9 +510,9 @@ export function VideoCallInterface({
 
         if (isCleanedUp) return;
 
-        // Create Daily call object with video (no token needed for non-private rooms)
-        console.log('[VideoCall] Creating Daily call object...');
-        const daily = Daily.createCallObject({
+        // OPTIMIZATION: Use prewarmed call object if available, otherwise create new one
+        console.log('[VideoCall] Getting Daily call object (prewarmed if available)...');
+        const daily = getPrewarmedCallObject(true) || Daily.createCallObject({
           audioSource: true,
           videoSource: true,
         });
