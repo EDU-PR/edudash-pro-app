@@ -13,6 +13,7 @@ export { TaskItemList } from './TaskItemList';
 export { ActivityFeed } from './ActivityFeed';
 export { LegacyActivityList } from './LegacyActivityList';
 export { QuickStatsRow } from './QuickStatsRow';
+export { RegionalLeaderboard } from './RegionalLeaderboard';
 export type { QuickStat } from './QuickStatsRow';
 
 // Types & Constants

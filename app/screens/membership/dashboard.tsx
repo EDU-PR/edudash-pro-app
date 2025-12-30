@@ -2,9 +2,12 @@
  * Organization Dashboard - Regional Manager View
  * Regional command center for provincial/regional management
  * 
- * Refactored to use modular components from regional-dashboard folder
+ * Now uses real data from useRegionalDashboard hook:
+ * - Members filtered to user's region only
+ * - Regional standings showing all regions for healthy competition
+ * - Real pending tasks and activities from database
  */
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   View, 
   Text, 
@@ -19,130 +22,133 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
-import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { useRegionalDashboard } from '@/hooks/useRegionalDashboard';
 
 // Modular components
 import {
   RegionalHero,
   ActionCardsGrid,
-  BranchListItems,
   TaskItemList,
   LegacyActivityList,
   QuickStatsRow,
-  PROVINCE_COLORS,
-  MOCK_REGIONAL_STATS,
+  RegionalLeaderboard,
   REGIONAL_ACTIONS,
   type QuickStat,
   type TaskItem,
   type LegacyActivityItem,
 } from '@/components/membership/regional-dashboard';
 
-// Mock Data - Simple branches for list view
-const BRANCHES = [
-  { id: '1', name: 'Johannesburg Central', members: 234, status: 'active', manager: 'Sarah Molefe' },
-  { id: '2', name: 'Pretoria East', members: 189, status: 'active', manager: 'John Sithole' },
-  { id: '3', name: 'Soweto', members: 156, status: 'active', manager: 'Grace Dlamini' },
-  { id: '4', name: 'Centurion', members: 143, status: 'active', manager: 'Thabo Khumalo' },
-  { id: '5', name: 'Sandton', members: 128, status: 'active', manager: 'Nomvula Nkosi' },
-];
-
-const TASKS: TaskItem[] = [
-  { task: 'Review 7 membership applications', icon: 'document-text', color: '#3B82F6', urgent: true },
-  { task: 'Print 12 ID cards for collection', icon: 'card', color: '#F59E0B', urgent: true },
-  { task: 'Schedule branch manager meeting', icon: 'people', color: '#8B5CF6', urgent: false },
-  { task: 'Submit monthly report to national', icon: 'bar-chart', color: '#10B981', urgent: false },
-];
-
-const ACTIVITIES: LegacyActivityItem[] = [
-  { icon: 'person-add', color: '#10B981', title: 'New member approved', subtitle: 'Thabo Mokoena - Johannesburg Central', time: '10 min ago' },
-  { icon: 'card', color: '#3B82F6', title: 'ID card printed', subtitle: 'Sarah Nkosi - Pretoria East', time: '25 min ago' },
-  { icon: 'calendar', color: '#F59E0B', title: 'Event registered', subtitle: 'Workshop attendance confirmed', time: '1 hour ago' },
-];
-
 export default function OrganizationDashboard() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [regionName, setRegionName] = useState<string>('Gauteng');
-  const [regionColor, setRegionColor] = useState<string>('#3B82F6');
-  const [regionCode, setRegionCode] = useState<string>('GP');
 
-  useEffect(() => {
-    checkUserRole();
-  }, []);
+  // Use the new hook for real data
+  const {
+    regionId,
+    regionName,
+    regionCode,
+    regionColor,
+    members,
+    stats,
+    allRegionCounts,
+    pendingTasks,
+    recentActivities,
+    loading,
+    error,
+    refresh,
+  } = useRegionalDashboard();
 
-  const checkUserRole = async () => {
-    try {
-      const supabase = assertSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace('/landing');
-        return;
-      }
-
-      // Check organization_members for role and region
-      const { data: member } = await supabase
-        .from('organization_members')
-        .select('role, member_type, province, region_id, organization_regions(name, code)')
-        .eq('user_id', user.id)
-        .single();
-
-      if (member) {
-        setUserRole(member.role);
-        
-        // If CEO/national_admin, redirect to CEO dashboard
-        if (member.role === 'national_admin' || member.member_type === 'ceo') {
-          router.replace('/screens/membership/ceo-dashboard');
-          return;
-        }
-
-        // Set region info from database
-        if (member.province) {
-          const provinceConfig = PROVINCE_COLORS[member.province] || PROVINCE_COLORS['Gauteng'];
-          setRegionName(provinceConfig.name);
-          setRegionColor(provinceConfig.primary);
-          setRegionCode(provinceConfig.code);
-        } else if (member.organization_regions) {
-          const region = member.organization_regions as any;
-          const provinceConfig = PROVINCE_COLORS[region.name] || PROVINCE_COLORS['Gauteng'];
-          setRegionName(region.name);
-          setRegionColor(provinceConfig.primary);
-          setRegionCode(region.code || provinceConfig.code);
-        }
-      }
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Error checking user role:', error);
-      setLoading(false);
-    }
-  };
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await checkUserRole();
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await refresh();
     setRefreshing(false);
   };
 
-  const formatCurrency = (amount: number) => `R ${(amount / 1000).toFixed(0)}K`;
+  // Convert pending tasks to TaskItem format
+  const tasksForDisplay: TaskItem[] = pendingTasks.map(task => ({
+    task: task.title,
+    icon: task.icon,
+    color: task.color,
+    urgent: task.urgent,
+  }));
 
-  // Quick stats configuration
+  // Convert activities to legacy format
+  const activitiesForDisplay: LegacyActivityItem[] = recentActivities.map(activity => ({
+    icon: activity.icon,
+    color: activity.color,
+    title: activity.title,
+    subtitle: activity.subtitle,
+    time: activity.time,
+  }));
+
+  // Quick stats from real data
   const quickStats: QuickStat[] = [
-    { id: 'revenue', icon: 'cash', value: formatCurrency(MOCK_REGIONAL_STATS.regionRevenue), label: 'Revenue', color: '#3B82F6' },
-    { id: 'growth', icon: 'trending-up', value: `+${MOCK_REGIONAL_STATS.regionGrowth}%`, label: 'Growth', color: '#10B981', valueColor: '#10B981' },
-    { id: 'cards', icon: 'card', value: String(MOCK_REGIONAL_STATS.idCardsIssued), label: 'ID Cards', color: '#8B5CF6' },
+    { 
+      id: 'members', 
+      icon: 'people', 
+      value: String(stats.regionMembers), 
+      label: 'Total Members', 
+      color: regionColor 
+    },
+    { 
+      id: 'active', 
+      icon: 'checkmark-circle', 
+      value: String(stats.activeMembers), 
+      label: 'Active', 
+      color: '#10B981',
+      valueColor: '#10B981' 
+    },
+    { 
+      id: 'new', 
+      icon: 'trending-up', 
+      value: `+${stats.newMembersThisMonth}`, 
+      label: 'This Month', 
+      color: '#3B82F6' 
+    },
   ];
+
+  // Regional stats for hero card
+  const heroStats = {
+    regionMembers: stats.regionMembers,
+    activeBranches: 0, // Not tracking branches yet
+    newMembersThisMonth: stats.newMembersThisMonth,
+    pendingApplications: stats.pendingApplications,
+    regionRevenue: stats.regionRevenue,
+    regionGrowth: 0, // Calculate from historical data later
+    idCardsIssued: stats.idCardsIssued,
+    upcomingEvents: 0,
+  };
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+            Loading your region...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color="#EF4444" />
+          <Text style={[styles.errorTitle, { color: theme.text }]}>Unable to Load Dashboard</Text>
+          <Text style={[styles.errorText, { color: theme.textSecondary }]}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: theme.primary }]}
+            onPress={refresh}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -161,9 +167,11 @@ export default function OrganizationDashboard() {
               </View>
               <TouchableOpacity style={styles.headerButton}>
                 <Ionicons name="notifications-outline" size={24} color={theme.primary} />
-                <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
-                  <Text style={styles.notificationCount}>{MOCK_REGIONAL_STATS.pendingApplications}</Text>
-                </View>
+                {stats.pendingApplications > 0 && (
+                  <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
+                    <Text style={styles.notificationCount}>{stats.pendingApplications}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.headerButton}>
                 <Ionicons name="search-outline" size={24} color={theme.text} />
@@ -181,53 +189,89 @@ export default function OrganizationDashboard() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
           }
         >
-        {/* Region Header Card */}
-        <RegionalHero
-          regionName={regionName}
-          regionCode={regionCode}
-          regionColor={regionColor}
-          stats={MOCK_REGIONAL_STATS}
-        />
+          {/* Region Header Card */}
+          <RegionalHero
+            regionName={regionName}
+            regionCode={regionCode}
+            regionColor={regionColor}
+            stats={heroStats}
+          />
 
-        {/* Urgent Actions */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Action Required</Text>
-          <ActionCardsGrid actions={REGIONAL_ACTIONS} theme={theme} />
-        </View>
-
-        {/* Today's Tasks */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today's Tasks</Text>
-          <TaskItemList tasks={TASKS} theme={theme} />
-        </View>
-
-        {/* Branch Performance */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Branch Performance</Text>
-            <TouchableOpacity>
-              <Text style={[styles.seeAll, { color: theme.primary }]}>View All</Text>
-            </TouchableOpacity>
+          {/* Regional Leaderboard - Healthy Competition */}
+          <View style={styles.section}>
+            <RegionalLeaderboard
+              regions={allRegionCounts}
+              currentRegionId={regionId}
+              theme={theme}
+              maxVisible={5}
+            />
           </View>
-          <BranchListItems branches={BRANCHES} theme={theme} maxItems={5} />
-        </View>
 
-        {/* Quick Stats Row */}
-        <View style={styles.section}>
-          <QuickStatsRow stats={quickStats} theme={theme} />
-        </View>
-
-        {/* Recent Activity */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Activity</Text>
-            <TouchableOpacity>
-              <Text style={[styles.seeAll, { color: theme.primary }]}>View All</Text>
-            </TouchableOpacity>
+          {/* Urgent Actions */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Action Required</Text>
+            <ActionCardsGrid actions={REGIONAL_ACTIONS} theme={theme} />
           </View>
-          <LegacyActivityList activities={ACTIVITIES} theme={theme} />
-        </View>
-      </ScrollView>
+
+          {/* Pending Tasks */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Pending Tasks</Text>
+            <TaskItemList tasks={tasksForDisplay} theme={theme} />
+          </View>
+
+          {/* Quick Stats Row */}
+          <View style={styles.section}>
+            <QuickStatsRow stats={quickStats} theme={theme} />
+          </View>
+
+          {/* Recent Activity */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Activity</Text>
+              <TouchableOpacity onPress={() => router.push('/screens/membership/members-list')}>
+                <Text style={[styles.seeAll, { color: theme.primary }]}>View All Members</Text>
+              </TouchableOpacity>
+            </View>
+            {activitiesForDisplay.length > 0 ? (
+              <LegacyActivityList activities={activitiesForDisplay} theme={theme} />
+            ) : (
+              <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+                <Ionicons name="time-outline" size={32} color={theme.textSecondary} />
+                <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                  No recent activity in your region
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Members Summary */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Your Region Members ({members.length})
+              </Text>
+              <TouchableOpacity onPress={() => router.push('/screens/membership/members-list')}>
+                <Text style={[styles.seeAll, { color: theme.primary }]}>Manage</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.membersSummary, { backgroundColor: theme.card }]}>
+              <View style={styles.memberStat}>
+                <Text style={[styles.memberStatValue, { color: theme.text }]}>{stats.activeMembers}</Text>
+                <Text style={[styles.memberStatLabel, { color: theme.textSecondary }]}>Active</Text>
+              </View>
+              <View style={[styles.memberStatDivider, { backgroundColor: theme.border }]} />
+              <View style={styles.memberStat}>
+                <Text style={[styles.memberStatValue, { color: '#F59E0B' }]}>{stats.pendingApplications}</Text>
+                <Text style={[styles.memberStatLabel, { color: theme.textSecondary }]}>Pending</Text>
+              </View>
+              <View style={[styles.memberStatDivider, { backgroundColor: theme.border }]} />
+              <View style={styles.memberStat}>
+                <Text style={[styles.memberStatValue, { color: '#10B981' }]}>+{stats.newMembersThisMonth}</Text>
+                <Text style={[styles.memberStatLabel, { color: theme.textSecondary }]}>This Month</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       </DashboardWallpaperBackground>
     </SafeAreaView>
   );
@@ -241,6 +285,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   headerButtons: {
     flexDirection: 'row',
@@ -298,5 +372,35 @@ const styles = StyleSheet.create({
   seeAll: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  emptyState: {
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+  },
+  membersSummary: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 16,
+  },
+  memberStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  memberStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  memberStatLabel: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  memberStatDivider: {
+    width: 1,
+    marginHorizontal: 8,
   },
 });
