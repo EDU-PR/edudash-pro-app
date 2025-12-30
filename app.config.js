@@ -31,18 +31,18 @@ require('dotenv').config();
 // Use aliases like: EAS_PROJECT_ID=playstore npx eas build ...
 const EAS_PROJECTS = {
   // Default project (dash-t account)
-  default: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c',
+  default: { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t' },
   // Aliases for easy switching
-  'dash-t': 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c',
+  'dash-t': { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t' },
   // edudashproplay-store org - EduPro-Final project (has build quota)
-  'playstore': 'accd5738-9ee6-434c-a3be-668d9674f541',
-  'edupro-final': 'accd5738-9ee6-434c-a3be-668d9674f541',
-  // king-prod account
-  'king-prod': process.env.EAS_PROJECT_ID_KINGPROD || '',
+  'playstore': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store' },
+  'edupro-final': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store' },
+  // king-prod account (set ID via env var)
+  'king-prod': { id: process.env.EAS_PROJECT_ID_KINGPROD || '', owner: 'king-prod' },
 };
 
-// Resolve project ID from environment or use default
-function getEasProjectId() {
+// Resolve project config from environment or use default
+function getEasProjectConfig() {
   const envProjectId = process.env.EAS_PROJECT_ID;
   
   if (envProjectId) {
@@ -51,9 +51,9 @@ function getEasProjectId() {
       console.log(`[app.config.js] Using EAS project alias: ${envProjectId}`);
       return EAS_PROJECTS[envProjectId];
     }
-    // Otherwise treat as direct project ID
+    // Otherwise treat as direct project ID (use default owner)
     console.log(`[app.config.js] Using custom EAS project ID: ${envProjectId}`);
-    return envProjectId;
+    return { id: envProjectId, owner: process.env.EAS_PROJECT_OWNER || 'dash-t' };
   }
   
   // Default
@@ -66,8 +66,8 @@ module.exports = ({ config }) => {
   const isDevBuild = profile === 'development' || appVariant === 'development';
   const isWeb = process.env.EXPO_PUBLIC_PLATFORM === 'web';
   
-  // Get dynamic EAS project ID
-  const easProjectId = getEasProjectId();
+  // Get dynamic EAS project config (ID and owner)
+  const easConfig = getEasProjectConfig();
   
   // Google Services file: use EAS env file path if available, fallback to local root file
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON || './google-services.json';
@@ -120,12 +120,14 @@ module.exports = ({ config }) => {
   return {
     ...config,
     ...devConfig,
+    // Dynamic owner based on EAS_PROJECT_ID (allows switching accounts)
+    owner: easConfig.owner,
     plugins,
     extra: {
       ...config.extra,
       // Dynamic EAS project ID (allows switching without editing app.json)
       eas: {
-        projectId: easProjectId,
+        projectId: easConfig.id,
       },
       // Explicitly expose environment variables to the app
       EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
