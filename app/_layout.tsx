@@ -45,7 +45,7 @@ import { BottomTabBar } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
-// GlobalUpdateBanner removed - using system notifications instead
+import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
 import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
@@ -133,7 +133,8 @@ function LayoutContent() {
         <AppTutorial />
       )}
       
-      {/* Update Banner removed - using system notifications instead */}
+      {/* OTA Update Banner - shows when update is downloaded */}
+      {Platform.OS !== 'web' && <GlobalUpdateBanner />}
       
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       
