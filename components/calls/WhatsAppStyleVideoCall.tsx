@@ -965,11 +965,20 @@ export function WhatsAppStyleVideoCall({
   // Toggle screen sharing
   const toggleScreenShare = useCallback(async () => {
     if (!dailyRef.current) return;
+    
+    // Check iOS screen share extension requirement
+    if (Platform.OS === 'ios' && Platform.Version && Number(Platform.Version) < 14) {
+      setError('Screen share requires iOS 14 or later');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
     try {
       if (isScreenSharing) {
         await dailyRef.current.stopScreenShare();
         console.log('[VideoCall] Screen share stopped');
       } else {
+        console.log('[VideoCall] Starting screen share...');
         await dailyRef.current.startScreenShare();
         console.log('[VideoCall] Screen share started');
       }
@@ -977,13 +986,28 @@ export function WhatsAppStyleVideoCall({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (err: any) {
       console.error('[VideoCall] Screen share error:', err);
-      // Show user-friendly error
-      if (err?.message?.includes('permission') || err?.message?.includes('denied')) {
-        setError('Screen share permission denied');
+      
+      // Platform-specific error messages
+      if (Platform.OS === 'ios') {
+        // iOS requires Screen Share Extension to be set up
+        if (err?.message?.includes('extension') || err?.message?.includes('broadcast')) {
+          setError('Screen share extension not configured. Contact app developer.');
+        } else if (err?.message?.includes('permission') || err?.message?.includes('denied')) {
+          setError('Screen share permission denied');
+        } else {
+          setError('Screen share not available on this device');
+        }
       } else {
-        setError('Screen sharing not available');
+        // Android errors
+        if (err?.message?.includes('permission') || err?.message?.includes('denied')) {
+          setError('Screen share permission denied');
+        } else if (err?.message?.includes('FOREGROUND') || err?.message?.includes('mediaProjection')) {
+          setError('Screen share not permitted. Please update the app.');
+        } else {
+          setError('Screen sharing failed. Try again.');
+        }
       }
-      setTimeout(() => setError(null), 3000);
+      setTimeout(() => setError(null), 4000);
     }
   }, [isScreenSharing]);
 
