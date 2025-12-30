@@ -15,6 +15,7 @@ import React, {
 } from 'react';
 import { AppState, AppStateStatus, Platform, Alert, Vibration, BackHandler } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 // CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
@@ -34,6 +35,7 @@ const getSupabase = () => assertSupabase();
 import { VoiceCallInterface } from './VoiceCallInterface';
 import { WhatsAppStyleVideoCall } from './WhatsAppStyleVideoCall';
 import { WhatsAppStyleIncomingCall } from './WhatsAppStyleIncomingCall';
+import { CALL_NOTIFICATION_EVENTS, setupForegroundEventListener } from './hooks/useCallBackgroundHandler';
 import { usePresence } from '@/hooks/usePresence';
 import type {
   ActiveCall,
@@ -132,6 +134,10 @@ export function CallProvider({ children }: CallProviderProps) {
     };
     
     setupPushNotifications();
+    
+    // Setup Notifee foreground event listener for call notification actions
+    // This handles End Call / Mute button presses when app is in foreground
+    const unsubscribeForegroundEvents = setupForegroundEventListener();
 
     const getUser = async () => {
       const { data: { user } } = await getSupabase().auth.getUser();
@@ -160,6 +166,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
     return () => {
       subscription.unsubscribe();
+      unsubscribeForegroundEvents();
       // CallKeep cleanup removed
     };
   }, [callsEnabled]);
@@ -305,6 +312,45 @@ export function CallProvider({ children }: CallProviderProps) {
   
   const setIncomingCallRef = React.useRef(setIncomingCall);
   setIncomingCallRef.current = setIncomingCall;
+
+  // Ref for endCall to use in notification event listeners
+  const endCallRef = React.useRef<() => Promise<void>>();
+
+  // Listen for notification action button presses from foreground service
+  // (End Call / Mute buttons on the ongoing call notification)
+  useEffect(() => {
+    if (!callsEnabled) return;
+    
+    console.log('[CallProvider] Setting up notification action listeners');
+    
+    // Handle "End Call" button press from notification
+    const endCallListener = DeviceEventEmitter.addListener(
+      CALL_NOTIFICATION_EVENTS.END_CALL,
+      () => {
+        console.log('[CallProvider] 🛑 END_CALL event received from notification');
+        if (endCallRef.current) {
+          endCallRef.current();
+        }
+      }
+    );
+    
+    // Handle "Mute" button press from notification
+    // Note: Mute state is managed within VoiceCallInterface/WhatsAppStyleVideoCall
+    // We emit a global event that those components can listen to
+    const muteListener = DeviceEventEmitter.addListener(
+      CALL_NOTIFICATION_EVENTS.MUTE,
+      () => {
+        console.log('[CallProvider] 🔇 MUTE event received from notification');
+        // Emit a more specific event for the active call interface to handle
+        DeviceEventEmitter.emit('call:toggle-mute');
+      }
+    );
+    
+    return () => {
+      endCallListener.remove();
+      muteListener.remove();
+    };
+  }, [callsEnabled]);
 
   // Listen for notification responses (Answer/Decline from notification drawer)
   useEffect(() => {
@@ -797,6 +843,9 @@ export function CallProvider({ children }: CallProviderProps) {
     // Reset state after a short delay
     setTimeout(() => setCallState('idle'), 1000);
   }, [answeringCall, outgoingCall, currentUserId]);
+
+  // Keep ref updated with latest endCall function for notification handlers
+  endCallRef.current = endCall;
 
   // Return to active call (for minimized calls)
   const returnToCall = useCallback(() => {

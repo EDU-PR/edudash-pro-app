@@ -16,5 +16,5 @@ export type { VoiceCallDailyOptions, VoiceCallDailyReturn } from './useVoiceCall
 export { useVoiceCallTimeout } from './useVoiceCallTimeout';
 export type { VoiceCallTimeoutOptions } from './useVoiceCallTimeout';
 
-export { useCallBackgroundHandler } from './useCallBackgroundHandler';
+export { useCallBackgroundHandler, CALL_NOTIFICATION_EVENTS, setupForegroundEventListener } from './useCallBackgroundHandler';
 export type { CallBackgroundHandlerOptions, CallBackgroundHandlerReturn } from './useCallBackgroundHandler';
