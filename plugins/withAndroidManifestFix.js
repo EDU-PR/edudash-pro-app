@@ -52,24 +52,60 @@ const withAndroidManifestFix = (config) => {
       }
       
       // Fix Firebase messaging meta-data conflicts
-      // expo-notifications and @react-native-firebase/messaging both set these values
-      // We need to add tools:replace to override the Firebase library's values
-      const firebaseMetaDataKeys = [
-        'com.google.firebase.messaging.default_notification_channel_id',
-        'com.google.firebase.messaging.default_notification_color',
-        'com.google.firebase.messaging.default_notification_icon',
+      // expo-notifications and @react-native-firebase/messaging both set these meta-data entries
+      // We need to find them and add tools:replace attributes
+      // 
+      // IMPORTANT: expo-notifications adds these entries, but we run AFTER it in plugin order
+      // So they should exist. We need to add tools:replace to prevent manifest merger conflicts
+      // with the @react-native-firebase/messaging library's AndroidManifest.xml
+      
+      const firebaseMetaDataConfigs = [
+        {
+          name: 'com.google.firebase.messaging.default_notification_channel_id',
+          replaceAttr: 'android:value',
+          defaultValue: 'default', // fallback if not set by expo-notifications
+        },
+        {
+          name: 'com.google.firebase.messaging.default_notification_color',
+          replaceAttr: 'android:resource',
+          defaultResource: '@color/notification_icon_color',
+        },
+        {
+          name: 'com.google.firebase.messaging.default_notification_icon',
+          replaceAttr: 'android:resource',
+          defaultResource: '@drawable/notification_icon',
+        },
       ];
       
-      for (const metaData of application['meta-data']) {
-        const name = metaData.$?.['android:name'];
-        if (firebaseMetaDataKeys.includes(name)) {
-          // Add tools:replace to override the library's value
-          if (metaData.$['android:value']) {
-            metaData.$['tools:replace'] = 'android:value';
-          } else if (metaData.$['android:resource']) {
-            metaData.$['tools:replace'] = 'android:resource';
+      console.log(`[withAndroidManifestFix] Found ${application['meta-data'].length} meta-data entries`);
+      
+      for (const metaDataConfig of firebaseMetaDataConfigs) {
+        const existingIndex = application['meta-data'].findIndex(
+          (m) => m.$?.['android:name'] === metaDataConfig.name
+        );
+        
+        if (existingIndex !== -1) {
+          // Entry exists - add tools:replace attribute
+          application['meta-data'][existingIndex].$['tools:replace'] = metaDataConfig.replaceAttr;
+          console.log(`[withAndroidManifestFix] ✅ Added tools:replace="${metaDataConfig.replaceAttr}" to existing ${metaDataConfig.name}`);
+        } else {
+          // Entry doesn't exist - create it with tools:replace
+          // This ensures we have the entry even if expo-notifications didn't add it
+          const newMetaData = {
+            $: {
+              'android:name': metaDataConfig.name,
+              'tools:replace': metaDataConfig.replaceAttr,
+            },
+          };
+          
+          if (metaDataConfig.defaultValue) {
+            newMetaData.$['android:value'] = metaDataConfig.defaultValue;
+          } else if (metaDataConfig.defaultResource) {
+            newMetaData.$['android:resource'] = metaDataConfig.defaultResource;
           }
-          console.log(`[withAndroidManifestFix] ✅ Added tools:replace to ${name}`);
+          
+          application['meta-data'].push(newMetaData);
+          console.log(`[withAndroidManifestFix] ✅ Created ${metaDataConfig.name} with tools:replace="${metaDataConfig.replaceAttr}"`);
         }
       }
       
