@@ -82,7 +82,8 @@ export const useParentThreads = () => {
     queryFn: async (): Promise<MessageThread[]> => {
       if (!user?.id) {
         logger.warn('useParentThreads', 'User not authenticated');
-        throw new Error('User not authenticated');
+        // Return empty instead of throwing - let the UI handle auth state
+        return [];
       }
       
       const client = assertSupabase();
@@ -98,13 +99,9 @@ export const useParentThreads = () => {
           .eq('user_id', user.id);
         
         if (participationsError) {
-          // Check for table not found
-          if (participationsError.code === '42P01') {
-            logger.warn('useParentThreads', 'message_participants table not found');
-            return [];
-          }
-          logger.error('useParentThreads', `Error fetching participations: ${participationsError.message}`);
-          throw participationsError;
+          // Check for table not found or any other error - just return empty
+          logger.warn('useParentThreads', `Error fetching participations: ${participationsError.message} (code: ${participationsError.code})`);
+          return [];
         }
         
         // If user has no thread participations, return empty
@@ -131,18 +128,9 @@ export const useParentThreads = () => {
           .order('last_message_at', { ascending: false });
         
         if (error) {
-          // Check if table doesn't exist - return empty array instead of throwing
-          if (error.code === '42P01' || error.message?.includes('does not exist')) {
-            logger.warn('useParentThreads', 'message_threads table not found, returning empty');
-            return [];
-          }
-          // Check for permission/RLS errors
-          if (error.code === '42501' || error.message?.includes('permission denied')) {
-            logger.warn('useParentThreads', `Permission denied for user ${user.id}: ${error.message}`);
-            return []; // Return empty instead of crashing
-          }
-          logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
-          throw error;
+          // Any error - just return empty and log it
+          logger.warn('useParentThreads', `Query error: ${error.message} (code: ${error.code})`);
+          return [];
         }
         
         // If no threads, return empty array early
