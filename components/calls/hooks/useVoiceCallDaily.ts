@@ -273,8 +273,35 @@ export function useVoiceCallDaily({
               throw callError;
             }
 
-            // CRITICAL: Send push notification to wake callee's app when backgrounded
+            // CRITICAL: Send FCM data message to wake callee's app when killed (Android)
+            // FCM data-only messages with high priority can wake killed apps
             // This is non-blocking to not delay call setup
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-fcm-call`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                callee_user_id: calleeId,
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'voice',
+                meeting_url: roomUrl,
+              }),
+            }).then(res => res.json()).then(result => {
+              if (result.success) {
+                console.log('[VoiceCallDaily] ✅ FCM wake-on-call message sent');
+              } else {
+                console.warn('[VoiceCallDaily] FCM failed, falling back to Expo push:', result.error);
+              }
+            }).catch(err => {
+              console.warn('[VoiceCallDaily] FCM call failed:', err);
+            });
+
+            // ALSO send Expo push notification (for when app is in background, not killed)
+            // This provides the visible notification banner
             fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
               method: 'POST',
               headers: {
@@ -301,14 +328,14 @@ export function useVoiceCallDaily({
               }),
             }).then(res => {
               if (res.ok) {
-                console.log('[VoiceCallDaily] ✅ Push notification sent to callee');
+                console.log('[VoiceCallDaily] ✅ Expo push notification sent to callee');
               } else {
                 res.text().then(text => {
-                  console.warn('[VoiceCallDaily] Push notification failed:', text);
+                  console.warn('[VoiceCallDaily] Expo push notification failed:', text);
                 });
               }
             }).catch(err => {
-              console.warn('[VoiceCallDaily] Failed to send push notification:', err);
+              console.warn('[VoiceCallDaily] Failed to send Expo push notification:', err);
             });
 
             // NOTE: CallKeep removed - library broken with Expo SDK 54+ (duplicate method exports)
