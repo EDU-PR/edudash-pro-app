@@ -128,6 +128,11 @@ module.exports = ({ config }) => {
     owner: easConfig.owner,
     slug: easConfig.slug,
     plugins,
+    // Dynamic updates URL to match the selected EAS project
+    updates: {
+      ...config.updates,
+      url: `https://u.expo.dev/${easConfig.id}`,
+    },
     extra: {
       ...config.extra,
       // Dynamic EAS project ID (allows switching without editing app.json)
