@@ -181,8 +181,26 @@ export function WhatsAppStyleVideoCall({
       }
     });
     
-    return () => muteListener.remove();
-  }, [isOpen, isAudioEnabled]);
+    const speakerListener = DeviceEventEmitter.addListener('call:toggle-speaker', () => {
+      console.log('[VideoCall] 🔊 Toggle speaker from notification');
+      // Inline speaker toggle to avoid dependency on toggleSpeaker which is defined later
+      const newState = !isSpeakerOn;
+      try {
+        if (InCallManager) {
+          InCallManager.setForceSpeakerphoneOn(newState);
+          console.log('[VideoCall] Speaker toggled to:', newState ? 'speaker' : 'earpiece');
+        }
+        setIsSpeakerOn(newState);
+      } catch (err) {
+        console.error('[VideoCall] Toggle speaker error from notification:', err);
+      }
+    });
+    
+    return () => {
+      muteListener.remove();
+      speakerListener.remove();
+    };
+  }, [isOpen, isAudioEnabled, isSpeakerOn]);
 
   // Local video draggable
   const localVideoPanResponder = useRef(

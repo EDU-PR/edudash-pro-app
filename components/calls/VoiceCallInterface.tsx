@@ -179,8 +179,16 @@ export function VoiceCallInterface({
       daily.toggleAudio();
     });
     
-    return () => muteListener.remove();
-  }, [isOpen, daily]);
+    const speakerListener = DeviceEventEmitter.addListener('call:toggle-speaker', () => {
+      console.log('[VoiceCallInterface] 🔊 Toggle speaker from notification');
+      audio.toggleSpeaker();
+    });
+    
+    return () => {
+      muteListener.remove();
+      speakerListener.remove();
+    };
+  }, [isOpen, daily, audio]);
 
   // Handlers
   const handleMinimize = useCallback(() => {

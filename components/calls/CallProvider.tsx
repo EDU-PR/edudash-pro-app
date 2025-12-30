@@ -346,9 +346,21 @@ export function CallProvider({ children }: CallProviderProps) {
       }
     );
     
+    // Handle "Speaker" button press from notification
+    // Toggles between earpiece and speaker output
+    const speakerListener = DeviceEventEmitter.addListener(
+      CALL_NOTIFICATION_EVENTS.SPEAKER,
+      () => {
+        console.log('[CallProvider] 🔊 SPEAKER event received from notification');
+        // Emit a more specific event for the active call interface to handle
+        DeviceEventEmitter.emit('call:toggle-speaker');
+      }
+    );
+    
     return () => {
       endCallListener.remove();
       muteListener.remove();
+      speakerListener.remove();
     };
   }, [callsEnabled]);
 

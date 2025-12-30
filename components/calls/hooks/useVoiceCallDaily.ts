@@ -35,6 +35,14 @@ try {
 // Lazy Supabase getter
 const getSupabase = () => assertSupabase();
 
+// Call prewarming utilities for faster connection
+import { 
+  prewarmCallSystem, 
+  getPrewarmedCallObject, 
+  disposePrewarmedCallObject,
+  hasValidSession,
+} from '@/lib/calls/CallPrewarming';
+
 // Daily.co SDK - conditionally imported (worked before expo-audio changes)
 let Daily: any = null;
 try {
@@ -153,6 +161,21 @@ export function useVoiceCallDaily({
       getSupabase().removeChannel(channel);
     };
   }, [callIdRef, cleanupCall, setCallState, onClose]);
+
+  // OPTIMIZATION: Prewarm call system when UI opens (before user initiates)
+  // This pre-creates call object, requests permissions, and validates session
+  useEffect(() => {
+    if (!isOpen) {
+      // Dispose prewarmed objects when call UI closes
+      disposePrewarmedCallObject();
+      return;
+    }
+    
+    // Start prewarming in background - don't block UI
+    prewarmCallSystem(false).catch((err) => {
+      console.warn('[VoiceCallDaily] Prewarm failed (non-fatal):', err);
+    });
+  }, [isOpen]);
 
   // Initialize call
   useEffect(() => {
@@ -366,9 +389,9 @@ export function useVoiceCallDaily({
 
         if (isCleanedUp) return;
 
-        // Create Daily call object
-        console.log('[VoiceCallDaily] Creating Daily call object...');
-        const daily = Daily.createCallObject({
+        // OPTIMIZATION: Use prewarmed call object if available, otherwise create new one
+        console.log('[VoiceCallDaily] Getting Daily call object (prewarmed if available)...');
+        const daily = getPrewarmedCallObject(false) || Daily.createCallObject({
           audioSource: true,
           videoSource: false,
         });
