@@ -24,6 +24,10 @@ import type { CallState } from '../types';
 // Unique tag for KeepAwake during calls
 const CALL_KEEP_AWAKE_TAG = 'active-voice-call';
 
+// Feature flag to disable foreground service while debugging crash
+// Set to false to completely skip foreground service (for debugging)
+const ENABLE_FOREGROUND_SERVICE = false; // TEMPORARY: disabled to debug crash
+
 // Conditionally import InCallManager
 let InCallManager: any = null;
 try {
@@ -248,6 +252,12 @@ export function useCallBackgroundHandler({
    * Uses Notifee's foreground service API (2025 best practice)
    */
   const startForegroundService = useCallback(async () => {
+    // Skip if feature disabled (for debugging)
+    if (!ENABLE_FOREGROUND_SERVICE) {
+      console.log('[CallBackgroundHandler] Foreground service disabled via feature flag');
+      return;
+    }
+    
     // Skip if not Android or already active
     if (Platform.OS !== 'android' || foregroundServiceActiveRef.current) {
       return;
