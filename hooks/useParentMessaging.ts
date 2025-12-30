@@ -90,7 +90,33 @@ export const useParentThreads = () => {
       try {
         logger.debug('useParentThreads', `Fetching threads for user ${user.id}`);
         
-        // Get threads with participants, student info, and last message
+        // Step 1: Get threads the user participates in via message_participants
+        // This is more reliable than relying on RLS to filter message_threads directly
+        const { data: participations, error: participationsError } = await client
+          .from('message_participants')
+          .select('thread_id')
+          .eq('user_id', user.id);
+        
+        if (participationsError) {
+          // Check for table not found
+          if (participationsError.code === '42P01') {
+            logger.warn('useParentThreads', 'message_participants table not found');
+            return [];
+          }
+          logger.error('useParentThreads', `Error fetching participations: ${participationsError.message}`);
+          throw participationsError;
+        }
+        
+        // If user has no thread participations, return empty
+        if (!participations || participations.length === 0) {
+          logger.debug('useParentThreads', 'No thread participations found for user');
+          return [];
+        }
+        
+        const threadIds = participations.map(p => p.thread_id);
+        logger.debug('useParentThreads', `Found ${threadIds.length} threads for user`);
+        
+        // Step 2: Get thread details for those threads
         const { data: threads, error } = await client
           .from('message_threads')
           .select(`
@@ -101,6 +127,7 @@ export const useParentThreads = () => {
               user_profile:profiles(first_name, last_name, role)
             )
           `)
+          .in('id', threadIds)
           .order('last_message_at', { ascending: false });
         
         if (error) {
@@ -113,6 +140,10 @@ export const useParentThreads = () => {
           if (error.code === '42501' || error.message?.includes('permission denied')) {
             logger.warn('useParentThreads', `Permission denied for user ${user.id}: ${error.message}`);
             return []; // Return empty instead of crashing
+          }
+          logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
+          throw error;
+        }
           }
           logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
           throw error;
