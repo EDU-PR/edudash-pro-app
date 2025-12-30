@@ -410,11 +410,22 @@ export function normalizeRole(role: string): Role | null {
   if (normalized.includes('principal') || normalized === 'admin') {
     return 'principal_admin';
   }
-  if (normalized.includes('teacher')) {
+  // Teachers, instructors, facilitators, trainers all map to teacher role
+  if (normalized.includes('teacher') || 
+      normalized.includes('instructor') || 
+      normalized.includes('facilitator') ||
+      normalized.includes('trainer') ||
+      normalized.includes('coach')) {
     return 'teacher';
   }
-  if (normalized.includes('parent')) {
+  if (normalized.includes('parent') || 
+      normalized.includes('guardian') ||
+      normalized.includes('sponsor')) {
     return 'parent';
+  }
+  // Learners, students map to student role  
+  if (normalized.includes('student') || normalized.includes('learner')) {
+    return 'student';
   }
   
   return null;

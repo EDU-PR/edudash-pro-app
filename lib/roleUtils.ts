@@ -82,8 +82,19 @@ export function normalizeRole(role?: string | null): UserRole | null {
   if (isSuperAdmin(role)) return 'super_admin';
   if (normalizedRole === 'principal') return 'principal';
   if (normalizedRole === 'principal_admin') return 'principal_admin';
-  if (normalizedRole === 'teacher') return 'teacher';
-  if (normalizedRole === 'parent') return 'parent';
+  // Teachers, instructors, facilitators, trainers, coaches all map to teacher
+  if (normalizedRole === 'teacher' || 
+      normalizedRole === 'instructor' ||
+      normalizedRole === 'facilitator' ||
+      normalizedRole === 'trainer' ||
+      normalizedRole === 'coach') return 'teacher';
+  // Parents, guardians, sponsors map to parent
+  if (normalizedRole === 'parent' ||
+      normalizedRole === 'guardian' ||
+      normalizedRole === 'sponsor') return 'parent';
+  // Students, learners map to student
+  if (normalizedRole === 'student' ||
+      normalizedRole === 'learner') return 'student';
   
   return null;
 }
@@ -103,12 +114,16 @@ export function canManageAllocationsRole(role?: string | null): boolean {
 }
 
 /**
- * Check if a user is a teacher
+ * Check if a user is a teacher (includes facilitators, instructors, etc.)
  */
 export function isTeacher(role?: string | null): boolean {
   if (!role) return false;
   const normalizedRole = String(role).trim().toLowerCase();
-  return normalizedRole === 'teacher';
+  return normalizedRole === 'teacher' || 
+         normalizedRole === 'instructor' ||
+         normalizedRole === 'facilitator' ||
+         normalizedRole === 'trainer' ||
+         normalizedRole === 'coach';
 }
 
 /**
