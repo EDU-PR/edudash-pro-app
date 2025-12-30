@@ -8,6 +8,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  AppState,
+  AppStateStatus,
   Dimensions,
   StyleSheet,
   Text,
@@ -20,6 +22,7 @@ import { assertSupabase } from '@/lib/supabase';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -81,6 +84,21 @@ export function VideoCallInterface({
   const callIdRef = useRef<string | null>(callId || null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const videoWasEnabledBeforeBackground = useRef<boolean>(true);
+
+  // PiP mode for video calls when app is backgrounded
+  const isCallActive = callState === 'connected' || callState === 'connecting' || callState === 'ringing';
+  const { isInPipMode, isPipSupported } = usePictureInPicture({
+    autoEnterOnBackground: isCallActive && isVideoEnabled,
+    onEnterPiP: () => {
+      console.log('[VideoCall] Entered PiP mode - keeping video active');
+      // Video stays active in PiP mode on Android via manifest configuration
+    },
+    onExitPiP: () => {
+      console.log('[VideoCall] Exited PiP mode');
+    },
+  });
 
   // Update callIdRef when prop changes
   useEffect(() => {
@@ -220,6 +238,81 @@ export function VideoCallInterface({
       }
     };
   }, [callState, isOpen]);
+
+  // Handle app state changes (background/foreground) for video persistence
+  // On Android with PiP enabled, video continues in PiP mode
+  // On iOS or without PiP, we pause video in background and resume on foreground
+  useEffect(() => {
+    if (!isCallActive || !dailyRef.current) return;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextAppState;
+      
+      console.log('[VideoCall] App state change:', previousState, '->', nextAppState, {
+        isPipSupported,
+        isInPipMode,
+        isVideoEnabled,
+      });
+
+      // Going to background
+      if (previousState === 'active' && (nextAppState === 'background' || nextAppState === 'inactive')) {
+        // On Android with PiP support, video stays active (handled by system)
+        // On iOS or without PiP, we pause video to save battery but keep audio
+        if (!isPipSupported) {
+          videoWasEnabledBeforeBackground.current = isVideoEnabled;
+          if (isVideoEnabled && dailyRef.current) {
+            console.log('[VideoCall] Pausing video for background (no PiP)');
+            try {
+              await dailyRef.current.setLocalVideo(false);
+              setIsVideoEnabled(false);
+            } catch (err) {
+              console.warn('[VideoCall] Failed to pause video:', err);
+            }
+          }
+        } else {
+          // Android with PiP - keep video running
+          console.log('[VideoCall] Keeping video active for PiP mode');
+          // Ensure InCallManager keeps audio going
+          if (InCallManager) {
+            try {
+              InCallManager.setKeepScreenOn(false); // Allow screen off in PiP
+            } catch (err) {
+              console.warn('[VideoCall] InCallManager error:', err);
+            }
+          }
+        }
+      }
+
+      // Coming back to foreground
+      if ((previousState === 'background' || previousState === 'inactive') && nextAppState === 'active') {
+        // Restore video if it was enabled before background
+        if (!isPipSupported && videoWasEnabledBeforeBackground.current && !isVideoEnabled && dailyRef.current) {
+          console.log('[VideoCall] Resuming video from background');
+          try {
+            await dailyRef.current.setLocalVideo(true);
+            setIsVideoEnabled(true);
+          } catch (err) {
+            console.warn('[VideoCall] Failed to resume video:', err);
+          }
+        }
+        // Restore keep screen on
+        if (InCallManager) {
+          try {
+            InCallManager.setKeepScreenOn(true);
+          } catch (err) {
+            console.warn('[VideoCall] InCallManager error:', err);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
+    };
+  }, [isCallActive, isPipSupported, isInPipMode, isVideoEnabled]);
 
   // Update participants state
   const updateParticipants = useCallback(() => {
