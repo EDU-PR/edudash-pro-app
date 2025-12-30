@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { assertSupabase } from '@/lib/supabase';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 import { useCallBackgroundHandler } from './hooks';
@@ -162,6 +163,24 @@ export function WhatsAppStyleVideoCall({
       }
     },
   });
+
+  // Listen for mute toggle events from notification action buttons
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const muteListener = DeviceEventEmitter.addListener('call:toggle-mute', async () => {
+      console.log('[VideoCall] 🔇 Toggle mute from notification');
+      if (!dailyRef.current) return;
+      try {
+        await dailyRef.current.setLocalAudio(!isAudioEnabled);
+        setIsAudioEnabled(!isAudioEnabled);
+      } catch (err) {
+        console.error('[VideoCall] Toggle audio error from notification:', err);
+      }
+    });
+    
+    return () => muteListener.remove();
+  }, [isOpen, isAudioEnabled]);
 
   // Local video draggable
   const localVideoPanResponder = useRef(

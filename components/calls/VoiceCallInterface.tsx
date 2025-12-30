@@ -26,6 +26,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import type { CallState } from './types';
 
 // Hooks
@@ -168,6 +169,18 @@ export function VoiceCallInterface({
 
     return () => backHandler.remove();
   }, [isOpen, state.callState, state]);
+
+  // Listen for mute toggle events from notification action buttons
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const muteListener = DeviceEventEmitter.addListener('call:toggle-mute', () => {
+      console.log('[VoiceCallInterface] 🔇 Toggle mute from notification');
+      daily.toggleAudio();
+    });
+    
+    return () => muteListener.remove();
+  }, [isOpen, daily]);
 
   // Handlers
   const handleMinimize = useCallback(() => {

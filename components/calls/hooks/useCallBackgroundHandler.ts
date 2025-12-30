@@ -19,10 +19,17 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import type { CallState } from '../types';
 
 // Unique tag for KeepAwake during calls
 const CALL_KEEP_AWAKE_TAG = 'active-voice-call';
+
+// Event names for notification actions
+export const CALL_NOTIFICATION_EVENTS = {
+  END_CALL: 'call:notification:end-call',
+  MUTE: 'call:notification:mute',
+} as const;
 
 // Feature flag to disable foreground service while debugging crash
 // Set to false to completely skip foreground service (for debugging)
@@ -91,24 +98,62 @@ export function registerCallForegroundService(): void {
         // This promise intentionally never resolves - the service runs until
         // stopForegroundService() is called when the call ends.
         console.log('[CallBackgroundHandler] Foreground service runner started for:', notification.id);
-        
-        // Listen for foreground events within the service context
-        notifee?.onForegroundEvent(({ type, detail }) => {
-          const EventType = require('@notifee/react-native').EventType;
-          // Handle "End Call" action press from notification
-          if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'end-call') {
-            console.log('[CallBackgroundHandler] End call action pressed from notification');
-            // Note: Actual call termination is handled by the CallProvider
-            // This just stops the foreground service
-            notifee?.stopForegroundService();
-          }
-        });
+        // NOTE: Event handling for foreground is done via onForegroundEvent in the main app,
+        // not inside this runner. This runner just keeps the service alive.
       });
     });
     console.log('[CallBackgroundHandler] ✅ Foreground service runner registered');
   } catch (error) {
     console.error('[CallBackgroundHandler] Failed to register foreground service:', error);
   }
+}
+
+/**
+ * Set up foreground event listener for call notification actions.
+ * Should be called when app initializes (e.g., in _layout.tsx or App.tsx).
+ * Returns cleanup function.
+ */
+export function setupForegroundEventListener(): () => void {
+  if (Platform.OS !== 'android') return () => {};
+  
+  if (!ensureNotifeeLoaded() || !notifee) {
+    console.log('[CallBackgroundHandler] Skipping foreground event setup - notifee not available');
+    return () => {};
+  }
+  
+  console.log('[CallBackgroundHandler] Setting up foreground event listener');
+  
+  const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
+    const EventType = require('@notifee/react-native').EventType;
+    
+    console.log('[CallBackgroundHandler] Foreground event:', type, 'action:', detail?.pressAction?.id);
+    
+    // Handle "End Call" action press from notification
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'end-call') {
+      console.log('[CallBackgroundHandler] 🛑 End call action pressed from notification (foreground)');
+      // Emit event so CallProvider can terminate the call
+      DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.END_CALL);
+      // Stop the foreground service
+      notifee?.stopForegroundService();
+    }
+    
+    // Handle "Mute" action press from notification
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'mute') {
+      console.log('[CallBackgroundHandler] 🔇 Mute action pressed from notification (foreground)');
+      // Emit event so CallProvider can toggle mute
+      DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.MUTE);
+      // DON'T stop the service - just toggle mute
+    }
+    
+    // Handle notification body press - open call screen
+    if (type === EventType.PRESS && detail?.notification?.id === CALL_NOTIFICATION_ID) {
+      console.log('[CallBackgroundHandler] Notification pressed - returning to call');
+      // App will come to foreground automatically via launchActivity: 'default'
+    }
+  });
+  
+  console.log('[CallBackgroundHandler] ✅ Foreground event listener active');
+  return unsubscribe;
 }
 
 /**
@@ -133,10 +178,18 @@ export function registerCallNotificationBackgroundHandler(): void {
       // Handle "End Call" action from notification when app is backgrounded
       if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'end-call') {
         console.log('[CallBackgroundHandler] End call action pressed (background)');
+        // Emit event so CallProvider can terminate the call when app returns
+        DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.END_CALL);
         // Stop the foreground service - this removes the ongoing notification
         await notifee?.stopForegroundService();
-        // Note: The actual call termination needs to be handled when app returns to foreground
-        // via CallProvider's event handling
+      }
+      
+      // Handle "Mute" action from notification when app is backgrounded
+      if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'mute') {
+        console.log('[CallBackgroundHandler] Mute action pressed (background)');
+        // Emit event so CallProvider can toggle mute
+        DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.MUTE);
+        // DON'T stop the service - mute just toggles audio
       }
       
       // Handle notification press - return to app/call screen
