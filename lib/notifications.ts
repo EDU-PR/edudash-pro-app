@@ -82,6 +82,19 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       showBadge: true, // Shows red dot on app icon
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     })
+    
+    // Messages channel - for incoming message notifications (WhatsApp-style)
+    await Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages',
+      description: 'New message notifications',
+      importance: Notifications.AndroidImportance.HIGH, // HIGH priority - shows as banner
+      vibrationPattern: [0, 250, 100, 250],
+      lightColor: '#3B82F6', // Blue for messages
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true, // Shows badge on app icon
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, // Shows on lock screen
+    })
   }
 
   // iOS requires explicit permission prompt; Android shows without prompt
