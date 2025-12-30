@@ -25,8 +25,15 @@ try {
   console.warn('[VoiceCallAudio] InCallManager not available:', error);
 }
 
-// Ringback sound asset - plays through earpiece when audio mode is set correctly
-const RINGBACK_SOUND = require('../../../assets/sounds/ringback.mp3');
+// Ringback sound asset - use @/ alias for consistent resolution
+// CRITICAL: Must use require() at module level, not inside function
+let RINGBACK_SOUND: any = null;
+try {
+  RINGBACK_SOUND = require('@/assets/sounds/ringback.mp3');
+  console.log('[VoiceCallAudio] ✅ Ringback sound loaded');
+} catch (error) {
+  console.warn('[VoiceCallAudio] ❌ Failed to load ringback sound:', error);
+}
 
 export interface VoiceCallAudioOptions {
   callState: CallState;
@@ -66,8 +73,15 @@ export function useVoiceCallAudio({
   const playCustomRingback = useCallback(async () => {
     if (ringbackStartedRef.current) return;
     
+    // Check if sound file is loaded
+    if (!RINGBACK_SOUND) {
+      console.error('[VoiceCallAudio] ❌ Ringback sound not loaded - cannot play');
+      return;
+    }
+    
     try {
       console.log('[VoiceCallAudio] 🔊 Starting ringback via expo-audio (earpiece mode)');
+      console.log('[VoiceCallAudio] Ringback sound source:', RINGBACK_SOUND);
       
       // CRITICAL: Set audio mode to route through earpiece BEFORE creating player
       // expo-audio's shouldRouteThroughEarpiece is the key setting for Android

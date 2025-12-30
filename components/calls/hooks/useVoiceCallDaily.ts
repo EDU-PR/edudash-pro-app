@@ -167,6 +167,10 @@ export function useVoiceCallDaily({
 
     const initializeCall = async () => {
       try {
+        // CRITICAL: Clean up previous call FIRST before setting state
+        // This ensures audioInitializedRef is reset before the audio effect runs
+        cleanupCall();
+        
         setCallState('connecting');
         setError(null);
         setCallDuration(0);
@@ -201,8 +205,6 @@ export function useVoiceCallDaily({
         }
 
         if (isCleanedUp) return;
-
-        cleanupCall();
 
         let roomUrl = meetingUrl;
 
