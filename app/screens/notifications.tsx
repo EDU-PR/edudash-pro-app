@@ -36,6 +36,61 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NOTIFICATIONS_LAST_SEEN_KEY = 'notifications_last_seen_at';
 const READ_NOTIFICATIONS_KEY = 'read_notifications';
+const CLEARED_NOTIFICATIONS_KEY = 'cleared_notifications';
+const CLEARED_BEFORE_DATE_KEY = 'cleared_before_date';
+
+// Helper to get the "cleared before" date - notifications before this date are hidden
+const getClearedBeforeDate = async (userId: string): Promise<Date | null> => {
+  try {
+    const key = `${CLEARED_BEFORE_DATE_KEY}_${userId}`;
+    const stored = await AsyncStorage.getItem(key);
+    if (stored) {
+      return new Date(stored);
+    }
+  } catch (e) {
+    console.error('[getClearedBeforeDate] Error:', e);
+  }
+  return null;
+};
+
+// Helper to set "cleared before" date - all notifications before this are hidden
+const setClearedBeforeDate = async (userId: string, date: Date): Promise<void> => {
+  try {
+    const key = `${CLEARED_BEFORE_DATE_KEY}_${userId}`;
+    await AsyncStorage.setItem(key, date.toISOString());
+  } catch (e) {
+    console.error('[setClearedBeforeDate] Error:', e);
+  }
+};
+
+// Helper to get set of individually cleared notification IDs
+const getClearedNotificationIds = async (userId: string): Promise<Set<string>> => {
+  try {
+    const key = `${CLEARED_NOTIFICATIONS_KEY}_${userId}`;
+    const stored = await AsyncStorage.getItem(key);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Set(parsed);
+    }
+  } catch (e) {
+    console.error('[getClearedNotificationIds] Error:', e);
+  }
+  return new Set();
+};
+
+// Helper to add notification IDs to cleared set
+const addToClearedNotifications = async (userId: string, notificationIds: string[]): Promise<void> => {
+  try {
+    const key = `${CLEARED_NOTIFICATIONS_KEY}_${userId}`;
+    const existing = await getClearedNotificationIds(userId);
+    notificationIds.forEach(id => existing.add(id));
+    // Keep only last 1000 entries to prevent infinite growth
+    const arr = Array.from(existing).slice(-1000);
+    await AsyncStorage.setItem(key, JSON.stringify(arr));
+  } catch (e) {
+    console.error('[addToClearedNotifications] Error:', e);
+  }
+};
 
 // Helper to get set of read notification IDs
 const getReadNotificationIds = async (userId: string): Promise<Set<string>> => {
@@ -286,6 +341,18 @@ const useNotifications = () => {
       
       // Get set of read notification IDs from local storage
       const readIds = await getReadNotificationIds(user.id);
+      // Get cleared notification data
+      const clearedIds = await getClearedNotificationIds(user.id);
+      const clearedBeforeDate = await getClearedBeforeDate(user.id);
+      
+      // Helper to check if a notification should be hidden
+      const isCleared = (id: string, createdAt: string): boolean => {
+        // Check if individually cleared
+        if (clearedIds.has(id)) return true;
+        // Check if created before the "clear all" date
+        if (clearedBeforeDate && new Date(createdAt) <= clearedBeforeDate) return true;
+        return false;
+      };
       
       // Try to fetch from notifications table if it exists
       try {
@@ -297,11 +364,13 @@ const useNotifications = () => {
           .limit(50);
         
         if (!error && data) {
-          // Mark as read if in our local read set
-          return data.map(n => ({
-            ...n,
-            read: n.read || readIds.has(n.id),
-          })) as Notification[];
+          // Filter out cleared and mark as read if in our local read set
+          return data
+            .filter(n => !isCleared(n.id, n.created_at))
+            .map(n => ({
+              ...n,
+              read: n.read || readIds.has(n.id),
+            })) as Notification[];
         }
       } catch {
         // Table might not exist, fall back to composite notifications
@@ -342,16 +411,19 @@ const useNotifications = () => {
             const readTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
             const isReadByDb = lastReadAt && readTime >= messageTime;
             
-            notifications.push({
-              id: notifId,
-              type: 'message',
-              title: `New message from ${senderName}`,
-              body: lastMessage.content?.substring(0, 100) || 'New message',
-              data: { threadId: thread.id },
-              read: isReadByDb || readIds.has(notifId),
-              created_at: lastMessage.created_at,
-              sender_name: senderName,
-            });
+            // Only add if not cleared
+            if (!isCleared(notifId, lastMessage.created_at)) {
+              notifications.push({
+                id: notifId,
+                type: 'message',
+                title: `New message from ${senderName}`,
+                body: lastMessage.content?.substring(0, 100) || 'New message',
+                data: { threadId: thread.id },
+                read: isReadByDb || readIds.has(notifId),
+                created_at: lastMessage.created_at,
+                sender_name: senderName,
+              });
+            }
           }
         });
       } catch (e) {
@@ -373,16 +445,19 @@ const useNotifications = () => {
             ? `${call.caller.first_name} ${call.caller.last_name}`.trim()
             : 'Unknown';
           const notifId = `call-${call.call_id}`;
-          notifications.push({
-            id: notifId,
-            type: 'call',
-            title: `Missed ${call.call_type || 'voice'} call`,
-            body: `You missed a ${call.call_type || 'voice'} call from ${callerName}`,
-            data: { callerId: call.caller_id, callType: call.call_type },
-            read: readIds.has(notifId),
-            created_at: call.started_at,
-            sender_name: callerName,
-          });
+          // Only add if not cleared
+          if (!isCleared(notifId, call.started_at)) {
+            notifications.push({
+              id: notifId,
+              type: 'call',
+              title: `Missed ${call.call_type || 'voice'} call`,
+              body: `You missed a ${call.call_type || 'voice'} call from ${callerName}`,
+              data: { callerId: call.caller_id, callType: call.call_type },
+              read: readIds.has(notifId),
+              created_at: call.started_at,
+              sender_name: callerName,
+            });
+          }
         });
       } catch (e) {
         console.log('[Notifications] Error fetching calls:', e);
@@ -514,10 +589,10 @@ export default function NotificationsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete call notifications from the list
-              await deleteNotificationsByType(user.id, notifications, ['call']);
+              // Add call notification IDs to cleared set
+              const callNotifIds = notifications.filter(n => n.type === 'call').map(n => n.id);
+              await addToClearedNotifications(user.id, callNotifIds);
               markCallsSeen();
-              await refetch();
               queryClient.invalidateQueries({ queryKey: ['notifications'] });
               queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
             } catch (error) {
@@ -528,7 +603,7 @@ export default function NotificationsScreen() {
         }
       ]
     );
-  }, [user?.id, t, refetch, queryClient, markCallsSeen, notifications]);
+  }, [user?.id, t, queryClient, markCallsSeen, notifications]);
   
   // Mark all messages as read
   const handleMarkMessagesRead = useCallback(async () => {
@@ -543,8 +618,9 @@ export default function NotificationsScreen() {
           text: t('common.clear', { defaultValue: 'Clear' }),
           onPress: async () => {
             try {
-              // Delete message notifications
-              await deleteNotificationsByType(user.id, notifications, ['message']);
+              // Add message notification IDs to cleared set
+              const msgNotifIds = notifications.filter(n => n.type === 'message').map(n => n.id);
+              await addToClearedNotifications(user.id, msgNotifIds);
               
               // Also mark message threads as read in database
               const client = assertSupabase();
@@ -553,7 +629,7 @@ export default function NotificationsScreen() {
                 .update({ last_read_at: new Date().toISOString() })
                 .eq('user_id', user.id);
               
-              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['notifications'] });
               queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
               queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
             } catch (error) {
@@ -564,30 +640,34 @@ export default function NotificationsScreen() {
         }
       ]
     );
-  }, [user?.id, t, refetch, queryClient, notifications]);
+  }, [user?.id, t, queryClient, notifications]);
   
   const handleClearAll = useCallback(() => {
     alert.showConfirm(
       t('notifications.clearAll', { defaultValue: 'Clear All Notifications' }),
       t('notifications.clearAllConfirm', { defaultValue: 'Are you sure you want to clear all notifications? This cannot be undone.' }),
       async () => {
-        // Mark all as read/seen
+        if (!user?.id) return;
+        
+        // Set "cleared before" date to now - all notifications before this will be hidden
+        await setClearedBeforeDate(user.id, new Date());
+        
+        // Mark all as read/seen for badge counts
         markCallsSeen();
         markAnnouncementsSeen();
         
         // Update message read status
-        if (user?.id) {
-          try {
-            const client = assertSupabase();
-            await client
-              .from('message_participants')
-              .update({ last_read_at: new Date().toISOString() })
-              .eq('user_id', user.id);
-          } catch (error) {
-            console.error('[ClearAll] Error updating messages:', error);
-          }
+        try {
+          const client = assertSupabase();
+          await client
+            .from('message_participants')
+            .update({ last_read_at: new Date().toISOString() })
+            .eq('user_id', user.id);
+        } catch (error) {
+          console.error('[ClearAll] Error updating messages:', error);
         }
         
+        // Invalidate queries to refetch (now with cleared filter applied)
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
         queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
         queryClient.invalidateQueries({ queryKey: ['unread-announcements-count'] });
