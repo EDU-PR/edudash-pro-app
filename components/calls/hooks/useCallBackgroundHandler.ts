@@ -286,6 +286,13 @@ export function useCallBackgroundHandler({
       
       console.log('[CallBackgroundHandler] Starting foreground service with state:', callState);
       
+      // Check if we have notification permission first (Android 13+)
+      const settings = await notifee.getNotificationSettings();
+      if (settings.authorizationStatus < 1) {
+        console.log('[CallBackgroundHandler] No notification permission, skipping foreground service');
+        return;
+      }
+      
       await notifee.displayNotification({
         id: CALL_NOTIFICATION_ID,
         title: `${callTypeEmoji} ${callTypeText} in progress`,
@@ -324,7 +331,10 @@ export function useCallBackgroundHandler({
       foregroundServiceActiveRef.current = true;
       console.log('[CallBackgroundHandler] ✅ Notifee foreground service started - call will persist in background');
     } catch (error) {
+      // Log but don't crash - foreground service is enhancement, not critical for calls
       console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
+      // Mark as not active so we don't try to stop a service that didn't start
+      foregroundServiceActiveRef.current = false;
     }
   }, [callerName, callType, callState]);
 
@@ -361,15 +371,39 @@ export function useCallBackgroundHandler({
       // Start foreground service when call is active (connected OR connecting)
       // This ensures the notification shows even during call setup
       // Note: We use isAudioActive which includes connected, connecting, and ringing states
-      startForegroundService();
+      // Wrap in async IIFE to properly catch errors and delay slightly
+      (async () => {
+        try {
+          // Small delay to ensure call is fully initialized before starting service
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await startForegroundService();
+        } catch (error) {
+          console.error('[CallBackgroundHandler] Error starting foreground service:', error);
+          // Don't crash the app - foreground service is nice-to-have, not critical
+        }
+      })();
     } else {
       deactivateCallKeepAwake();
-      stopForegroundService();
+      // Wrap stop in async IIFE to catch errors
+      (async () => {
+        try {
+          await stopForegroundService();
+        } catch (error) {
+          console.warn('[CallBackgroundHandler] Error stopping foreground service:', error);
+        }
+      })();
     }
 
     return () => {
       deactivateCallKeepAwake();
-      stopForegroundService();
+      // Cleanup - wrap in async IIFE
+      (async () => {
+        try {
+          await stopForegroundService();
+        } catch (error) {
+          console.warn('[CallBackgroundHandler] Error in cleanup:', error);
+        }
+      })();
     };
   }, [isAudioActive, isCallActive, callState, activateCallKeepAwake, deactivateCallKeepAwake, configureBackgroundAudio, startForegroundService, stopForegroundService]);
 
