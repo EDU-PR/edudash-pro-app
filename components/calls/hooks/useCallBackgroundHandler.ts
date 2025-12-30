@@ -274,10 +274,22 @@ export function useCallBackgroundHandler({
       const callTypeEmoji = callType === 'video' ? '📹' : '📞';
       const callTypeText = callType === 'video' ? 'Video call' : 'Voice call';
       
+      // Show different body text based on call state
+      let bodyText = 'Tap to return to call';
+      if (callState === 'connected' && callerName) {
+        bodyText = `Connected with ${callerName}`;
+      } else if (callState === 'connecting') {
+        bodyText = callerName ? `Connecting to ${callerName}...` : 'Connecting...';
+      } else if (callState === 'ringing') {
+        bodyText = callerName ? `Calling ${callerName}...` : 'Ringing...';
+      }
+      
+      console.log('[CallBackgroundHandler] Starting foreground service with state:', callState);
+      
       await notifee.displayNotification({
         id: CALL_NOTIFICATION_ID,
         title: `${callTypeEmoji} ${callTypeText} in progress`,
-        body: callerName ? `Connected with ${callerName}` : 'Tap to return to call',
+        body: bodyText,
         android: {
           channelId: CALL_CHANNEL_ID,
           asForegroundService: true,
@@ -314,7 +326,7 @@ export function useCallBackgroundHandler({
     } catch (error) {
       console.error('[CallBackgroundHandler] Failed to start foreground service:', error);
     }
-  }, [callerName, callType]);
+  }, [callerName, callType, callState]);
 
   /**
    * Stop the foreground service when call ends
@@ -346,10 +358,10 @@ export function useCallBackgroundHandler({
     if (isAudioActive && isCallActive) {
       activateCallKeepAwake();
       configureBackgroundAudio();
-      // Start foreground service when call connects to keep WebRTC alive in background
-      if (callState === 'connected') {
-        startForegroundService();
-      }
+      // Start foreground service when call is active (connected OR connecting)
+      // This ensures the notification shows even during call setup
+      // Note: We use isAudioActive which includes connected, connecting, and ringing states
+      startForegroundService();
     } else {
       deactivateCallKeepAwake();
       stopForegroundService();
