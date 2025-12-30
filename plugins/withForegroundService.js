@@ -16,8 +16,7 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * - FOREGROUND_SERVICE_CAMERA (for camera in foreground service - Android 14+)
  * - WAKE_LOCK (keep device awake during calls)
  * 
- * Note: Notifee handles its own service declarations, this plugin
- * only needs to add the required permissions.
+ * Also modifies Notifee's ForegroundService to declare all required foregroundServiceTypes
  */
 const withForegroundService = (config) => {
   return withAndroidManifest(config, async (config) => {
@@ -51,6 +50,27 @@ const withForegroundService = (config) => {
           $: { 'android:name': permission },
         });
         console.log(`[withForegroundService] ✅ Added permission: ${permission}`);
+      }
+    }
+    
+    // Find and update Notifee's ForegroundService to declare all foregroundServiceTypes
+    // This is CRITICAL for Android 14+ (API 34) - the types used at runtime must be
+    // declared in the manifest's service element
+    const application = androidManifest.manifest.application?.[0];
+    if (application && application.service) {
+      for (const service of application.service) {
+        const serviceName = service.$['android:name'];
+        
+        // Find Notifee's ForegroundService
+        if (serviceName === 'app.notifee.core.ForegroundService') {
+          // Set foregroundServiceType to include all types we might use:
+          // - mediaPlayback (2048/0x800) - for background audio
+          // - phoneCall (4) - for VoIP calls  
+          // - microphone (128/0x80) - for voice recording
+          // Combined: mediaPlayback|phoneCall|microphone
+          service.$['android:foregroundServiceType'] = 'mediaPlayback|phoneCall|microphone';
+          console.log('[withForegroundService] ✅ Updated Notifee ForegroundService with foregroundServiceType: mediaPlayback|phoneCall|microphone');
+        }
       }
     }
     
