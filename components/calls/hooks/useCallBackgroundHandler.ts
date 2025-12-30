@@ -310,13 +310,22 @@ export function useCallBackgroundHandler({
         android: {
           channelId: CALL_CHANNEL_ID,
           asForegroundService: true,
-          // Keep it simple - don't specify foregroundServiceTypes on older Android
-          // The manifest already declares them, notifee will use defaults
+          // CRITICAL for Android 14+ (API 34): Must specify foreground service types
+          // for microphone access to work when app is backgrounded
+          // These types allow the app to continue recording/playing audio in background
+          foregroundServiceTypes: [
+            // MICROPHONE = 128 - Required for voice calls to keep mic active
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
+            // PHONE_CALL = 4 - Indicates this is a phone call service  
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_PHONE_CALL ?? 4,
+          ],
           ongoing: true,
           autoCancel: false,
-          // Use 'ic_launcher' which always exists, not 'ic_notification' which may not
+          // Use 'ic_launcher' which always exists
           smallIcon: 'ic_launcher',
           color: '#00f5ff', // App accent color
+          // Show on lock screen
+          visibility: 1, // PUBLIC
           pressAction: {
             id: 'default',
             launchActivity: 'default',
@@ -324,7 +333,13 @@ export function useCallBackgroundHandler({
           // Show call actions in notification
           actions: [
             {
-              title: 'End Call',
+              title: '🔇 Mute',
+              pressAction: {
+                id: 'mute',
+              },
+            },
+            {
+              title: '📞 End Call',
               pressAction: {
                 id: 'end-call',
               },
@@ -427,6 +442,19 @@ export function useCallBackgroundHandler({
         if (isAudioActive && callId) {
           console.log('[CallBackgroundHandler] Call active, app going to background');
           console.log('[CallBackgroundHandler] Foreground service active:', foregroundServiceActiveRef.current);
+          
+          // CRITICAL: Keep audio session alive when backgrounded
+          // This ensures the microphone keeps transmitting
+          if (InCallManager) {
+            try {
+              // Re-assert audio session mode to prevent system from suspending it
+              InCallManager.start({ media: 'audio' });
+              InCallManager.setKeepScreenOn(false); // Allow screen to turn off
+              console.log('[CallBackgroundHandler] ✅ Audio session kept alive for background');
+            } catch (error) {
+              console.warn('[CallBackgroundHandler] Failed to keep audio alive:', error);
+            }
+          }
         }
       }
       
@@ -439,8 +467,9 @@ export function useCallBackgroundHandler({
           // Restore audio settings when returning from background
           if (InCallManager) {
             try {
+              InCallManager.start({ media: 'audio' });
               InCallManager.setKeepScreenOn(true);
-              console.log('[CallBackgroundHandler] Audio settings restored after background return');
+              console.log('[CallBackgroundHandler] ✅ Audio settings restored after background return');
             } catch (error) {
               console.warn('[CallBackgroundHandler] Failed to restore settings:', error);
             }
