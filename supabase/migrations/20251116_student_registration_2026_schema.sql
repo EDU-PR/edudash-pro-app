@@ -390,9 +390,12 @@ ALTER TABLE communication_log ENABLE ROW LEVEL SECURITY;
 -- ORGANIZATIONS POLICIES
 -- =====================================================
 
+DROP POLICY IF EXISTS "principals_manage_own_org" ON organizations;
+DROP POLICY IF EXISTS "principals_manage_own_org" ON organizations;
 CREATE POLICY "principals_manage_own_org" ON organizations
   FOR ALL USING (principal_id = auth.uid());
 
+DROP POLICY IF EXISTS "public_can_view_open_orgs" ON organizations;
 CREATE POLICY "public_can_view_open_orgs" ON organizations
   FOR SELECT USING (enrollment_open = TRUE);
 
@@ -401,6 +404,7 @@ CREATE POLICY "public_can_view_open_orgs" ON organizations
 -- =====================================================
 
 -- Guardians can view their own children
+DROP POLICY IF EXISTS "guardians_view_own_children" ON students;
 CREATE POLICY "guardians_view_own_children" ON students
   FOR SELECT USING (
     id IN (
@@ -409,6 +413,7 @@ CREATE POLICY "guardians_view_own_children" ON students
   );
 
 -- Teachers can view students in their classes
+DROP POLICY IF EXISTS "teachers_view_class_students" ON students;
 CREATE POLICY "teachers_view_class_students" ON students
   FOR SELECT USING (
     class_id IN (
@@ -417,6 +422,7 @@ CREATE POLICY "teachers_view_class_students" ON students
   );
 
 -- Principals can manage all students in their organization
+DROP POLICY IF EXISTS "principals_manage_org_students" ON students;
 CREATE POLICY "principals_manage_org_students" ON students
   FOR ALL USING (
     organization_id IN (
@@ -428,9 +434,11 @@ CREATE POLICY "principals_manage_org_students" ON students
 -- STUDENT_GUARDIANS POLICIES
 -- =====================================================
 
+DROP POLICY IF EXISTS "guardians_view_own_relationships" ON student_guardians;
 CREATE POLICY "guardians_view_own_relationships" ON student_guardians
   FOR SELECT USING (guardian_id = auth.uid());
 
+DROP POLICY IF EXISTS "principals_manage_org_guardians" ON student_guardians;
 CREATE POLICY "principals_manage_org_guardians" ON student_guardians
   FOR ALL USING (
     student_id IN (
@@ -445,14 +453,17 @@ CREATE POLICY "principals_manage_org_guardians" ON student_guardians
 -- =====================================================
 
 -- Anyone can submit a registration request
+DROP POLICY IF EXISTS "public_can_submit_registration" ON registration_requests;
 CREATE POLICY "public_can_submit_registration" ON registration_requests
   FOR INSERT WITH CHECK (TRUE);
 
 -- Users can view their own requests
+DROP POLICY IF EXISTS "users_view_own_requests" ON registration_requests;
 CREATE POLICY "users_view_own_requests" ON registration_requests
   FOR SELECT USING (guardian_email = (SELECT email FROM auth.users WHERE id = auth.uid()));
 
 -- Principals can manage registrations for their org
+DROP POLICY IF EXISTS "principals_manage_registrations" ON registration_requests;
 CREATE POLICY "principals_manage_registrations" ON registration_requests
   FOR ALL USING (
     organization_id IN (
@@ -464,6 +475,7 @@ CREATE POLICY "principals_manage_registrations" ON registration_requests
 -- ATTENDANCE POLICIES
 -- =====================================================
 
+DROP POLICY IF EXISTS "guardians_view_own_child_attendance" ON attendance;
 CREATE POLICY "guardians_view_own_child_attendance" ON attendance
   FOR SELECT USING (
     student_id IN (
@@ -471,6 +483,7 @@ CREATE POLICY "guardians_view_own_child_attendance" ON attendance
     )
   );
 
+DROP POLICY IF EXISTS "teachers_manage_class_attendance" ON attendance;
 CREATE POLICY "teachers_manage_class_attendance" ON attendance
   FOR ALL USING (
     class_id IN (
@@ -478,6 +491,7 @@ CREATE POLICY "teachers_manage_class_attendance" ON attendance
     )
   );
 
+DROP POLICY IF EXISTS "principals_manage_org_attendance" ON attendance;
 CREATE POLICY "principals_manage_org_attendance" ON attendance
   FOR ALL USING (
     organization_id IN (
@@ -489,6 +503,7 @@ CREATE POLICY "principals_manage_org_attendance" ON attendance
 -- STUDENT_FEES POLICIES
 -- =====================================================
 
+DROP POLICY IF EXISTS "guardians_view_own_child_fees" ON student_fees;
 CREATE POLICY "guardians_view_own_child_fees" ON student_fees
   FOR SELECT USING (
     student_id IN (
@@ -496,6 +511,7 @@ CREATE POLICY "guardians_view_own_child_fees" ON student_fees
     )
   );
 
+DROP POLICY IF EXISTS "principals_manage_org_fees" ON student_fees;
 CREATE POLICY "principals_manage_org_fees" ON student_fees
   FOR ALL USING (
     organization_id IN (
