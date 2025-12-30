@@ -101,6 +101,9 @@ module.exports = ({ config }) => {
     plugins.push('expo-dev-client');
   }
 
+  // Add Picture-in-Picture support for video calls
+  plugins.push('./plugins/withPictureInPicture.js');
+
   // Development variant config (different package name so both can be installed)
   const devConfig = isDevBuild ? {
     name: 'EduDashPro Dev',
