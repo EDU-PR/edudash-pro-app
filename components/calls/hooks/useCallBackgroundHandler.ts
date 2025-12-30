@@ -26,7 +26,7 @@ const CALL_KEEP_AWAKE_TAG = 'active-voice-call';
 
 // Feature flag to disable foreground service while debugging crash
 // Set to false to completely skip foreground service (for debugging)
-const ENABLE_FOREGROUND_SERVICE = false; // TEMPORARY: disabled to debug crash
+const ENABLE_FOREGROUND_SERVICE = true; // Re-enabled after fixing icon issue
 
 // Conditionally import InCallManager
 let InCallManager: any = null;
@@ -310,17 +310,12 @@ export function useCallBackgroundHandler({
         android: {
           channelId: CALL_CHANNEL_ID,
           asForegroundService: true,
-          // Required for Android 14+ (API 34) - specify foreground service type
-          // Using enum values: PHONE_CALL=4, MEDIA_PLAYBACK=2, MICROPHONE=128
-          foregroundServiceTypes: [
-            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_PHONE_CALL ?? 4,
-            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK ?? 2,
-            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
-          ],
-          category: AndroidCategory?.CALL,
+          // Keep it simple - don't specify foregroundServiceTypes on older Android
+          // The manifest already declares them, notifee will use defaults
           ongoing: true,
           autoCancel: false,
-          smallIcon: 'ic_notification', // Use app's notification icon
+          // Use 'ic_launcher' which always exists, not 'ic_notification' which may not
+          smallIcon: 'ic_launcher',
           color: '#00f5ff', // App accent color
           pressAction: {
             id: 'default',
