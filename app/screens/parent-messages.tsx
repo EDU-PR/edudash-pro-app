@@ -584,6 +584,9 @@ export default function ParentMessagesScreen() {
   
   // Error state
   if (error && !threads) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
+    
     return (
       <View style={styles.container}>
         <MessagesListHeader
@@ -596,14 +599,19 @@ export default function ParentMessagesScreen() {
             <Ionicons name="cloud-offline-outline" size={40} color={theme.error} />
           </View>
           <Text style={styles.errorTitle}>
-            {t('parent.messagesError', { defaultValue: 'Unable to Load Messages' })}
+            {t('parent.messagesError', { defaultValue: 'Failed to Load Messages' })}
           </Text>
           <Text style={styles.errorText}>
-            {t('parent.messagesErrorDesc', { defaultValue: 'We couldn\'t load your messages. Please check your connection and try again.' })}
+            {t('parent.messagesErrorDesc', { defaultValue: 'Unable to load your messages. Please check your connection and try again.' })}
           </Text>
+          {isDev && errorMessage && (
+            <Text style={[styles.errorText, { fontSize: 12, color: theme.textSecondary, marginTop: 8 }]}>
+              Debug: {errorMessage}
+            </Text>
+          )}
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
             <Text style={styles.retryButtonText}>
-              {t('common.retry', { defaultValue: 'Try Again' })}
+              {t('common.retry', { defaultValue: 'Retry' })}
             </Text>
           </TouchableOpacity>
         </View>
