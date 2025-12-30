@@ -16,13 +16,14 @@
  * - VoiceCallMinimized: Minimized view
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   Animated,
   Dimensions,
   StyleSheet,
   View,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import type { CallState } from './types';
@@ -149,6 +150,24 @@ export function VoiceCallInterface({
     aspectRatioWidth: 9,
     aspectRatioHeight: 16,
   });
+
+  // Handle Android back button - minimize instead of ending call
+  useEffect(() => {
+    if (!isOpen || Platform.OS !== 'android') return;
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If call is active (connecting, ringing, or connected), minimize instead of ending
+      if (state.callState === 'connected' || state.callState === 'connecting' || state.callState === 'ringing') {
+        console.log('[VoiceCallInterface] Back button pressed - minimizing call (not ending)');
+        state.setIsMinimized(true);
+        return true; // Prevent default back behavior
+      }
+      // For other states (idle, ended, error), allow normal back behavior
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [isOpen, state.callState, state]);
 
   // Handlers
   const handleMinimize = useCallback(() => {
