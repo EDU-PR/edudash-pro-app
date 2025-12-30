@@ -310,15 +310,17 @@ export function useCallBackgroundHandler({
         android: {
           channelId: CALL_CHANNEL_ID,
           asForegroundService: true,
-          // CRITICAL for Android 14+ (API 34): Must specify foreground service types
-          // that are declared in AndroidManifest.xml
-          // Current manifest declares MEDIA_PLAYBACK (0x800 = 2048)
-          // NOTE: For proper MICROPHONE + PHONE_CALL support, a native rebuild is needed
-          // to add these types to the Notifee service declaration in manifest
+          // CRITICAL for Android 14+ (API 34) and Android 15:
+          // Must specify foreground service types that are declared in AndroidManifest.xml
+          // Our withForegroundService.js plugin declares: mediaPlayback|phoneCall|microphone
+          // Values: MEDIA_PLAYBACK=2, PHONE_CALL=4, MICROPHONE=128
           foregroundServiceTypes: [
-            // MEDIA_PLAYBACK = 2048 (0x800) - Currently declared in manifest
-            // This allows audio to continue in background
-            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK ?? 2048,
+            // MEDIA_PLAYBACK = 2 - for background audio
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK ?? 2,
+            // PHONE_CALL = 4 - for VoIP calls
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_PHONE_CALL ?? 4,
+            // MICROPHONE = 128 - for voice recording
+            AndroidForegroundServiceType?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
           ],
           ongoing: true,
           autoCancel: false,

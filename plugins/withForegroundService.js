@@ -6,7 +6,12 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * This adds Android permissions and service declarations required for:
  * - @notifee/react-native foreground service (2025 best practice)
  * - Voice/video calls running in background
- * - Android 14+ (API 34) foreground service types
+ * - Android 14+ (API 34) and Android 15 foreground service types
+ * 
+ * CRITICAL FIX for Android 15:
+ * Notifee's AAR declares ForegroundService with android:foregroundServiceType="shortService"
+ * But we need "mediaPlayback|phoneCall|microphone" for voice/video calls.
+ * This plugin uses tools:replace to override the AAR's declaration.
  * 
  * Permissions added:
  * - FOREGROUND_SERVICE (for starting foreground service)
@@ -15,12 +20,15 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * - FOREGROUND_SERVICE_MICROPHONE (for microphone in foreground service - Android 14+)
  * - FOREGROUND_SERVICE_CAMERA (for camera in foreground service - Android 14+)
  * - WAKE_LOCK (keep device awake during calls)
- * 
- * Also modifies Notifee's ForegroundService to declare all required foregroundServiceTypes
  */
 const withForegroundService = (config) => {
   return withAndroidManifest(config, async (config) => {
     const androidManifest = config.modResults;
+    
+    // Ensure tools namespace is declared for manifest merger attributes
+    if (!androidManifest.manifest.$['xmlns:tools']) {
+      androidManifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+    }
     
     // Add permissions if not already present
     if (!androidManifest.manifest['uses-permission']) {
@@ -53,29 +61,46 @@ const withForegroundService = (config) => {
       }
     }
     
-    // Find and update Notifee's ForegroundService to declare all foregroundServiceTypes
-    // This is CRITICAL for Android 14+ (API 34) - the types used at runtime must be
-    // declared in the manifest's service element
+    // Get or create the application element
     const application = androidManifest.manifest.application?.[0];
-    if (application && application.service) {
-      for (const service of application.service) {
-        const serviceName = service.$['android:name'];
-        
-        // Find Notifee's ForegroundService
-        if (serviceName === 'app.notifee.core.ForegroundService') {
-          // Set foregroundServiceType to include all types we might use:
-          // - mediaPlayback (2048/0x800) - for background audio
-          // - phoneCall (4) - for VoIP calls  
-          // - microphone (128/0x80) - for voice recording
-          // Combined: mediaPlayback|phoneCall|microphone
-          service.$['android:foregroundServiceType'] = 'mediaPlayback|phoneCall|microphone';
-          console.log('[withForegroundService] ✅ Updated Notifee ForegroundService with foregroundServiceType: mediaPlayback|phoneCall|microphone');
-        }
-      }
+    if (!application) {
+      console.warn('[withForegroundService] ⚠️ No application element found in manifest');
+      return config;
+    }
+    
+    // Ensure service array exists
+    if (!application.service) {
+      application.service = [];
+    }
+    
+    // Find or create Notifee's ForegroundService with correct foregroundServiceType
+    // CRITICAL: We need to use tools:replace to override the shortService type from Notifee's AAR
+    const notifeeServiceName = 'app.notifee.core.ForegroundService';
+    let notifeeService = application.service.find(
+      (s) => s.$['android:name'] === notifeeServiceName
+    );
+    
+    if (notifeeService) {
+      // Service exists - update it with tools:replace to override AAR
+      notifeeService.$['android:foregroundServiceType'] = 'mediaPlayback|phoneCall|microphone';
+      notifeeService.$['tools:replace'] = 'android:foregroundServiceType';
+      console.log('[withForegroundService] ✅ Updated existing Notifee ForegroundService with foregroundServiceType override');
+    } else {
+      // Service doesn't exist yet - add it with full declaration
+      // This will merge with/override the AAR's declaration
+      application.service.push({
+        $: {
+          'android:name': notifeeServiceName,
+          'android:exported': 'false',
+          'android:foregroundServiceType': 'mediaPlayback|phoneCall|microphone',
+          'tools:replace': 'android:foregroundServiceType',
+        },
+      });
+      console.log('[withForegroundService] ✅ Added Notifee ForegroundService with correct foregroundServiceType');
     }
     
     return config;
   });
 };
 
-module.exports = withForegroundService;
+module.exports = withForegroundService;module.exports = withForegroundService;
