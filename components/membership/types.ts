@@ -3,6 +3,92 @@
  * Type definitions for the membership ID card system
  */
 
+// ============================================================================
+// Wing Types
+// ============================================================================
+
+export type OrganizationWingCode = 'main' | 'youth' | 'women' | 'veterans';
+
+// Main structure member types
+export type MainMemberType = 
+  | 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' 
+  | 'regional_manager' | 'national_admin';
+
+// Youth Wing member types
+export type YouthMemberType = 
+  | 'youth_president' | 'youth_deputy' | 'youth_secretary' | 'youth_treasurer'
+  | 'youth_coordinator' | 'youth_facilitator' | 'youth_mentor' | 'youth_member';
+
+// Women's League member types
+export type WomenMemberType = 
+  | 'women_president' | 'women_deputy' | 'women_secretary' | 'women_treasurer'
+  | 'women_coordinator' | 'women_facilitator' | 'women_mentor' | 'women_member';
+
+// Veterans League member types
+export type VeteransMemberType = 
+  | 'veterans_president' | 'veterans_coordinator' | 'veterans_member';
+
+// Legacy/executive types for backward compatibility
+export type LegacyMemberType = 
+  | 'ceo' | 'president' | 'executive' | 'board_member' | 'volunteer' 
+  | 'secretary_general' | 'deputy_president' | 'treasurer';
+
+// All member types
+export type AllMemberTypes = 
+  | MainMemberType | YouthMemberType | WomenMemberType | VeteransMemberType | LegacyMemberType;
+
+// ============================================================================
+// Organization Wing Interface
+// ============================================================================
+
+export interface OrganizationWing {
+  id: string;
+  organization_id: string;
+  wing_code: OrganizationWingCode;
+  name: string;
+  description?: string;
+  motto?: string;
+  president_id?: string;
+  deputy_id?: string;
+  secretary_id?: string;
+  treasurer_id?: string;
+  min_age?: number;
+  max_age?: number;
+  annual_budget: number;
+  monthly_allocation: number;
+  current_balance: number;
+  email?: string;
+  phone?: string;
+  is_active: boolean;
+  established_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WingRegionalCoordinator {
+  id: string;
+  wing_id: string;
+  region_id: string;
+  coordinator_id?: string;
+  monthly_float: number;
+  current_balance: number;
+  spending_limit: number;
+  is_active: boolean;
+  appointed_date: string;
+  appointed_by?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  created_at: string;
+  // Joined relations
+  wing?: OrganizationWing;
+  region?: OrganizationRegion;
+  coordinator?: OrganizationMember;
+}
+
+// ============================================================================
+// Core Interfaces
+// ============================================================================
+
 export interface OrganizationRegion {
   id: string;
   organization_id: string;
@@ -25,7 +111,17 @@ export interface OrganizationMember {
   profile_id?: string;
   
   member_number: string;
-  member_type: 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' | 'regional_manager' | 'national_admin' | 'ceo' | 'president' | 'executive' | 'board_member' | 'volunteer' | 'secretary_general' | 'deputy_president' | 'treasurer';
+  member_type: AllMemberTypes;
+  wing: OrganizationWingCode;
+  
+  // Appointment tracking
+  appointed_by?: string;
+  appointed_at?: string;
+  
+  // Age verification (for youth wing)
+  birth_year?: number;
+  age_verified?: boolean;
+  age_verified_at?: string;
   
   first_name: string;
   last_name: string;
@@ -151,13 +247,41 @@ export const CARD_TEMPLATES: Record<CardTemplate, CardTemplateConfig> = {
 };
 
 export const MEMBER_TYPE_LABELS: Record<string, string> = {
+  // Main structure
   learner: 'Learner',
   mentor: 'Mentor',
   facilitator: 'Facilitator',
   staff: 'Staff Member',
-  admin: 'President',
+  admin: 'Administrator',
   regional_manager: 'Regional Manager',
   national_admin: 'National Administrator',
+  
+  // Youth Wing
+  youth_president: 'Youth President',
+  youth_deputy: 'Youth Deputy President',
+  youth_secretary: 'Youth Secretary',
+  youth_treasurer: 'Youth Treasurer',
+  youth_coordinator: 'Youth Coordinator',
+  youth_facilitator: 'Youth Facilitator',
+  youth_mentor: 'Youth Mentor',
+  youth_member: 'Youth Member',
+  
+  // Women's League
+  women_president: "Women's League President",
+  women_deputy: "Women's Deputy President",
+  women_secretary: "Women's Secretary",
+  women_treasurer: "Women's Treasurer",
+  women_coordinator: "Women's Coordinator",
+  women_facilitator: "Women's Facilitator",
+  women_mentor: "Women's Mentor",
+  women_member: "Women's Member",
+  
+  // Veterans
+  veterans_president: 'Veterans President',
+  veterans_coordinator: 'Veterans Coordinator',
+  veterans_member: 'Veterans Member',
+  
+  // Legacy/executive types
   ceo: 'President',
   president: 'President',
   executive: 'Executive',
@@ -166,6 +290,13 @@ export const MEMBER_TYPE_LABELS: Record<string, string> = {
   secretary_general: 'Secretary General',
   deputy_president: 'Deputy President',
   treasurer: 'Treasurer',
+};
+
+export const WING_LABELS: Record<OrganizationWingCode, string> = {
+  main: 'Main Structure',
+  youth: 'Youth Wing',
+  women: "Women's League",
+  veterans: 'Veterans League',
 };
 
 export const MEMBERSHIP_TIER_LABELS: Record<string, string> = {
@@ -187,3 +318,101 @@ export const STATUS_COLORS: Record<string, string> = {
 export type MemberType = OrganizationMember['member_type'];
 export type MembershipTier = OrganizationMember['membership_tier'];
 export type MembershipStatus = OrganizationMember['membership_status'];
+
+// Re-export financial types from separate file
+export * from './financial-types';
+
+// ============================================================================
+// Appointment Authority
+// ============================================================================
+
+export const APPOINTABLE_ROLES: Record<string, AllMemberTypes[]> = {
+  national_admin: [
+    // Main structure
+    'regional_manager', 'admin', 'staff', 'facilitator', 'mentor', 'learner',
+    // Youth Wing
+    'youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer',
+    'youth_coordinator', 'youth_facilitator', 'youth_mentor', 'youth_member',
+    // Women's League
+    'women_president', 'women_deputy', 'women_secretary', 'women_treasurer',
+    'women_coordinator', 'women_facilitator', 'women_mentor', 'women_member',
+    // Veterans
+    'veterans_president', 'veterans_coordinator', 'veterans_member',
+  ],
+  regional_manager: ['facilitator', 'mentor', 'learner'],
+  youth_president: [
+    'youth_deputy', 'youth_secretary', 'youth_treasurer',
+    'youth_coordinator', 'youth_facilitator', 'youth_mentor', 'youth_member',
+  ],
+  youth_deputy: ['youth_coordinator', 'youth_facilitator', 'youth_mentor', 'youth_member'],
+  youth_coordinator: ['youth_facilitator', 'youth_mentor', 'youth_member'],
+  women_president: [
+    'women_deputy', 'women_secretary', 'women_treasurer',
+    'women_coordinator', 'women_facilitator', 'women_mentor', 'women_member',
+  ],
+  women_deputy: ['women_coordinator', 'women_facilitator', 'women_mentor', 'women_member'],
+  women_coordinator: ['women_facilitator', 'women_mentor', 'women_member'],
+  veterans_president: ['veterans_coordinator', 'veterans_member'],
+  veterans_coordinator: ['veterans_member'],
+};
+
+export const SPENDING_LIMITS: Record<string, number> = {
+  national_admin: 100000,
+  admin: 10000,
+  regional_manager: 5000,
+  staff: 2000,
+  youth_president: 5000,
+  youth_deputy: 3000,
+  youth_treasurer: 2000,
+  youth_secretary: 1000,
+  youth_coordinator: 1000,
+  youth_facilitator: 500,
+  women_president: 5000,
+  women_deputy: 3000,
+  women_treasurer: 2000,
+  women_secretary: 1000,
+  women_coordinator: 1000,
+  women_facilitator: 500,
+  veterans_president: 3000,
+  veterans_coordinator: 1000,
+};
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+export function getAppointableRoles(role: AllMemberTypes): AllMemberTypes[] {
+  return APPOINTABLE_ROLES[role] || [];
+}
+
+export function canAppoint(appointerRole: AllMemberTypes, targetRole: AllMemberTypes): boolean {
+  const appointable = getAppointableRoles(appointerRole);
+  return appointable.includes(targetRole);
+}
+
+export function getSpendingLimit(role: AllMemberTypes): number {
+  return SPENDING_LIMITS[role] || 0;
+}
+
+export function canApproveAmount(role: AllMemberTypes, amount: number): boolean {
+  return amount <= getSpendingLimit(role);
+}
+
+export function isYouthWingRole(role: AllMemberTypes): boolean {
+  return role.startsWith('youth_');
+}
+
+export function isWomensLeagueRole(role: AllMemberTypes): boolean {
+  return role.startsWith('women_');
+}
+
+export function isVeteransRole(role: AllMemberTypes): boolean {
+  return role.startsWith('veterans_');
+}
+
+export function getRoleWing(role: AllMemberTypes): OrganizationWingCode {
+  if (isYouthWingRole(role)) return 'youth';
+  if (isWomensLeagueRole(role)) return 'women';
+  if (isVeteransRole(role)) return 'veterans';
+  return 'main';
+}
