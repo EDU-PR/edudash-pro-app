@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import InvoiceNotificationSettings from '@/components/settings/InvoiceNotificationSettings';
 import type { ViewStyle, TextStyle } from 'react-native';
 
@@ -25,13 +26,29 @@ interface BillingSectionProps {
 export function BillingSection({ styles }: BillingSectionProps) {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
+  const { profile } = useAuth();
+
+  // Determine which settings to show based on role
+  // Invoice notifications: Parents, Principals, Super Admins (not Teachers)
+  // Subscription management: All roles can manage their subscription
+  const userRole = profile?.role;
+  const showInvoiceNotifications = 
+    userRole === 'parent' || 
+    userRole === 'principal' || 
+    userRole === 'principal_admin' || 
+    userRole === 'super_admin';
 
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{t('settings.billing.title')}</Text>
       <View style={{ backgroundColor: theme.surface, borderRadius: 12, overflow: 'hidden' }}>
-        <InvoiceNotificationSettings />
-        <View style={styles.divider} />
+        {/* Invoice Notifications - only for parents and admins */}
+        {showInvoiceNotifications && (
+          <>
+            <InvoiceNotificationSettings />
+            <View style={styles.divider} />
+          </>
+        )}
         <TouchableOpacity
           style={[styles.settingItem, styles.lastSettingItem]}
           onPress={() => router.push('/screens/manage-subscription')}
