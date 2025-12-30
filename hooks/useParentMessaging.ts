@@ -144,10 +144,6 @@ export const useParentThreads = () => {
           logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
           throw error;
         }
-          }
-          logger.error('useParentThreads', `Query error: ${error.message}`, { code: error.code });
-          throw error;
-        }
         
         // If no threads, return empty array early
         if (!threads || threads.length === 0) {
