@@ -31,14 +31,14 @@ require('dotenv').config();
 // Use aliases like: EAS_PROJECT_ID=playstore npx eas build ...
 const EAS_PROJECTS = {
   // Default project (dash-t account)
-  default: { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t' },
+  default: { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t', slug: 'edudashpro' },
   // Aliases for easy switching
-  'dash-t': { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t' },
+  'dash-t': { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t', slug: 'edudashpro' },
   // edudashproplay-store org - EduPro-Final project (has build quota)
-  'playstore': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store' },
-  'edupro-final': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store' },
+  'playstore': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
+  'edupro-final': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
   // king-prod account (set ID via env var)
-  'king-prod': { id: process.env.EAS_PROJECT_ID_KINGPROD || '', owner: 'king-prod' },
+  'king-prod': { id: process.env.EAS_PROJECT_ID_KINGPROD || '', owner: 'king-prod', slug: 'edudashpro' },
 };
 
 // Resolve project config from environment or use default
@@ -51,9 +51,13 @@ function getEasProjectConfig() {
       console.log(`[app.config.js] Using EAS project alias: ${envProjectId}`);
       return EAS_PROJECTS[envProjectId];
     }
-    // Otherwise treat as direct project ID (use default owner)
+    // Otherwise treat as direct project ID (use default owner/slug)
     console.log(`[app.config.js] Using custom EAS project ID: ${envProjectId}`);
-    return { id: envProjectId, owner: process.env.EAS_PROJECT_OWNER || 'dash-t' };
+    return { 
+      id: envProjectId, 
+      owner: process.env.EAS_PROJECT_OWNER || 'dash-t',
+      slug: process.env.EAS_PROJECT_SLUG || 'edudashpro'
+    };
   }
   
   // Default
@@ -120,8 +124,9 @@ module.exports = ({ config }) => {
   return {
     ...config,
     ...devConfig,
-    // Dynamic owner based on EAS_PROJECT_ID (allows switching accounts)
+    // Dynamic owner and slug based on EAS_PROJECT_ID (allows switching accounts)
     owner: easConfig.owner,
+    slug: easConfig.slug,
     plugins,
     extra: {
       ...config.extra,
