@@ -8,10 +8,15 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * - Voice/video calls running in background
  * - Android 14+ (API 34) and Android 15 foreground service types
  * 
- * CRITICAL FIX for Android 15:
- * Notifee's AAR declares ForegroundService with android:foregroundServiceType="shortService"
- * But we need "mediaPlayback|phoneCall|microphone" for voice/video calls.
- * This plugin uses tools:replace to override the AAR's declaration.
+ * CRITICAL FIX for Android 15 (SDK 36):
+ * 1. Notifee's AAR declares ForegroundService with android:foregroundServiceType="shortService"
+ *    But we need "mediaPlayback|phoneCall|microphone" for voice/video calls.
+ *    This plugin uses tools:replace to override the AAR's declaration.
+ * 
+ * 2. Android 15 requires MANAGE_OWN_CALLS permission alongside FOREGROUND_SERVICE_PHONE_CALL
+ *    Without this, the app crashes with SecurityException when starting phoneCall foreground service.
+ *    Error: "Starting FGS with type phoneCall... requires permissions: allOf=true 
+ *    [FOREGROUND_SERVICE_PHONE_CALL] anyOf=false [MANAGE_OWN_CALLS, android.app.role.DIALER]"
  * 
  * Permissions added:
  * - FOREGROUND_SERVICE (for starting foreground service)
@@ -19,6 +24,7 @@ const { withAndroidManifest } = require('@expo/config-plugins');
  * - FOREGROUND_SERVICE_MEDIA_PLAYBACK (for audio in background - Android 14+)
  * - FOREGROUND_SERVICE_MICROPHONE (for microphone in foreground service - Android 14+)
  * - FOREGROUND_SERVICE_CAMERA (for camera in foreground service - Android 14+)
+ * - MANAGE_OWN_CALLS (required by Android 15 for phoneCall foreground service type)
  * - WAKE_LOCK (keep device awake during calls)
  */
 const withForegroundService = (config) => {
@@ -47,6 +53,9 @@ const withForegroundService = (config) => {
       'android.permission.WAKE_LOCK',
       // Required for showing notifications
       'android.permission.POST_NOTIFICATIONS',
+      // CRITICAL for Android 15 (SDK 36): Required alongside FOREGROUND_SERVICE_PHONE_CALL
+      // Android 15 requires MANAGE_OWN_CALLS or being the default dialer to use phoneCall foreground service type
+      'android.permission.MANAGE_OWN_CALLS',
     ];
     
     for (const permission of requiredPermissions) {
@@ -103,4 +112,4 @@ const withForegroundService = (config) => {
   });
 };
 
-module.exports = withForegroundService;module.exports = withForegroundService;
+module.exports = withForegroundService;
