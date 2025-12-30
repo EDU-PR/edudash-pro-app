@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,38 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useUpdates } from '@/contexts/UpdatesProvider';
 import { useTranslation } from 'react-i18next';
 
+// Import context directly to allow safe access
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let UpdatesContext: React.Context<any> | null = null;
+try {
+  // Dynamic import to handle cases where context may not be ready
+  UpdatesContext = require('@/contexts/UpdatesProvider').UpdatesContext;
+} catch {
+  console.warn('[GlobalUpdateBanner] UpdatesContext not available');
+}
+
+/**
+ * Safe hook that returns null if provider not ready instead of throwing
+ */
+function useUpdatesSafe() {
+  const context = useContext(UpdatesContext!);
+  // Return safe defaults if context not available
+  if (!context) {
+    return {
+      isUpdateDownloaded: false,
+      updateError: null,
+      applyUpdate: () => Promise.resolve(),
+      dismissUpdate: () => {},
+      dismissError: () => {},
+    };
+  }
+  return context;
+}
+
 export function GlobalUpdateBanner() {
-  const { isUpdateDownloaded, updateError, applyUpdate, dismissUpdate, dismissError } = useUpdates();
+  const { isUpdateDownloaded, updateError, applyUpdate, dismissUpdate, dismissError } = useUpdatesSafe();
   const { t } = useTranslation();
   const colorScheme = useColorScheme();
   
