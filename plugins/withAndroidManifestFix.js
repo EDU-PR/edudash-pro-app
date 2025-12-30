@@ -3,7 +3,7 @@ const { withAndroidManifest, withGradleProperties } = require('@expo/config-plug
 /**
  * Config plugin to fix Android Manifest merger errors and configure foreground services
  * - Ensures AndroidX compatibility
- * - Removes conflicting tools:replace attributes
+ * - Fixes Firebase messaging meta-data conflicts between expo-notifications and @react-native-firebase/messaging
  * - Updates foreground service type declarations for existing services
  * 
  * NOTE: We DO NOT manually add services here. Services are added by their respective libraries:
@@ -38,13 +38,40 @@ const withAndroidManifestFix = (config) => {
         androidManifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
       }
       
-      // Remove any existing tools:replace that might be causing issues
+      // Remove any existing tools:replace on application that might be causing issues
       if (application.$['tools:replace']) {
         delete application.$['tools:replace'];
       }
       
       // Set the appComponentFactory to use AndroidX version
       application.$['android:appComponentFactory'] = 'androidx.core.app.CoreComponentFactory';
+      
+      // Ensure meta-data array exists
+      if (!application['meta-data']) {
+        application['meta-data'] = [];
+      }
+      
+      // Fix Firebase messaging meta-data conflicts
+      // expo-notifications and @react-native-firebase/messaging both set these values
+      // We need to add tools:replace to override the Firebase library's values
+      const firebaseMetaDataKeys = [
+        'com.google.firebase.messaging.default_notification_channel_id',
+        'com.google.firebase.messaging.default_notification_color',
+        'com.google.firebase.messaging.default_notification_icon',
+      ];
+      
+      for (const metaData of application['meta-data']) {
+        const name = metaData.$?.['android:name'];
+        if (firebaseMetaDataKeys.includes(name)) {
+          // Add tools:replace to override the library's value
+          if (metaData.$['android:value']) {
+            metaData.$['tools:replace'] = 'android:value';
+          } else if (metaData.$['android:resource']) {
+            metaData.$['tools:replace'] = 'android:resource';
+          }
+          console.log(`[withAndroidManifestFix] ✅ Added tools:replace to ${name}`);
+        }
+      }
       
       if (!application.service) {
         application.service = [];
