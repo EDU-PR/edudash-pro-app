@@ -3,10 +3,17 @@
  * 
  * Handles all organization membership operations using Supabase.
  * Includes member CRUD, ID cards, regions, invoices, and events.
+ * 
+ * For wing/sub-structure operations, see WingService.ts
  */
 
 import { assertSupabase } from '@/lib/supabase';
-import type { OrganizationMember, MemberType, MembershipTier, MembershipStatus } from '@/components/membership/types';
+import type { 
+  OrganizationMember, 
+  MemberType, 
+  MembershipTier, 
+  MembershipStatus,
+} from '@/components/membership/types';
 
 // ============================================================================
 // Types
