@@ -61,6 +61,23 @@ export const COMING_SOON_LANGUAGES = {
 
 export type SupportedLanguage = keyof typeof SUPPORTED_LANGUAGES;
 
+// Languages supported for AI/TTS responses (subset of UI languages)
+// Azure TTS only has good voices for these South African languages
+export const AI_SUPPORTED_LANGUAGES = ['en', 'af', 'zu'] as const;
+export type AISupportedLanguage = typeof AI_SUPPORTED_LANGUAGES[number];
+
+/**
+ * Get AI-safe language (fallback to 'en' if not supported by AI/TTS)
+ * UI can show any language, but AI responses are limited to en/af/zu
+ */
+export const getAILanguage = (lang: string): AISupportedLanguage => {
+  const baseLang = lang.split('-')[0];
+  if (AI_SUPPORTED_LANGUAGES.includes(baseLang as AISupportedLanguage)) {
+    return baseLang as AISupportedLanguage;
+  }
+  return 'en';
+};
+
 // Eager resources (English only)
 const baseResources: Record<string, any> = {
   en: { common: en, whatsapp: enWhatsApp },
@@ -183,7 +200,7 @@ export const changeLanguage = async (language: SupportedLanguage): Promise<void>
     await lazyLoadLanguage(language);
     await i18n.changeLanguage(language);
 
-    // Persist language selection
+    // Persist language selection to AsyncStorage
     try {
       const { storage } = await import('@/lib/storage');
       await storage.setItem('@edudash_language', language);
@@ -204,18 +221,28 @@ export const changeLanguage = async (language: SupportedLanguage): Promise<void>
       console.debug('[i18n] Analytics not available for language tracking');
     }
 
-    // Best-effort: sync Dash user context (only if authenticated)
+    // Sync to profiles table (source of truth for AI/TTS language)
+    // AI only supports en, af, zu - other UI languages fallback to English for AI
     try {
       const { assertSupabase } = await import('@/lib/supabase');
       const supabase = assertSupabase();
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (session) {
+      if (session?.user?.id) {
+        // Use AI-safe language for profile storage
+        const aiLang = getAILanguage(language);
+        await supabase.rpc('set_user_language', { 
+          p_user_id: session.user.id, 
+          p_language: aiLang 
+        });
+        if (__DEV__) console.log('[i18n] Synced AI language to profile:', aiLang);
+        
+        // Also sync to Dash context for consistency
         const { syncDashContext } = await import('@/lib/agent/dashContextSync');
-        await syncDashContext({ language });
+        await syncDashContext({ language: aiLang });
       }
     } catch (e) {
-      console.debug('[i18n] dash-context-sync skipped:', e);
+      console.debug('[i18n] Profile language sync skipped:', e);
     }
   } catch (error) {
     console.error('Failed to change language:', error);

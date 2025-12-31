@@ -250,6 +250,19 @@ serve(async (req: Request): Promise<Response> => {
     // Redact PII
     const { redactedText, redactionCount } = redactPII(payload.prompt)
 
+    // Validate and normalize language for AI responses
+    // AI only supports: en (English), af (Afrikaans), zu (isiZulu)
+    const AI_SUPPORTED_LANGS = ['en', 'af', 'zu'];
+    let responseLanguage = metadata?.language || payload?.language || 'en';
+    const baseLang = responseLanguage.split('-')[0];
+    if (!AI_SUPPORTED_LANGS.includes(baseLang)) {
+      console.log(`[ai-proxy:${requestId}] Unsupported AI language '${responseLanguage}', defaulting to 'en'`);
+      responseLanguage = 'en';
+    } else {
+      responseLanguage = baseLang; // Normalize to base language code
+    }
+    console.log(`[ai-proxy:${requestId}] AI response language: ${responseLanguage}`);
+
     // Get AI configuration (using hardcoded fallback for now)
     const hasImages = !!(payload.images && payload.images.length > 0)
     console.log(`[ai-proxy:${requestId}] Model selection:`, { service_type, tier, hasImages })
