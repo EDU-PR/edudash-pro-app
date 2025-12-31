@@ -21,6 +21,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutAndRedirect } from '@/lib/authActions';
+import { getRoleDisplayName } from '@/lib/roleUtils';
 
 interface NavItem {
   id: string;
@@ -38,10 +39,10 @@ interface MobileNavDrawerProps {
 
 // Default nav items by role
 const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
-  // Check if user is CEO (member_type from organization membership)
-  if (memberType === 'ceo' || memberType === 'chief_executive_officer') {
+  // Check if user is CEO/President (member_type from organization membership)
+  if (memberType === 'ceo' || memberType === 'chief_executive_officer' || memberType === 'president') {
     return [
-      { id: 'home', label: 'CEO Dashboard', icon: 'business', route: '/screens/membership/ceo-dashboard' },
+      { id: 'home', label: 'President Dashboard', icon: 'business', route: '/screens/membership/ceo-dashboard' },
       { id: 'regional', label: 'Regional Managers', icon: 'people', route: '/screens/membership/regional-managers' },
       { id: 'members', label: 'All Members', icon: 'person-circle', route: '/screens/membership/members' },
       { id: 'finance', label: 'Financial Reports', icon: 'trending-up', route: '/screens/membership/finance' },
@@ -152,6 +153,12 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   // Get member_type from organization_membership for CEO detection
   const memberType = profile?.organization_membership?.member_type;
   const items = navItems || getDefaultNavItems(userRole, memberType);
+  
+  // Get display role - prioritize member_type for membership organizations
+  const displayRole = memberType 
+    ? (memberType === 'ceo' || memberType === 'president' ? 'President' : 
+       memberType.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
+    : getRoleDisplayName(userRole);
 
   useEffect(() => {
     if (isOpen) {
@@ -231,9 +238,9 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
               </View>
               <View style={styles.userText}>
                 <Text style={styles.userName} numberOfLines={1}>
-                  {profile?.full_name || 'User'}
+                  {profile?.full_name || 'Guest'}
                 </Text>
-                <Text style={styles.userRole}>{userRole}</Text>
+                <Text style={styles.userRole}>{displayRole}</Text>
               </View>
             </View>
             <TouchableOpacity

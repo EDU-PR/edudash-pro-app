@@ -232,16 +232,19 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Stop any current playback
       await stop();
       
-      // IMPORTANT: TTS only supports en, af, zu (South African languages with Azure voices)
-      // Validate language and fallback to en-ZA for unsupported languages
+      // IMPORTANT: TTS ONLY supports en, af, zu (South African languages with Azure voices)
+      // For ANY other language, TTS is completely disabled - no speech at all
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
       const baseLang = language.split('-')[0];
-      let effectiveLanguage: SupportedLanguage = language;
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
-        console.warn(`[VoiceTTS] Language ${language} not supported for TTS, using en-ZA`);
-        effectiveLanguage = 'en-ZA';
+        console.warn(`[VoiceTTS] Language ${language} not supported - TTS disabled. Only en, af, zu are supported.`);
+        setError('TTS not available for this language');
+        setIsSpeaking(false);
+        return; // Exit early - no TTS for unsupported languages
       }
+      
+      const effectiveLanguage: SupportedLanguage = language;
       
       // Clean text for TTS - remove markdown, emojis, and special characters for natural speech
       const cleanText = text
