@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutAndRedirect } from '@/lib/authActions';
 import { getRoleDisplayName } from '@/lib/roleUtils';
 import { getNavDrawerStyles, DRAWER_WIDTH } from './MobileNavDrawer.styles';
+import Constants from 'expo-constants';
 
 interface NavItem {
   id: string;
@@ -279,8 +280,8 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
           })}
         </ScrollView>
 
-        {/* Footer */}
-        <View style={styles.footer}>
+        {/* Sign Out Button - Above divider */}
+        <View style={styles.signOutSection}>
           <TouchableOpacity
             style={styles.signOutButton}
             onPress={handleSignOut}
@@ -289,7 +290,12 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
             <Ionicons name="log-out-outline" size={20} color={theme.error} />
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
+        </View>
+        
+        {/* Footer - Below divider with branding */}
+        <View style={styles.footer}>
           <Text style={styles.brandText}>Powered by EduDash Pro</Text>
+          <Text style={styles.versionText}>v{Constants.expoConfig?.version || '1.0.0'}</Text>
         </View>
       </Animated.View>
     </View>

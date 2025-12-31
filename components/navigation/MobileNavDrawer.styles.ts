@@ -116,12 +116,17 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       fontSize: 11,
       fontWeight: '700',
     },
+    signOutSection: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
     footer: {
       paddingHorizontal: 16,
-      paddingVertical: 16,
+      paddingVertical: 12,
       borderTopWidth: 1,
       borderTopColor: theme.border,
       paddingBottom: Math.max(insets.bottom, 16),
+      alignItems: 'center',
     },
     signOutButton: {
       flexDirection: 'row',
@@ -133,6 +138,7 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       borderRadius: 10,
       borderWidth: 1,
       borderColor: theme.error + '30',
+      width: '100%',
     },
     signOutText: {
       marginLeft: 10,
@@ -141,10 +147,16 @@ export const getNavDrawerStyles = (theme: any, isDark: boolean, insets: EdgeInse
       color: theme.error,
     },
     brandText: {
-      fontSize: 11,
+      fontSize: 12,
       color: theme.textSecondary,
       textAlign: 'center',
-      marginTop: 12,
-      opacity: 0.7,
+      opacity: 0.8,
+    },
+    versionText: {
+      fontSize: 10,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: 4,
+      opacity: 0.6,
     },
   });
