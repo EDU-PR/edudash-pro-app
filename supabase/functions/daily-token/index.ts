@@ -29,7 +29,7 @@ interface DailyTokenProperties {
   user_name?: string;
   user_id: string;
   is_owner?: boolean;
-  enable_recording?: boolean;
+  enable_recording?: 'cloud' | 'local' | false; // 'cloud' stores in Daily.co, 'local' requires custom setup
   start_audio_off?: boolean;
   start_video_off?: boolean;
 }
@@ -115,12 +115,13 @@ serve(async (req) => {
       'User';
 
     // Prepare Daily.co token properties
+    // Enable recording for room owners only (recordings stored in Daily.co cloud)
     const tokenProperties: DailyTokenProperties = {
       room_name: roomName,
       user_name: displayName,
       user_id: user.id,
       is_owner: isOwner ?? false,
-      enable_recording: false,
+      enable_recording: isOwner ? 'cloud' : false, // Only owners can start recording
       start_audio_off: false,
       start_video_off: false,
     };

@@ -104,6 +104,11 @@ export interface DailyParticipant {
       track?: any; // MediaStreamTrack
       persistentTrack?: any; // persistentTrack for React Native
     };
+    screenVideo?: {
+      state: 'playable' | 'loading' | 'off' | 'interrupted' | 'blocked';
+      track?: any; // MediaStreamTrack for screen share
+      persistentTrack?: any; // persistentTrack for React Native
+    };
   };
 }
 
