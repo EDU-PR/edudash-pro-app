@@ -92,6 +92,8 @@
     "build:android:apk": "npx eas build --platform android --profile production-apk --local",
     "build:android:aab": "node scripts/bump-android-version.mjs && npx eas build --platform android --profile production --clear-cache --non-interactive",
     "build:android:preview": "npx eas build --platform android --profile preview --local",
+    "build:playstore": "node scripts/bump-android-version.mjs && EAS_PROJECT_ID=playstore npx eas build --platform android --profile playstore",
+    "build:playstore:nobump": "EAS_PROJECT_ID=playstore npx eas build --platform android --profile playstore",
     "eas-build-pre-install": "echo 'EAS Build: Pre-install hook running'",
     "eas-build-post-install": "echo 'Typecheck temporarily disabled for build - will fix TS errors in separate PR'",
     "eas-build-on-success": "echo 'EAS Build: Build completed successfully'",
