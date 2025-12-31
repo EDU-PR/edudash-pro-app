@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import Constants from 'expo-constants';
 import type { ViewStyle, TextStyle } from 'react-native';
 
 interface AboutSupportSectionProps {
@@ -24,6 +25,9 @@ interface AboutSupportSectionProps {
 export function AboutSupportSection({ styles }: AboutSupportSectionProps) {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
+  
+  // Get version from app config
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   return (
     <View style={styles.section}>
@@ -35,7 +39,7 @@ export function AboutSupportSection({ styles }: AboutSupportSectionProps) {
           onPress={() =>
             Alert.alert(
               t('settings.about_alert.title'),
-              t('settings.about_alert.message'),
+              t('settings.about_alert.message', { version: appVersion }),
               [{ text: t('common.ok') }]
             )
           }

@@ -1319,7 +1319,7 @@
     },
     "about_alert": {
       "title": "EduDash Pro",
-      "message": "Version 1.0.2\nBuilt with ❤️ for educators and parents\n\nWhat's New:\n• WhatsApp notifications integration\n• Enhanced superadmin controls\n• Improved mobile-first responsive design\n• Push notifications system"
+      "message": "Version {{version}}\nBuilt with ❤️ for educators and parents\n\nWhat's New:\n• Video/Voice calling with PiP support\n• Call recording & screen sharing\n• Improved messaging & notifications\n• Enhanced performance & stability"
     },
     "help_alert": {
       "title": "Help & Support",
