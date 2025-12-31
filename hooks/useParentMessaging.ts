@@ -206,9 +206,32 @@ export const useParentThreads = () => {
 
 /**
  * Hook to get messages for a specific thread
+ * Also marks messages as delivered when thread is opened (WhatsApp-style delivery tracking)
  */
 export const useThreadMessages = (threadId: string | null) => {
   const { user } = useAuth();
+  
+  // Mark messages as delivered when thread is opened
+  useEffect(() => {
+    if (!threadId || !user?.id) return;
+    
+    const markAsDelivered = async () => {
+      try {
+        const client = assertSupabase();
+        const result = await client.rpc('mark_messages_delivered', {
+          p_thread_id: threadId,
+          p_user_id: user.id,
+        });
+        if (result.data && result.data > 0) {
+          logger.debug('useThreadMessages', `✅ Marked ${result.data} messages as delivered`);
+        }
+      } catch (err) {
+        logger.warn('useThreadMessages', 'Failed to mark messages as delivered:', err);
+      }
+    };
+    
+    markAsDelivered();
+  }, [threadId, user?.id]);
   
   return useQuery({
     queryKey: ['messages', threadId],
@@ -533,13 +556,13 @@ export const useMarkThreadRead = () => {
   return useMutation({
     mutationFn: async ({ threadId }: { threadId: string }) => {
       if (!user?.id) {
-        console.warn('[useMarkThreadRead] No user ID');
+        logger.warn('useMarkThreadRead', 'No user ID');
         return;
       }
       
       const client = assertSupabase();
       
-      console.log('[useMarkThreadRead] Marking thread as read:', { threadId, userId: user.id });
+      logger.debug('useMarkThreadRead', 'Marking thread as read:', { threadId, userId: user.id });
       
       // Use RPC function to mark thread as read (updates both messages and participants)
       const { error } = await client.rpc('mark_thread_messages_as_read', {
@@ -548,11 +571,11 @@ export const useMarkThreadRead = () => {
       });
       
       if (error) {
-        console.error('[useMarkThreadRead] RPC error:', error);
+        logger.error('useMarkThreadRead', 'RPC error:', error);
         throw error;
       }
       
-      console.log('[useMarkThreadRead] Success');
+      logger.debug('useMarkThreadRead', 'Success');
     },
     onSuccess: () => {
       // Invalidate parent threads to update unread counts
@@ -561,10 +584,10 @@ export const useMarkThreadRead = () => {
       queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
       // Invalidate the unified notification context queries
       queryClient.invalidateQueries({ queryKey: ['notifications', 'messages'] });
-      console.log('[useMarkThreadRead] Queries invalidated');
+      logger.debug('useMarkThreadRead', 'Queries invalidated');
     },
     onError: (err) => {
-      console.error('[useMarkThreadRead] Failed:', err);
+      logger.error('useMarkThreadRead', 'Failed:', err);
     },
   });
 };

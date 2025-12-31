@@ -98,6 +98,14 @@
         "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-3940256099942544~1458002511"
       }
     },
+    "development-apk": {
+      "extends": "development",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      }
+    },
     "production-apk": {
       "extends": "production",
       "android": { "buildType": "apk" }

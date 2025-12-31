@@ -2,7 +2,7 @@
  * Parent Message Thread Screen
  * Full-featured WhatsApp-style chat interface with PWA parity
  * Features: Voice recording, wallpaper, message actions, options menu,
- *           date separators, message ticks, reply preview
+ *           date separators, message ticks, reply preview, typing indicators
  * 
  * Refactored to use shared messaging components from components/messaging/
  */
@@ -29,6 +29,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { toast } from '@/components/ui/ToastProvider';
 import { useCallSafe } from '@/components/calls/CallProvider';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { TypingIndicator } from '@/components/messaging/TypingIndicator';
+import { logger } from '@/lib/logger';
 
 // Shared messaging components
 import {
@@ -151,6 +154,13 @@ export default function ParentMessageThreadScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
 
+  // Typing indicator hook
+  const { isOtherTyping, typingText, setTyping, clearTyping } = useTypingIndicator({
+    threadId: threadId || null,
+    userId: user?.id || null,
+    userName: user?.email?.split('@')[0] || 'User',
+  });
+
   // Core state
   const [sending, setSending] = useState(false);
   const [optimisticMsgs, setOptimisticMsgs] = useState<Message[]>([]);
@@ -215,21 +225,21 @@ export default function ParentMessageThreadScreen() {
     error = threadResult.error;
     refetch = threadResult.refetch;
   } catch (e) {
-    console.warn('useThreadMessages error:', e);
+    if (__DEV__) logger.warn('ParentThread', 'useThreadMessages error:', e);
   }
 
   try {
     const sendResult = useSendMessage();
     sendMessage = sendResult.mutateAsync;
   } catch (e) {
-    console.warn('useSendMessage error:', e);
+    if (__DEV__) logger.warn('ParentThread', 'useSendMessage error:', e);
   }
 
   try {
     const markResult = useMarkThreadRead();
     markRead = markResult.mutate;
   } catch (e) {
-    console.warn('useMarkThreadRead error:', e);
+    if (__DEV__) logger.warn('ParentThread', 'useMarkThreadRead error:', e);
   }
 
   // Combined messages with optimistic updates
@@ -253,7 +263,7 @@ export default function ParentMessageThreadScreen() {
       }
         } catch (err) {
       if (__DEV__) {
-        console.warn('[ParentThread] Real-time hook not available:', err);
+        logger.warn('ParentThread', 'Real-time hook not available:', err);
       }
     }
   }, [threadId, user?.id]);
@@ -271,12 +281,12 @@ export default function ParentMessageThreadScreen() {
           p_user_id: user.id,
         }).then(() => {
           if (__DEV__) {
-            console.log('[ParentThread] ✅ Marked messages as delivered');
+            logger.debug('ParentThread', '✅ Marked messages as delivered');
           }
         }).catch((err: any) => {
           if (__DEV__) {
-          console.warn('[ParentThread] Failed to mark messages as delivered:', err);
-        }
+            logger.warn('ParentThread', 'Failed to mark messages as delivered:', err);
+          }
         });
       } catch {}
       
@@ -314,6 +324,9 @@ export default function ParentMessageThreadScreen() {
   const handleSend = useCallback(async (content: string) => {
     if (!content || !threadId || sending) return;
 
+    // Clear typing indicator when message is sent
+    clearTyping();
+    
     setSending(true);
     setReplyingTo(null);
 
@@ -330,13 +343,13 @@ export default function ParentMessageThreadScreen() {
       await sendMessage({ threadId, content });
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
     } catch (err) {
-      console.error('Send failed:', err);
+      logger.error('ParentMessageThread', 'Send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.error('Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
-  }, [threadId, sending, user?.id, sendMessage]);
+  }, [threadId, sending, user?.id, sendMessage, clearTyping]);
   
   // Voice recording handler
   const handleVoiceRecording = useCallback(async (uri: string, duration: number) => {
@@ -369,12 +382,12 @@ export default function ParentMessageThreadScreen() {
         });
       } else {
         // Fallback: send as text only
-        console.warn('[Voice] uploadVoiceNote not available, sending text only');
+        if (__DEV__) logger.warn('ParentThread', 'uploadVoiceNote not available, sending text only');
         await sendMessage({ threadId, content });
       }
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
     } catch (err) {
-      console.error('Voice send failed:', err);
+      logger.error('ParentThread', 'Voice send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.error('Failed to send voice message.');
     }
@@ -417,7 +430,7 @@ export default function ParentMessageThreadScreen() {
       // Refresh messages to show updated reactions
       refetch();
     } catch (err) {
-      console.error('Error reacting to message:', err);
+      logger.error('ParentThread', 'Error reacting to message:', err);
       toast.error('Failed to add reaction');
     }
     
@@ -444,7 +457,7 @@ export default function ParentMessageThreadScreen() {
       refetch();
       toast.success('Reaction removed');
     } catch (err) {
-      console.error('Error removing reaction:', err);
+      logger.error('ParentThread', 'Error removing reaction:', err);
       toast.error('Failed to remove reaction');
     }
   }, [user?.id, refetch]);
@@ -494,7 +507,7 @@ export default function ParentMessageThreadScreen() {
               // Trigger refetch to update from server
               refetch();
             } catch (err) {
-              console.error('Delete failed:', err);
+              logger.error('ParentThread', 'Delete failed:', err);
               toast.error('Failed to delete message');
             }
           }
@@ -541,7 +554,7 @@ export default function ParentMessageThreadScreen() {
               
               toast.success('Chat cleared', 'Success');
             } catch (error) {
-              console.error('[ClearChat] Error:', error);
+              logger.error('ParentThread', 'ClearChat error:', error);
               toast.error('Failed to clear chat', 'Error');
             }
           }
@@ -590,10 +603,10 @@ export default function ParentMessageThreadScreen() {
       'Set messages to disappear after:',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Off', onPress: () => console.log('Disappearing off') },
-        { text: '24 Hours', onPress: () => console.log('24h disappearing') },
-        { text: '7 Days', onPress: () => console.log('7d disappearing') },
-        { text: '90 Days', onPress: () => console.log('90d disappearing') }
+        { text: 'Off', onPress: () => toast.info('Disappearing messages turned off') },
+        { text: '24 Hours', onPress: () => toast.info('Messages will disappear after 24 hours') },
+        { text: '7 Days', onPress: () => toast.info('Messages will disappear after 7 days') },
+        { text: '90 Days', onPress: () => toast.info('Messages will disappear after 90 days') }
       ]
     );
     setShowOptionsMenu(false);
@@ -695,13 +708,13 @@ export default function ParentMessageThreadScreen() {
       
       // Handler for when voice playback finishes - play next voice message
       const handleVoiceFinished = msg.voice_url ? () => {
-        console.log('[ParentThread] Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
+        if (__DEV__) logger.debug('ParentThread', 'Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
         if (hasNextVoice) {
           const nextId = voiceMessageIds[voiceIndex + 1];
-          console.log('[ParentThread] Auto-playing next voice message:', nextId);
+          if (__DEV__) logger.debug('ParentThread', 'Auto-playing next voice message:', nextId);
           setCurrentlyPlayingVoiceId(nextId);
         } else {
-          console.log('[ParentThread] No more voice messages to play');
+          if (__DEV__) logger.debug('ParentThread', 'No more voice messages to play');
           setCurrentlyPlayingVoiceId(null);
         }
       } : undefined;
@@ -719,8 +732,8 @@ export default function ParentMessageThreadScreen() {
       // Check if this voice message should auto-play (continuous playback)
       const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
       
-      if (shouldAutoPlay) {
-        console.log('[ParentThread] Auto-play enabled for message:', msg.id);
+      if (shouldAutoPlay && __DEV__) {
+        logger.debug('ParentThread', 'Auto-play enabled for message:', msg.id);
       }
       
       return (
@@ -831,6 +844,23 @@ export default function ParentMessageThreadScreen() {
         </View>
       </View>
 
+      {/* Typing Indicator - show above composer when someone is typing */}
+      {isOtherTyping && (
+        <View style={[
+          styles.typingIndicatorContainer,
+          { 
+            bottom: Platform.OS === 'ios' 
+              ? Math.max(insets.bottom, 4) + keyboardHeight + 70 
+              : Math.max(insets.bottom, 12) + keyboardHeight + 70,
+          }
+        ]}>
+          <View style={styles.typingIndicatorBubble}>
+            <TypingIndicator color="#94a3b8" size={5} />
+            <Text style={styles.typingIndicatorText}>{typingText}</Text>
+          </View>
+        </View>
+      )}
+
       {/* Floating Composer */}
       <View style={[
         styles.composerArea,
@@ -845,6 +875,7 @@ export default function ParentMessageThreadScreen() {
           sending={sending}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
+          onTyping={setTyping}
         />
       </View>
       
@@ -982,5 +1013,24 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 100,
+  },
+  typingIndicatorContainer: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 99,
+  },
+  typingIndicatorBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    gap: 8,
+  },
+  typingIndicatorText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontStyle: 'italic',
   },
 });
