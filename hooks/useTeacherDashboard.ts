@@ -252,7 +252,7 @@ export const useTeacherDashboard = () => {
             title,
             due_date,
             is_published,
-            homework_submissions!left(
+            homework_submissions!homework_submissions_assignment_id_fkey(
               id,
               status
             )

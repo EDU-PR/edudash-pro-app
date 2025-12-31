@@ -4,7 +4,7 @@
  * Triggered on long-press of a message bubble
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import * as Clipboard from 'expo-clipboard';
+
+// Lazy load EmojiPicker to avoid circular dependencies
+let EmojiPickerComponent: React.FC<any> | null = null;
+try {
+  EmojiPickerComponent = require('@/components/messaging/EmojiPicker').EmojiPicker;
+} catch {}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -66,9 +72,17 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+  const [showFullEmojiPicker, setShowFullEmojiPicker] = useState(false);
   
   // Safe message content with fallback to prevent crashes
   const safeMessageContent = messageContent || '';
+  
+  // Reset emoji picker state when menu closes
+  useEffect(() => {
+    if (!visible) {
+      setShowFullEmojiPicker(false);
+    }
+  }, [visible]);
   
   useEffect(() => {
     if (visible && safeMessageContent) {
@@ -113,8 +127,13 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
   };
   
   const handleReaction = (emoji: string) => {
+    setShowFullEmojiPicker(false);
     onReact(emoji);
     onClose();
+  };
+  
+  const handleOpenEmojiPicker = () => {
+    setShowFullEmojiPicker(true);
   };
   
   const handleAction = (action: () => void) => {
@@ -208,6 +227,21 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
       alignItems: 'center',
       justifyContent: 'center',
     },
+    fullEmojiPickerContainer: {
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    emojiPickerHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    emojiPickerTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
     actionsGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -276,75 +310,95 @@ export const MessageActionsMenu: React.FC<MessageActionsMenuProps> = ({
             </Text>
           </View>
           
-          {/* Quick Reactions */}
-          <View style={styles.reactionsContainer}>
-            {REACTION_EMOJIS.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                style={styles.reactionButton}
-                onPress={() => handleReaction(emoji)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.reactionEmoji}>{emoji}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={styles.moreReactionsButton}
-              onPress={() => {
-                // TODO: Open full emoji picker
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          {/* Full Emoji Picker (shown when + is pressed) */}
+          {showFullEmojiPicker && EmojiPickerComponent && (
+            <View style={styles.fullEmojiPickerContainer}>
+              <View style={styles.emojiPickerHeader}>
+                <Text style={[styles.emojiPickerTitle, { color: theme.text }]}>Choose Reaction</Text>
+                <TouchableOpacity onPress={() => setShowFullEmojiPicker(false)}>
+                  <Ionicons name="close" size={24} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <EmojiPickerComponent
+                visible={true}
+                onClose={() => setShowFullEmojiPicker(false)}
+                onEmojiSelect={handleReaction}
+                height={220}
+              />
+            </View>
+          )}
           
-          {/* Action Buttons */}
-          <View style={styles.actionsGrid}>
-            {actions.map((action) => (
+          {/* Quick Reactions (hidden when full picker is shown) */}
+          {!showFullEmojiPicker && (
+            <View style={styles.reactionsContainer}>
+              {REACTION_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.reactionButton}
+                  onPress={() => handleReaction(emoji)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reactionEmoji}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
               <TouchableOpacity
-                key={action.id}
-                style={styles.actionButton}
-                onPress={() => {
-                  switch (action.id) {
-                    case 'reply':
-                      handleAction(onReply);
-                      break;
-                    case 'forward':
-                      handleAction(onForward);
-                      break;
-                    case 'copy':
-                      handleCopy();
-                      break;
-                    case 'edit':
-                      if (onEdit) handleAction(onEdit);
-                      break;
-                    case 'delete':
-                      handleAction(onDelete);
-                      break;
-                  }
-                }}
+                style={styles.moreReactionsButton}
+                onPress={handleOpenEmojiPicker}
                 activeOpacity={0.7}
               >
-                <View style={[
-                  styles.actionIconContainer,
-                  action.destructive && { backgroundColor: 'rgba(239, 68, 68, 0.1)' },
-                ]}>
-                  <Ionicons 
-                    name={action.icon} 
-                    size={24} 
-                    color={action.color || theme.text} 
-                  />
-                </View>
-                <Text style={[
-                  styles.actionLabel,
-                  action.destructive && styles.destructiveLabel,
-                ]}>
-                  {action.label}
-                </Text>
+                <Ionicons name="add" size={24} color={theme.textSecondary} />
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          )}
+          
+          {/* Action Buttons (hidden when emoji picker is shown) */}
+          {!showFullEmojiPicker && (
+            <View style={styles.actionsGrid}>
+              {actions.map((action) => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={styles.actionButton}
+                  onPress={() => {
+                    switch (action.id) {
+                      case 'reply':
+                        handleAction(onReply);
+                        break;
+                      case 'forward':
+                        handleAction(onForward);
+                        break;
+                      case 'copy':
+                        handleCopy();
+                        break;
+                      case 'edit':
+                        if (onEdit) handleAction(onEdit);
+                        break;
+                      case 'delete':
+                        handleAction(onDelete);
+                        break;
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.actionIconContainer,
+                    action.destructive && { backgroundColor: 'rgba(239, 68, 68, 0.1)' },
+                  ]}>
+                    <Ionicons 
+                      name={action.icon} 
+                      size={24} 
+                      color={action.color || theme.text} 
+                    />
+                  </View>
+                  <Text style={[
+                    styles.actionLabel,
+                    action.destructive && styles.destructiveLabel,
+                  ]}>
+                    {action.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </Animated.View>
       </View>
     </Modal>

@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AppState } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { usePathname } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
@@ -302,11 +302,35 @@ export const useThreadMessages = (threadId: string | null) => {
 /**
  * Hook for real-time message and reaction updates in a thread
  * Subscribes to new messages and reactions, updating the query cache incrementally
+ * Also handles app state changes to refetch messages when returning from background
  */
 export const useParentMessagesRealtime = (threadId: string | null) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const pathname = usePathname();
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // Handle app state changes - refetch messages when returning to foreground
+  useEffect(() => {
+    if (!threadId) return;
+    
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      // Only refetch when transitioning FROM background/inactive TO active
+      if (
+        appStateRef.current.match(/inactive|background/) && 
+        nextAppState === 'active'
+      ) {
+        logger.debug('ParentMessagesRealtime', 'App came to foreground, refetching messages');
+        // Refetch messages to get any delivery/read status updates that happened while backgrounded
+        queryClient.invalidateQueries({ queryKey: ['parent', 'messages', threadId] });
+        queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [threadId, queryClient]);
 
   useEffect(() => {
     if (!threadId || !user?.id) return;

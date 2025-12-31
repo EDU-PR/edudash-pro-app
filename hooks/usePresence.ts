@@ -114,8 +114,9 @@ export function usePresence(
 
   // Check if user is online
   // Users are considered online if:
-  // 1. Status is 'online' or 'away' (away means backgrounded but still available)
-  // 2. Last seen within 10 minutes (generous grace period for backgrounded apps)
+  // 1. Status is 'online' and last seen within 2 minutes (active heartbeat)
+  // 2. Status is 'away' and last seen within 30 minutes (app backgrounded but still available)
+  // This accounts for iOS/Android background execution restrictions
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const record = onlineUsers.get(targetUserId);
     if (!record) {
@@ -127,19 +128,23 @@ export function usePresence(
       return false;
     }
     
-    // Consider online if last seen within 10 minutes (generous grace period for backgrounded apps)
-    // This accounts for iOS/Android background execution restrictions
     const lastSeen = new Date(record.last_seen_at).getTime();
-    const tenMinutesAgo = Date.now() - 600000; // 10 minutes
-    const isOnline = lastSeen > tenMinutesAgo && (record.status === 'online' || record.status === 'away');
+    const now = Date.now();
+    const ageSeconds = Math.floor((now - lastSeen) / 1000);
+    
+    // Different grace periods based on status
+    // - 'online': 2 minutes (heartbeat is every 30s, so 4 missed heartbeats = offline)
+    // - 'away': 30 minutes (app is backgrounded, user may return)
+    const graceMs = record.status === 'online' ? 120000 : 1800000; // 2 min : 30 min
+    const isOnline = lastSeen > (now - graceMs);
     
     console.log('[usePresence] isUserOnline check:', {
       targetUserId,
       status: record.status,
       lastSeen: new Date(record.last_seen_at).toISOString(),
-      ageSeconds: Math.floor((Date.now() - lastSeen) / 1000),
+      ageSeconds,
       isOnline,
-      threshold: '10min'
+      threshold: record.status === 'online' ? '2min' : '30min'
     });
     
     return isOnline;

@@ -144,23 +144,59 @@ export function ComplianceCard({ score, status, stats }: ComplianceCardProps) {
   );
 }
 
-// Main Board positions
-export const BOARD_MEMBERS: BoardMember[] = [
-  { id: '1', name: 'King Bongani Ramontja', role: 'President & Chairperson', since: '2020' },
-  { id: '2', name: 'Position Vacant', role: 'Vice Chairperson', since: '-' },
-  { id: '3', name: 'Position Vacant', role: 'Secretary', since: '-' },
-  { id: '4', name: 'Position Vacant', role: 'Treasurer', since: '-' },
-  { id: '5', name: 'Position Vacant', role: 'Board Member', since: '-' },
+// Empty Board Positions Component (shown when no positions exist)
+interface EmptyBoardStateProps {
+  theme: any;
+  onInitialize?: () => void;
+  loading?: boolean;
+}
+
+export function EmptyBoardState({ theme, onInitialize, loading }: EmptyBoardStateProps) {
+  return (
+    <View style={[styles.emptyBoardContainer, { backgroundColor: theme.card }]}>
+      <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
+      <Text style={[styles.emptyBoardTitle, { color: theme.text }]}>
+        No Board Positions Set Up
+      </Text>
+      <Text style={[styles.emptyBoardSubtitle, { color: theme.textSecondary }]}>
+        Board positions have not been configured for this organization yet.
+      </Text>
+      {onInitialize && (
+        <TouchableOpacity
+          style={[styles.initializeButton, { backgroundColor: theme.primary }]}
+          onPress={onInitialize}
+          disabled={loading}
+        >
+          <Text style={styles.initializeButtonText}>
+            {loading ? 'Setting up...' : 'Initialize Board Positions'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// Default position templates (used for display when no DB data)
+export const DEFAULT_BOARD_POSITIONS = [
+  { position_code: 'president', position_title: 'President & Chairperson', position_order: 1 },
+  { position_code: 'vice_chairperson', position_title: 'Vice Chairperson', position_order: 2 },
+  { position_code: 'secretary', position_title: 'Secretary', position_order: 3 },
+  { position_code: 'treasurer', position_title: 'Treasurer', position_order: 4 },
+  { position_code: 'board_member', position_title: 'Board Member', position_order: 5 },
 ];
 
-// Youth Wing Board positions
-export const YOUTH_BOARD_MEMBERS: BoardMember[] = [
-  { id: 'y1', name: 'Position Vacant', role: 'Youth President', since: '-' },
-  { id: 'y2', name: 'Position Vacant', role: 'Youth Deputy President', since: '-' },
-  { id: 'y3', name: 'Position Vacant', role: 'Youth Secretary', since: '-' },
-  { id: 'y4', name: 'Position Vacant', role: 'Youth Treasurer', since: '-' },
-  { id: 'y5', name: 'Position Vacant', role: 'Youth Coordinator', since: '-' },
+export const DEFAULT_YOUTH_POSITIONS = [
+  { position_code: 'youth_president', position_title: 'Youth President', position_order: 1 },
+  { position_code: 'youth_deputy', position_title: 'Youth Deputy President', position_order: 2 },
+  { position_code: 'youth_secretary', position_title: 'Youth Secretary', position_order: 3 },
+  { position_code: 'youth_treasurer', position_title: 'Youth Treasurer', position_order: 4 },
+  { position_code: 'youth_coordinator', position_title: 'Youth Coordinator', position_order: 5 },
 ];
+
+// DEPRECATED: Static mock data - use useBoardPositions hook instead
+// Keeping for backward compatibility during transition
+export const BOARD_MEMBERS: BoardMember[] = [];
+export const YOUTH_BOARD_MEMBERS: BoardMember[] = [];
 
 const styles = StyleSheet.create({
   section: {
@@ -259,5 +295,35 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 4,
+  },
+  // Empty state styles
+  emptyBoardContainer: {
+    alignItems: 'center',
+    padding: 32,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  emptyBoardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptyBoardSubtitle: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  initializeButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  initializeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -28,6 +28,7 @@ interface Child {
   last_name: string;
   preschool_id: string;
   preschool_name?: string;
+  student_code: string; // Unique payment reference (e.g., YE-2026-0001)
   registration_fee_amount?: number;
   registration_fee_paid?: boolean;
   payment_verified?: boolean;
@@ -211,7 +212,7 @@ export default function PaymentsPage() {
       // Fetch children linked to this parent via parent_id or guardian_id in students table
       const { data: directChildren, error: childrenError } = await supabase
         .from('students')
-        .select('id, first_name, last_name, preschool_id, registration_fee_amount, registration_fee_paid, payment_verified')
+        .select('id, student_id, first_name, last_name, preschool_id, registration_fee_amount, registration_fee_paid, payment_verified')
         .or(`parent_id.eq.${session.user.id},guardian_id.eq.${session.user.id}`);
 
       console.log('[Payments] Children:', directChildren, 'Error:', childrenError);
@@ -236,6 +237,7 @@ export default function PaymentsPage() {
             last_name: student.last_name,
             preschool_id: student.preschool_id,
             preschool_name: schoolName,
+            student_code: student.student_id || student.id.slice(0, 8).toUpperCase(),
             registration_fee_amount: student.registration_fee_amount,
             registration_fee_paid: student.registration_fee_paid,
             payment_verified: student.payment_verified,
@@ -567,6 +569,10 @@ export default function PaymentsPage() {
                   <div className="muted" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <School className="w-3 h-3" />
                     {selectedChild.preschool_name || 'School not assigned'}
+                  </div>
+                  <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, color: 'var(--primary)', fontWeight: 600 }}>
+                    <FileText className="w-3 h-3" />
+                    Payment Ref: {selectedChild.student_code}
                   </div>
                 </div>
                 {selectedChild.payment_verified && (

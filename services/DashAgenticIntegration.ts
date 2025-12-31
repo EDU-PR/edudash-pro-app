@@ -43,7 +43,9 @@ export class DashAgenticIntegration {
    * Others: Assistant mode with limited autonomy
    */
   static getAgenticCapabilities(role: string): AgenticCapabilities {
-    const isSuperadmin = role === 'superadmin';
+    // Only EduDash Pro platform super_admin gets full agentic mode
+    // Note: Database uses 'super_admin' but some code may use 'superadmin'
+    const isSuperadmin = role === 'super_admin' || role === 'superadmin';
     
     if (isSuperadmin) {
       return {

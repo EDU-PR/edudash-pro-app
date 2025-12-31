@@ -8,6 +8,7 @@ interface Child {
   id: string;
   first_name: string;
   last_name: string;
+  student_code?: string; // Unique payment reference
 }
 
 interface POPUploadFormProps {
@@ -80,16 +81,20 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
       return;
     }
     
+    // Get the selected child's student_code for the payment reference
+    const childData = linkedChildren.find(c => c.id === selectedChild);
+    const studentCode = childData?.student_code || selectedChild.slice(0, 8).toUpperCase();
+    
     const result = await upload({
       student_id: selectedChild,
       upload_type: 'proof_of_payment',
-      title: paymentReference ? `Payment - ${paymentReference}` : 'Proof of Payment',
+      title: `Payment - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`,
       description,
       file: selectedFile,
       payment_amount: paymentAmount ? parseFloat(paymentAmount) : undefined,
       payment_method: paymentMethod,
       payment_date: paymentDate,
-      payment_reference: paymentReference,
+      payment_reference: studentCode, // Always use the child's unique code
     });
     
     if (result) {
@@ -153,10 +158,46 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
         </div>
       )}
 
-      {/* Payment Reference */}
+      {/* Child Payment Reference - Non-editable */}
+      {selectedChild && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+            Payment Reference <span style={{ color: 'var(--primary)', fontWeight: 600 }}>(Use when paying)</span>
+          </label>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 12,
+            padding: '14px 16px',
+            background: 'rgba(124, 58, 237, 0.1)',
+            borderRadius: 8,
+            border: '1px solid rgba(124, 58, 237, 0.3)',
+          }}>
+            <FileText className="w-5 h-5" style={{ color: 'var(--primary)' }} />
+            <span style={{ flex: 1, fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>
+              {linkedChildren.find(c => c.id === selectedChild)?.student_code || selectedChild.slice(0, 8).toUpperCase()}
+            </span>
+            <span style={{ 
+              padding: '4px 8px', 
+              background: 'var(--primary)', 
+              color: 'white', 
+              borderRadius: 6, 
+              fontSize: 10, 
+              fontWeight: 600 
+            }}>
+              Required
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, fontStyle: 'italic' }}>
+            Always include this reference when making bank payments
+          </p>
+        </div>
+      )}
+
+      {/* Bank Transaction Reference */}
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-          Payment Reference <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(Optional)</span>
+          Bank Transaction Reference <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(Optional)</span>
         </label>
         <input
           type="text"

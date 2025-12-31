@@ -2,6 +2,14 @@ import React from 'react';
 import Purchases, { CustomerInfo, PurchasesEntitlementInfo } from 'react-native-purchases';
 import { Platform } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
+import { 
+  REVENUECAT_ENTITLEMENTS, 
+  REVENUECAT_PRODUCT_TO_TIER, 
+  getTierFromRevenueCatProduct,
+  getCapabilityTier,
+  getTierDisplayName,
+  type TierNameAligned 
+} from '../tiers';
 
 // RevenueCat Configuration
 export const REVENUECAT_CONFIG = {
@@ -10,25 +18,25 @@ export const REVENUECAT_CONFIG = {
   API_KEY_IOS: process.env.EXPO_PUBLIC_REVENUECAT_IOS_SDK_KEY || '',
   API_KEY_ANDROID: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_SDK_KEY || '',
   
-  // Product IDs - these should match your App Store/Play Store product IDs
+  // Product IDs - Must match Google Play Console / App Store Connect
+  // Current offerings in RevenueCat:
+  // - edudash_starter_monthly (Starter Plan) -> parent_starter
+  // - edudash_premium_monthly (Premium Plan) -> parent_plus
   PRODUCT_IDS: {
+    // Parent plans (currently configured)
     STARTER_MONTHLY: 'edudash_starter_monthly',
     STARTER_ANNUAL: 'edudash_starter_annual',
-    BASIC_MONTHLY: 'edudash_basic_monthly',
-    BASIC_ANNUAL: 'edudash_basic_annual',
     PREMIUM_MONTHLY: 'edudash_premium_monthly',
     PREMIUM_ANNUAL: 'edudash_premium_annual',
-    PRO_MONTHLY: 'edudash_pro_monthly',
-    PRO_ANNUAL: 'edudash_pro_annual',
+    // School plans (for future)
+    SCHOOL_STARTER_MONTHLY: 'edudash_school_starter_monthly',
+    SCHOOL_PREMIUM_MONTHLY: 'edudash_school_premium_monthly',
+    SCHOOL_PRO_MONTHLY: 'edudash_school_pro_monthly',
   },
   
-  // Entitlement IDs
-  ENTITLEMENTS: {
-    STARTER: 'starter_features',
-    BASIC: 'basic_features',
-    PREMIUM: 'premium_features',
-    PRO: 'pro_features',
-  }
+  // Entitlement IDs - Must be created in RevenueCat dashboard
+  // and attached to products
+  ENTITLEMENTS: REVENUECAT_ENTITLEMENTS,
 };
 
 /**
@@ -111,14 +119,15 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
 /**
  * Check if user has access to a specific feature tier
  */
-export async function hasFeatureAccess(tier: 'starter' | 'basic' | 'premium' | 'pro'): Promise<boolean> {
+export async function hasFeatureAccess(tier: 'starter' | 'premium' | 'enterprise'): Promise<boolean> {
   try {
     const customerInfo = await getCustomerInfo();
     if (!customerInfo) return false;
 
     const entitlementId = REVENUECAT_CONFIG.ENTITLEMENTS[tier.toUpperCase() as keyof typeof REVENUECAT_CONFIG.ENTITLEMENTS];
-    const entitlement = customerInfo.entitlements.active[entitlementId];
+    if (!entitlementId) return false;
     
+    const entitlement = customerInfo.entitlements.active[entitlementId];
     return entitlement?.isActive === true;
   } catch (error) {
     console.error('Failed to check feature access:', error);
@@ -128,19 +137,20 @@ export async function hasFeatureAccess(tier: 'starter' | 'basic' | 'premium' | '
 
 /**
  * Get the user's highest active subscription tier
+ * Returns canonical tier_name_aligned value
  */
-export async function getActiveSubscriptionTier(): Promise<string> {
+export async function getActiveSubscriptionTier(): Promise<TierNameAligned> {
   try {
     const customerInfo = await getCustomerInfo();
     if (!customerInfo) return 'free';
 
-    // Check entitlements in order of priority
+    // Check entitlements in order of priority (highest to lowest)
     const entitlements = customerInfo.entitlements.active;
     
-    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.PRO]?.isActive) return 'pro';
-    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.PREMIUM]?.isActive) return 'premium';
-    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.BASIC]?.isActive) return 'basic';
-    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.STARTER]?.isActive) return 'starter';
+    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.ENTERPRISE]?.isActive) return 'school_enterprise';
+    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.PRO]?.isActive) return 'school_pro';
+    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.PREMIUM]?.isActive) return 'parent_plus';
+    if (entitlements[REVENUECAT_CONFIG.ENTITLEMENTS.STARTER]?.isActive) return 'parent_starter';
     
     return 'free';
   } catch (error) {

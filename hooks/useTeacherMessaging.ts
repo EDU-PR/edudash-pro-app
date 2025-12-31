@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { usePathname } from 'expo-router';
 import { assertSupabase, supabase } from '@/lib/supabase';
@@ -428,11 +428,35 @@ export const useTeacherMarkThreadRead = () => {
 /**
  * Hook for real-time message updates in a thread
  * Subscribes to new messages and updates the query cache incrementally
+ * Also handles app state changes to refetch messages when returning from background
  */
 export const useTeacherMessagesRealtime = (threadId: string | null) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const pathname = usePathname();
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // Handle app state changes - refetch messages when returning to foreground
+  useEffect(() => {
+    if (!threadId) return;
+    
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      // Only refetch when transitioning FROM background/inactive TO active
+      if (
+        appStateRef.current.match(/inactive|background/) && 
+        nextAppState === 'active'
+      ) {
+        logger.debug('MessagesRealtime', 'App came to foreground, refetching messages');
+        // Refetch messages to get any delivery/read status updates that happened while backgrounded
+        queryClient.invalidateQueries({ queryKey: ['teacher', 'messages', threadId] });
+        queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [threadId, queryClient]);
 
   useEffect(() => {
     if (!threadId || !user?.id) return;

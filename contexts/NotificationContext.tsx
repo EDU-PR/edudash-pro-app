@@ -20,11 +20,11 @@ import React, {
 } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
 import { assertSupabase } from '../lib/supabase';
 import { logger } from '@/lib/logger';
-import * as Notifications from 'expo-notifications';
+import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
 
 // ============================================================================
 // Types
@@ -317,9 +317,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const syncBadge = useCallback(async () => {
     try {
       if (Platform.OS !== 'web') {
-        const badgeCount = counts.total;
-        await Notifications.setBadgeCountAsync(badgeCount);
-        logger.debug('NotificationContext', `Badge synced: ${badgeCount} (messages: ${counts.messages}, calls: ${counts.calls}, announcements: ${counts.announcements})`);
+        // Use BadgeCoordinator to coordinate with other badge sources (calls, updates)
+        await BadgeCoordinator.setCategories({
+          messages: counts.messages,
+          calls: counts.calls,
+          announcements: counts.announcements,
+        });
+        logger.debug('NotificationContext', `Badge synced via coordinator: messages=${counts.messages}, calls=${counts.calls}, announcements=${counts.announcements}`);
       }
       // For PWA, we could update document.title or use the Badging API
       // when running in browser context

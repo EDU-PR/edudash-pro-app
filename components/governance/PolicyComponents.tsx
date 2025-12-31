@@ -23,14 +23,7 @@ export interface Policy {
   status: 'active' | 'under-review' | 'draft';
 }
 
-export const POLICIES: Policy[] = [
-  { id: '1', title: 'Constitution', category: 'Foundational', lastUpdated: '2024-06-15', status: 'active' },
-  { id: '2', title: 'Membership Policy', category: 'Membership', lastUpdated: '2024-08-20', status: 'active' },
-  { id: '3', title: 'Financial Policy', category: 'Finance', lastUpdated: '2024-09-10', status: 'active' },
-  { id: '4', title: 'Code of Conduct', category: 'Ethics', lastUpdated: '2024-07-05', status: 'active' },
-  { id: '5', title: 'Data Protection Policy', category: 'Privacy', lastUpdated: '2024-10-01', status: 'under-review' },
-  { id: '6', title: 'Conflict of Interest Policy', category: 'Ethics', lastUpdated: '2024-05-20', status: 'active' },
-];
+// Legacy mock data removed - now using real documents from database via useOrganizationDocuments hook
 
 export function getStatusColor(status: string): string {
   switch (status) {
@@ -80,9 +73,56 @@ interface PoliciesSectionProps {
   theme: any;
   onPolicyPress: (policy: Policy) => void;
   onAddPress: () => void;
+  loading?: boolean;
 }
 
-export function PoliciesSection({ policies, theme, onPolicyPress, onAddPress }: PoliciesSectionProps) {
+export function PoliciesSection({ policies, theme, onPolicyPress, onAddPress, loading }: PoliciesSectionProps) {
+  if (loading) {
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Policies & Documents</Text>
+          <TouchableOpacity onPress={onAddPress}>
+            <Ionicons name="add-circle" size={24} color={theme.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+            Loading documents...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (policies.length === 0) {
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Policies & Documents</Text>
+          <TouchableOpacity onPress={onAddPress}>
+            <Ionicons name="add-circle" size={24} color={theme.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+          <Ionicons name="document-text-outline" size={48} color={theme.textSecondary} />
+          <Text style={[styles.emptyStateTitle, { color: theme.text }]}>No Documents Yet</Text>
+          <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+            Organization policies and documents will appear here once uploaded.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.uploadButton, { backgroundColor: theme.primary }]}
+            onPress={onAddPress}
+          >
+            <Ionicons name="cloud-upload-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.uploadButtonText}>Upload Document</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -102,6 +142,9 @@ export function PoliciesSection({ policies, theme, onPolicyPress, onAddPress }: 
     </View>
   );
 }
+
+// Remove mock data - now using real documents from database
+export const POLICIES: Policy[] = [];
 
 interface DocumentUploadModalProps {
   visible: boolean;
@@ -358,14 +401,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   uploadButton: {
-    flex: 1,
+    flexDirection: 'row',
     paddingVertical: 14,
+    paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
   },
   uploadButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Empty state styles
+  emptyState: {
+    alignItems: 'center',
+    padding: 32,
+    borderRadius: 16,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

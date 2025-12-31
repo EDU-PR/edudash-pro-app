@@ -4,6 +4,7 @@ import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 import { trackOTAUpdateCheck, trackOTAUpdateFetch, trackOTAUpdateApply, trackOTAError } from '@/lib/otaObservability';
+import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
 
 // Types for update state
 export interface UpdateState {
@@ -207,7 +208,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     updateState({ isUpdateDownloaded: false });
     // Clear badge when update is dismissed
     if (Platform.OS !== 'web') {
-      Notifications.setBadgeCountAsync(0).catch(() => {});
+      BadgeCoordinator.clearCategory('updates').catch(() => {});
     }
   };
 
@@ -267,7 +268,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Set app badge to show update available
         if (Platform.OS !== 'web') {
           try {
-            await Notifications.setBadgeCountAsync(1);
+            await BadgeCoordinator.setCategory('updates', 1);
           } catch (badgeError) {
             logger.warn('[Updates] Failed to set badge count:', badgeError);
           }

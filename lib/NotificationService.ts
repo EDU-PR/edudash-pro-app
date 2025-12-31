@@ -177,22 +177,21 @@ class NotificationService {
         appVersion,
       };
 
-      // Save token to database
-      const pushTokenData: Omit<PushToken, 'createdAt' | 'updatedAt'> = {
-        userId,
-        token: this.pushToken,
-        platform: Platform.OS as 'ios' | 'android' | 'web',
-        deviceInfo,
-        isActive: true,
-      };
+      // Get device installation ID for upsert conflict key
+      const deviceInstallationId = Constants.deviceId || Constants.sessionId || 'unknown';
 
-      // Upsert push token in database
+      // Upsert push token in database with correct column names
       const { error } = await assertSupabase()
         .from('push_devices')
         .upsert(
           {
-            ...pushTokenData,
-            fcm_token: this.fcmToken, // Also store FCM token for wake-on-call
+            user_id: userId,
+            expo_push_token: this.pushToken,
+            platform: Platform.OS as 'ios' | 'android' | 'web',
+            device_installation_id: deviceInstallationId,
+            device_metadata: deviceInfo,
+            is_active: true,
+            fcm_token: this.fcmToken || null,
             updated_at: new Date().toISOString(),
           },
           { 
