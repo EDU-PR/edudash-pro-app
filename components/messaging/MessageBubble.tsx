@@ -103,8 +103,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
     );
   }
 
-  // Get the user's reaction (only one allowed)
-  const userReaction = msg.reactions?.find(r => r.hasReacted);
+  // Get all reactions with counts > 0
+  const activeReactions = msg.reactions?.filter(r => r.count > 0) || [];
 
   return (
     <View style={[styles.container, isOwn ? styles.own : styles.other]}>
@@ -172,18 +172,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         </LinearGradient>
       </Pressable>
       
-      {/* Reaction display below bubble - only show user's reaction */}
-      {userReaction && (
-        <TouchableOpacity
+      {/* Reaction display below bubble - show all reactions with counts */}
+      {activeReactions.length > 0 && (
+        <View
           style={[
-            styles.reactionBelowBubble,
-            isOwn ? styles.reactionBelowOwn : styles.reactionBelowOther
+            styles.reactionsBelowBubble,
+            isOwn ? styles.reactionsBelowOwn : styles.reactionsBelowOther
           ]}
-          onPress={() => onReactionPress?.(msg.id, userReaction.emoji)}
-          activeOpacity={0.7}
         >
-          <Text style={styles.reactionEmoji}>{userReaction.emoji}</Text>
-        </TouchableOpacity>
+          {activeReactions.map((reaction) => (
+            <TouchableOpacity
+              key={reaction.emoji}
+              style={[
+                styles.reactionPill,
+                reaction.hasReacted && styles.reactionPillActive
+              ]}
+              onPress={() => onReactionPress?.(msg.id, reaction.emoji)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+              {reaction.count > 1 && (
+                <Text style={styles.reactionCount}>{reaction.count}</Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
     </View>
   );
@@ -284,8 +297,23 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 11 },
   ticksContainer: { marginLeft: 2 },
-  reactionBelowBubble: {
+  reactionsBelowBubble: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
     marginTop: -6,
+  },
+  reactionsBelowOwn: {
+    justifyContent: 'flex-end',
+    marginRight: 8,
+  },
+  reactionsBelowOther: {
+    justifyContent: 'flex-start',
+    marginLeft: 8,
+  },
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 6,
     paddingVertical: 2,
     backgroundColor: 'rgba(30, 41, 59, 0.95)',
@@ -297,17 +325,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
+    gap: 2,
   },
-  reactionBelowOwn: {
-    alignSelf: 'flex-end',
-    marginRight: 8,
-  },
-  reactionBelowOther: {
-    alignSelf: 'flex-start',
-    marginLeft: 8,
+  reactionPillActive: {
+    borderColor: 'rgba(59, 130, 246, 0.5)',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
   },
   reactionEmoji: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  reactionCount: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
   },
 });

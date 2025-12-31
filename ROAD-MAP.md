@@ -160,6 +160,159 @@ CREATE TABLE join_requests (
 
 ---
 
+## Phase 1.5: State-of-the-Art Parent Features (Q1 2026)
+
+### 1.5.1 Weekly AI-Generated Learning Reports 🆕
+**Priority**: High | **Status**: Planned
+
+Personalized weekly insights delivered to parents about their child's learning journey.
+
+| Feature | Description |
+|---------|-------------|
+| AI Report Generation | Claude generates personalized weekly summaries |
+| Progress Highlights | Key achievements and milestones reached |
+| Areas of Focus | Subjects/skills needing attention |
+| Teacher Notes Integration | Include teacher observations |
+| Comparative Analytics | Progress vs curriculum expectations |
+| Actionable Tips | Home activities to support learning |
+| Multi-Language Support | Reports in parent's preferred language |
+| Delivery Options | Push notification + in-app + email digest |
+
+**Implementation**:
+```typescript
+// Edge Function: generate-weekly-report
+interface WeeklyLearningReport {
+  studentId: string;
+  weekNumber: number;
+  highlights: string[];        // "Mastered counting to 20"
+  focusAreas: string[];        // "Letter recognition needs practice"
+  attendanceSummary: {
+    daysPresent: number;
+    daysAbsent: number;
+  };
+  homeworkCompletion: number;  // Percentage
+  teacherNotes: string[];
+  homeActivities: string[];    // AI-suggested activities
+  moodSummary?: string;        // If mood tracking enabled
+}
+```
+
+**Database Changes**:
+```sql
+CREATE TABLE weekly_learning_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES profiles(id),
+  preschool_id UUID NOT NULL REFERENCES preschools(id),
+  week_start DATE NOT NULL,
+  week_end DATE NOT NULL,
+  report_data JSONB NOT NULL,
+  ai_model TEXT DEFAULT 'claude-3-5-sonnet',
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  viewed_at TIMESTAMPTZ,
+  sent_via JSONB DEFAULT '[]'::jsonb, -- ['push', 'email', 'in_app']
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(student_id, week_start)
+);
+
+CREATE INDEX idx_weekly_reports_parent ON weekly_learning_reports(parent_id);
+CREATE INDEX idx_weekly_reports_student_week ON weekly_learning_reports(student_id, week_start);
+```
+
+**Screens Needed**:
+- `app/screens/parent-weekly-report.tsx`
+- `components/reports/WeeklyReportCard.tsx`
+- `components/reports/WeeklyReportDetail.tsx`
+
+### 1.5.2 Daily Activity Feed 🆕
+**Priority**: High | **Status**: Planned
+
+Real-time updates from the classroom throughout the day.
+
+| Feature | Description |
+|---------|-------------|
+| Live Activity Stream | Timestamped updates from teachers |
+| Photo/Video Moments | Media shared by teachers (with consent) |
+| Activity Categories | Learning, Play, Meals, Rest, Special Events |
+| Reactions | Parents can react with emoji 💝 |
+| Comments | Optional parent comments (moderated) |
+| Notification Preferences | Choose which activities to be notified about |
+| Daily Summary | End-of-day digest of all activities |
+| Privacy Controls | Per-child visibility settings |
+
+**Implementation**:
+```typescript
+interface DailyActivity {
+  id: string;
+  studentId: string;
+  teacherId: string;
+  activityType: 'learning' | 'play' | 'meal' | 'rest' | 'special' | 'milestone';
+  title: string;
+  description?: string;
+  mediaUrls?: string[];
+  timestamp: Date;
+  visibility: 'parent_only' | 'class_parents' | 'all_parents';
+  reactions: { parentId: string; emoji: string }[];
+  comments: { parentId: string; text: string; createdAt: Date }[];
+}
+```
+
+**Database Changes**:
+```sql
+CREATE TABLE daily_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  class_id UUID REFERENCES classes(id),
+  teacher_id UUID NOT NULL REFERENCES profiles(id),
+  preschool_id UUID NOT NULL REFERENCES preschools(id),
+  activity_type TEXT NOT NULL CHECK (activity_type IN ('learning', 'play', 'meal', 'rest', 'special', 'milestone')),
+  title TEXT NOT NULL,
+  description TEXT,
+  media_urls JSONB DEFAULT '[]'::jsonb,
+  visibility TEXT DEFAULT 'parent_only' CHECK (visibility IN ('parent_only', 'class_parents', 'all_parents')),
+  activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE daily_activity_reactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  activity_id UUID NOT NULL REFERENCES daily_activities(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES profiles(id),
+  emoji TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(activity_id, parent_id)
+);
+
+CREATE TABLE daily_activity_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  activity_id UUID NOT NULL REFERENCES daily_activities(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES profiles(id),
+  comment_text TEXT NOT NULL,
+  is_approved BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_daily_activities_student ON daily_activities(student_id, activity_at DESC);
+CREATE INDEX idx_daily_activities_class ON daily_activities(class_id, activity_at DESC);
+CREATE INDEX idx_daily_activities_preschool ON daily_activities(preschool_id, activity_at DESC);
+```
+
+**Screens Needed**:
+- `app/screens/parent-activity-feed.tsx`
+- `components/activities/ActivityCard.tsx`
+- `components/activities/ActivityMediaViewer.tsx`
+- `components/activities/DailySummaryCard.tsx`
+- `app/screens/teacher-post-activity.tsx`
+
+**Teacher Interface**:
+- Quick-post buttons for common activities
+- Batch photo upload with auto-tagging
+- Template messages for routine activities
+- Voice-to-text for quick descriptions
+
+---
+
 ## Phase 2: Communication & Verification (Q1-Q2 2026)
 
 ### 2.1 Phone Number Verification System 🆕

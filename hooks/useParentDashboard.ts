@@ -113,19 +113,42 @@ export const useParentDashboard = () => {
             first_name,
             last_name,
             grade_level,
-            student_class:classes(id, name, teacher:profiles!classes_teacher_id_fkey(first_name, last_name))
+            classes!students_class_id_fkey(id, name, teacher_id)
           `)
           .eq('parent_id', user.id);
+        
+        // Fetch teacher names separately if we have classes
+        const classIds = (childrenData || [])
+          .map((c: any) => c.classes?.id)
+          .filter(Boolean);
+        
+        let teacherMap: Record<string, string> = {};
+        if (classIds.length > 0) {
+          const teacherIds = (childrenData || [])
+            .map((c: any) => c.classes?.teacher_id)
+            .filter(Boolean);
+          
+          if (teacherIds.length > 0) {
+            const { data: teachersData } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .in('id', teacherIds);
+            
+            (teachersData || []).forEach((t: any) => {
+              teacherMap[t.id] = `${t.first_name || ''} ${t.last_name || ''}`.trim();
+            });
+          }
+        }
 
         const children = (childrenData || []).map((child: Record<string, unknown>) => ({
           id: child.id as string,
           firstName: child.first_name as string,
           lastName: child.last_name as string,
           grade: (child.grade_level as string) || 'Grade R',
-          className: (child.student_class as Record<string, unknown>)?.name as string || 'No Class',
-          teacher: (child.student_class as Record<string, unknown>)?.teacher ? 
-            `${((child.student_class as Record<string, unknown>).teacher as Record<string, unknown>).first_name} ${((child.student_class as Record<string, unknown>).teacher as Record<string, unknown>).last_name}` : 
-            'No Teacher Assigned'
+          className: (child.classes as Record<string, unknown>)?.name as string || 'No Class',
+          teacher: (child.classes as Record<string, unknown>)?.teacher_id 
+            ? teacherMap[(child.classes as Record<string, unknown>).teacher_id as string] || 'No Teacher Assigned'
+            : 'No Teacher Assigned'
         }));
 
         // Get today's attendance for all children
@@ -145,21 +168,21 @@ export const useParentDashboard = () => {
         }
 
         // Fetch recent homework assignments for children
+        // Using explicit FK to avoid ambiguous relationship error
         const { data: assignmentsData } = await supabase
           .from('homework_assignments')
           .select(`
             id,
             title,
             due_date,
-            homework_submissions!inner(
+            homework_submissions!homework_submissions_assignment_id_fkey(
               id,
               status,
               student_id
             )
           `)
-          .in('homework_submissions.student_id', childIds)
           .order('due_date', { ascending: false })
-          .limit(5);
+          .limit(10);
 
         // Fetch upcoming events for the school
         const { data: eventsData } = await supabase
@@ -175,17 +198,24 @@ export const useParentDashboard = () => {
         const presentToday = todayAttendanceData.filter(a => a.status === 'present').length;
         const attendanceRate = totalChildren > 0 ? Math.round((presentToday / totalChildren) * 100) : 0;
 
-        // Process homework data
-        const recentHomework = (assignmentsData || []).map((assignment: Record<string, unknown>) => {
-          const submissions = (assignment.homework_submissions as Array<{ status: string; student_id: string }>)?.[0];
-          return {
-            id: assignment.id as string,
-            title: assignment.title as string,
-            dueDate: formatDueDate(assignment.due_date as string),
-            status: (submissions?.status || 'not_submitted') as 'submitted' | 'graded' | 'not_submitted',
-            studentName: children.find(child => child.id === submissions?.student_id)?.firstName || 'Unknown'
-          };
-        });
+        // Process homework data - filter to only show homework for this parent's children
+        const recentHomework = (assignmentsData || [])
+          .map((assignment: Record<string, unknown>) => {
+            const submissions = (assignment.homework_submissions as Array<{ status: string; student_id: string }>) || [];
+            // Find submission for one of our children
+            const childSubmission = submissions.find(s => childIds.includes(s.student_id));
+            if (!childSubmission) return null; // Skip if no submission from our children
+            
+            return {
+              id: assignment.id as string,
+              title: assignment.title as string,
+              dueDate: formatDueDate(assignment.due_date as string),
+              status: (childSubmission.status || 'not_submitted') as 'submitted' | 'graded' | 'not_submitted',
+              studentName: children.find(child => child.id === childSubmission.student_id)?.firstName || 'Unknown'
+            };
+          })
+          .filter(Boolean)
+          .slice(0, 5);
 
         // Process upcoming events
         const upcomingEvents = (eventsData || []).map((event: Record<string, unknown>) => {

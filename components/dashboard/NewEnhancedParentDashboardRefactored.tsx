@@ -173,6 +173,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'calls':
         router.push('/screens/calls');
         break;
+      case 'payments':
+        router.push('/screens/parent-payments');
+        break;
       default:
         Alert.alert(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }), 
@@ -268,6 +271,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     { id: 'messages', title: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', color: theme.info },
     { id: 'events', title: t('parent.events', { defaultValue: 'Events' }), icon: 'calendar-outline', color: theme.warning },
     { id: 'calls', title: t('parent.calls', { defaultValue: 'Calls' }), icon: 'call', color: '#10B981' },
+    { id: 'payments', title: t('parent.payments', { defaultValue: 'Payments & POP' }), icon: 'card', color: '#059669' },
     { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
     { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
   ], [t, theme, tier]);

@@ -24,15 +24,16 @@ import { Card } from '@/components/ui/Card';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useOrganizationBranding } from '@/contexts/OrganizationBrandingContext';
 import { useOrganizationStats } from '@/hooks/membership/useOrganizationStats';
+import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import {
   ExecutiveSummaryCard,
   StrategicPriorities,
   RegionalPerformanceList,
   DashboardBackground,
   DashboardWallpaperSettings,
-  MOCK_STRATEGIC_PRIORITIES,
   MOCK_EXECUTIVE_ACTIONS,
   type DashboardSettings,
+  type StrategicPriority,
 } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -45,6 +46,7 @@ export default function CEODashboard() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { refetch: refetchBranding } = useOrganizationBranding();
+  const notificationCount = useNotificationBadgeCount();
   
   // Real data from Supabase
   const { 
@@ -89,6 +91,66 @@ export default function CEODashboard() {
     growth: r.growth_percent || 0,
     satisfaction: 0, // Will be added when feedback system is implemented
   })) || [];
+
+  // Strategic priorities - empty until database integration
+  const strategicPriorities: StrategicPriority[] = [];
+
+  // Pending approval items with routes
+  const PENDING_APPROVAL_ITEMS = [
+    { 
+      icon: 'briefcase' as const, 
+      color: '#3B82F6', 
+      title: 'Regional Manager Applications', 
+      description: `${stats?.pendingApprovals || 0} candidates awaiting review`,
+      urgent: true,
+      route: '/screens/membership/regional-manager-applications',
+    },
+    { 
+      icon: 'document-text' as const, 
+      color: '#F59E0B', 
+      title: 'Budget Proposals', 
+      description: 'Regional budgets pending approval',
+      urgent: false,
+      route: '/screens/membership/budget-proposals',
+    },
+    { 
+      icon: 'ribbon' as const, 
+      color: '#8B5CF6', 
+      title: 'Strategic Initiatives', 
+      description: 'New proposals from regional teams',
+      urgent: false,
+      route: '/screens/membership/initiatives',
+    },
+    { 
+      icon: 'cash' as const, 
+      color: '#10B981', 
+      title: 'Financial Authorizations', 
+      description: 'Expenditure requests pending',
+      urgent: true,
+      route: '/screens/membership/financial-authorizations',
+    },
+  ];
+
+  // Handlers
+  const handlePriorityPress = (priority: StrategicPriority) => {
+    router.push({
+      pathname: '/screens/membership/priority-detail',
+      params: { id: priority.id, title: priority.title },
+    });
+  };
+
+  const handleApprovalPress = (item: typeof PENDING_APPROVAL_ITEMS[0]) => {
+    // For now, show coming soon for screens that don't exist yet
+    if (item.route.includes('regional-manager')) {
+      router.push('/screens/membership/regional-managers');
+    } else {
+      Alert.alert(
+        item.title,
+        `${item.description}\n\nThis feature is coming soon.`,
+        [{ text: 'OK' }]
+      );
+    }
+  };
 
   const handleSettingsSaved = (newSettings: DashboardSettings) => {
     setDashboardSettings(newSettings);
@@ -177,9 +239,13 @@ export default function CEODashboard() {
             onPress={() => router.push('/screens/notifications')}
           >
             <Ionicons name="notifications-outline" size={24} color={theme.primary} />
-            <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
-              <Text style={styles.notificationCount}>5</Text>
-            </View>
+            {notificationCount > 0 && (
+              <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.notificationCount}>
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerButton}
@@ -233,13 +299,14 @@ export default function CEODashboard() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Strategic Priorities</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/screens/membership/strategic-priorities')}>
                 <Text style={[styles.seeAll, { color: theme.primary }]}>Manage</Text>
               </TouchableOpacity>
             </View>
             <StrategicPriorities 
-              priorities={MOCK_STRATEGIC_PRIORITIES}
+              priorities={strategicPriorities}
               theme={theme}
+              onPriorityPress={handlePriorityPress}
             />
           </View>
 
@@ -267,38 +334,12 @@ export default function CEODashboard() {
             </View>
             
             <Card padding={0} margin={0}>
-              {[
-                { 
-                  icon: 'briefcase', 
-                  color: '#3B82F6', 
-                  title: 'Regional Manager Applications', 
-                  description: '8 candidates awaiting review',
-                  urgent: true,
-                },
-                { 
-                  icon: 'document-text', 
-                  color: '#F59E0B', 
-                  title: 'Budget Proposals', 
-                  description: '3 regional budgets for Q1 2026',
-                  urgent: false,
-                },
-                { 
-                  icon: 'ribbon', 
-                  color: '#8B5CF6', 
-                  title: 'Strategic Initiatives', 
-                  description: '5 new proposals from regional teams',
-                  urgent: false,
-                },
-                { 
-                  icon: 'cash', 
-                  color: '#10B981', 
-                  title: 'Financial Authorizations', 
-                  description: '7 expenditure requests > R50K',
-                  urgent: true,
-                },
-              ].map((item, index) => (
+              {PENDING_APPROVAL_ITEMS.map((item, index) => (
                 <View key={index}>
-                  <TouchableOpacity style={styles.approvalItem}>
+                  <TouchableOpacity 
+                    style={styles.approvalItem}
+                    onPress={() => handleApprovalPress(item)}
+                  >
                     <View style={[styles.approvalIcon, { backgroundColor: item.color + '15' }]}>
                       <Ionicons name={item.icon as any} size={20} color={item.color} />
                     </View>
@@ -317,7 +358,9 @@ export default function CEODashboard() {
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
                   </TouchableOpacity>
-                  {index < 3 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+                  {index < PENDING_APPROVAL_ITEMS.length - 1 && (
+                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                  )}
                 </View>
               ))}
             </Card>

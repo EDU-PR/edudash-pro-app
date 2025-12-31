@@ -179,8 +179,8 @@ export default function VoiceMessageBubble({
 }: VoiceMessageBubbleProps) {
   const theme = { ...DEFAULT_THEME, ...customTheme };
   
-  // Get the user's reaction (only one allowed)
-  const userReaction = reactions?.find(r => r.hasReacted);
+  // Get all reactions with counts > 0
+  const activeReactions = reactions?.filter(r => r.count > 0) || [];
 
   // ─── State ─────────────────────────────────────────────────────────────────
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -603,18 +603,31 @@ export default function VoiceMessageBubble({
         />
       </View>
       
-      {/* Reaction display below bubble - only show user's reaction */}
-      {userReaction && (
-        <TouchableOpacity
+      {/* Reaction display below bubble - show all reactions with counts */}
+      {activeReactions.length > 0 && (
+        <View
           style={[
-            styles.reactionBelowBubble,
-            isOwnMessage ? styles.reactionBelowOwn : styles.reactionBelowOther
+            styles.reactionsBelowBubble,
+            isOwnMessage ? styles.reactionsBelowOwn : styles.reactionsBelowOther
           ]}
-          onPress={() => messageId && onReactionPress?.(messageId, userReaction.emoji)}
-          activeOpacity={0.7}
         >
-          <Text style={styles.reactionEmojiBelow}>{userReaction.emoji}</Text>
-        </TouchableOpacity>
+          {activeReactions.map((reaction) => (
+            <TouchableOpacity
+              key={reaction.emoji}
+              style={[
+                styles.reactionPill,
+                reaction.hasReacted && styles.reactionPillActive
+              ]}
+              onPress={() => messageId && onReactionPress?.(messageId, reaction.emoji)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+              {reaction.count > 1 && (
+                <Text style={styles.reactionCount}>{reaction.count}</Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
     </Pressable>
   );
@@ -720,8 +733,23 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     opacity: 0.6,
   },
-  reactionBelowBubble: {
+  reactionsBelowBubble: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
     marginTop: -4,
+  },
+  reactionsBelowOwn: {
+    justifyContent: 'flex-end',
+    marginRight: 8,
+  },
+  reactionsBelowOther: {
+    justifyContent: 'flex-start',
+    marginLeft: 8,
+  },
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 6,
     paddingVertical: 2,
     backgroundColor: 'rgba(30, 41, 59, 0.95)',
@@ -733,18 +761,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
+    gap: 2,
   },
-  reactionBelowOwn: {
-    alignSelf: 'flex-end',
-    marginRight: 8,
+  reactionPillActive: {
+    borderColor: 'rgba(59, 130, 246, 0.5)',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
   },
-  reactionBelowOther: {
-    alignSelf: 'flex-start',
-    marginLeft: 8,
+  reactionEmoji: {
+    fontSize: 14,
+    lineHeight: 18,
   },
-  reactionEmojiBelow: {
-    fontSize: 16,
-    lineHeight: 20,
+  reactionCount: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
   },
 });
 

@@ -3,7 +3,7 @@
  * Organizational governance, policies, and compliance
  * Refactored to comply with WARP.md (< 500 lines)
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -12,6 +12,7 @@ import {
   TouchableOpacity, 
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,18 +27,21 @@ import {
   BoardMemberCard, 
   YouthBoardSection,
   ComplianceCard,
-  BOARD_MEMBERS,
-  YOUTH_BOARD_MEMBERS,
+  EmptyBoardState,
+  DEFAULT_BOARD_POSITIONS,
+  DEFAULT_YOUTH_POSITIONS,
 } from '@/components/governance/BoardComponents';
 import { 
   PoliciesSection, 
-  POLICIES,
 } from '@/components/governance/PolicyComponents';
 import { 
   MeetingsSection,
   UPCOMING_MEETINGS,
 } from '@/components/governance/MeetingComponents';
 import { DocumentUploadModal } from '@/components/governance/useDocumentUpload';
+import { BoardAppointmentModal } from '@/components/governance/BoardAppointmentModal';
+import { useBoardPositions, positionsToLegacyFormat } from '@/hooks/membership/useBoardPositions';
+import { useOrganizationDocuments } from '@/hooks/membership/useOrganizationDocuments';
 
 export default function GovernanceScreen() {
   const { theme } = useTheme();
@@ -46,10 +50,43 @@ export default function GovernanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'board' | 'policies' | 'meetings'>('board');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<{ id: string; title: string } | null>(null);
+
+  // Board positions hook
+  const {
+    positions,
+    loading: boardLoading,
+    error: boardError,
+    refetch: refetchBoard,
+    appointMember,
+    appointableMembers,
+    loadingMembers,
+    fetchAppointableMembers,
+    initializePositions,
+  } = useBoardPositions();
+
+  // Documents hook
+  const {
+    documents: policies,
+    loading: policiesLoading,
+    error: policiesError,
+    refetch: refetchPolicies,
+  } = useOrganizationDocuments();
+
+  // Convert positions to legacy format for BoardMemberCard
+  const boardMembers = positionsToLegacyFormat(positions);
+
+  // Calculate governance stats
+  const filledPositions = positions.filter(p => p.member_id).length;
+  const totalPositions = positions.length || DEFAULT_BOARD_POSITIONS.length;
+  const governanceScore = totalPositions > 0 
+    ? Math.round((filledPositions / totalPositions) * 100) 
+    : 0;
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await Promise.all([refetchBoard(), refetchPolicies()]);
     setRefreshing(false);
   };
 
@@ -70,7 +107,47 @@ export default function GovernanceScreen() {
 
   const handleUploadSuccess = () => {
     setShowUploadModal(false);
-    onRefresh();
+    refetchPolicies();
+  };
+
+  const handleAppoint = (member: { id: string; role: string; positionId?: string }) => {
+    // Find the position ID for this board member
+    const position = positions.find(p => p.id === member.id);
+    if (position) {
+      setSelectedPosition({ id: position.id, title: position.position_title });
+      fetchAppointableMembers();
+      setShowAppointmentModal(true);
+    } else {
+      // For vacant positions from default list, we need to initialize first
+      Alert.alert(
+        'Initialize Board',
+        'Board positions need to be set up first. Would you like to initialize the default positions?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Initialize', 
+            onPress: async () => {
+              const success = await initializePositions();
+              if (success) {
+                Alert.alert('Success', 'Board positions have been initialized. You can now appoint members.');
+              }
+            }
+          },
+        ]
+      );
+    }
+  };
+
+  const handleAppointMember = async (memberId: string) => {
+    if (!selectedPosition) return;
+    const success = await appointMember(selectedPosition.id, memberId);
+    if (success) {
+      setShowAppointmentModal(false);
+      setSelectedPosition(null);
+      Alert.alert('Success', 'Member has been appointed successfully.');
+    } else {
+      Alert.alert('Error', 'Failed to appoint member. Please try again.');
+    }
   };
 
   return (
@@ -128,43 +205,63 @@ export default function GovernanceScreen() {
             <>
               {/* Compliance Summary */}
               <ComplianceCard 
-                score={72}
-                status="Good Standing"
+                score={governanceScore}
+                status={governanceScore >= 80 ? 'Excellent' : governanceScore >= 50 ? 'Good Standing' : 'Needs Attention'}
                 stats={{
-                  boardFilled: '1/5',
-                  activePolicies: 6,
-                  upcomingMeetings: 3,
+                  boardFilled: `${filledPositions}/${totalPositions}`,
+                  activePolicies: policies.length,
+                  upcomingMeetings: UPCOMING_MEETINGS.length,
                 }}
               />
 
               {/* Board Members */}
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>Board of Directors</Text>
-                {BOARD_MEMBERS.map((member) => (
-                  <BoardMemberCard
-                    key={member.id}
-                    member={member}
-                    theme={theme}
-                    onAppoint={() => Alert.alert('Appoint', `Appoint member to ${member.role}`)}
-                  />
-                ))}
-              </View>
+              {boardLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={theme.primary} />
+                  <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+                    Loading board positions...
+                  </Text>
+                </View>
+              ) : positions.length === 0 ? (
+                <EmptyBoardState 
+                  theme={theme} 
+                  onInitialize={initializePositions}
+                  loading={boardLoading}
+                />
+              ) : (
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Board of Directors</Text>
+                  {boardMembers.map((member) => (
+                    <BoardMemberCard
+                      key={member.id}
+                      member={member}
+                      theme={theme}
+                      onAppoint={() => handleAppoint(member)}
+                    />
+                  ))}
+                </View>
+              )}
 
-              {/* Youth Wing Board */}
-              <YouthBoardSection
-                members={YOUTH_BOARD_MEMBERS}
-                theme={theme}
-                onAppoint={(member) => Alert.alert('Appoint', `Appoint youth member to ${member.role}`)}
-              />
+              {/* Youth Wing Board - placeholder until wing leadership is set up */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Youth Wing Leadership</Text>
+                <View style={[styles.emptySection, { backgroundColor: theme.card }]}>
+                  <Ionicons name="people-outline" size={32} color={theme.textSecondary} />
+                  <Text style={[styles.emptySectionText, { color: theme.textSecondary }]}>
+                    Youth wing positions not yet configured
+                  </Text>
+                </View>
+              </View>
             </>
           )}
 
           {activeTab === 'policies' && (
             <PoliciesSection
-              policies={POLICIES}
+              policies={policies}
               theme={theme}
               onPolicyPress={handlePolicyPress}
               onAddPress={handleAddDocument}
+              loading={policiesLoading}
             />
           )}
 
@@ -185,6 +282,20 @@ export default function GovernanceScreen() {
         theme={theme}
         onClose={() => setShowUploadModal(false)}
         onSuccess={handleUploadSuccess}
+      />
+
+      {/* Board Appointment Modal */}
+      <BoardAppointmentModal
+        visible={showAppointmentModal}
+        theme={theme}
+        positionTitle={selectedPosition?.title || ''}
+        members={appointableMembers}
+        loading={loadingMembers}
+        onClose={() => {
+          setShowAppointmentModal(false);
+          setSelectedPosition(null);
+        }}
+        onAppoint={handleAppointMember}
       />
     </SafeAreaView>
   );
@@ -244,5 +355,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+  },
+  emptySection: {
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 12,
+    gap: 8,
+  },
+  emptySectionText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

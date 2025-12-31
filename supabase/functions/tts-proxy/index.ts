@@ -378,6 +378,42 @@ serve(async (req) => {
     const preschoolId = user.user_metadata?.preschool_id || 'unknown';
     const userId = user.id;
 
+    // =========================================================================
+    // TIER CHECK - TTS is only available for paid tiers (starter+)
+    // =========================================================================
+    const { data: tierData } = await supabase
+      .from('user_ai_tiers')
+      .select('tier')
+      .eq('user_id', userId)
+      .single();
+    
+    const userTier = tierData?.tier || 'free';
+    
+    // Tier capability check: free tier does NOT get TTS
+    // Tiers with TTS access: parent_starter, parent_plus, teacher_starter, teacher_pro,
+    // school_starter, school_premium, school_pro, school_enterprise, enterprise
+    const TTS_ALLOWED_TIERS = [
+      'parent_starter', 'parent_plus',
+      'teacher_starter', 'teacher_pro',
+      'school_starter', 'school_premium', 'school_pro', 'school_enterprise',
+      'enterprise', 'trial', 'starter', 'premium', 'pro' // Include legacy tier names
+    ];
+    
+    if (!TTS_ALLOWED_TIERS.includes(userTier)) {
+      console.log(`[TTS] Tier check failed: user ${userId} has tier "${userTier}" - TTS not allowed`);
+      return new Response(JSON.stringify({ 
+        error: 'TTS not available on free tier',
+        code: 'UPGRADE_REQUIRED',
+        userTier,
+        message: 'Upgrade to Starter or Pro to unlock Text-to-Speech features'
+      }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    
+    console.log(`[TTS] Tier check passed: user ${userId} has tier "${userTier}"`);
+
     // Parse request (handle both param names for compatibility)
     const request: TTSRequest = await req.json();
     const { text, lang, language, voiceId, voice_id, style, rate, pitch, speaking_rate } = request;

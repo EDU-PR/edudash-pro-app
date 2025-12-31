@@ -206,7 +206,7 @@ export function useStartLessonLogic(
     setError(null);
 
     try {
-      const { data: roomData, error: roomError } = await supabase.functions.invoke('create-daily-room', {
+      const { data: roomData, error: roomError } = await supabase.functions.invoke('daily-rooms', {
         body: {
           name: lessonTitle,
           properties: {

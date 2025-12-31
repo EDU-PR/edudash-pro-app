@@ -89,34 +89,15 @@ export default function StudentDetailScreen() {
         return;
       }
 
-      // Get student details with related information
+      // Get student details with class info (simpler query - avoids nested FK issues)
       const { data: studentData, error: studentError } = await assertSupabase()
         .from('students')
         .select(`
           *,
-          classes (
-            id,
-            name,
-            grade_level,
-            teacher_id,
-            profiles!classes_teacher_id_fkey (
-              id,
-              first_name,
-              last_name
-            )
-          ),
-          profiles!students_parent_id_fkey (
-            id,
-            first_name,
-            last_name,
-            email
-          ),
-          age_groups!students_age_group_id_fkey (
-            name
-          )
+          classes!left(id, name, grade_level, teacher_id)
         `)
         .eq('id', studentId)
-        .eq('preschool_id', userProfile.preschool_id)
+        .eq('preschool_id', schoolId)
         .single();
 
       if (studentError) {
@@ -124,6 +105,46 @@ export default function StudentDetailScreen() {
         Alert.alert('Error', 'Student not found');
         router.back();
         return;
+      }
+
+      // Fetch teacher info separately if class has teacher
+      let teacherName: string | undefined;
+      if (studentData.classes?.teacher_id) {
+        const { data: teacherData } = await assertSupabase()
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', studentData.classes.teacher_id)
+          .single();
+        if (teacherData) {
+          teacherName = `${teacherData.first_name || ''} ${teacherData.last_name || ''}`.trim();
+        }
+      }
+
+      // Fetch parent info separately if student has parent_id
+      let parentInfo: { name?: string; email?: string } = {};
+      if (studentData.parent_id) {
+        const { data: parentData } = await assertSupabase()
+          .from('profiles')
+          .select('first_name, last_name, email')
+          .eq('id', studentData.parent_id)
+          .single();
+        if (parentData) {
+          parentInfo = {
+            name: `${parentData.first_name || ''} ${parentData.last_name || ''}`.trim(),
+            email: parentData.email,
+          };
+        }
+      }
+
+      // Fetch age group info if student has age_group_id
+      let ageGroupName: string | undefined;
+      if (studentData.age_group_id) {
+        const { data: ageGroupData } = await assertSupabase()
+          .from('age_groups')
+          .select('name')
+          .eq('id', studentData.age_group_id)
+          .single();
+        ageGroupName = ageGroupData?.name;
       }
 
       // Calculate age information
@@ -168,11 +189,11 @@ export default function StudentDetailScreen() {
         age_months: ageInfo.months,
         age_years: ageInfo.years,
         class_name: studentData.classes?.name,
-        teacher_name: studentData.classes?.profiles ? `${studentData.classes.profiles.first_name} ${studentData.classes.profiles.last_name}` : undefined,
-        parent_name: studentData.profiles ? `${studentData.profiles.first_name} ${studentData.profiles.last_name}` : undefined,
-        parent_email: studentData.profiles?.email,
+        teacher_name: teacherName,
+        parent_name: parentInfo.name,
+        parent_email: parentInfo.email,
         parent_phone: undefined,
-        age_group_name: studentData.age_groups?.name,
+        age_group_name: ageGroupName,
         attendance_rate: attendanceRate,
         last_attendance: lastAttendance,
         outstanding_fees: outstandingFees,
@@ -186,28 +207,54 @@ export default function StudentDetailScreen() {
         const { data: classesData } = await assertSupabase()
           .from('classes')
           .select(`
-            *,
-            profiles!classes_teacher_id_fkey (
-              id,
-              first_name,
-              last_name
-            ),
-            students!inner (
-              id
-            )
+            id,
+            name,
+            grade_level,
+            teacher_id,
+            capacity
           `)
           .eq('preschool_id', userProfile.preschool_id)
           .eq('is_active', true);
 
-        const processedClasses = classesData?.map(cls => ({
+        // Get teacher names for each class
+        const teacherIds = [...new Set((classesData || []).map(c => c.teacher_id).filter(Boolean))];
+        let teacherMap: Record<string, string> = {};
+        
+        if (teacherIds.length > 0) {
+          const { data: teachersData } = await assertSupabase()
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', teacherIds);
+          
+          teacherMap = (teachersData || []).reduce((acc, t) => {
+            acc[t.id] = `${t.first_name} ${t.last_name}`;
+            return acc;
+          }, {} as Record<string, string>);
+        }
+
+        // Get enrollment counts
+        const { data: enrollmentData } = await assertSupabase()
+          .from('students')
+          .select('class_id')
+          .eq('preschool_id', userProfile.preschool_id)
+          .eq('is_active', true);
+        
+        const enrollmentMap = (enrollmentData || []).reduce((acc, s) => {
+          if (s.class_id) {
+            acc[s.class_id] = (acc[s.class_id] || 0) + 1;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+
+        const processedClasses = (classesData || []).map(cls => ({
           id: cls.id,
           name: cls.name,
           grade_level: cls.grade_level,
-          teacher_id: (cls as any).profiles?.id || null,
-          teacher_name: (cls as any).profiles ? `${(cls as any).profiles.first_name} ${(cls as any).profiles.last_name}` : undefined,
+          teacher_id: cls.teacher_id || null,
+          teacher_name: cls.teacher_id ? teacherMap[cls.teacher_id] : undefined,
           capacity: cls.capacity || 25,
-          current_enrollment: cls.students?.length || 0,
-        })) || [];
+          current_enrollment: enrollmentMap[cls.id] || 0,
+        }));
 
         setClasses(processedClasses);
       }

@@ -18,6 +18,7 @@ import * as Notifications from 'expo-notifications';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
 // CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
 // See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
 import { getPendingCall, cancelIncomingCallNotification, type IncomingCallData } from '@/lib/calls/CallHeadlessTask';
@@ -384,7 +385,7 @@ export function CallProvider({ children }: CallProviderProps) {
       
       // Cancel the notification
       await cancelIncomingCallNotification(callId);
-      await Notifications.setBadgeCountAsync(0);
+      await BadgeCoordinator.clearCategory('incomingCall');
       
       if (actionId === 'ANSWER' || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
         // User tapped Answer or the notification itself
@@ -608,7 +609,7 @@ export function CallProvider({ children }: CallProviderProps) {
           ) {
             // Cancel notification and vibration when call ends for any reason
             await cancelIncomingCallNotification(call.call_id);
-            await Notifications.setBadgeCountAsync(0);
+            await BadgeCoordinator.clearCategory('incomingCall');
             Vibration.cancel();
             
             if (incomingCall?.call_id === call.call_id) {
@@ -768,7 +769,7 @@ export function CallProvider({ children }: CallProviderProps) {
     // Cancel both types of notifications and vibration
     await cancelIncomingCallNotification(incomingCall.call_id);
     await cancelBackgroundCallNotification(incomingCall.call_id);
-    await Notifications.setBadgeCountAsync(0);
+    await BadgeCoordinator.clearCategory('incomingCall');
     Vibration.cancel();
     
     // Report to CallKeep that call is being answered
@@ -788,7 +789,7 @@ export function CallProvider({ children }: CallProviderProps) {
     // Cancel both types of notifications and vibration
     await cancelIncomingCallNotification(incomingCall.call_id);
     await cancelBackgroundCallNotification(incomingCall.call_id);
-    await Notifications.setBadgeCountAsync(0);
+    await BadgeCoordinator.clearCategory('incomingCall');
     Vibration.cancel();
 
     // End call in CallKeep

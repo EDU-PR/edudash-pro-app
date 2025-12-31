@@ -17,6 +17,7 @@
 import { AppRegistry, Platform, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
 
 // CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
 // See: https://github.com/react-native-webrtc/react-native-callkeep/issues/866-869
@@ -215,8 +216,8 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
       }, 30000);
     }
     
-    // Update badge count
-    await Notifications.setBadgeCountAsync(1);
+    // Update badge count - use coordinator to not wipe other badges
+    await BadgeCoordinator.setCategory('incomingCall', 1);
     
     console.log('[CallHeadlessTask] Incoming call notification shown:', callData.call_id);
   } catch (error) {

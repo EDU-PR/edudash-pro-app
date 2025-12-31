@@ -21,10 +21,10 @@ export const FILE_VALIDATION = {
   compressionQuality: 0.8,
 };
 
-// Storage buckets
+// Storage buckets - matching existing database buckets
 export const STORAGE_BUCKETS = {
-  proof_of_payment: 'proof-of-payment',
-  picture_of_progress: 'picture-of-progress',
+  proof_of_payment: 'proof-of-payments', // Existing bucket in database
+  picture_of_progress: 'proof-of-payments', // Using same bucket until picture-of-progress is created
 } as const;
 
 // File validation result
@@ -61,14 +61,28 @@ export const validatePOPFile = async (
   uploadType: POPUploadType
 ): Promise<FileValidationResult> => {
   try {
+    // Handle Android content:// URIs - they should already be copied to cache
+    // when using copyToCacheDirectory: true in DocumentPicker
+    const uri = fileUri.startsWith('content://') 
+      ? fileUri 
+      : fileUri.startsWith('file://') 
+        ? fileUri 
+        : `file://${fileUri}`;
+    
     // Get file info
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    const fileInfo = await FileSystem.getInfoAsync(uri);
     
     if (!fileInfo.exists) {
-      return {
-        isValid: false,
-        errors: ['File does not exist'],
-      };
+      // For content:// URIs, we may not be able to check existence
+      // but the file should be valid if DocumentPicker returned it
+      if (fileUri.startsWith('content://')) {
+        console.log('Content URI detected, skipping existence check');
+      } else {
+        return {
+          isValid: false,
+          errors: ['File does not exist'],
+        };
+      }
     }
     
     const fileSize = fileInfo.size || 0;
@@ -92,7 +106,12 @@ export const validatePOPFile = async (
         fileType = 'application/pdf';
         break;
       default:
-        fileType = 'unknown';
+        // Try to infer from filename for PDFs (Android sometimes strips extension)
+        if (fileUri.toLowerCase().includes('.pdf') || fileUri.toLowerCase().includes('pdf')) {
+          fileType = 'application/pdf';
+        } else {
+          fileType = 'unknown';
+        }
     }
     
     const errors: string[] = [];
@@ -115,23 +134,9 @@ export const validatePOPFile = async (
       }
     }
     
-    // Additional validation for images
-    if (FILE_VALIDATION.allowedImageTypes.includes(fileType)) {
-      try {
-        // Try to get image info to validate it's a real image
-        const imageInfo = await ImageManipulator.manipulateAsync(
-          fileUri,
-          [],
-          { base64: false }
-        );
-        
-        if (!imageInfo.uri) {
-          errors.push('Invalid image file');
-        }
-      } catch (error) {
-        errors.push('Invalid or corrupted image file');
-      }
-    }
+    // Note: We skip complex file content validation here.
+    // Supabase Storage will reject truly invalid files on upload.
+    // This keeps validation fast and avoids ImageManipulator issues with PDFs.
     
     return {
       isValid: errors.length === 0,
@@ -140,9 +145,26 @@ export const validatePOPFile = async (
       fileType,
     };
   } catch (error) {
+    console.error('File validation error:', error);
+    // If validation fails but we have a file from DocumentPicker, try to continue
+    // The upload will fail at the Supabase level if the file is truly invalid
+    const extension = fileUri.split('.').pop()?.toLowerCase();
+    const isPdf = extension === 'pdf' || fileUri.toLowerCase().includes('pdf');
+    const isImage = ['jpg', 'jpeg', 'png', 'webp'].includes(extension || '');
+    
+    if (isPdf || isImage) {
+      console.log('Validation error but file appears valid by extension, allowing upload attempt');
+      return {
+        isValid: true,
+        errors: [],
+        fileSize: 0,
+        fileType: isPdf ? 'application/pdf' : `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+      };
+    }
+    
     return {
       isValid: false,
-      errors: ['Failed to validate file'],
+      errors: ['Failed to validate file. Please try a different file or format.'],
     };
   }
 };

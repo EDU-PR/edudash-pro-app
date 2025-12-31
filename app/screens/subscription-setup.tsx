@@ -643,7 +643,8 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
   
   // Database stores BASE prices. Apply promo discount for display (monthly only).
   // Annual billing already has 20% annual discount, no additional promo.
-  const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
+  // Early Bird promo extended through Q1 2026
+  const promoEndDate = new Date('2026-03-31T23:59:59.999Z');
   const isLaunchPromoActive = new Date() <= promoEndDate;
   const isParentPromoEligible = isLaunchPromoActive && isParentTier && !isFree && !isEnterprise && priceInRands > 0 && !annual;
   
@@ -704,6 +705,7 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
               <>
                 <Text style={[styles.price, { color: planColor }]}>R{promoPriceInRands.toFixed(2)}</Text>
                 <Text style={styles.pricePeriod}>/ {annual ? 'year' : 'month'}</Text>
+                <Text style={styles.vatNote}>incl. VAT</Text>
               </>
             )}
           </View>
@@ -908,6 +910,11 @@ const styles = StyleSheet.create({
   pricePeriod: {
     fontSize: 16,
     color: '#9CA3AF',
+  },
+  vatNote: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginLeft: 4,
   },
   savings: {
     fontSize: 12,
