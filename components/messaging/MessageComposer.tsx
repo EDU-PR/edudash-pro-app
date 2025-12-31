@@ -42,6 +42,8 @@ interface MessageComposerProps {
   onCancelReply?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Called when user is typing (for typing indicators) */
+  onTyping?: () => void;
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
@@ -52,6 +54,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   onCancelReply,
   disabled = false,
   placeholder = 'Message',
+  onTyping,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -137,7 +140,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                 placeholder={placeholder}
                 placeholderTextColor="rgba(255,255,255,0.4)"
                 value={text}
-                onChangeText={setText}
+                onChangeText={(newText) => {
+                  setText(newText);
+                  // Notify parent about typing activity
+                  if (newText.trim() && onTyping) {
+                    onTyping();
+                  }
+                }}
                 multiline
                 maxLength={1000}
                 editable={!sending && !disabled}
