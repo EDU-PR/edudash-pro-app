@@ -1,6 +1,6 @@
 # EduDash Pro Product Roadmap
 
-> **Version**: 2.0.0 | **Last Updated**: December 31, 2025  
+> **Version**: 2.0.1 | **Last Updated**: January 3, 2026  
 > **Current App Version**: 1.0.11 | **Runtime**: 1.0.11
 
 This document outlines the product roadmap for EduDash Pro, including completed features, in-progress work, and planned enhancements.
@@ -46,6 +46,9 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Youth Wing management
 - [x] Document management
 - [x] Finance tracking
+- [x] CEO/President Dashboard with real Supabase data
+- [x] Regional Managers screen with live data
+- [x] Organization statistics hook (`useOrganizationStats`)
 
 #### Skills Development
 - [x] Program creation and management
