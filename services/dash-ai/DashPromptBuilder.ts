@@ -162,36 +162,43 @@ IMPORTANT: Always use tools to access real data. Never make up information. Neve
   /**
    * Build language directive based on voice settings
    * 
-   * South African language mappings for reply instructions.
-   * Now supports strict language mode to prevent language switching.
+   * IMPORTANT: AI/TTS only supports en, af, zu (South African languages with Azure voices)
+   * All other languages fallback to English for AI responses.
    */
   public buildLanguageDirective(strictMode?: boolean): string {
     const replyLocale = (this.personality?.voice_settings?.language || 'en-ZA') as string;
-    const langMap: Record<string, string> = {
+    
+    // AI/TTS only supports these languages - everything else maps to English
+    const AI_LANG_MAP: Record<string, string> = {
       'en-ZA': 'English (South Africa)',
       'en': 'English (South Africa)',
       'af-ZA': 'Afrikaans',
       'af': 'Afrikaans',
       'zu-ZA': 'isiZulu',
       'zu': 'isiZulu',
-      'xh-ZA': 'isiXhosa',
-      'xh': 'isiXhosa',
-      'nso-ZA': 'Northern Sotho (Sepedi)',
-      'nso': 'Northern Sotho (Sepedi)',
     };
     
-    const languageName = langMap[replyLocale] || 'English (South Africa)';
+    // Extract base language and validate against supported AI languages
+    const baseLang = replyLocale.split('-')[0];
+    const isSupported = ['en', 'af', 'zu'].includes(baseLang);
+    const effectiveLang = isSupported ? replyLocale : 'en-ZA';
+    const languageName = AI_LANG_MAP[effectiveLang] || AI_LANG_MAP[baseLang] || 'English (South Africa)';
+    
+    if (!isSupported) {
+      console.debug(`[DashPromptBuilder] Language ${replyLocale} not supported for AI, using English`);
+    }
     
     if (strictMode) {
       return `🌍 STRICT LANGUAGE MODE - ABSOLUTELY MANDATORY:
 You MUST respond ONLY in ${languageName}.
 DO NOT switch to any other language under ANY circumstances.
 Even if the user writes in a different language, you MUST respond in ${languageName}.
-If the user asks you to respond in another language, politely explain that you are configured to respond only in ${languageName}.
-This is a strict user preference that cannot be overridden.`;
+If the user asks you to respond in another language, politely explain that this app only supports English, Afrikaans, and isiZulu for AI responses.
+This is a strict system limitation that cannot be overridden.`;
     }
     
-    return `REPLY LANGUAGE: Reply in ${languageName} (${replyLocale}). If the user writes in a different language, you may switch to match their language.`;
+    return `REPLY LANGUAGE: Reply in ${languageName} (${effectiveLang}). 
+NOTE: This app only supports AI responses in English, Afrikaans, and isiZulu. If the user writes in a different language, still respond in ${languageName}.`;
   }
   
   /**
