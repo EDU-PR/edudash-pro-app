@@ -50,6 +50,7 @@ import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPr
 import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
 import { FloatingCallOverlay } from '../components/calls/FloatingCallOverlay';
+import { PlayStoreUpdateChecker } from '../components/updates/PlayStoreUpdateChecker';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -135,6 +136,9 @@ function LayoutContent() {
       
       {/* OTA Update Banner - shows when update is downloaded */}
       {Platform.OS !== 'web' && <GlobalUpdateBanner />}
+      
+      {/* Play Store Update Checker - prompts for native app updates */}
+      {Platform.OS !== 'web' && <PlayStoreUpdateChecker />}
       
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       
