@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "edudashpro",
     "owner": "dash-t",
-    "version": "1.0.12",
-    "runtimeVersion": "1.0.12",
+    "version": "1.0.13",
+    "runtimeVersion": "1.0.13",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -73,7 +73,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 16,
+      "versionCode": 17,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -146,7 +146,8 @@
       "@react-native-firebase/messaging",
       "./plugins/withAndroidManifestFix.js",
       "./plugins/withForegroundService.js",
-      "./plugins/withFirebaseMessaging.js"
+      "./plugins/withFirebaseMessaging.js",
+      "./plugins/withAndroid15BootFix.js"
     ],
     "experiments": {
       "typedRoutes": false
