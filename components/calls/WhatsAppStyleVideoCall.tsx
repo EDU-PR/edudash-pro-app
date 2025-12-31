@@ -1077,6 +1077,11 @@ export function WhatsAppStyleVideoCall({
 
   if (!isOpen) return null;
 
+  // Check if any remote participant is screen sharing
+  const screenSharingParticipant = remoteParticipants.find(
+    (p: any) => p.tracks?.screenVideo?.state === 'playable'
+  );
+
   const mainParticipant = remoteParticipants[0] || localParticipant;
   const hasRemoteVideo = remoteParticipants[0]?.tracks?.video?.state === 'playable';
   const hasLocalVideo = localParticipant?.tracks?.video?.state === 'playable' && isVideoEnabled;
@@ -1089,6 +1094,22 @@ export function WhatsAppStyleVideoCall({
   const localVideoTrack = localParticipant?.tracks?.video?.persistentTrack 
     || localParticipant?.tracks?.video?.track 
     || null;
+    
+  // Determine which video track to show in main view
+  // Priority: 1. Remote screen share, 2. Remote video, 3. Local video
+  const getMainVideoTrack = () => {
+    if (screenSharingParticipant) {
+      const screenTrack = screenSharingParticipant.tracks?.screenVideo;
+      return screenTrack?.persistentTrack || screenTrack?.track || null;
+    }
+    if (hasRemoteVideo) {
+      return remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null;
+    }
+    if (showLocalInMainView) {
+      return localVideoTrack;
+    }
+    return null;
+  };
 
   // DEBUG: Log video rendering decision with full track details
   console.log('[VideoCall] Render decision:', {
@@ -1097,6 +1118,7 @@ export function WhatsAppStyleVideoCall({
     hasRemoteParticipant,
     showLocalInMainView,
     isVideoEnabled,
+    screenSharing: !!screenSharingParticipant,
     DailyMediaViewAvailable: !!DailyMediaView,
     localParticipantExists: !!localParticipant,
     localVideoState: localParticipant?.tracks?.video?.state,
@@ -1158,21 +1180,14 @@ export function WhatsAppStyleVideoCall({
         onPress={handleScreenTap}
         style={styles.mainVideoContainer}
       >
-        {/* Main Video View - Show remote participant if available, otherwise local only if NO remote exists */}
-        {hasRemoteVideo && DailyMediaView ? (
+        {/* Main Video View - Priority: screen share > remote video > local video */}
+        {(screenSharingParticipant || hasRemoteVideo || showLocalInMainView) && DailyMediaView ? (
           <DailyMediaView
-            videoTrack={remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null}
+            videoTrack={getMainVideoTrack()}
             audioTrack={remoteParticipants[0]?.tracks?.audio?.persistentTrack || remoteParticipants[0]?.tracks?.audio?.track || null}
             style={styles.mainVideo}
-            objectFit="cover"
-          />
-        ) : showLocalInMainView && DailyMediaView ? (
-          <DailyMediaView
-            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
-            audioTrack={null}
-            style={styles.mainVideo}
-            objectFit="cover"
-            mirror={isFrontCamera}
+            objectFit={screenSharingParticipant ? 'contain' : 'cover'}
+            mirror={showLocalInMainView && !screenSharingParticipant ? isFrontCamera : false}
           />
         ) : (
           <LinearGradient
@@ -1195,6 +1210,14 @@ export function WhatsAppStyleVideoCall({
           </LinearGradient>
         )}
       </TouchableOpacity>
+      
+      {/* Screen Share Indicator */}
+      {screenSharingParticipant && (
+        <View style={styles.screenShareIndicator}>
+          <Ionicons name="desktop-outline" size={16} color="#00f5ff" />
+          <Text style={styles.screenShareText}>Screen sharing</Text>
+        </View>
+      )}
 
       {/* Local Video Preview (Draggable) */}
       {/* Show local video when:
@@ -1567,6 +1590,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF3B30',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  screenShareIndicator: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 120 : 100,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 245, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  screenShareText: {
+    color: '#00f5ff',
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
 

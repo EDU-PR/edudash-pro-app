@@ -709,21 +709,40 @@ export function VideoCallInterface({
 
   if (!isOpen) return null;
 
+  // Check if any remote participant is screen sharing
+  const screenSharingParticipant = remoteParticipants.find(
+    (p: any) => p.tracks?.screenVideo?.state === 'playable'
+  );
+  
   // Show remote participant if available, otherwise show local
   // Don't fallback to local if remote exists but has no video
   const hasRemoteParticipant = remoteParticipants.length > 0;
   const mainParticipant = hasRemoteParticipant ? remoteParticipants[0] : localParticipant;
+  
+  // Determine which video track to show in main view
+  // Priority: 1. Remote screen share, 2. Remote video, 3. Local video
+  const getMainVideoTrack = () => {
+    if (screenSharingParticipant) {
+      // Show screen share as main view
+      const screenTrack = screenSharingParticipant.tracks?.screenVideo;
+      return screenTrack?.persistentTrack || screenTrack?.track || null;
+    }
+    if (mainParticipant?.tracks?.video?.state === 'playable') {
+      return mainParticipant.tracks?.video?.persistentTrack || mainParticipant.tracks?.video?.track || null;
+    }
+    return null;
+  };
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Main Video View */}
+      {/* Main Video View - Shows screen share if active, otherwise remote/local video */}
       <View style={styles.mainVideoContainer}>
         {mainParticipant && DailyMediaView ? (
           <DailyMediaView
-            videoTrack={mainParticipant.tracks?.video?.state === 'playable' ? (mainParticipant.tracks?.video?.persistentTrack || mainParticipant.tracks?.video?.track || null) : null}
+            videoTrack={getMainVideoTrack()}
             audioTrack={mainParticipant.tracks?.audio?.persistentTrack || mainParticipant.tracks?.audio?.track || null}
             style={styles.mainVideo}
-            objectFit="cover"
+            objectFit={screenSharingParticipant ? 'contain' : 'cover'}
           />
         ) : (
           <View style={styles.noVideoPlaceholder}>
@@ -745,6 +764,26 @@ export function VideoCallInterface({
             objectFit="cover"
             mirror={isFrontCamera}
           />
+        </View>
+      )}
+      
+      {/* Remote participant camera when they're screen sharing (show in secondary PIP) */}
+      {screenSharingParticipant && screenSharingParticipant.tracks?.video?.state === 'playable' && DailyMediaView && (
+        <View style={[styles.localVideoContainer, { top: Platform.OS === 'ios' ? 210 : 190 }]}>
+          <DailyMediaView
+            videoTrack={screenSharingParticipant.tracks?.video?.persistentTrack || screenSharingParticipant.tracks?.video?.track || null}
+            audioTrack={null}
+            style={styles.localVideo}
+            objectFit="cover"
+          />
+        </View>
+      )}
+      
+      {/* Screen Share Indicator */}
+      {screenSharingParticipant && (
+        <View style={styles.screenShareIndicator}>
+          <Ionicons name="desktop-outline" size={16} color="#00f5ff" />
+          <Text style={styles.screenShareText}>Screen sharing</Text>
         </View>
       )}
 
@@ -1012,6 +1051,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  screenShareIndicator: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 120 : 100,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 245, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  screenShareText: {
+    color: '#00f5ff',
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
 
