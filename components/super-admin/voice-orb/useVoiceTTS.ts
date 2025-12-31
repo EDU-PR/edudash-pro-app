@@ -7,11 +7,11 @@
  * @module components/super-admin/voice-orb/useVoiceTTS
  */
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import * as Speech from 'expo-speech';
 import { useAudioPlayer } from 'expo-audio';
 import { assertSupabase } from '../../../lib/supabase';
-import { SUPPORTED_LANGUAGES, SupportedLanguage } from './useVoiceSTT';
+import { SupportedLanguage } from './useVoiceSTT';
 
 export interface TTSOptions {
   voice?: string;
@@ -40,7 +40,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       if (audioPlayer && typeof audioPlayer === 'object' && 'remove' in audioPlayer) {
         try {
           audioPlayer.remove();
-        } catch (err) {
+        } catch {
           // Silently ignore cleanup errors
         }
       }
