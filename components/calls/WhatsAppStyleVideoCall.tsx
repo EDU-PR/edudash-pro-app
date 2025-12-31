@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   PanResponder,
@@ -32,6 +33,7 @@ import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 import { useCallBackgroundHandler } from './hooks';
+import { AddParticipantModal } from './AddParticipantModal';
 import type { CallState, DailyParticipant } from './types';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
@@ -117,6 +119,13 @@ export function WhatsAppStyleVideoCall({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showAddParticipants, setShowAddParticipants] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+  // Screen share conflict detection
+  const [remoteScreenSharerName, setRemoteScreenSharerName] = useState<string | null>(null);
+  // View switching - user preference for main view
+  const [preferLocalView, setPreferLocalView] = useState(false);
+  // Call recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -807,12 +816,55 @@ export function WhatsAppStyleVideoCall({
         });
 
         daily.on('participant-updated', (event: any) => {
+          const participant = event?.participant;
           console.log('[VideoCall] Participant updated:', {
-            participant: event?.participant?.session_id,
-            videoState: event?.participant?.tracks?.video?.state,
-            audioState: event?.participant?.tracks?.audio?.state,
+            participant: participant?.session_id,
+            videoState: participant?.tracks?.video?.state,
+            audioState: participant?.tracks?.audio?.state,
+            screenVideoState: participant?.tracks?.screenVideo?.state,
           });
           updateParticipants();
+          
+          // Screen share conflict detection
+          // If remote participant started screen sharing while we're sharing, show alert
+          if (!participant?.local && participant?.tracks?.screenVideo?.state === 'playable') {
+            const remoteUserName = participant?.user_name || 'Another participant';
+            setRemoteScreenSharerName(remoteUserName);
+            
+            // Only show alert if local user is also screen sharing
+            if (isScreenSharing) {
+              Alert.alert(
+                'Screen Share Conflict',
+                `${remoteUserName} started sharing their screen. Would you like to stop your screen share?`,
+                [
+                  { 
+                    text: 'Keep Mine', 
+                    style: 'cancel',
+                    onPress: () => console.log('[VideoCall] User chose to keep their screen share')
+                  },
+                  { 
+                    text: 'Stop Mine', 
+                    style: 'destructive',
+                    onPress: async () => {
+                      if (dailyRef.current) {
+                        try {
+                          await dailyRef.current.stopScreenShare();
+                          setIsScreenSharing(false);
+                          console.log('[VideoCall] Stopped local screen share due to conflict');
+                        } catch (err) {
+                          console.error('[VideoCall] Failed to stop screen share:', err);
+                        }
+                      }
+                    }
+                  },
+                ],
+                { cancelable: true }
+              );
+            }
+          } else if (!participant?.local && participant?.tracks?.screenVideo?.state !== 'playable') {
+            // Remote stopped screen sharing
+            setRemoteScreenSharerName(null);
+          }
         });
         
         daily.on('track-started', async (event: any) => {
@@ -857,6 +909,29 @@ export function WhatsAppStyleVideoCall({
         daily.on('camera-error', (event: any) => {
           console.error('[VideoCall] Camera error:', event);
           setIsVideoEnabled(false);
+        });
+        
+        // Recording events
+        daily.on('recording-started', () => {
+          console.log('[VideoCall] 🔴 Recording started');
+          setIsRecording(true);
+          setRecordingStartTime(Date.now());
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
+        
+        daily.on('recording-stopped', () => {
+          console.log('[VideoCall] ⬛ Recording stopped');
+          setIsRecording(false);
+          setRecordingStartTime(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        });
+        
+        daily.on('recording-error', (event: any) => {
+          console.error('[VideoCall] Recording error:', event);
+          setIsRecording(false);
+          setRecordingStartTime(null);
+          setError('Recording failed');
+          setTimeout(() => setError(null), 3000);
         });
 
         // CRITICAL: Request streaming audio mode from AudioModeCoordinator
@@ -1048,6 +1123,46 @@ export function WhatsAppStyleVideoCall({
     }
   }, [meetingUrl]);
 
+  // Toggle call recording (only available to room owner)
+  const toggleRecording = useCallback(async () => {
+    if (!dailyRef.current) return;
+    
+    // Only room owner can start/stop recording
+    if (!isOwner) {
+      setError('Only the call host can start recording');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    try {
+      if (isRecording) {
+        console.log('[VideoCall] Stopping recording...');
+        await dailyRef.current.stopRecording();
+        setError('Recording stopped');
+      } else {
+        console.log('[VideoCall] Starting recording...');
+        // Start cloud recording (stored in Daily.co cloud)
+        await dailyRef.current.startRecording({
+          type: 'cloud',
+        });
+        setError('Recording started');
+      }
+      setTimeout(() => setError(null), 2000);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err: any) {
+      console.error('[VideoCall] Recording toggle error:', err);
+      setError(err?.message || 'Recording failed');
+      setTimeout(() => setError(null), 3000);
+    }
+  }, [isRecording, isOwner]);
+
+  // Toggle view preference (local vs remote in main view)
+  const toggleViewPreference = useCallback(() => {
+    setPreferLocalView(prev => !prev);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    console.log('[VideoCall] View preference toggled to:', !preferLocalView ? 'local' : 'remote');
+  }, [preferLocalView]);
+
   // End call
   const handleEndCall = useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -1096,20 +1211,33 @@ export function WhatsAppStyleVideoCall({
     || null;
     
   // Determine which video track to show in main view
-  // Priority: 1. Remote screen share, 2. Remote video, 3. Local video
+  // Priority: 1. Remote screen share, 2. User preference (if both videos available), 3. Remote video, 4. Local video
   const getMainVideoTrack = () => {
+    // Screen share always takes priority
     if (screenSharingParticipant) {
       const screenTrack = screenSharingParticipant.tracks?.screenVideo;
       return screenTrack?.persistentTrack || screenTrack?.track || null;
     }
+    
+    // If user prefers local view and both videos available, show local
+    if (preferLocalView && hasLocalVideo && hasRemoteVideo) {
+      return localVideoTrack;
+    }
+    
+    // Default: show remote if available
     if (hasRemoteVideo) {
       return remoteParticipants[0]?.tracks?.video?.persistentTrack || remoteParticipants[0]?.tracks?.video?.track || null;
     }
+    
+    // Fallback to local if no remote
     if (showLocalInMainView) {
       return localVideoTrack;
     }
     return null;
   };
+  
+  // Determine what's showing in main view for view switch button label
+  const isShowingLocalInMain = preferLocalView && hasLocalVideo && hasRemoteVideo;
 
   // DEBUG: Log video rendering decision with full track details
   console.log('[VideoCall] Render decision:', {
@@ -1270,8 +1398,16 @@ export function WhatsAppStyleVideoCall({
       </Animated.View>
 
       {/* Error Message */}
+      {/* Recording Indicator */}
+      {isRecording && (
+        <View style={[styles.recordingIndicator, { top: insets.top + 60 }]}>
+          <View style={styles.recordingDot} />
+          <Text style={styles.recordingText}>Recording</Text>
+        </View>
+      )}
+
       {error && (
-        <View style={[styles.errorContainer, { top: insets.top + 60 }]}>
+        <View style={[styles.errorContainer, { top: insets.top + (isRecording ? 100 : 60) }]}>
           <Ionicons name="alert-circle" size={18} color="#fff" />
           <Text style={styles.errorText}>{error}</Text>
         </View>
@@ -1309,9 +1445,40 @@ export function WhatsAppStyleVideoCall({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.secondaryButton} onPress={shareCallLink}>
+          {/* View Switch - only show when both local and remote video available */}
+          {hasRemoteVideo && hasLocalVideo && (
+            <TouchableOpacity style={styles.secondaryButton} onPress={toggleViewPreference}>
+              <Ionicons 
+                name={isShowingLocalInMain ? 'person-circle' : 'people-circle'} 
+                size={24} 
+                color="#fff" 
+              />
+              <Text style={styles.secondaryLabel}>
+                {isShowingLocalInMain ? 'Remote' : 'Local'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Recording - only show for room owner */}
+          {isOwner && (
+            <TouchableOpacity 
+              style={[styles.secondaryButton, isRecording && styles.secondaryButtonActive]} 
+              onPress={toggleRecording}
+            >
+              <Ionicons 
+                name={isRecording ? 'stop-circle' : 'radio-button-on'} 
+                size={24} 
+                color={isRecording ? '#ef4444' : '#fff'} 
+              />
+              <Text style={[styles.secondaryLabel, isRecording && { color: '#ef4444' }]}>
+                {isRecording ? 'Stop Rec' : 'Record'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowAddParticipants(true)}>
             <Ionicons name="person-add" size={24} color="#fff" />
-            <Text style={styles.secondaryLabel}>Invite</Text>
+            <Text style={styles.secondaryLabel}>Add</Text>
           </TouchableOpacity>
         </View>
 
@@ -1355,6 +1522,17 @@ export function WhatsAppStyleVideoCall({
           </View>
         )}
       </Animated.View>
+
+      {/* Add Participant Modal */}
+      <AddParticipantModal
+        visible={showAddParticipants}
+        onClose={() => setShowAddParticipants(false)}
+        callId={callIdRef.current}
+        meetingUrl={meetingUrl || null}
+        callerName={userName}
+        callType="video"
+        excludeUserIds={remoteParticipants.map(p => p.user_id).filter(Boolean)}
+      />
     </Animated.View>
   );
 }
@@ -1607,6 +1785,28 @@ const styles = StyleSheet.create({
     color: '#00f5ff',
     fontSize: 13,
     fontWeight: '500',
+  },
+  recordingIndicator: {
+    position: 'absolute',
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#fff',
+  },
+  recordingText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

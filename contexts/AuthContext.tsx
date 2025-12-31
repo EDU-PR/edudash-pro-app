@@ -139,37 +139,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Enhanced sign out with cache clearing and browser history management
+  // CRITICAL: Clear state IMMEDIATELY before any async operations to prevent hanging
   const handleSignOut = useCallback(async () => {
     try {
       console.log('[AuthContext] Starting sign-out process...');
       
-      // Security audit for logout
-      if (user?.id) {
-        securityAuditor.auditAuthenticationEvent(user.id, 'logout', {
-          role: profile?.role,
-          session_duration: session ? Date.now() - (session.user.created_at ? new Date(session.user.created_at).getTime() : Date.now()) : null,
-        });
-      }
-      
-      // Clear all state immediately to prevent stale data
-      console.log('[AuthContext] Clearing auth state...');
+      // CRITICAL FIX: Clear all auth state IMMEDIATELY - before any async work
+      // This prevents the UI from hanging while waiting for backend cleanup
+      console.log('[AuthContext] Clearing auth state immediately...');
       setUser(null);
       setSession(null);
       setProfile(null);
       setPermissions(createPermissionChecker(null));
       setProfileLoading(false);
       
-      // Clear TanStack Query cache to prevent stale data flash
+      // Clear TanStack Query cache immediately
       try {
-        console.log('[AuthContext] Clearing TanStack Query cache...');
         queryClient.clear();
-        console.log('[AuthContext] Query cache cleared successfully');
+        console.log('[AuthContext] Query cache cleared');
       } catch (cacheErr) {
         console.warn('[AuthContext] Query cache clear failed:', cacheErr);
       }
       
+      // Security audit for logout (fire-and-forget, don't block)
+      const userId = user?.id;
+      const userRole = profile?.role;
+      if (userId) {
+        // Don't await - fire and forget
+        Promise.resolve().then(() => {
+          securityAuditor.auditAuthenticationEvent(userId, 'logout', {
+            role: userRole,
+          });
+        });
+      }
+      
       // CRITICAL: Clear all navigation locks before sign-out to prevent stale locks
-      // This prevents sign-in freeze caused by leftover locks from previous session
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
@@ -178,88 +182,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
       }
       
-      // Call sessionManager sign out (this clears storage and Supabase session)
-      await signOut();
-      
-      // Clear PostHog and Sentry
-      try {
-        await getPostHog()?.reset();
-        console.log('[AuthContext] PostHog reset completed');
-      } catch (e) {
-        console.warn('[AuthContext] PostHog reset failed:', e);
-      }
+      // Call sessionManager sign out with short timeout (don't let it block)
+      const signOutPromise = signOut();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Sign out timeout')), 3000)
+      );
       
       try {
-        Sentry.Native.setUser(null as any);
-        console.log('[AuthContext] Sentry user cleared');
-      } catch (e) {
-        console.warn('[AuthContext] Sentry clear user failed:', e);
+        await Promise.race([signOutPromise, timeoutPromise]);
+        console.log('[AuthContext] Supabase sign-out completed');
+      } catch (signOutErr) {
+        console.warn('[AuthContext] Sign-out timed out or failed (continuing anyway):', signOutErr);
       }
+      
+      // Clear PostHog and Sentry (don't block on these)
+      Promise.resolve().then(async () => {
+        try { await getPostHog()?.reset(); } catch { /* Intentional: non-fatal */ }
+        try { Sentry.Native.setUser(null as any); } catch { /* Intentional: non-fatal */ }
+      });
       
       console.log('[AuthContext] Sign-out completed successfully');
       
-      // Navigate to sign-in screen using replace (no back navigation)
-      try {
-        // Web-only: Clear browser history to prevent back button to protected routes
-        if (Platform.OS === 'web') {
-          try {
-            const w = globalThis as any;
-            // Clear all history and navigate to sign-in with a fresh history stack
-            // This prevents back button from accessing protected pages
-            if (w?.location) {
-              // Use location.replace to completely replace history entry
-              w.location.replace('/(auth)/sign-in');
-              console.log('[AuthContext] Browser navigated to sign-in with history cleared');
-            } else {
-              // Fallback to router if location is not available
-              router.replace('/(auth)/sign-in');
-            }
-          } catch (historyErr) {
-            console.warn('[AuthContext] Browser history manipulation failed:', historyErr);
+      // Navigate to sign-in screen
+      if (Platform.OS === 'web') {
+        try {
+          const w = globalThis as any;
+          if (w?.location) {
+            w.location.replace('/(auth)/sign-in');
+          } else {
             router.replace('/(auth)/sign-in');
           }
-        } else {
-          // Mobile: use router replace
+        } catch {
           router.replace('/(auth)/sign-in');
         }
-      } catch (navErr) {
-        console.error('[AuthContext] Navigation to sign-in failed:', navErr);
-        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
+      } else {
+        router.replace('/(auth)/sign-in');
       }
     } catch (error) {
       console.error('[AuthContext] Sign out failed:', error);
       
-      // Even if sign-out fails, clear local state to prevent UI issues
-      setUser(null);
-      setSession(null);
-      setProfile(null);
-      setPermissions(createPermissionChecker(null));
-      
-      // Clear query cache even on error
+      // Even if sign-out fails, state is already cleared - just navigate
       try {
-        queryClient.clear();
-      } catch { /* Intentional: non-fatal */ }
-      
-      // Security audit for failed logout
-      if (user?.id) {
-        securityAuditor.auditAuthenticationEvent(user.id, 'auth_failure', {
-          action: 'logout',
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      }
-      
-      // Still try to navigate even if there was an error
-      try {
-        // Web-only: Clear browser history even on error
         if (Platform.OS === 'web') {
-          try {
-            const w = globalThis as any;
-            if (w?.location) {
-              w.location.replace('/(auth)/sign-in');
-            } else {
-              router.replace('/(auth)/sign-in');
-            }
-          } catch { 
+          const w = globalThis as any;
+          if (w?.location) {
+            w.location.replace('/(auth)/sign-in');
+          } else {
             router.replace('/(auth)/sign-in');
           }
         } else {
@@ -267,10 +235,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (navErr) {
         console.error('[AuthContext] Navigation to sign-in failed:', navErr);
-        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
       }
     }
-  }, [user?.id, profile?.role, session, queryClient]);
+  }, [user?.id, profile?.role, queryClient]);
 
   useEffect(() => {
     let unsub: { subscription?: { unsubscribe: () => void } } | null = null;

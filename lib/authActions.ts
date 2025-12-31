@@ -7,9 +7,10 @@ import { deactivateCurrentUserTokens } from './pushTokenUtils';
 let isSigningOut = false;
 
 // Timeout constants for sign-out operations
-const TOKEN_DEACTIVATION_TIMEOUT = 5000; // 5 seconds
-const SIGNOUT_TIMEOUT = 5000; // 5 seconds
-const OVERALL_SIGNOUT_TIMEOUT = 15000; // 15 seconds max total
+const TOKEN_DEACTIVATION_TIMEOUT = 3000; // 3 seconds (reduced from 5)
+const SIGNOUT_TIMEOUT = 3000; // 3 seconds (reduced from 5)
+const OVERALL_SIGNOUT_TIMEOUT = 8000; // 8 seconds max total (reduced from 15)
+const FORCE_SIGNOUT_DELAY = 5000; // Show force button after 5 seconds
 
 /**
  * Helper to wrap a promise with a timeout
