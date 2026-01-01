@@ -39,11 +39,20 @@ export const REVENUECAT_CONFIG = {
   ENTITLEMENTS: REVENUECAT_ENTITLEMENTS,
 };
 
+// Track initialization state
+let isRevenueCatInitialized = false;
+
 /**
  * Initialize RevenueCat SDK
  * Should be called early in the app lifecycle
  */
 export async function initializeRevenueCat(): Promise<void> {
+  // Don't reinitialize if already done
+  if (isRevenueCatInitialized) {
+    console.log('RevenueCat already initialized');
+    return;
+  }
+  
   try {
     const apiKey = Platform.select({
       ios: REVENUECAT_CONFIG.API_KEY_IOS,
@@ -65,6 +74,7 @@ export async function initializeRevenueCat(): Promise<void> {
       await Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
     }
 
+    isRevenueCatInitialized = true;
     console.log('RevenueCat initialized successfully');
   } catch (error) {
     console.error('Failed to initialize RevenueCat:', error);
@@ -173,7 +183,29 @@ export async function getAvailableProducts() {
 }
 
 /**
- * Purchase a product
+ * Check if RevenueCat is initialized
+ */
+export function isInitialized(): boolean {
+  return isRevenueCatInitialized;
+}
+
+/**
+ * Ensure RevenueCat is initialized before making calls
+ */
+export async function ensureInitialized(): Promise<boolean> {
+  if (isRevenueCatInitialized) return true;
+  
+  try {
+    await initializeRevenueCat();
+    return isRevenueCatInitialized;
+  } catch (error) {
+    console.error('Failed to ensure RevenueCat initialization:', error);
+    return false;
+  }
+}
+
+/**
+ * Purchase a product (ensures SDK is initialized first)
  */
 export async function purchaseProduct(productId: string): Promise<{
   success: boolean;
@@ -181,6 +213,15 @@ export async function purchaseProduct(productId: string): Promise<{
   error?: string;
 }> {
   try {
+    // Ensure SDK is initialized before purchase
+    const initialized = await ensureInitialized();
+    if (!initialized) {
+      return {
+        success: false,
+        error: 'RevenueCat SDK not initialized. Please try again.',
+      };
+    }
+    
     const { customerInfo } = await Purchases.purchaseProduct(productId);
     return {
       success: true,
@@ -195,6 +236,24 @@ export async function purchaseProduct(productId: string): Promise<{
         success: false,
         error: 'Purchase cancelled by user',
       };
+    }
+    
+    // Check for singleton error
+    if (error.message?.includes('singleton') || error.message?.includes('configure')) {
+      // Try to initialize and retry once
+      try {
+        await initializeRevenueCat();
+        const { customerInfo } = await Purchases.purchaseProduct(productId);
+        return {
+          success: true,
+          customerInfo,
+        };
+      } catch (retryError: any) {
+        return {
+          success: false,
+          error: retryError.message || 'Purchase failed after retry',
+        };
+      }
     }
     
     return {
