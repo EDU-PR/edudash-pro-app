@@ -19,24 +19,31 @@ export const REVENUECAT_CONFIG = {
   API_KEY_ANDROID: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_SDK_KEY || '',
   
   // Product IDs - Must match Google Play Console / App Store Connect
+  // Format for Google Play subscriptions: {subscription_id}:{base_plan_id}
   // Current offerings in RevenueCat:
-  // - edudash_starter_monthly (Starter Plan) -> parent_starter
-  // - edudash_premium_monthly (Premium Plan) -> parent_plus
+  // - edudash_starter_monthly:p1m (Starter Plan R49.50) -> parent_starter
+  // - edudash_premium_monthly:p1m (Premium Plan R99.50) -> parent_plus
   PRODUCT_IDS: {
-    // Parent plans (currently configured)
-    STARTER_MONTHLY: 'edudash_starter_monthly',
-    STARTER_ANNUAL: 'edudash_starter_annual',
-    PREMIUM_MONTHLY: 'edudash_premium_monthly',
-    PREMIUM_ANNUAL: 'edudash_premium_annual',
+    // Parent plans - Monthly (with base plan ID for Google Play)
+    STARTER_MONTHLY: 'edudash_starter_monthly:p1m',
+    PREMIUM_MONTHLY: 'edudash_premium_monthly:p1m',
+    // Annual plans (not yet configured in Google Play)
+    STARTER_ANNUAL: 'edudash_starter_annual:p1y',
+    PREMIUM_ANNUAL: 'edudash_premium_annual:p1y',
     // School plans (for future)
-    SCHOOL_STARTER_MONTHLY: 'edudash_school_starter_monthly',
-    SCHOOL_PREMIUM_MONTHLY: 'edudash_school_premium_monthly',
-    SCHOOL_PRO_MONTHLY: 'edudash_school_pro_monthly',
+    SCHOOL_STARTER_MONTHLY: 'edudash_school_starter_monthly:p1m',
+    SCHOOL_PREMIUM_MONTHLY: 'edudash_school_premium_monthly:p1m',
+    SCHOOL_PRO_MONTHLY: 'edudash_school_pro_monthly:p1m',
   },
   
-  // Entitlement IDs - Must be created in RevenueCat dashboard
-  // and attached to products
-  ENTITLEMENTS: REVENUECAT_ENTITLEMENTS,
+  // Entitlement IDs - Must match RevenueCat dashboard
+  // Currently configured: starter_features, premium_features
+  ENTITLEMENTS: {
+    STARTER: 'starter_features',
+    PREMIUM: 'premium_features',
+    PRO: 'premium_features', // Alias for premium
+    ENTERPRISE: 'enterprise_features',
+  },
 };
 
 // Track initialization state
