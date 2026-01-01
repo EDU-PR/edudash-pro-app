@@ -52,17 +52,17 @@ This section covers step-by-step tutorials for all dashboards, registration flow
 
 ### Role Permissions Matrix
 
-| Permission | Super Admin | Principal | Teacher | Parent | Student |
-|------------|:-----------:|:---------:|:-------:|:------:|:-------:|
-| View All Schools | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Manage Teachers | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Manage Students | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Create Lessons | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Mark Attendance | ✅ | ✅ | ✅ | ❌ | ❌ |
-| View Own Child | ❌ | ❌ | ❌ | ✅ | ❌ |
-| Submit Homework | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Use AI Chat | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Financial Access | ✅ | ✅ | ❌ | View Only | ❌ |
+| Permission       | Super Admin | Principal | Teacher |  Parent   | Student |
+| ---------------- | :---------: | :-------: | :-----: | :-------: | :-----: |
+| View All Schools |      ✅      |     ❌     |    ❌    |     ❌     |    ❌    |
+| Manage Teachers  |      ✅      |     ✅     |    ❌    |     ❌     |    ❌    |
+| Manage Students  |      ✅      |     ✅     |    ✅    |     ❌     |    ❌    |
+| Create Lessons   |      ✅      |     ✅     |    ✅    |     ❌     |    ❌    |
+| Mark Attendance  |      ✅      |     ✅     |    ✅    |     ❌     |    ❌    |
+| View Own Child   |      ❌      |     ❌     |    ❌    |     ✅     |    ❌    |
+| Submit Homework  |      ❌      |     ❌     |    ❌    |     ❌     |    ✅    |
+| Use AI Chat      |      ✅      |     ✅     |    ✅    |     ✅     |    ✅    |
+| Financial Access |      ✅      |     ✅     |    ❌    | View Only |    ❌    |
 
 ---
 
@@ -99,34 +99,34 @@ This section covers step-by-step tutorials for all dashboards, registration flow
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| View all users | Tap "Users Management" | `super-admin-users.tsx` |
-| Create new school | Tap "Schools" → "Add School" | `school-onboarding-wizard.tsx` |
-| Check system health | Tap "System Health" | `super-admin-system-monitoring.tsx` |
-| Execute AI commands | Tap "AI Command Center" | `super-admin-ai-command-center.tsx` |
-| Manage subscriptions | Tap "Subscriptions" | `super-admin-subscriptions.tsx` |
-| Toggle features | Tap "Feature Flags" | `super-admin-feature-flags.tsx` |
+| Action               | How To                       | Screen                              |
+| -------------------- | ---------------------------- | ----------------------------------- |
+| View all users       | Tap "Users Management"       | `super-admin-users.tsx`             |
+| Create new school    | Tap "Schools" → "Add School" | `school-onboarding-wizard.tsx`      |
+| Check system health  | Tap "System Health"          | `super-admin-system-monitoring.tsx` |
+| Execute AI commands  | Tap "AI Command Center"      | `super-admin-ai-command-center.tsx` |
+| Manage subscriptions | Tap "Subscriptions"          | `super-admin-subscriptions.tsx`     |
+| Toggle features      | Tap "Feature Flags"          | `super-admin-feature-flags.tsx`     |
 
 #### Available Screens
 
-| Screen | Path | Purpose |
-|--------|------|---------|
-| Main Dashboard | `super-admin-dashboard.tsx` | Overview metrics |
-| AI Command Center | `super-admin-ai-command-center.tsx` | Execute AI operations |
-| AI Quotas | `super-admin-ai-quotas.tsx` | Manage AI limits |
-| Users | `super-admin-users.tsx` | User management |
-| Organizations | `super-admin-organizations.tsx` | Org management |
-| Subscriptions | `super-admin-subscriptions.tsx` | Plan management |
-| System Monitoring | `super-admin-system-monitoring.tsx` | Health checks |
-| Feature Flags | `super-admin-feature-flags.tsx` | Feature toggles |
-| Announcements | `super-admin-announcements.tsx` | Platform-wide messages |
-| Analytics | `super-admin-analytics.tsx` | Usage analytics |
-| DevOps | `super-admin-devops.tsx` | Deployment tools |
-| Leads | `super-admin-leads.tsx` | Sales leads |
-| Moderation | `super-admin-moderation.tsx` | Content moderation |
-| WhatsApp Hub | `super-admin-whatsapp.tsx` | WhatsApp management |
-| Settings | `super-admin-settings.tsx` | Platform settings |
+| Screen            | Path                                | Purpose                |
+| ----------------- | ----------------------------------- | ---------------------- |
+| Main Dashboard    | `super-admin-dashboard.tsx`         | Overview metrics       |
+| AI Command Center | `super-admin-ai-command-center.tsx` | Execute AI operations  |
+| AI Quotas         | `super-admin-ai-quotas.tsx`         | Manage AI limits       |
+| Users             | `super-admin-users.tsx`             | User management        |
+| Organizations     | `super-admin-organizations.tsx`     | Org management         |
+| Subscriptions     | `super-admin-subscriptions.tsx`     | Plan management        |
+| System Monitoring | `super-admin-system-monitoring.tsx` | Health checks          |
+| Feature Flags     | `super-admin-feature-flags.tsx`     | Feature toggles        |
+| Announcements     | `super-admin-announcements.tsx`     | Platform-wide messages |
+| Analytics         | `super-admin-analytics.tsx`         | Usage analytics        |
+| DevOps            | `super-admin-devops.tsx`            | Deployment tools       |
+| Leads             | `super-admin-leads.tsx`             | Sales leads            |
+| Moderation        | `super-admin-moderation.tsx`        | Content moderation     |
+| WhatsApp Hub      | `super-admin-whatsapp.tsx`          | WhatsApp management    |
+| Settings          | `super-admin-settings.tsx`          | Platform settings      |
 
 ---
 
@@ -167,14 +167,14 @@ This section covers step-by-step tutorials for all dashboards, registration flow
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| Add teacher | Teachers → "Invite Teacher" | `teacher-management.tsx` |
-| Enroll student | Students → "Add Student" | `student-enrollment.tsx` |
-| Generate parent code | Parents → "Generate Code" | `principal-parent-invite-code.tsx` |
-| View finances | Tap "Finance" | `financial-dashboard.tsx` |
-| Send announcement | Tap "Campaigns" | `campaigns.tsx` |
-| View reports | Tap "Reports" | `principal-report-review.tsx` |
+| Action               | How To                      | Screen                             |
+| -------------------- | --------------------------- | ---------------------------------- |
+| Add teacher          | Teachers → "Invite Teacher" | `teacher-management.tsx`           |
+| Enroll student       | Students → "Add Student"    | `student-enrollment.tsx`           |
+| Generate parent code | Parents → "Generate Code"   | `principal-parent-invite-code.tsx` |
+| View finances        | Tap "Finance"               | `financial-dashboard.tsx`          |
+| Send announcement    | Tap "Campaigns"             | `campaigns.tsx`                    |
+| View reports         | Tap "Reports"               | `principal-report-review.tsx`      |
 
 #### Navigation Flow
 
@@ -251,16 +251,16 @@ Principal Dashboard
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| Take attendance | Tap class → "Take Attendance" | `attendance.tsx` |
-| Create lesson | Tap "Lessons" → "Create New" | `create-lesson.tsx` |
-| AI lesson help | Tap "Dash AI" → describe lesson | `dash-ai-chat.tsx` |
-| Assign homework | Tap "Homework" → "Assign New" | `assign-homework.tsx` |
-| Grade homework | Tap "Homework" → select submission | `ai-homework-grader-live.tsx` |
-| Message parent | Tap "Messages" → select parent | `teacher-messages.tsx` |
-| Create report | Tap "Reports" → "New Report" | `progress-report-creator.tsx` |
-| Start live class | Tap "Live Class" | `start-live-lesson.tsx` |
+| Action           | How To                             | Screen                        |
+| ---------------- | ---------------------------------- | ----------------------------- |
+| Take attendance  | Tap class → "Take Attendance"      | `attendance.tsx`              |
+| Create lesson    | Tap "Lessons" → "Create New"       | `create-lesson.tsx`           |
+| AI lesson help   | Tap "Dash AI" → describe lesson    | `dash-ai-chat.tsx`            |
+| Assign homework  | Tap "Homework" → "Assign New"      | `assign-homework.tsx`         |
+| Grade homework   | Tap "Homework" → select submission | `ai-homework-grader-live.tsx` |
+| Message parent   | Tap "Messages" → select parent     | `teacher-messages.tsx`        |
+| Create report    | Tap "Reports" → "New Report"       | `progress-report-creator.tsx` |
+| Start live class | Tap "Live Class"                   | `start-live-lesson.tsx`       |
 
 #### Daily Workflow
 
@@ -320,14 +320,14 @@ End of Day:
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| View attendance | Tap "Attendance History" | `parent-attendance.tsx` |
-| Get homework help | Tap "Homework Help" or "Dash AI" | `ai-homework-helper.tsx` |
-| Message teacher | Tap "Messages" → select teacher | `parent-messages.tsx` |
-| Make payment | Tap "Payments" | `manage-subscription.tsx` |
-| View reports | Tap "Progress Reports" | View PDF reports |
-| Add child | Profile → "Add Another Child" | `parent-child-registration.tsx` |
+| Action            | How To                           | Screen                          |
+| ----------------- | -------------------------------- | ------------------------------- |
+| View attendance   | Tap "Attendance History"         | `parent-attendance.tsx`         |
+| Get homework help | Tap "Homework Help" or "Dash AI" | `ai-homework-helper.tsx`        |
+| Message teacher   | Tap "Messages" → select teacher  | `parent-messages.tsx`           |
+| Make payment      | Tap "Payments"                   | `manage-subscription.tsx`       |
+| View reports      | Tap "Progress Reports"           | View PDF reports                |
+| Add child         | Profile → "Add Another Child"    | `parent-child-registration.tsx` |
 
 ---
 
@@ -367,13 +367,13 @@ End of Day:
 
 #### Key Actions (Age-Appropriate)
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| Do homework | Tap "Homework" → select task | `homework.tsx` |
-| Get help | Tap "Dash AI" → ask question | `ai-homework-helper.tsx` |
-| View lessons | Tap "Lessons" | `lessons-hub.tsx` |
-| Check grades | Tap "Grades" | `grades.tsx` |
-| Practice worksheets | Tap "Worksheet" | `worksheet-viewer.tsx` |
+| Action              | How To                       | Screen                   |
+| ------------------- | ---------------------------- | ------------------------ |
+| Do homework         | Tap "Homework" → select task | `homework.tsx`           |
+| Get help            | Tap "Dash AI" → ask question | `ai-homework-helper.tsx` |
+| View lessons        | Tap "Lessons"                | `lessons-hub.tsx`        |
+| Check grades        | Tap "Grades"                 | `grades.tsx`             |
+| Practice worksheets | Tap "Worksheet"              | `worksheet-viewer.tsx`   |
 
 ---
 
@@ -412,14 +412,14 @@ End of Day:
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| Send broadcast | Tap "Broadcast" | `membership/broadcast.tsx` |
-| View documents | Tap "Document Vault" | `membership/documents.tsx` |
-| Manage regions | Tap "Regional Managers" | `membership/regional-managers.tsx` |
-| View governance | Tap "Governance" | `membership/governance.tsx` |
-| Financial reports | Tap "Financial Reports" | `membership/finance.tsx` |
-| View analytics | Tap "Analytics" | `membership/analytics.tsx` |
+| Action            | How To                  | Screen                             |
+| ----------------- | ----------------------- | ---------------------------------- |
+| Send broadcast    | Tap "Broadcast"         | `membership/broadcast.tsx`         |
+| View documents    | Tap "Document Vault"    | `membership/documents.tsx`         |
+| Manage regions    | Tap "Regional Managers" | `membership/regional-managers.tsx` |
+| View governance   | Tap "Governance"        | `membership/governance.tsx`        |
+| Financial reports | Tap "Financial Reports" | `membership/finance.tsx`           |
+| View analytics    | Tap "Analytics"         | `membership/analytics.tsx`         |
 
 ---
 
@@ -452,13 +452,13 @@ End of Day:
 
 #### Key Actions
 
-| Action | How To | Screen |
-|--------|--------|--------|
-| Create program | Tap "Programs" → "Create New" | `org-admin/create-program.tsx` |
-| Import CVs | Tap "CV Import" | `org-admin/bulk-cv-import.tsx` |
-| Enroll learner | Tap "Learners" → "Enroll" | `org-admin/manual-enrollment.tsx` |
-| Issue certificate | Tap "Certs" → select learner | `org-admin/certifications.tsx` |
-| Track placements | Tap "Placements" | `org-admin/placements.tsx` |
+| Action            | How To                        | Screen                            |
+| ----------------- | ----------------------------- | --------------------------------- |
+| Create program    | Tap "Programs" → "Create New" | `org-admin/create-program.tsx`    |
+| Import CVs        | Tap "CV Import"               | `org-admin/bulk-cv-import.tsx`    |
+| Enroll learner    | Tap "Learners" → "Enroll"     | `org-admin/manual-enrollment.tsx` |
+| Issue certificate | Tap "Certs" → select learner  | `org-admin/certifications.tsx`    |
+| Track placements  | Tap "Placements"              | `org-admin/placements.tsx`        |
 
 ---
 
@@ -512,16 +512,16 @@ End of Day:
 
 #### Key Files for Debugging
 
-| Step | File | Purpose |
-|------|------|---------|
-| Sign Up | `app/screens/principal-signup.tsx` | Principal registration |
-| School Setup | `app/screens/school-registration.tsx` | School creation |
-| Subscription | `app/screens/subscription-setup.tsx` | Plan selection |
-| Payment | `supabase/functions/payments-create-checkout/` | PayFast checkout |
-| Webhook | `supabase/functions/payfast-webhook/` | Payment confirmation |
-| First Class | `app/screens/class-details.tsx` | Class creation |
-| Teacher Invite | `app/screens/teacher-management.tsx` | Send invites |
-| Parent Code | `app/screens/principal-parent-invite-code.tsx` | Generate codes |
+| Step           | File                                           | Purpose                |
+| -------------- | ---------------------------------------------- | ---------------------- |
+| Sign Up        | `app/screens/principal-signup.tsx`             | Principal registration |
+| School Setup   | `app/screens/school-registration.tsx`          | School creation        |
+| Subscription   | `app/screens/subscription-setup.tsx`           | Plan selection         |
+| Payment        | `supabase/functions/payments-create-checkout/` | PayFast checkout       |
+| Webhook        | `supabase/functions/payfast-webhook/`          | Payment confirmation   |
+| First Class    | `app/screens/class-details.tsx`                | Class creation         |
+| Teacher Invite | `app/screens/teacher-management.tsx`           | Send invites           |
+| Parent Code    | `app/screens/principal-parent-invite-code.tsx` | Generate codes         |
 
 ---
 
@@ -554,12 +554,12 @@ End of Day:
 
 #### Key Files
 
-| Step | File |
-|------|------|
-| Invite Accept | `app/screens/teacher-invite-accept.tsx` |
-| Self Register | `app/screens/teacher-registration.tsx` |
+| Step             | File                                         |
+| ---------------- | -------------------------------------------- |
+| Invite Accept    | `app/screens/teacher-invite-accept.tsx`      |
+| Self Register    | `app/screens/teacher-registration.tsx`       |
 | Profile Complete | `app/screens/teacher-profile-completion.tsx` |
-| Approval Queue | `app/screens/principal-registrations.tsx` |
+| Approval Queue   | `app/screens/principal-registrations.tsx`    |
 
 ---
 
@@ -599,13 +599,13 @@ End of Day:
 
 #### Key Files
 
-| Step | File |
-|------|------|
-| Parent Signup | `app/screens/parent-registration.tsx` |
-| Join by Code | `app/screens/parent-join-by-code.tsx` |
+| Step               | File                                        |
+| ------------------ | ------------------------------------------- |
+| Parent Signup      | `app/screens/parent-registration.tsx`       |
+| Join by Code       | `app/screens/parent-join-by-code.tsx`       |
 | Child Registration | `app/screens/parent-child-registration.tsx` |
-| Link Existing | `app/screens/parent-link-child.tsx` |
-| Claim Child | `app/screens/parent-claim-child.tsx` |
+| Link Existing      | `app/screens/parent-link-child.tsx`         |
+| Claim Child        | `app/screens/parent-claim-child.tsx`        |
 
 ---
 
@@ -647,13 +647,13 @@ End of Day:
 
 #### Key Files
 
-| Step | File |
-|------|------|
-| Join Screen | `app/screens/membership/join.tsx` |
-| Registration Form | `app/screens/membership/register.tsx` |
-| Region Selection | Component in register screen |
-| Payment | `supabase/functions/payments-registration-fee/` |
-| Member Card | `app/screens/membership/id-card.tsx` |
+| Step              | File                                            |
+| ----------------- | ----------------------------------------------- |
+| Join Screen       | `app/screens/membership/join.tsx`               |
+| Registration Form | `app/screens/membership/register.tsx`           |
+| Region Selection  | Component in register screen                    |
+| Payment           | `supabase/functions/payments-registration-fee/` |
+| Member Card       | `app/screens/membership/id-card.tsx`            |
 
 ---
 
@@ -684,12 +684,12 @@ End of Day:
 
 #### Key Files
 
-| Step | File |
-|------|------|
-| Learner Registration | `app/screens/learner-registration.tsx` |
-| Program Browse | `app/screens/learner/programs.tsx` |
-| Manual Enrollment | `app/screens/org-admin/manual-enrollment.tsx` |
-| Bulk Import | `app/screens/org-admin/bulk-cv-import.tsx` |
+| Step                 | File                                          |
+| -------------------- | --------------------------------------------- |
+| Learner Registration | `app/screens/learner-registration.tsx`        |
+| Program Browse       | `app/screens/learner/programs.tsx`            |
+| Manual Enrollment    | `app/screens/org-admin/manual-enrollment.tsx` |
+| Bulk Import          | `app/screens/org-admin/bulk-cv-import.tsx`    |
 
 ---
 
@@ -701,12 +701,12 @@ End of Day:
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
-| `lib/authActions.ts` | Sign in logic |
-| `lib/supabase.ts` | Supabase client config |
-| `contexts/AuthContext.tsx` | Auth state |
-| `.env` | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
+| File                       | What to Check                                               |
+| -------------------------- | ----------------------------------------------------------- |
+| `lib/authActions.ts`       | Sign in logic                                               |
+| `lib/supabase.ts`          | Supabase client config                                      |
+| `contexts/AuthContext.tsx` | Auth state                                                  |
+| `.env`                     | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
 
 **Debug Steps:**
 ```typescript
@@ -728,11 +728,11 @@ console.log('[Auth] Result:', { data, error });
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
-| `lib/routeAfterLogin.ts` | Dashboard routing logic |
-| `profiles` table | `role` column value |
-| `organization_members` table | `member_type` column |
+| File                         | What to Check           |
+| ---------------------------- | ----------------------- |
+| `lib/routeAfterLogin.ts`     | Dashboard routing logic |
+| `profiles` table             | `role` column value     |
+| `organization_members` table | `member_type` column    |
 
 **Debug Steps:**
 ```typescript
@@ -753,11 +753,11 @@ console.log('[Route] Routing to:', determinedRoute);
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
-| `supabase/functions/payfast-webhook/` | Webhook handler |
+| File                                           | What to Check     |
+| ---------------------------------------------- | ----------------- |
+| `supabase/functions/payfast-webhook/`          | Webhook handler   |
 | `supabase/functions/payments-create-checkout/` | Checkout creation |
-| PayFast dashboard | ITN logs |
+| PayFast dashboard                              | ITN logs          |
 
 **Debug Steps:**
 1. Check PayFast sandbox logs for ITN delivery
@@ -779,11 +779,11 @@ console.log('[Route] Routing to:', determinedRoute);
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
+| File                           | What to Check         |
+| ------------------------------ | --------------------- |
 | `hooks/useTeacherMessaging.ts` | Send message function |
-| `hooks/useParentMessaging.ts` | Parent version |
-| `messages` table RLS | Policies |
+| `hooks/useParentMessaging.ts`  | Parent version        |
+| `messages` table RLS           | Policies              |
 
 **Debug Steps:**
 ```typescript
@@ -806,11 +806,11 @@ console.log('[Message] Result:', { data, error });
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
-| `services/dash-ai/DashAIClient.ts` | API calls |
-| `supabase/functions/ai-proxy/` | Proxy function |
-| `user_ai_tiers` table | User quota |
+| File                               | What to Check  |
+| ---------------------------------- | -------------- |
+| `services/dash-ai/DashAIClient.ts` | API calls      |
+| `supabase/functions/ai-proxy/`     | Proxy function |
+| `user_ai_tiers` table              | User quota     |
 
 **Debug Steps:**
 1. Check quota: `SELECT * FROM user_ai_tiers WHERE user_id = '<id>'`
@@ -851,11 +851,11 @@ EAS_PROJECT_ID=playstore npx eas channel:edit production --branch production
 
 **Check these files:**
 
-| File | What to Check |
-|------|---------------|
-| `lib/NotificationService.ts` | Token registration |
-| `supabase/functions/send-push/` | Send function |
-| `expo_push_tokens` table | Token stored |
+| File                            | What to Check      |
+| ------------------------------- | ------------------ |
+| `lib/NotificationService.ts`    | Token registration |
+| `supabase/functions/send-push/` | Send function      |
+| `expo_push_tokens` table        | Token stored       |
 
 **Debug Steps:**
 1. Verify push token saved: `SELECT * FROM expo_push_tokens WHERE user_id = '<id>'`
@@ -874,13 +874,13 @@ EAS_PROJECT_ID=playstore npx eas channel:edit production --branch production
 
 ### 5.1 Quick Fixes
 
-| Issue | Solution |
-|-------|----------|
-| App stuck on splash | Clear cache: `expo start --clear` |
-| Build failing | Check `eas.json` profile, ensure dependencies installed |
-| Types error | Run `npm run typecheck`, update `lib/database.types.ts` |
-| RLS blocking data | Check policies in Supabase dashboard |
-| Supabase connection | Verify env vars, check Supabase status |
+| Issue               | Solution                                                  |
+| ------------------- | --------------------------------------------------------- |
+| App stuck on splash | Clear cache: `expo start --clear`                         |
+| Build failing       | Check `eas.json` profile, ensure dependencies installed   |
+| Types error         | Run `npm run typecheck`, update `lib/database.types.ts`   |
+| RLS blocking data   | Check policies in Supabase dashboard                      |
+| Supabase connection | Verify env vars, check Supabase status                    |
 | Metro bundler crash | Increase memory: `NODE_OPTIONS=--max-old-space-size=8192` |
 
 ### 5.2 Reset Procedures
@@ -917,39 +917,39 @@ npx supabase gen types typescript --project-id lvvvjywrmpcqrpvuptdi > lib/databa
 
 ### Authentication
 
-| Purpose | File |
-|---------|------|
-| Auth Context | `contexts/AuthContext.tsx` |
-| Sign In/Up/Out | `lib/authActions.ts` |
-| Route After Login | `lib/routeAfterLogin.ts` |
-| Session Manager | `lib/sessionManager.ts` |
-| Route Guard | `hooks/useRouteGuard.ts` |
-| Supabase Client | `lib/supabase.ts` |
+| Purpose           | File                       |
+| ----------------- | -------------------------- |
+| Auth Context      | `contexts/AuthContext.tsx` |
+| Sign In/Up/Out    | `lib/authActions.ts`       |
+| Route After Login | `lib/routeAfterLogin.ts`   |
+| Session Manager   | `lib/sessionManager.ts`    |
+| Route Guard       | `hooks/useRouteGuard.ts`   |
+| Supabase Client   | `lib/supabase.ts`          |
 
 ### Dashboards
 
-| Role | File |
-|------|------|
-| Super Admin | `app/screens/super-admin-dashboard.tsx` |
-| Principal | `app/screens/principal-dashboard.tsx` |
-| Teacher | `app/screens/teacher-dashboard.tsx` |
-| Parent | `app/screens/parent-dashboard.tsx` |
-| Student | `app/screens/learner-dashboard.tsx` |
+| Role            | File                                       |
+| --------------- | ------------------------------------------ |
+| Super Admin     | `app/screens/super-admin-dashboard.tsx`    |
+| Principal       | `app/screens/principal-dashboard.tsx`      |
+| Teacher         | `app/screens/teacher-dashboard.tsx`        |
+| Parent          | `app/screens/parent-dashboard.tsx`         |
+| Student         | `app/screens/learner-dashboard.tsx`        |
 | President (SOA) | `app/screens/membership/ceo-dashboard.tsx` |
-| Org Admin | `app/screens/org-admin-dashboard.tsx` |
+| Org Admin       | `app/screens/org-admin-dashboard.tsx`      |
 
 ### Features
 
-| Feature | Key File |
-|---------|----------|
-| Messaging | `hooks/useTeacherMessaging.ts` |
-| AI Chat | `services/dash-ai/DashAIClient.ts` |
-| Calls | `components/calls/CallProvider.tsx` |
-| Payments | `supabase/functions/payfast-webhook/` |
-| Notifications | `lib/NotificationRouter.ts` |
-| Attendance | `app/screens/attendance.tsx` |
-| Lessons | `services/LessonsService.ts` |
-| Homework | `app/screens/homework.tsx` |
+| Feature       | Key File                              |
+| ------------- | ------------------------------------- |
+| Messaging     | `hooks/useTeacherMessaging.ts`        |
+| AI Chat       | `services/dash-ai/DashAIClient.ts`    |
+| Calls         | `components/calls/CallProvider.tsx`   |
+| Payments      | `supabase/functions/payfast-webhook/` |
+| Notifications | `lib/NotificationRouter.ts`           |
+| Attendance    | `app/screens/attendance.tsx`          |
+| Lessons       | `services/LessonsService.ts`          |
+| Homework      | `app/screens/homework.tsx`            |
 
 ---
 
