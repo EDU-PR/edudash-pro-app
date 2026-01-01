@@ -322,7 +322,7 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
       ) {
         logger.debug('ParentMessagesRealtime', 'App came to foreground, refetching messages');
         // Refetch messages to get any delivery/read status updates that happened while backgrounded
-        queryClient.invalidateQueries({ queryKey: ['parent', 'messages', threadId] });
+        queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
         queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
       }
       appStateRef.current = nextAppState;
@@ -399,8 +399,32 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
             }
           }
           
-          // Invalidate to refetch with new message
-          queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
+          // IMMEDIATELY add new message to cache for instant UI update
+          // Fetch sender info first to have complete message data
+          const { data: senderProfile } = await assertSupabase()
+            .from('profiles')
+            .select('first_name, last_name, role')
+            .eq('id', payload.new.sender_id)
+            .single();
+          
+          const newMessage = {
+            ...payload.new,
+            sender: senderProfile || null,
+            reactions: [],
+          };
+          
+          // Add to cache immediately
+          queryClient.setQueryData(
+            ['messages', threadId],
+            (old: any[] | undefined) => {
+              if (!old) return [newMessage];
+              // Check if message already exists (avoid duplicates)
+              if (old.some(m => m.id === newMessage.id)) return old;
+              return [...old, newMessage];
+            }
+          );
+          
+          // Also invalidate to ensure full data refresh
           queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
         }
       )
@@ -416,7 +440,7 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
         async (payload: any) => {
           logger.debug('ParentMessagesRealtime', 'Message updated:', payload.new.id);
           
-          // Update message in cache with new delivery/read status
+          // IMMEDIATELY update message in cache with new delivery/read status
           queryClient.setQueryData(
             ['messages', threadId],
             (old: any[] | undefined) => {

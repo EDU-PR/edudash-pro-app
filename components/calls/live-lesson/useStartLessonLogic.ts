@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Alert, Linking } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import type { AdvancedSettings } from './AdvancedLessonSettings';
 
 interface Class {
   id: string;
@@ -22,6 +23,29 @@ interface ExistingCall {
   classId: string | null;
   startedAt: string;
 }
+
+// Default advanced settings
+const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
+  isPrivateRoom: true,
+  enableKnocking: true,
+  enablePrejoinUI: true,
+  camerasOnStart: true,
+  microphonesOnStart: false,
+  enableScreenShare: true,
+  enableBreakoutRooms: false,
+  chatMode: 'advanced',
+  enableEmojiReactions: true,
+  enablePeopleUI: true,
+  enableBackgroundEffects: true,
+  enablePictureInPicture: true,
+  enableHandRaising: true,
+  enableNetworkUI: true,
+  enableNoiseCancellation: true,
+  enableLiveCaptions: false,
+  recordingMode: 'off',
+  ownerOnlyBroadcast: false,
+  maxParticipants: 50,
+};
 
 const TIER_TIME_LIMITS: Record<string, { minutes: number; label: string; badge: string; badgeColor: string }> = {
   free: { minutes: 15, label: '15 min', badge: 'Free', badgeColor: '#6b7280' },
@@ -65,6 +89,9 @@ export function useStartLessonLogic(
   const [scheduledTime, setScheduledTime] = useState('');
   const [sendReminders, setSendReminders] = useState(true);
   const [customDuration, setCustomDuration] = useState<number>(0);
+  
+  // Advanced settings state
+  const [advancedSettings, setAdvancedSettings] = useState<AdvancedSettings>(DEFAULT_ADVANCED_SETTINGS);
 
   const tierConfig = TIER_TIME_LIMITS[subscriptionTier.toLowerCase()] || TIER_TIME_LIMITS.starter;
   console.log('[useStartLessonLogic] Tier calculation:', {
@@ -349,6 +376,8 @@ export function useStartLessonLogic(
     maxDurationMinutes,
     tierConfig,
     effectiveDuration,
+    advancedSettings,
+    setAdvancedSettings,
     handleStartLesson,
     handleRejoinCall,
     handleEndExistingCall,

@@ -120,9 +120,12 @@ export function StartLiveLesson({
         maxDurationMinutes={logic.maxDurationMinutes}
         tierBadge={logic.tierConfig.badge}
         tierLabel={logic.tierConfig.label}
+        subscriptionTier={subscriptionTier}
         isCreating={logic.isCreating}
         error={logic.error}
         colors={colors}
+        advancedSettings={logic.advancedSettings}
+        onAdvancedSettingsChange={logic.setAdvancedSettings}
       />
     </ScrollView>
   );

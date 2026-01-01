@@ -44,6 +44,7 @@ import {
   getDateSeparatorLabel,
 } from '@/components/messaging';
 import { TypingIndicator } from '@/components/messaging/TypingIndicator';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
@@ -143,6 +144,13 @@ export default function TeacherMessageThreadScreen() {
   const callContext = useCallSafe();
   const isOnline = parentId && callContext ? callContext.isUserOnline(parentId) : false;
   const lastSeenText = parentId && callContext ? callContext.getLastSeenText(parentId) : 'Offline';
+  
+  // Typing indicator hook
+  const { isOtherTyping, typingText, setTyping, clearTyping } = useTypingIndicator({
+    threadId: threadId || null,
+    userId: user?.id || null,
+    userName: user?.email?.split('@')[0] || 'Teacher',
+  });
   
   // State
   const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
