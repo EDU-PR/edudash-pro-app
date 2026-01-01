@@ -479,12 +479,56 @@ export class DashVoiceService {
     );
   }
 
+  // Tiers that have TTS access
+  private static readonly TTS_ALLOWED_TIERS = [
+    'parent_starter', 'parent_plus', 'parent-starter', 'parent-plus',
+    'teacher_starter', 'teacher_pro', 'teacher-starter', 'teacher-pro',
+    'starter', 'basic', 'pro', 'premium', 'enterprise',
+    'school_starter', 'school_pro', 'school_enterprise'
+  ];
+
   /**
    * Speak text using TTS with intelligent text normalization
+   * Note: TTS is a premium feature - free tier users will get an error callback
    */
   public async speakText(text: string, callbacks?: SpeechCallbacks, options?: { language?: string }): Promise<void> {
     try {
       const voiceSettings = this.config.voiceSettings;
+      
+      // Check tier access for TTS (premium feature)
+      try {
+        const { useSubscription } = await import('@/contexts/SubscriptionContext');
+        // We can't use hooks here, so check via Supabase directly
+        const supabase = this.config.supabaseClient;
+        if (supabase) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: tierData } = await supabase
+              .from('user_ai_tiers')
+              .select('tier')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            const { data: usageData } = await supabase
+              .from('user_ai_usage')
+              .select('current_tier')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            const userTier = tierData?.tier || usageData?.current_tier || 'free';
+            const tierLower = String(userTier).toLowerCase().replace(/-/g, '_');
+            
+            if (!DashVoiceService.TTS_ALLOWED_TIERS.some(t => t.replace(/-/g, '_') === tierLower)) {
+              console.log(`[DashVoice] TTS blocked for free tier user`);
+              callbacks?.onError?.(new Error('TTS_FREE_TIER_BLOCKED'));
+              return;
+            }
+          }
+        }
+      } catch (tierErr) {
+        console.warn('[DashVoice] Could not check tier for TTS, allowing request:', tierErr);
+        // Allow request to proceed - Edge Function will do final tier check
+      }
       
       // Check if TTS is supported for this language
       const requestedLang = options?.language || voiceSettings.language || 'en';
@@ -893,8 +937,9 @@ export class DashVoiceService {
       .replace(/\n[\s]*(\d+)[.)\s]+/g, '\n') // Remove numbered bullets after newlines
       // Handle dashes in educational content (not math contexts)
       .replace(/([a-zA-Z])\s*-\s*([A-Z][a-z])/g, '$1, $2') // "Students - They will" -> "Students, They will"
-      // Handle dash separators in descriptions
-      .replace(/([a-z])\s*-\s*([a-z])/g, '$1 to $2') // "5-6 years" -> "5 to 6 years"
+      // Handle number ranges with dashes (e.g., "5-6 years" -> "5 to 6 years")
+      // ONLY match number-to-number ranges, NOT hyphenated words like "eye-catching"
+      .replace(/(\d+)\s*-\s*(\d+)/g, '$1 to $2') // "5-6" -> "5 to 6"
       // Clean up extra spaces and newlines
       .replace(/\n\s*\n/g, '. ') // Double newlines become sentence breaks
       .replace(/\n/g, '. ') // Single newlines become sentence breaks

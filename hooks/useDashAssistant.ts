@@ -393,6 +393,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const speakResponse = useCallback(async (message: DashMessage) => {
     if (!dashInstance || message.type !== 'assistant') return;
 
+    // Check tier for TTS access
+    if (!hasTTSAccess()) {
+      Alert.alert(
+        'Voice Playback - Premium',
+        'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
+        [
+          { text: 'Maybe Later', style: 'cancel' },
+          { 
+            text: 'Upgrade Now', 
+            onPress: () => router.push('/screens/subscription-setup' as any)
+          }
+        ]
+      );
+      return;
+    }
+
     if (speakingMessageId === message.id) {
       await stopSpeaking();
       return;
@@ -416,9 +432,24 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           setIsSpeaking(false);
           setSpeakingMessageId(null);
         },
-        onError: () => {
+        onError: (error: any) => {
           setIsSpeaking(false);
           setSpeakingMessageId(null);
+          
+          // Check for tier-blocked error
+          if (error?.message === 'TTS_FREE_TIER_BLOCKED') {
+            Alert.alert(
+              'Voice Playback - Premium',
+              'Text-to-speech is a premium feature. Upgrade to Starter or Plus to unlock voice features.',
+              [
+                { text: 'Maybe Later', style: 'cancel' },
+                { 
+                  text: 'Upgrade Now', 
+                  onPress: () => router.push('/screens/subscription-setup' as any)
+                }
+              ]
+            );
+          }
         }
       });
     } catch (error) {
@@ -426,7 +457,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
-  }, [dashInstance, speakingMessageId, isSpeaking]);
+  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess]);
 
   const stopSpeaking = useCallback(async () => {
     if (!dashInstance) return;
@@ -508,13 +539,37 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, []);
 
+  // Check if user has TTS/voice features
+  const hasTTSAccess = useCallback(() => {
+    const freeTiers = ['free', 'trial', ''];
+    const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
+    return !freeTiers.includes(currentTier);
+  }, [tier]);
+
   const handleInputMicPress = useCallback(async () => {
+    // Check tier for voice features
+    if (!hasTTSAccess()) {
+      Alert.alert(
+        'Voice Features - Premium',
+        'Voice input and text-to-speech are premium features available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Voice input (speak to Dash)\n• Text-to-speech (Dash reads responses)\n• Voice commands',
+        [
+          { text: 'Maybe Later', style: 'cancel' },
+          { 
+            text: 'Upgrade Now', 
+            onPress: () => router.push('/screens/subscription-setup' as any)
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Voice feature is available but input might be disabled for other reasons
     Alert.alert(
-      'Voice Input Unavailable',
-      'Voice input is temporarily disabled. Please use the text input instead.',
+      'Voice Input',
+      'Voice input is coming soon! In the meantime, Dash can read responses aloud using the speaker button.',
       [{ text: 'OK' }]
     );
-  }, []);
+  }, [hasTTSAccess]);
 
   const startNewConversation = useCallback(async () => {
     if (!dashInstance) return;
