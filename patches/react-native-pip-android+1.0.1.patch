@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-pip-android/android/build.gradle b/node_modules/react-native-pip-android/android/build.gradle
-index d7f0428..612c2cf 100644
+index d7f0428..9be0d16 100644
 --- a/node_modules/react-native-pip-android/android/build.gradle
 +++ b/node_modules/react-native-pip-android/android/build.gradle
 @@ -1,16 +1,3 @@
@@ -29,7 +29,7 @@ index d7f0428..612c2cf 100644
 +    buildToolsVersion safeExtGet('PipAndroid_buildToolsVersion', '36.0.0')
 +    
 +    // Required for Gradle 8.x compatibility
-+    namespace 'com.nicechute.pipandroid'
++    namespace 'com.reactnativepipandroid'
 +    
      defaultConfig {
 -        minSdkVersion safeExtGet('PipAndroid_minSdkVersion', 16)
@@ -72,3 +72,13 @@ index d7f0428..612c2cf 100644
  }
  
  dependencies {
+diff --git a/node_modules/react-native-pip-android/android/src/main/AndroidManifest.xml b/node_modules/react-native-pip-android/android/src/main/AndroidManifest.xml
+index 4f27e4c..a2f47b6 100644
+--- a/node_modules/react-native-pip-android/android/src/main/AndroidManifest.xml
++++ b/node_modules/react-native-pip-android/android/src/main/AndroidManifest.xml
+@@ -1,4 +1,2 @@
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+-          package="com.reactnativepipandroid">
+-
++<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ </manifest>
