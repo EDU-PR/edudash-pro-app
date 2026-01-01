@@ -65,12 +65,12 @@
     </service>
     <service android:name="io.wazo.callkeep.RNCallKeepBackgroundMessagingService" android:exported="true"/>
     <!-- Notifee Foreground Service for call persistence -->
-    <!-- CRITICAL: Service types must match what code requests -->
-    <!-- For voice calls: phoneCall only (simplest, most compatible) -->
-    <!-- For video calls: phoneCall|camera (add when needed) -->
+    <!-- CRITICAL: Service types MUST match what code requests in useCallBackgroundHandler.ts -->
+    <!-- Android 14+ (API 34) will CRASH if code requests a type not declared here -->
+    <!-- Values: phoneCall (for VoIP), microphone (for voice input), mediaPlayback (for background audio) -->
     <service
         android:name="app.notifee.core.ForegroundService"
-        android:foregroundServiceType="phoneCall"
+        android:foregroundServiceType="phoneCall|microphone|mediaPlayback"
         android:exported="false">
     </service>
     <!-- Daily.co Ongoing Meeting Foreground Service for video/audio calls and screen share -->
