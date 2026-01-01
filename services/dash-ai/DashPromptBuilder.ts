@@ -21,6 +21,16 @@ import type { DashMessage, DashPersonality } from './types';
  */
 export interface UserProfile {
   role?: string;
+  full_name?: string;
+  display_name?: string;
+  grade_level?: string;
+  preferred_language?: string;
+  subscription_tier?: string;
+  organization_name?: string;
+  children?: Array<{
+    name: string;
+    grade_level?: string;
+  }>;
 }
 
 /**
@@ -52,13 +62,66 @@ export class DashPromptBuilder {
    * - Anthropic system prompts: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/system-prompts
    */
   public buildSystemPrompt(): string {
-    const userRole = this.getUserProfile()?.role || 'educator';
+    const profile = this.getUserProfile();
+    const userRole = profile?.role || 'educator';
     const roleSpec = this.personality.role_specializations[userRole];
     const capabilities = roleSpec?.capabilities || [];
     
-    return `You are Dash, an AI Teaching Assistant specialized in early childhood education and preschool management.
+    // Get user's name for personalized greetings
+    const userName = profile?.full_name?.split(' ')[0] || 
+                     profile?.display_name?.split(' ')[0] || 
+                     '';
+    const userGreeting = userName ? ` You're helping ${userName}.` : '';
+    
+    // Build personalization context
+    let personalizationContext = '';
+    if (profile) {
+      const parts: string[] = [];
+      
+      if (userName) {
+        parts.push(`- User's name: ${userName}`);
+      }
+      
+      if (profile.grade_level) {
+        parts.push(`- Grade level: ${profile.grade_level}`);
+      }
+      
+      if (profile.subscription_tier) {
+        const tierName = profile.subscription_tier.charAt(0).toUpperCase() + 
+                        profile.subscription_tier.slice(1).replace(/_/g, ' ');
+        parts.push(`- Subscription: ${tierName} tier`);
+      }
+      
+      if (profile.children && profile.children.length > 0) {
+        const childrenInfo = profile.children
+          .map(c => c.grade_level ? `${c.name} (Grade ${c.grade_level})` : c.name)
+          .join(', ');
+        parts.push(`- Children: ${childrenInfo}`);
+      }
+      
+      if (parts.length > 0) {
+        personalizationContext = `
+PERSONALIZATION CONTEXT (use to make responses more relevant):
+${parts.join('\n')}
+- Always address ${userName || 'the user'} by name when appropriate
+- Tailor examples and suggestions to their grade level/children's grade levels
+- Remember their context across the conversation
+`;
+      }
+    }
+    
+    return `You are Dash, an AI Teaching Assistant specialized in early childhood education and preschool management.${userGreeting}
 
 CORE PERSONALITY: ${this.personality.personality_traits.join(', ')}
+${personalizationContext}
+INTERACTION STYLE:
+- Be warm, personal, and conversational - not robotic
+- Use the user's name occasionally (not in every message)
+- Show enthusiasm when helping with educational topics
+- Celebrate achievements and progress
+- Be encouraging when users face challenges
+- Ask follow-up questions to show genuine interest
+- Remember context from earlier in the conversation
 
 RESPONSE GUIDELINES:
 - Be concise, practical, and directly helpful
@@ -76,6 +139,11 @@ TOOL USAGE PHILOSOPHY:
 - Example: User asks "How are my students doing?" → Use get_student_list AND analyze_class_performance
 - Example: User asks "What's happening this week?" → Use get_schedule with appropriate date range
 
+EDUCATIONAL TOOLS AVAILABLE:
+- caps_curriculum_query: Search CAPS curriculum topics, learning objectives, and content standards
+- textbook_content: Find approved South African textbooks and chapters for specific topics
+- user_context: Get information about the user and their children for personalized help
+
 CAPS CURRICULUM INTEGRATION (South African Education):
 🚨 CRITICAL - TOOL USAGE REQUIRED 🚨
 - You have DIRECT database access to South African CAPS curriculum documents via tools
@@ -91,6 +159,8 @@ TOOL SELECTION GUIDE:
 - "Show me Grade X Subject CAPS documents" → Use get_caps_documents with {grade: "X", subject: "Subject"}
 - "Find CAPS content about [topic]" → Use search_caps_curriculum with {query: "topic", grade: "X", subject: "Subject"}
 - "What subjects are available?" → Use get_caps_subjects with {grade: "X"}
+- "What should my child learn in Grade X?" → Use caps_curriculum_query with {grade: "X"}
+- "Find textbooks for Grade X Mathematics" → Use textbook_content with {grade: "X", subject: "Mathematics"}
 
 EXAMPLES:
   User: "Show me grade 10 mathematics CAPS documents"

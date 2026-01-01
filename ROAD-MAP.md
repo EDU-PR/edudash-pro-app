@@ -1,6 +1,6 @@
 # EduDash Pro Product Roadmap
 
-> **Version**: 2.0.1 | **Last Updated**: January 3, 2026  
+> **Version**: 2.0.2 | **Last Updated**: January 1, 2026  
 > **Current App Version**: 1.0.11 | **Runtime**: 1.0.11
 
 This document outlines the product roadmap for EduDash Pro, including completed features, in-progress work, and planned enhancements.
@@ -28,7 +28,7 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Multi-tenant architecture with RLS
 - [x] Role-based access control (RBAC)
 - [x] Authentication (Email, Google OAuth, OTP)
-- [x] Session management with refresh tokens
+- [x] Session management with refresh tokens (24-hour expiry configured)
 - [x] Multi-account support (switch profiles)
 
 #### Educational Features
@@ -65,6 +65,7 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Voice chat (STT + TTS)
 - [x] Conversation memory
 - [x] South African language support (EN, AF, ZU)
+- [x] Keyboard-aware UI (auto-scroll on keyboard show)
 
 #### Communication
 - [x] Direct messaging

@@ -28,6 +28,8 @@ interface DashInputBarProps {
   selectedAttachments: DashAttachment[];
   isLoading: boolean;
   isUploading: boolean;
+  isRecording?: boolean;
+  partialTranscript?: string;
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
@@ -42,6 +44,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   selectedAttachments,
   isLoading,
   isUploading,
+  isRecording = false,
+  partialTranscript = '',
   onSend,
   onMicPress,
   onTakePhoto,
@@ -203,13 +207,19 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                 paddingLeft: 36,
               }
             ]}
-            placeholder={selectedAttachments.length > 0 ? "Add a message (optional)..." : "Ask Dash anything..."}
-            placeholderTextColor={theme.inputPlaceholder}
+            placeholder={
+              isRecording 
+                ? "🎤 Listening... tap stop when done" 
+                : selectedAttachments.length > 0 
+                  ? "Add a message (optional)..." 
+                  : "Ask Dash anything..."
+            }
+            placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}
             onChangeText={setInputText}
             multiline={true}
             maxLength={500}
-            editable={!isLoading && !isUploading}
+            editable={!isLoading && !isUploading && !isRecording}
             onSubmitEditing={undefined}
             returnKeyType="default"
             blurOnSubmit={false}
@@ -239,13 +249,28 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.recordButton, { backgroundColor: theme.accent }]}
+            style={[
+              styles.recordButton, 
+              { 
+                backgroundColor: isRecording ? theme.error : theme.accent,
+                // Add pulsing animation effect for recording
+                shadowColor: isRecording ? theme.error : 'transparent',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: isRecording ? 0.5 : 0,
+                shadowRadius: isRecording ? 8 : 0,
+                elevation: isRecording ? 8 : 0,
+              }
+            ]}
             onPress={onMicPress}
             disabled={isLoading}
-            accessibilityLabel="Record voice message"
+            accessibilityLabel={isRecording ? "Stop recording" : "Record voice message"}
             accessibilityRole="button"
           >
-            <Ionicons name="mic-outline" size={20} color={theme.onAccent} />
+            <Ionicons 
+              name={isRecording ? "stop" : "mic-outline"} 
+              size={20} 
+              color={isRecording ? '#fff' : theme.onAccent} 
+            />
           </TouchableOpacity>
         )}
       </View>

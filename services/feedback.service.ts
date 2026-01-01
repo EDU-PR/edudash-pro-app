@@ -16,7 +16,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import type {
   TesterFeedback,
@@ -89,7 +89,7 @@ export async function uploadScreenshot(
 
     // Read file as base64
     const base64 = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
 
     // Convert base64 to ArrayBuffer

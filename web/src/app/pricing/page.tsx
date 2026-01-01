@@ -338,10 +338,10 @@ export default function PricingPage() {
                 <span style={{ fontSize: "32px" }}>🔥</span>
                 <div>
                   <p style={{ fontSize: "clamp(18px, 3vw, 24px)", fontWeight: 800, margin: 0, color: "#fff", textTransform: "uppercase" as const, letterSpacing: "0.05em", textShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>
-                    LAUNCH SPECIAL: 50% OFF FOR 6 MONTHS!
+                    LAUNCH SPECIAL: 50% OFF FOR 3 MONTHS!
                   </p>
                   <p style={{ fontSize: "clamp(13px, 2vw, 16px)", margin: "6px 0 0", color: "rgba(255, 255, 255, 0.95)", fontWeight: 600 }}>
-                    🎁 Join before Dec 31, 2025 • R49.50/mo (was R99) or R99.50/mo (was R199) for 6 months
+                    🎁 Join before Mar 31, 2026 • R49.50/mo (was R99) or R99.50/mo (was R199) for 3 months
                   </p>
                 </div>
                 <span style={{ fontSize: "32px" }}>⚡</span>

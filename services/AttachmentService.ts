@@ -8,7 +8,7 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { Platform, Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';

@@ -753,7 +753,7 @@ export interface DecisionRecord {
 /**
  * Tool category classification
  */
-export type ToolCategory = 'database' | 'navigation' | 'file' | 'communication' | 'report' | 'analysis';
+export type ToolCategory = 'database' | 'navigation' | 'file' | 'communication' | 'report' | 'analysis' | 'education' | 'profile';
 
 /**
  * Tool parameter definition for function calling
@@ -835,7 +835,7 @@ export interface Tool {
   riskLevel: RiskLevel;
   
   // Role-based access control
-  allowedRoles: Array<'parent' | 'teacher' | 'principal' | 'superadmin'>;
+  allowedRoles: Array<'parent' | 'teacher' | 'principal' | 'superadmin' | 'student'>;
   
   // Subscription tier requirements
   requiredTier?: 'free' | 'starter' | 'basic' | 'premium' | 'pro' | 'enterprise';

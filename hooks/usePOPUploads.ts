@@ -12,7 +12,7 @@ import {
   UploadResult, 
   getPOPFileUrl 
 } from '@/lib/popUpload';
-
+import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 // POP Upload interface
 export interface POPUpload {
   id: string;
@@ -264,17 +264,17 @@ export const useCreatePOPUpload = () => {
         file_size: uploadResult.fileSize || 0,
         file_type: uploadResult.fileType || 'unknown',
         
-        // Payment specific fields
+        // Payment specific fields - payment_amount and payment_date are required by CHECK constraint
         ...(data.upload_type === 'proof_of_payment' && {
-          payment_amount: data.payment_amount,
+          payment_amount: data.payment_amount ?? 0, // Default to 0 if not provided
           payment_method: data.payment_method,
-          payment_date: data.payment_date,
+          payment_date: data.payment_date || new Date().toISOString().split('T')[0], // Default to today
           payment_reference: data.payment_reference,
         }),
         
-        // Progress specific fields
+        // Progress specific fields - subject is required by CHECK constraint
         ...(data.upload_type === 'picture_of_progress' && {
-          subject: data.subject,
+          subject: data.subject || 'General', // Default if not provided
           achievement_level: data.achievement_level,
           learning_area: data.learning_area,
         }),
@@ -354,6 +354,54 @@ export const useUpdatePOPStatus = () => {
         
       if (error) {
         throw new Error(`Failed to update status: ${error.message}`);
+      }
+      
+      // Send notification to parent about status change
+      try {
+        // Get parent profile name
+        const { data: parentProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', data.uploaded_by)
+          .single();
+        
+        const parentName = parentProfile 
+          ? `${parentProfile.first_name || ''} ${parentProfile.last_name || ''}`.trim()
+          : 'Parent';
+
+        const popData = {
+          id: data.id,
+          preschool_id: data.preschool_id,
+          student_id: data.student_id,
+          submitted_by: data.uploaded_by,
+          parent_name: parentName,
+          payment_amount: data.payment_amount || 0,
+          payment_date: data.payment_date || new Date().toISOString(),
+          payment_method: (data.payment_method || 'bank_transfer') as 'bank_transfer',
+          payment_purpose: data.title || 'School Fees',
+          status: status === 'approved' ? 'approved' : 'rejected',
+          rejection_reason: status === 'rejected' ? reviewNotes : undefined,
+          auto_matched: false,
+          submitted_at: data.created_at,
+          approved_at: status === 'approved' ? new Date().toISOString() : undefined,
+          created_at: data.created_at,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (status === 'approved') {
+          await ApprovalNotificationService.notifyParentPOPApproved(popData);
+          logger.info('✅ Parent notified of POP approval');
+        } else if (status === 'rejected' || status === 'needs_revision') {
+          await ApprovalNotificationService.notifyParentPOPRejected({
+            ...popData,
+            status: 'rejected',
+            rejection_reason: reviewNotes || 'Please review and resubmit',
+          });
+          logger.info('✅ Parent notified of POP rejection');
+        }
+      } catch (notifError) {
+        logger.error('Failed to send parent notification:', notifError);
+        // Don't fail the status update if notification fails
       }
       
       return {

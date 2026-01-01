@@ -1,6 +1,6 @@
 import { assertSupabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 export interface ImageUploadResult {
@@ -286,7 +286,7 @@ class ProfileImageService {
       }
 
       // Native: read as base64 and decode to bytes
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
       const bytes = this.base64ToUint8Array(base64);
       return bytes;
     } catch (error) {

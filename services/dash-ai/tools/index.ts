@@ -7,6 +7,9 @@
 
 import { DashToolRegistry } from '../DashToolRegistry';
 import { DatabaseQueryTool } from './DatabaseQueryTool';
+import { CAPSCurriculumTool } from './CAPSCurriculumTool';
+import { UserContextTool } from './UserContextTool';
+import { TextbookContentTool } from './TextbookContentTool';
 
 /**
  * Initialize all tools and register them with the registry
@@ -16,6 +19,13 @@ export function initializeTools(): void {
 
   // Register Database Tools
   DashToolRegistry.registerTool(DatabaseQueryTool);
+
+  // Register Educational Tools (CAPS Curriculum)
+  DashToolRegistry.registerTool(CAPSCurriculumTool);
+  DashToolRegistry.registerTool(TextbookContentTool);
+  
+  // Register User Context Tools
+  DashToolRegistry.registerTool(UserContextTool);
 
   // TODO: Add more tools here as they're implemented:
   // DashToolRegistry.registerTool(NavigationTool);
@@ -37,3 +47,6 @@ export { DashToolRegistry } from '../DashToolRegistry';
  * Export individual tools
  */
 export { DatabaseQueryTool } from './DatabaseQueryTool';
+export { CAPSCurriculumTool } from './CAPSCurriculumTool';
+export { UserContextTool } from './UserContextTool';
+export { TextbookContentTool } from './TextbookContentTool';

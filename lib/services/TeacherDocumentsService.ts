@@ -1,5 +1,5 @@
 import { assertSupabase } from '@/lib/supabase'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 
 export type TeacherDocType = 'cv' | 'qualifications' | 'id_copy' | 'contracts'
 
@@ -136,12 +136,10 @@ export const TeacherDocumentsService = {
 
       const path = `${params.preschoolId}/${params.teacherUserId}/${Date.now()}_${params.originalFileName}`
 
-      // Read to base64 -> Blob
-      const base64 = await FileSystem.readAsStringAsync(params.localUri, { encoding: FileSystem.EncodingType.Base64 })
-      const byteChars = atob(base64)
-      const byteNumbers = new Array(byteChars.length)
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i)
-      const byteArray = new Uint8Array(byteNumbers)
+      // Read to base64 -> Uint8Array using safe utility (atob is not available in React Native)
+      const base64 = await FileSystem.readAsStringAsync(params.localUri, { encoding: 'base64' })
+      const { base64ToUint8Array } = await import('@/lib/utils/base64')
+      const byteArray = base64ToUint8Array(base64)
       const blob = new Blob([byteArray], { type: params.mimeType || 'application/octet-stream' })
 
       const { error: upErr } = await assertSupabase().storage.from(TEACHER_DOCS_BUCKET).upload(path, blob, {

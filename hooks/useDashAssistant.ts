@@ -3,14 +3,16 @@
  * 
  * Custom hook that extracts business logic from DashAssistant component.
  * Handles message state, conversation management, attachments, and AI interactions.
+ * Voice input enabled for paid tier users (Starter, Plus).
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, PermissionsAndroid, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
+import { Audio } from 'expo-av';
 
 import type { DashMessage, DashConversation, DashAttachment } from '@/services/dash-ai/types';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
@@ -26,6 +28,7 @@ import {
 import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
+import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -56,6 +59,10 @@ interface UseDashAssistantReturn {
   unreadCount: number;
   setUnreadCount: (value: number | ((prev: number) => number)) => void;
   
+  // Voice input state
+  isRecording: boolean;
+  partialTranscript: string;
+  
   // Refs
   flashListRef: React.RefObject<any>;
   inputRef: React.RefObject<any>;
@@ -71,6 +78,7 @@ interface UseDashAssistantReturn {
   handleTakePhoto: () => Promise<void>;
   handleRemoveAttachment: (attachmentId: string) => Promise<void>;
   handleInputMicPress: () => Promise<void>;
+  stopVoiceRecording: () => Promise<void>;
   startNewConversation: () => Promise<void>;
   
   // Helpers
@@ -109,6 +117,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isUploading, setIsUploading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Voice input state
+  const [isRecording, setIsRecording] = useState(false);
+  const [partialTranscript, setPartialTranscript] = useState('');
+  const voiceSessionRef = useRef<VoiceSession | null>(null);
+  const voiceProviderRef = useRef<VoiceProvider | null>(null);
   
   // Refs
   const flashListRef = useRef<any>(null);
@@ -540,12 +554,29 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, []);
 
   // Check if user has TTS/voice features
+  // Note: 'trial' users DO have TTS access (aligned with Edge Function tier list)
   const hasTTSAccess = useCallback(() => {
-    const freeTiers = ['free', 'trial', ''];
+    const freeTiers = ['free', ''];
     const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
     return !freeTiers.includes(currentTier);
   }, [tier]);
 
+  // Stop voice recording
+  const stopVoiceRecording = useCallback(async () => {
+    try {
+      if (voiceSessionRef.current && voiceSessionRef.current.isActive()) {
+        await voiceSessionRef.current.stop();
+      }
+      setIsRecording(false);
+      setPartialTranscript('');
+    } catch (error) {
+      console.error('[useDashAssistant] Error stopping voice:', error);
+      setIsRecording(false);
+      setPartialTranscript('');
+    }
+  }, []);
+
+  // Handle voice input mic press - START/STOP toggle
   const handleInputMicPress = useCallback(async () => {
     // Check tier for voice features
     if (!hasTTSAccess()) {
@@ -562,14 +593,149 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       );
       return;
     }
-    
-    // Voice feature is available but input might be disabled for other reasons
-    Alert.alert(
-      'Voice Input',
-      'Voice input is coming soon! In the meantime, Dash can read responses aloud using the speaker button.',
-      [{ text: 'OK' }]
-    );
-  }, [hasTTSAccess]);
+
+    // If already recording, stop and send
+    if (isRecording) {
+      await stopVoiceRecording();
+      // The final transcript should already be in inputText from onFinal callback
+      return;
+    }
+
+    // Start voice recognition
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      // Request microphone permission first (especially important on Android)
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Microphone Permission',
+              message: 'Dash AI needs access to your microphone for voice input.',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Deny',
+            }
+          );
+          
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            Alert.alert(
+              'Microphone Permission Required',
+              'Please grant microphone permission to use voice input with Dash.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+              ]
+            );
+            return;
+          }
+        } catch (permErr) {
+          console.error('[useDashAssistant] Permission request error:', permErr);
+        }
+      } else if (Platform.OS === 'ios') {
+        // Use expo-av for iOS permission
+        try {
+          const { status } = await Audio.requestPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert(
+              'Microphone Permission Required',
+              'Please grant microphone permission to use voice input with Dash.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+              ]
+            );
+            return;
+          }
+        } catch (permErr) {
+          console.error('[useDashAssistant] iOS permission request error:', permErr);
+        }
+      }
+      
+      // Get voice provider
+      if (!voiceProviderRef.current) {
+        voiceProviderRef.current = await getSingleUseVoiceProvider('en-ZA');
+      }
+      
+      const provider = voiceProviderRef.current;
+      const available = await provider.isAvailable();
+      
+      if (!available) {
+        Alert.alert(
+          'Voice Unavailable',
+          Platform.OS === 'android' 
+            ? 'Speech recognition is not available on this device.\n\nPossible solutions:\n• Ensure Google app is installed and up-to-date\n• Check device settings for Speech Recognition\n• Some devices may not support on-device speech recognition\n• Try using text input instead'
+            : 'Speech recognition is not available on this device. Please check your device settings and microphone permissions.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Create and start session
+      const session = provider.createSession();
+      voiceSessionRef.current = session;
+      
+      const started = await session.start({
+        language: 'en-ZA',
+        onPartial: (text: string) => {
+          // Show partial transcript as user speaks
+          setPartialTranscript(text);
+          // Update input text with partial results
+          setInputText(text);
+        },
+        onFinal: (text: string) => {
+          // Final transcript - update input text
+          setInputText(text);
+          setPartialTranscript('');
+          setIsRecording(false);
+          
+          // Haptic feedback for completion
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          
+          // Track voice input usage
+          track('edudash.voice.input_completed', {
+            transcript_length: text.length,
+            user_tier: tier || 'free',
+          });
+        },
+      });
+
+      if (started) {
+        setIsRecording(true);
+        setPartialTranscript('');
+        
+        // Track voice input start
+        track('edudash.voice.input_started', {
+          user_tier: tier || 'free',
+        });
+      } else {
+        Alert.alert(
+          'Voice Error',
+          'Failed to start voice recognition. Please check microphone permissions and try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('[useDashAssistant] Voice recognition error:', error);
+      setIsRecording(false);
+      setPartialTranscript('');
+      
+      Alert.alert(
+        'Voice Error',
+        'An error occurred with voice recognition. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier]);
+
+  // Cleanup voice session on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceSessionRef.current && voiceSessionRef.current.isActive()) {
+        voiceSessionRef.current.stop().catch(() => {});
+      }
+    };
+  }, []);
 
   const startNewConversation = useCallback(async () => {
     if (!dashInstance) return;
@@ -788,6 +954,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     unreadCount,
     setUnreadCount,
     
+    // Voice input state
+    isRecording,
+    partialTranscript,
+    
     // Refs
     flashListRef,
     inputRef,
@@ -803,6 +973,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     handleTakePhoto,
     handleRemoveAttachment,
     handleInputMicPress,
+    stopVoiceRecording,
     startNewConversation,
     
     // Helpers

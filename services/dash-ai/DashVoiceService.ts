@@ -16,7 +16,7 @@
 
 import { AudioModule } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 
@@ -370,12 +370,9 @@ export class DashVoiceService {
             encoding: 'base64'
           });
           
-          // Convert base64 to Uint8Array for upload
-          const binaryString = atob(base64Data);
-          const uint8Array = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            uint8Array[i] = binaryString.charCodeAt(i);
-          }
+          // Convert base64 to Uint8Array for upload using safe utility (atob is not available in React Native)
+          const { base64ToUint8Array } = await import('@/lib/utils/base64');
+          const uint8Array = base64ToUint8Array(base64Data);
           
           console.log('[DashVoice] Uploading audio as Uint8Array:', uint8Array.length, 'bytes');
           console.log('[DashVoice] Upload path:', storagePath);
@@ -479,11 +476,11 @@ export class DashVoiceService {
     );
   }
 
-  // Tiers that have TTS access
+  // Tiers that have TTS access (aligned with tts-proxy Edge Function)
   private static readonly TTS_ALLOWED_TIERS = [
     'parent_starter', 'parent_plus', 'parent-starter', 'parent-plus',
     'teacher_starter', 'teacher_pro', 'teacher-starter', 'teacher-pro',
-    'starter', 'basic', 'pro', 'premium', 'enterprise',
+    'starter', 'basic', 'pro', 'premium', 'enterprise', 'trial',
     'school_starter', 'school_pro', 'school_enterprise'
   ];
 

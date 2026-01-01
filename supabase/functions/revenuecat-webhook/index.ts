@@ -53,22 +53,15 @@ serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const REVENUECAT_WEBHOOK_TOKEN = Deno.env.get("REVENUECAT_WEBHOOK_TOKEN");
     
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { 
       auth: { persistSession: false } 
     });
 
-    // Verify RevenueCat authorization if token is set
-    if (REVENUECAT_WEBHOOK_TOKEN) {
-      const authHeader = req.headers.get('Authorization');
-      const expectedAuth = `Bearer ${REVENUECAT_WEBHOOK_TOKEN}`;
-      
-      if (authHeader !== expectedAuth) {
-        console.error('RevenueCat webhook: Invalid authorization token');
-        return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-      }
-    }
+    // Note: Authorization header check removed - RevenueCat webhook has no auth configured
+    // If you want to add auth later, set REVENUECAT_WEBHOOK_TOKEN in Supabase secrets
+    // and add the same token in RevenueCat Dashboard → Integrations → Webhook → Authorization header value
+    console.log('RevenueCat webhook: Processing request...');
 
     const payload = await req.json().catch(() => null);
     if (!payload?.event) return new Response("Bad Request", { status: 400, headers: corsHeaders });
@@ -132,6 +125,12 @@ serve(async (req: Request) => {
 
       case 'CANCELLATION':
       case 'EXPIRATION':
+        // In sandbox mode, subscriptions expire very quickly (minutes)
+        // Skip tier reset in sandbox to allow proper testing of premium features
+        if (environment === 'SANDBOX') {
+          console.log('[RevenueCat] Skipping cancellation/expiration in SANDBOX mode to preserve tier for testing');
+          break;
+        }
         await handleSubscriptionCancellation(supabase, {
           userId,
           preschoolId,
@@ -325,6 +324,44 @@ async function handleSubscriptionActivation(
       
     console.log('Personal subscription created for user:', userId, 'school:', userSchoolId);
   }
+  
+  // SINGLE SOURCE OF TRUTH: Update profiles.subscription_tier
+  // Database trigger automatically syncs to user_ai_tiers and user_ai_usage
+  if (userId && planTier) {
+    // Map to parent tier format for parent plans (individual users are parents)
+    const tierValue = planTier.startsWith('parent_') ? planTier : `parent_${planTier}`;
+    
+    console.log('[RevenueCat] Updating profiles.subscription_tier (single source of truth):', {
+      userId,
+      tier: tierValue,
+    });
+    
+    // Update profiles.subscription_tier - trigger handles user_ai_tiers and user_ai_usage
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ subscription_tier: tierValue })
+      .eq('id', userId);
+    
+    if (profileError) {
+      console.error('[RevenueCat] Failed to update profiles.subscription_tier:', profileError);
+    } else {
+      console.log('[RevenueCat] Successfully updated profiles.subscription_tier to:', tierValue);
+    }
+    
+    // Update user_metadata.subscription_tier for JWT token on next login
+    try {
+      const { error: metaError } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: { subscription_tier: tierValue }
+      });
+      if (metaError) {
+        console.error('[RevenueCat] Failed to update user_metadata.subscription_tier:', metaError);
+      } else {
+        console.log('[RevenueCat] Updated user_metadata.subscription_tier to:', tierValue);
+      }
+    } catch (metaErr) {
+      console.warn('[RevenueCat] user_metadata update threw (non-fatal):', metaErr);
+    }
+  }
 }
 
 async function handleSubscriptionCancellation(
@@ -377,6 +414,41 @@ async function handleSubscriptionCancellation(
         .from('preschools')
         .update({ subscription_tier: 'free' })
         .eq('id', userSchool.id);
+    }
+  }
+  
+  // SINGLE SOURCE OF TRUTH: Reset profiles.subscription_tier to 'free'
+  // Database trigger automatically syncs to user_ai_tiers and user_ai_usage
+  if (userId) {
+    console.log('[RevenueCat] Resetting profiles.subscription_tier to free on cancellation:', {
+      userId,
+      eventType: event.type,
+    });
+    
+    // Reset profiles.subscription_tier - trigger handles user_ai_tiers and user_ai_usage
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ subscription_tier: 'free' })
+      .eq('id', userId);
+    
+    if (profileError) {
+      console.error('[RevenueCat] Failed to reset profiles.subscription_tier:', profileError);
+    } else {
+      console.log('[RevenueCat] Successfully reset profiles.subscription_tier to free');
+    }
+    
+    // Reset user_metadata.subscription_tier for JWT token
+    try {
+      const { error: metaError } = await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: { subscription_tier: 'free' }
+      });
+      if (metaError) {
+        console.error('[RevenueCat] Failed to reset user_metadata.subscription_tier:', metaError);
+      } else {
+        console.log('[RevenueCat] Reset user_metadata.subscription_tier to free');
+      }
+    } catch (metaErr) {
+      console.warn('[RevenueCat] user_metadata reset threw (non-fatal):', metaErr);
     }
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { DashAttachment } from '@/services/dash-ai/types';
 
@@ -89,7 +89,7 @@ export async function generateThumbnail(
 export async function imageToBase64(imageUri: string): Promise<string> {
   try {
     const base64 = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
     return base64;
   } catch (error) {

@@ -12,7 +12,7 @@
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
@@ -1502,15 +1502,12 @@ class DashPDFGeneratorImpl {
   }
 
   /**
-   * Convert base64 to Blob
+   * Convert base64 to Blob using safe utility (atob is not available in React Native)
    */
   private base64ToBlob(base64: string, mimeType: string): Blob {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
+    // Import synchronously from the utility - this method is called after async setup
+    const { base64ToUint8Array } = require('@/lib/utils/base64');
+    const byteArray = base64ToUint8Array(base64);
     return new Blob([byteArray], { type: mimeType });
   }
 }

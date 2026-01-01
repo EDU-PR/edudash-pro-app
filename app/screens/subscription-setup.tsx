@@ -13,13 +13,14 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { createCheckout } from '@/lib/payments';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
-import { getAvailableProducts, purchaseProduct, REVENUECAT_CONFIG } from '@/lib/revenuecat/config';
+import { getAvailableProducts, purchaseProduct, REVENUECAT_CONFIG, identifyRevenueCatUser, ensureInitialized } from '@/lib/revenuecat/config';
 
 interface SubscriptionPlan {
   id: string;
@@ -62,6 +63,7 @@ function getSchoolTypeDescription(schoolType: string): string {
 
 export default function SubscriptionSetupScreen() {
   const { profile } = useAuth();
+  const { refresh: refreshSubscription } = useSubscription();
   const params = useLocalSearchParams() as Partial<RouteParams>;
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [allPlans, setAllPlans] = useState<SubscriptionPlan[]>([]);
@@ -399,6 +401,16 @@ export default function SubscriptionSetupScreen() {
       // For parent plans on mobile, use RevenueCat (Google Play / App Store)
       if (isPlanForParent && Platform.OS !== 'web') {
         try {
+          // CRITICAL: Identify user with RevenueCat before purchase
+          // This ensures the webhook knows which Supabase user made the purchase
+          if (profile?.id) {
+            console.log('[subscription-setup] Identifying user with RevenueCat:', profile.id);
+            await ensureInitialized();
+            await identifyRevenueCatUser(profile.id);
+          } else {
+            throw new Error('User profile not found. Please log in again.');
+          }
+          
           // Map plan tier to RevenueCat product ID
           const tierLower = plan.tier.toLowerCase().replace(/-/g, '_');
           let productId: string;
@@ -429,20 +441,29 @@ export default function SubscriptionSetupScreen() {
               product_id: productId,
             });
             
-            // Update user tier in database
+            // SINGLE SOURCE OF TRUTH: Update profiles.subscription_tier
+            // Database trigger automatically syncs to user_ai_tiers and user_ai_usage
             try {
               const newTier = tierLower.startsWith('parent_') ? tierLower : `parent_${tierLower}`;
-              await assertSupabase()
-                .from('user_ai_tiers')
-                .upsert({
-                  user_id: profile?.id,
-                  tier: newTier,
-                  updated_at: new Date().toISOString(),
-                }, { onConflict: 'user_id' });
+              console.log('[subscription-setup] Updating profiles.subscription_tier to:', newTier);
+              
+              const { error: profileError } = await assertSupabase()
+                .from('profiles')
+                .update({ subscription_tier: newTier })
+                .eq('id', profile?.id);
+              
+              if (profileError) {
+                console.error('Failed to update profiles.subscription_tier:', profileError);
+              } else {
+                console.log('Successfully updated profiles.subscription_tier to:', newTier);
+              }
             } catch (dbErr) {
               console.error('Failed to update tier in DB:', dbErr);
               // Don't fail - RevenueCat webhook will sync
             }
+            
+            // Refresh subscription context to update UI immediately
+            refreshSubscription();
             
             Alert.alert(
               'Purchase Successful!',
@@ -759,6 +780,11 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
               <View style={[styles.planTierBadge, { backgroundColor: planColor + '20' }]}>
                 <Text style={[styles.planTier, { color: planColor }]}>{plan.tier}</Text>
               </View>
+              {isParentPromoEligible && (
+                <View style={styles.promoBadge}>
+                  <Text style={styles.promoText}>50% OFF</Text>
+                </View>
+              )}
             </View>
             {isRecommended && (
               <View style={styles.recommendedBadge}>
@@ -777,6 +803,9 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
               <Text style={styles.customPrice}>Custom</Text>
             ) : (
               <>
+                {isParentPromoEligible && (
+                  <Text style={styles.originalPrice}>R{originalPriceInRands.toFixed(2)}</Text>
+                )}
                 <Text style={[styles.price, { color: planColor }]}>R{promoPriceInRands.toFixed(2)}</Text>
                 <Text style={styles.pricePeriod}>/ {annual ? 'year' : 'month'}</Text>
                 <Text style={styles.vatNote}>incl. VAT</Text>
@@ -784,10 +813,9 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
             )}
           </View>
           {isParentPromoEligible && (
-            <View style={styles.savingsBadge}>
-              <Text style={styles.savings}>
-                <Text style={{ textDecorationLine: 'line-through' }}>R{originalPriceInRands.toFixed(2)}</Text>
-                {' '}launch special
+            <View style={[styles.savingsBadge, { backgroundColor: '#10b981' + '20' }]}>
+              <Text style={[styles.savings, { color: '#10b981' }]}>
+                🎉 Early Bird Special - Ends March 2026
               </Text>
             </View>
           )}
@@ -1118,6 +1146,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
+  // Promo badge styles
+  promoBadge: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  promoText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  originalPrice: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
   // New redesigned plan card styles
   planCardTouchable: {
     flex: 1,
@@ -1127,6 +1173,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    flexWrap: 'wrap',
   },
   planTierBadge: {
     paddingHorizontal: 8,

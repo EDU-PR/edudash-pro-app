@@ -31,17 +31,8 @@ export interface UploadProgress {
   percentage: number;
 }
 
-/**
- * Convert base64 string to Uint8Array for upload
- */
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
+// Import safe base64 utility (atob is not available in React Native)
+import { base64ToUint8Array } from '@/lib/utils/base64';
 
 /**
  * Generate a unique filename for voice note
@@ -115,7 +106,7 @@ export async function uploadVoiceNote(
   } else {
     // For mobile, read as base64 and convert to Uint8Array
     const base64Data = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
     fileData = base64ToUint8Array(base64Data);
   }

@@ -6,7 +6,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 const BUCKET_NAME = 'dash-attachments'; // switched from chat-images after RLS conflicts

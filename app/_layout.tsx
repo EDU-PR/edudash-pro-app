@@ -46,6 +46,7 @@ import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { GlobalUpdateBanner } from '../components/GlobalUpdateBanner';
+import { RevenueCatProvider } from '../lib/revenuecat/RevenueCatProvider';
 import { AppPreferencesProvider, useAppPreferencesSafe } from '../contexts/AppPreferencesContext';
 import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingContext';
 import { AppTutorial } from '../components/onboarding/AppTutorial';
@@ -188,6 +189,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <SubscriptionProvider>
+              <RevenueCatProvider>
               <UpdatesProvider>
                 <AppPreferencesProvider>
                   <NotificationProvider>
@@ -211,6 +213,7 @@ export default function RootLayout() {
                   </NotificationProvider>
                 </AppPreferencesProvider>
               </UpdatesProvider>
+              </RevenueCatProvider>
             </SubscriptionProvider>
           </AuthProvider>
         </ThemeProvider>

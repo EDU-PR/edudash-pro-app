@@ -5,7 +5,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 // ============================================================================
@@ -246,15 +246,12 @@ export class OrganizationDocumentService {
         fileContent = await response.arrayBuffer();
       } else {
         const base64 = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         });
-        // Convert base64 to ArrayBuffer
-        const binaryString = atob(base64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        fileContent = bytes.buffer;
+        // Convert base64 to ArrayBuffer using safe utility (atob is not available in React Native)
+        const { base64ToUint8Array } = await import('@/lib/utils/base64');
+        const byteArray = base64ToUint8Array(base64);
+        fileContent = byteArray.buffer;
       }
 
       // Optional encryption
