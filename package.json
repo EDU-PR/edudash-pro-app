@@ -24,7 +24,6 @@
           "@config-plugins/react-native-webrtc",
           "react-native-pdf",
           "react-native-blob-util",
-          "expo-av",
           "react-native-background-timer",
           "react-native-incall-manager"
         ],
