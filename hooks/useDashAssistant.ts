@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { Audio } from 'expo-av';
+import { AudioModule } from 'expo-audio';
 
 import type { DashMessage, DashConversation, DashAttachment } from '@/services/dash-ai/types';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
@@ -633,9 +633,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           console.error('[useDashAssistant] Permission request error:', permErr);
         }
       } else if (Platform.OS === 'ios') {
-        // Use expo-av for iOS permission
+        // Use expo-audio for iOS permission
         try {
-          const { status } = await Audio.requestPermissionsAsync();
+          const { status } = await AudioModule.requestPermissionsAsync();
           if (status !== 'granted') {
             Alert.alert(
               'Microphone Permission Required',
