@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
+import { VideoCallInterface } from './VideoCallInterface';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -37,17 +38,24 @@ interface JoinLiveLessonProps {
   studentId?: string;
   classId?: string;
   preschoolId: string;
+  /** Parent/student name for display in the call */
+  userName?: string;
 }
 
 export function JoinLiveLesson({
   studentId,
   classId,
   preschoolId,
+  userName = 'Parent',
 }: JoinLiveLessonProps) {
   const [liveLessons, setLiveLessons] = useState<LiveLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  
+  // Video call state
+  const [activeLesson, setActiveLesson] = useState<LiveLesson | null>(null);
+  const [isCallOpen, setIsCallOpen] = useState(false);
 
   // Fetch live lessons
   const fetchLiveLessons = useCallback(async (isRefresh = false) => {
@@ -147,18 +155,31 @@ export function JoinLiveLesson({
   const handleJoinLesson = useCallback((lesson: LiveLesson) => {
     setJoiningId(lesson.id);
 
-    // TODO: Navigate to lesson interface with lesson.meeting_url
-    Alert.alert(
-      'Join Lesson',
-      `Ready to join ${lesson.title}. Lesson interface coming soon!`,
-      [
-        {
-          text: 'OK',
-          onPress: () => setJoiningId(null),
-        },
-      ]
-    );
+    // Validate meeting URL
+    if (!lesson.meeting_url) {
+      Alert.alert(
+        'Cannot Join',
+        'This lesson does not have a valid meeting link. Please ask the teacher to restart the lesson.',
+        [{ text: 'OK', onPress: () => setJoiningId(null) }]
+      );
+      return;
+    }
+
+    console.log('[JoinLiveLesson] Joining lesson:', lesson.title, 'URL:', lesson.meeting_url);
+    
+    // Set active lesson and open video call
+    setActiveLesson(lesson);
+    setIsCallOpen(true);
+    setJoiningId(null);
   }, []);
+
+  // Handle call close
+  const handleCallClose = useCallback(() => {
+    setIsCallOpen(false);
+    setActiveLesson(null);
+    // Refresh lessons to check if still live
+    fetchLiveLessons(false);
+  }, [fetchLiveLessons]);
 
   // Render lesson item
   const renderLesson = useCallback(({ item }: { item: LiveLesson }) => {
@@ -270,6 +291,19 @@ export function JoinLiveLesson({
           />
         }
       />
+
+      {/* Video Call Interface - Shows when joining a lesson */}
+      {activeLesson && (
+        <VideoCallInterface
+          isOpen={isCallOpen}
+          onClose={handleCallClose}
+          roomName={activeLesson.title}
+          userName={userName}
+          isOwner={false} // Parents are not owners
+          meetingUrl={activeLesson.meeting_url}
+          role="parent" // Role-based controls
+        />
+      )}
     </View>
   );
 }

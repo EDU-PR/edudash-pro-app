@@ -3,7 +3,7 @@
  * Advanced settings: title, class, scheduling, duration, reminders
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   View,
@@ -13,8 +13,10 @@ import {
   ScrollView,
   ActivityIndicator,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AdvancedLessonSettings, AdvancedSettings } from './AdvancedLessonSettings';
 
 interface Class {
   id: string;
@@ -46,10 +48,36 @@ interface StartLessonModalProps {
   maxDurationMinutes: number;
   tierBadge: string;
   tierLabel: string;
+  subscriptionTier: string;
   isCreating: boolean;
   error: string | null;
   colors: any;
+  advancedSettings?: AdvancedSettings;
+  onAdvancedSettingsChange?: (settings: AdvancedSettings) => void;
 }
+
+// Default advanced settings
+const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
+  isPrivateRoom: true,
+  enableKnocking: true,
+  enablePrejoinUI: true,
+  camerasOnStart: true,
+  microphonesOnStart: false,
+  enableScreenShare: true,
+  enableBreakoutRooms: false,
+  chatMode: 'advanced',
+  enableEmojiReactions: true,
+  enablePeopleUI: true,
+  enableBackgroundEffects: true,
+  enablePictureInPicture: true,
+  enableHandRaising: true,
+  enableNetworkUI: true,
+  enableNoiseCancellation: true,
+  enableLiveCaptions: false,
+  recordingMode: 'off',
+  ownerOnlyBroadcast: false,
+  maxParticipants: 50,
+};
 
 export function StartLessonModal(props: StartLessonModalProps) {
   const {
@@ -75,10 +103,34 @@ export function StartLessonModal(props: StartLessonModalProps) {
     maxDurationMinutes,
     tierBadge,
     tierLabel,
+    subscriptionTier,
     isCreating,
     error,
     colors,
+    advancedSettings = DEFAULT_ADVANCED_SETTINGS,
+    onAdvancedSettingsChange,
   } = props;
+
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [advancedRotation] = useState(new Animated.Value(0));
+
+  const toggleAdvancedSettings = () => {
+    Animated.timing(advancedRotation, {
+      toValue: showAdvancedSettings ? 0 : 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    setShowAdvancedSettings(!showAdvancedSettings);
+  };
+
+  const rotateStyle = {
+    transform: [{
+      rotate: advancedRotation.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '180deg'],
+      }),
+    }],
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -259,6 +311,53 @@ export function StartLessonModal(props: StartLessonModalProps) {
                 Your {tierBadge} plan allows up to {tierLabel}
               </Text>
             </View>
+
+            {/* Advanced Settings Toggle */}
+            <TouchableOpacity
+              style={[
+                styles.advancedToggle,
+                { backgroundColor: colors.inputBg, borderColor: showAdvancedSettings ? colors.accent : colors.inputBorder },
+              ]}
+              onPress={toggleAdvancedSettings}
+              activeOpacity={0.7}
+            >
+              <View style={styles.advancedToggleLeft}>
+                <View style={[styles.advancedIcon, { backgroundColor: showAdvancedSettings ? colors.accentLight : 'rgba(124, 58, 237, 0.1)' }]}>
+                  <Ionicons name="settings" size={18} color={colors.accent} />
+                </View>
+                <View>
+                  <Text style={[styles.advancedToggleTitle, { color: colors.text }]}>
+                    Advanced Room Options
+                  </Text>
+                  <Text style={[styles.advancedToggleSubtitle, { color: colors.textMuted }]}>
+                    Privacy, audio/video, features & more
+                  </Text>
+                </View>
+              </View>
+              <Animated.View style={rotateStyle}>
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+              </Animated.View>
+            </TouchableOpacity>
+
+            {/* Advanced Settings Panel */}
+            {showAdvancedSettings && onAdvancedSettingsChange && (
+              <View style={styles.advancedPanel}>
+                <AdvancedLessonSettings
+                  settings={advancedSettings}
+                  onSettingsChange={onAdvancedSettingsChange}
+                  subscriptionTier={subscriptionTier}
+                  colors={{
+                    background: colors.modalBg,
+                    text: colors.text,
+                    textMuted: colors.textMuted,
+                    accent: colors.accent,
+                    accentLight: colors.accentLight,
+                    border: colors.inputBorder,
+                    cardBg: colors.inputBg,
+                  }}
+                />
+              </View>
+            )}
 
             {/* Submit Button */}
             <TouchableOpacity
@@ -483,5 +582,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+  },
+  advancedToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  advancedIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  advancedToggleTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  advancedToggleSubtitle: {
+    fontSize: 12,
+  },
+  advancedPanel: {
+    marginBottom: 16,
+    marginTop: -8,
   },
 });

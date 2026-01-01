@@ -63,6 +63,8 @@ interface VideoCallInterfaceProps {
   callId?: string;
   meetingUrl?: string;
   onCallStateChange?: (state: CallState) => void;
+  /** Role of the participant - affects available controls */
+  role?: 'teacher' | 'parent' | 'student';
 }
 
 export function VideoCallInterface({
@@ -75,6 +77,7 @@ export function VideoCallInterface({
   callId,
   meetingUrl,
   onCallStateChange,
+  role = 'teacher', // Default to teacher for backward compatibility
 }: VideoCallInterfaceProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
@@ -86,6 +89,13 @@ export function VideoCallInterface({
   const [remoteParticipants, setRemoteParticipants] = useState<DailyParticipant[]>([]);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Default speaker for video calls
+  const [isHandRaised, setIsHandRaised] = useState(false); // For participant hand raising
+
+  // Role-based permissions
+  const isParticipant = role === 'parent' || role === 'student';
+  const canScreenShare = !isParticipant; // Only teachers/owners can screen share
+  const canInvite = !isParticipant; // Only teachers/owners can invite
+  const canRaiseHand = isParticipant; // Only participants can raise hand
 
   const dailyRef = useRef<any>(null);
   const callIdRef = useRef<string | null>(callId || null);
@@ -748,6 +758,22 @@ export function VideoCallInterface({
     }
   }, [meetingUrl]);
 
+  // Toggle hand raised (for participants)
+  const toggleHandRaise = useCallback(() => {
+    const newState = !isHandRaised;
+    setIsHandRaised(newState);
+    
+    // TODO: Send hand raise signal to other participants via Daily.co custom events
+    if (dailyRef.current) {
+      try {
+        dailyRef.current.sendAppMessage({ type: 'hand_raise', raised: newState, userName }, '*');
+        console.log('[VideoCall] Hand raise:', newState ? 'raised' : 'lowered');
+      } catch (err) {
+        console.warn('[VideoCall] Failed to send hand raise signal:', err);
+      }
+    }
+  }, [isHandRaised, userName]);
+
   // End call
   const handleEndCall = useCallback(async () => {
     console.log('[VideoCall] Ending call');
@@ -881,9 +907,17 @@ export function VideoCallInterface({
         </View>
       )}
 
+      {/* Hand Raised Indicator (for participants) */}
+      {isHandRaised && (
+        <View style={styles.handRaisedIndicator}>
+          <Ionicons name="hand-left" size={16} color="#fbbf24" />
+          <Text style={styles.handRaisedText}>Hand Raised</Text>
+        </View>
+      )}
+
       {/* Controls */}
       <View style={styles.controlsContainer}>
-        {/* Secondary Row - More features */}
+        {/* Secondary Row - Role-based features */}
         <View style={styles.secondaryControls}>
           <TouchableOpacity style={styles.secondaryButton} onPress={toggleSpeaker}>
             <Ionicons 
@@ -899,24 +933,47 @@ export function VideoCallInterface({
             <Text style={styles.secondaryLabel}>Flip</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.secondaryButton, isScreenSharing && styles.secondaryButtonActive]} 
-            onPress={toggleScreenShare}
-          >
-            <Ionicons 
-              name={isScreenSharing ? 'stop-circle' : 'share-outline'} 
-              size={22} 
-              color={isScreenSharing ? '#ef4444' : '#ffffff'} 
-            />
-            <Text style={[styles.secondaryLabel, isScreenSharing && { color: '#ef4444' }]}>
-              {isScreenSharing ? 'Stop' : 'Share'}
-            </Text>
-          </TouchableOpacity>
+          {/* Screen Share - Only for teachers */}
+          {canScreenShare && (
+            <TouchableOpacity 
+              style={[styles.secondaryButton, isScreenSharing && styles.secondaryButtonActive]} 
+              onPress={toggleScreenShare}
+            >
+              <Ionicons 
+                name={isScreenSharing ? 'stop-circle' : 'share-outline'} 
+                size={22} 
+                color={isScreenSharing ? '#ef4444' : '#ffffff'} 
+              />
+              <Text style={[styles.secondaryLabel, isScreenSharing && { color: '#ef4444' }]}>
+                {isScreenSharing ? 'Stop' : 'Share'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity style={styles.secondaryButton} onPress={shareCallLink}>
-            <Ionicons name="person-add" size={22} color="#ffffff" />
-            <Text style={styles.secondaryLabel}>Invite</Text>
-          </TouchableOpacity>
+          {/* Hand Raise - Only for participants (parents/students) */}
+          {canRaiseHand && (
+            <TouchableOpacity 
+              style={[styles.secondaryButton, isHandRaised && styles.secondaryButtonActive]} 
+              onPress={toggleHandRaise}
+            >
+              <Ionicons 
+                name="hand-left" 
+                size={22} 
+                color={isHandRaised ? '#fbbf24' : '#ffffff'} 
+              />
+              <Text style={[styles.secondaryLabel, isHandRaised && { color: '#fbbf24' }]}>
+                {isHandRaised ? 'Lower' : 'Raise'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Invite - Only for teachers */}
+          {canInvite && (
+            <TouchableOpacity style={styles.secondaryButton} onPress={shareCallLink}>
+              <Ionicons name="person-add" size={22} color="#ffffff" />
+              <Text style={styles.secondaryLabel}>Invite</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Main Controls */}
@@ -1149,6 +1206,23 @@ const styles = StyleSheet.create({
   },
   screenShareText: {
     color: '#00f5ff',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  handRaisedIndicator: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 120 : 100,
+    right: 130,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  handRaisedText: {
+    color: '#fbbf24',
     fontSize: 13,
     fontWeight: '500',
   },

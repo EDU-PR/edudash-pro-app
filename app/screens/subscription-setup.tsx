@@ -240,9 +240,17 @@ export default function SubscriptionSetupScreen() {
       const schoolId = await getSchoolId();
       if (!schoolId) return;
 
+      // Fetch subscription with plan details
       const { data, error } = await assertSupabase()
         .from('subscriptions')
-        .select('*')
+        .select(`
+          *,
+          subscription_plans:plan_id (
+            id,
+            name,
+            tier
+          )
+        `)
         .eq('school_id', schoolId)
         .eq('status', 'active')
         .maybeSingle();
@@ -570,6 +578,10 @@ export default function SubscriptionSetupScreen() {
 
   // Only show existing subscription card for school subscriptions (not parents)
   if (existingSubscription && !isParent) {
+    // Get plan name from joined data
+    const planInfo = existingSubscription.subscription_plans;
+    const planName = planInfo?.name || planInfo?.tier || 'Active Plan';
+    
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <Stack.Screen options={{ 
@@ -586,12 +598,12 @@ export default function SubscriptionSetupScreen() {
               
               <View style={styles.subscriptionInfo}>
                 <Text style={styles.infoLabel}>Plan:</Text>
-                <Text style={styles.infoValue}>{existingSubscription.plan_id}</Text>
+                <Text style={styles.infoValue}>{planName}</Text>
               </View>
               
               <View style={styles.subscriptionInfo}>
                 <Text style={styles.infoLabel}>Status:</Text>
-                <Text style={styles.infoValue}>{existingSubscription.status}</Text>
+                <Text style={[styles.infoValue, { textTransform: 'capitalize' }]}>{existingSubscription.status}</Text>
               </View>
               
               <View style={styles.subscriptionInfo}>

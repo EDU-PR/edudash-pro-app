@@ -782,7 +782,7 @@ export default function ParentMessageThreadScreen() {
         isOnline={isOnline}
         lastSeenText={lastSeenText}
         isLoading={loading}
-        isTyping={otherParticipant?.isTyping}
+        isTyping={isOtherTyping}
         typingName={recipientName}
         recipientRole={recipientRole}
         onVoiceCall={handleVoiceCall}

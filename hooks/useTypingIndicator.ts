@@ -118,6 +118,8 @@ export function useTypingIndicator({
         // Ignore own typing events
         if (typingUserId === userId) return;
         
+        logger.debug('useTypingIndicator', `Received typing event: ${typingUserName} isTyping=${isTyping}`);
+        
         setTypingUsers(prev => {
           if (isTyping) {
             // Add or update typing user
@@ -136,10 +138,17 @@ export function useTypingIndicator({
           }
         });
       })
-      .subscribe();
+      .subscribe((status) => {
+        logger.debug('useTypingIndicator', `Channel subscription status: ${status}`);
+        if (status === 'SUBSCRIBED') {
+          logger.debug('useTypingIndicator', `✅ Successfully subscribed to typing channel: ${threadId}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          logger.warn('useTypingIndicator', `❌ Failed to subscribe to typing channel: ${threadId}`);
+        }
+      });
 
     channelRef.current = channel;
-    logger.debug('useTypingIndicator', `Subscribed to typing channel: ${threadId}`);
+    logger.debug('useTypingIndicator', `Subscribing to typing channel: ${threadId}`);
 
     // Cleanup stale typing indicators every second
     const cleanupInterval = setInterval(() => {
