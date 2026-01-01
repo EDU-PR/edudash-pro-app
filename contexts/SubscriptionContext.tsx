@@ -169,15 +169,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               
               console.log('[SubscriptionContext] Normalized tier:', aiTierStr, 'isKnown:', knownTiers.includes(aiTierStr as Tier));
               
+              // ALWAYS use database tier when available - ignore JWT metadata to avoid stale cached values
               if (aiTierStr && knownTiers.includes(aiTierStr as Tier)) {
                 t = aiTierStr as Tier;
                 source = 'user';
                 console.log('[SubscriptionContext] ✅ Set tier from DB:', t);
+              } else if (usageTier !== undefined || tierRowTier !== undefined) {
+                // DB returned a value but it wasn't in knownTiers - default to 'free'
+                t = 'free';
+                source = 'user';
+                console.log('[SubscriptionContext] ✅ DB has tier record, defaulting to free');
               } else if (metadataTier) {
-                // Fallback to metadata if DB has no paid tier
+                // Only use metadata as fallback if NO DB record exists at all
                 t = metadataTier;
                 source = 'user';
-                console.log('[SubscriptionContext] ⚠️ Using metadata tier as fallback:', t);
+                console.log('[SubscriptionContext] ⚠️ Using metadata tier as fallback (no DB record):', t);
               }
             } catch (err) {
               // Log error for debugging
