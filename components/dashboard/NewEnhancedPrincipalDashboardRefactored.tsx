@@ -206,6 +206,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             stats={data.stats}
             pendingRegistrationsCount={data.stats?.pendingRegistrations?.total ?? 0}
             pendingPaymentsCount={data.stats?.pendingPayments?.total ?? 0}
+            pendingPOPUploadsCount={data.stats?.pendingPOPUploads?.total ?? 0}
             collapsedSections={collapsedSections}
             onToggleSection={toggleSection}
           />

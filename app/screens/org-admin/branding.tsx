@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/useOrgSettings';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { assertSupabase } from '@/lib/supabase';
 import { base64ToUint8Array } from '@/lib/utils/base64';

@@ -17,6 +17,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
+import { SuccessModal } from '@/components/ui/SuccessModal';
+import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 
 interface PaymentUploadModalProps {
   visible: boolean;
@@ -45,6 +47,7 @@ export function PaymentUploadModal({
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [uploading, setUploading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const insets = useSafeAreaInsets();
 
   const styles = createStyles(theme, insets);
@@ -120,34 +123,82 @@ export function PaymentUploadModal({
         throw new Error(uploadResult.error || 'Upload failed');
       }
 
-      const { error: dbError } = await supabase
+      // Get user profile for parent name
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', userId)
+        .single();
+      
+      const parentName = userProfile 
+        ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() 
+        : 'A parent';
+
+      const finalPreschoolId = selectedChild?.preschool_id || preschoolId;
+      const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount) : 0;
+
+      const { data: insertedPOP, error: dbError } = await supabase
         .from('pop_uploads')
         .insert({
           student_id: selectedChildId,
           uploaded_by: userId,
-          preschool_id: selectedChild?.preschool_id || preschoolId,
+          preschool_id: finalPreschoolId,
           upload_type: 'proof_of_payment',
           title: `Payment - ${selectedChild?.student_code || 'Unknown'}${paymentReference ? ` (${paymentReference})` : ''}`,
           file_path: uploadResult.filePath,
           file_name: uploadResult.fileName || selectedFile.name,
           file_size: uploadResult.fileSize || selectedFile.size || 0,
           file_type: uploadResult.fileType || selectedFile.type || 'unknown',
-          payment_amount: paymentAmount ? parseFloat(paymentAmount) : null,
-          payment_reference: selectedChild?.student_code || null, // Always use child's unique reference
+          payment_amount: paymentAmountNum, // Required by CHECK constraint
+          payment_date: new Date().toISOString().split('T')[0], // Required by CHECK constraint (YYYY-MM-DD)
+          payment_reference: paymentReference || selectedChild?.student_code || null,
           status: 'pending',
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
-      Alert.alert('Success', 'Proof of payment uploaded successfully!');
+      // Notify principal of new POP submission
+      if (finalPreschoolId && insertedPOP) {
+        try {
+          await ApprovalNotificationService.notifyPrincipalOfNewPOP({
+            id: insertedPOP.id,
+            preschool_id: finalPreschoolId,
+            student_id: selectedChildId,
+            submitted_by: userId,
+            parent_name: parentName,
+            payment_amount: paymentAmountNum,
+            payment_date: new Date().toISOString(),
+            payment_method: 'bank_transfer',
+            payment_purpose: 'School Fees',
+            status: 'submitted',
+            auto_matched: false,
+            submitted_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          console.log('✅ Principal notified of new POP');
+        } catch (notifError) {
+          console.error('Failed to notify principal:', notifError);
+          // Don't fail the upload if notification fails
+        }
+      }
+
+      // Show celebration modal instead of basic Alert
+      setShowSuccessModal(true);
       resetForm();
       onSuccess();
-      onClose();
     } catch (error: any) {
       Alert.alert('Upload Failed', error.message || 'Failed to upload proof of payment');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    onClose();
   };
 
   const resetForm = () => {
@@ -264,6 +315,16 @@ export function PaymentUploadModal({
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Celebration Success Modal */}
+      <SuccessModal
+        visible={showSuccessModal}
+        title="Payment Submitted! 🎉"
+        message="Your proof of payment has been uploaded. The school will verify and confirm your payment within 24-48 hours."
+        buttonText="Done"
+        onClose={handleSuccessModalClose}
+        icon="checkmark-circle"
+      />
     </Modal>
   );
 }

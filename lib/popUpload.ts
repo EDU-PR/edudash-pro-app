@@ -5,9 +5,9 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
-import { base64ToUint8Array } from './utils/base64';
+import { decode } from 'base64-arraybuffer';
 
 // Upload types
 export type POPUploadType = 'proof_of_payment' | 'picture_of_progress';
@@ -276,19 +276,20 @@ export const uploadPOPFile = async (
     const bucket = STORAGE_BUCKETS[uploadType];
     
     // Read file as base64 for upload
+    // Note: Using 'base64' string literal instead of FileSystem.EncodingType.Base64
+    // to avoid "Cannot read property 'Base64' of undefined" errors in some Expo versions
     const base64 = await FileSystem.readAsStringAsync(uploadUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
     
-    // Convert base64 to blob using React Native compatible utility
-    // Note: atob() is a Web API not available in React Native runtime
-    const byteArray = base64ToUint8Array(base64);
-    const blob = new Blob([byteArray], { type: finalFileType });
+    // Convert base64 to ArrayBuffer using base64-arraybuffer
+    // Note: React Native doesn't support new Blob([Uint8Array]), so we upload ArrayBuffer directly
+    const arrayBuffer = decode(base64);
     
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage (Supabase accepts ArrayBuffer directly)
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(storagePath, blob, {
+      .upload(storagePath, arrayBuffer, {
         contentType: finalFileType,
         upsert: false,
       });

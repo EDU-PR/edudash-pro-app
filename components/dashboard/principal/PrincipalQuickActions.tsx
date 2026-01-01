@@ -21,9 +21,11 @@ interface PrincipalQuickActionsProps {
   stats?: {
     pendingRegistrations?: { total: number };
     pendingPayments?: { total: number };
+    pendingPOPUploads?: { total: number };
   };
   pendingRegistrationsCount?: number;
   pendingPaymentsCount?: number;
+  pendingPOPUploadsCount?: number;
   collapsedSections: Set<string>;
   onToggleSection: (sectionId: string) => void;
   onAction?: (actionId: string) => void;
@@ -33,6 +35,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   stats,
   pendingRegistrationsCount = 0,
   pendingPaymentsCount = 0,
+  pendingPOPUploadsCount = 0,
   collapsedSections,
   onToggleSection,
   onAction,
@@ -51,8 +54,15 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       badge: stats?.pendingRegistrations?.total ?? pendingRegistrationsCount,
     },
     {
+      id: 'pop_review',
+      title: t('dashboard.review_pop', { defaultValue: 'Review Payments' }),
+      icon: 'receipt',
+      color: '#059669',
+      badge: stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount,
+    },
+    {
       id: 'payments',
-      title: t('dashboard.view_payments', { defaultValue: 'View Payments' }),
+      title: t('dashboard.view_payments', { defaultValue: 'View Finances' }),
       icon: 'card',
       color: '#10B981',
       badge: stats?.pendingPayments?.total ?? pendingPaymentsCount,
@@ -105,6 +115,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
     switch (actionId) {
       case 'registrations':
         router.push('/screens/principal-registrations');
+        break;
+      case 'pop_review':
+        router.push('/screens/pop-review');
         break;
       case 'payments':
         router.push('/screens/financial-dashboard');

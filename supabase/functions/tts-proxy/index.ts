@@ -151,11 +151,13 @@ async function storeCache(
     lang: string;
     voiceId: string;
     provider: string;
-    preschoolId: string;
+    preschoolId: string | null;
     userId: string;
   }
 ): Promise<string> {
-  const storagePath = `${metadata.preschoolId}/${hash}.mp3`;
+  // Use preschool_id if available, otherwise use user_id for storage path
+  const storagePrefix = metadata.preschoolId || `user_${metadata.userId}`;
+  const storagePath = `${storagePrefix}/${hash}.mp3`;
 
   // Upload to storage
   const { error: uploadError } = await supabase.storage
@@ -170,18 +172,24 @@ async function storeCache(
     throw new Error(`Failed to upload audio: ${uploadError.message}`);
   }
 
-  // Store metadata
-  await supabase.from('tts_audio_cache').insert({
+  // Store metadata - preschool_id is now nullable
+  // NOTE: user_id column doesn't exist in tts_audio_cache, only created_by
+  const { error: insertError } = await supabase.from('tts_audio_cache').insert({
     hash,
-    preschool_id: metadata.preschoolId,
+    preschool_id: metadata.preschoolId || null, // Allow null for parent users
     text: metadata.text.substring(0, 1000), // Truncate long text
     language_code: metadata.lang,
     voice_id: metadata.voiceId,
     provider: metadata.provider,
     storage_path: storagePath,
     size_bytes: audioBlob.size,
-    created_by: metadata.userId,
+    created_by: metadata.userId, // Track who created this cache entry
   });
+  
+  if (insertError) {
+    console.warn('[Cache] Failed to store cache entry:', insertError.message);
+    // Don't throw - audio was already generated and stored, cache metadata is optional
+  }
 
   // Get signed URL
   const { data: urlData } = await supabase.storage
@@ -195,7 +203,7 @@ async function storeCache(
  * Log usage for cost tracking
  */
 async function logUsage(
-  preschoolId: string,
+  preschoolId: string | null,
   userId: string,
   lang: string,
   provider: string,
@@ -214,7 +222,7 @@ async function logUsage(
     const costEstimate = (charCount / 1_000_000) * (costPer1M[provider] || 0);
 
     await supabase.from('voice_usage_logs').insert({
-      preschool_id: preschoolId,
+      preschool_id: preschoolId || null, // Allow null for parent users
       user_id: userId,
       service: 'tts',
       provider,
@@ -227,6 +235,52 @@ async function logUsage(
   } catch (error) {
     console.error('Usage logging error:', error);
   }
+}
+
+/**
+ * Apply pronunciation fixes using SSML substitutions
+ * Fixes common issues like "EduDash Pro" being spelled out as "E D U Dash Pro"
+ */
+function applyPronunciationFixes(text: string): string {
+  // Define pronunciation substitutions
+  // Use phonetic spellings that Azure Neural Voices understand naturally
+  const pronunciationFixes: Record<string, string> = {
+    // Brand names - use phonetic aliases that sound natural
+    // "EduDash Pro" should sound like "Edoo-Dash Pro" not "E-D-U Dash Pro"
+    'EduDash Pro': '<phoneme alphabet="ipa" ph="ˈɛdjuː dæʃ proʊ">EduDash Pro</phoneme>',
+    'EduDashPro': '<phoneme alphabet="ipa" ph="ˈɛdjuː dæʃ proʊ">EduDashPro</phoneme>',
+    'EduDash': '<phoneme alphabet="ipa" ph="ˈɛdjuː dæʃ">EduDash</phoneme>',
+    'EDUDASH': '<phoneme alphabet="ipa" ph="ˈɛdjuː dæʃ">EDUDASH</phoneme>',
+    'edudash': '<phoneme alphabet="ipa" ph="ˈɛdjuː dæʃ">edudash</phoneme>',
+    // AI assistant name - "Dash" as a name, "AI" as letters
+    'Dash AI': 'Dash <say-as interpret-as="characters">AI</say-as>',
+    'DashAI': 'Dash <say-as interpret-as="characters">AI</say-as>',
+    // Common acronyms that should be spelled out
+    'CAPS': '<say-as interpret-as="characters">CAPS</say-as>',
+    'STEM': '<sub alias="stem">STEM</sub>',
+    // South African curriculum terms - expand for clarity
+    'GET': '<sub alias="General Education and Training">GET</sub>',
+    'FET': '<sub alias="Further Education and Training">FET</sub>',
+    'DBE': '<sub alias="Department of Basic Education">DBE</sub>',
+    'NCS': '<sub alias="National Curriculum Statement">NCS</sub>',
+    // Common abbreviations
+    'Mrs.': '<sub alias="Missus">Mrs.</sub>',
+    'Mr.': '<sub alias="Mister">Mr.</sub>',
+    'Dr.': '<sub alias="Doctor">Dr.</sub>',
+    'Prof.': '<sub alias="Professor">Prof.</sub>',
+    // App-specific terms
+    'TTS': '<sub alias="text to speech">TTS</sub>',
+    'STT': '<sub alias="speech to text">STT</sub>',
+  };
+
+  let processedText = text;
+  for (const [original, replacement] of Object.entries(pronunciationFixes)) {
+    // Case-insensitive replacement but preserve original case in tag for matching
+    const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    processedText = processedText.replace(regex, replacement);
+  }
+
+  return processedText;
 }
 
 /**
@@ -246,6 +300,9 @@ async function synthesizeAzure(
 
   const voice = voiceId || AZURE_VOICES[lang] || AZURE_VOICES['en-US'];
   
+  // Apply pronunciation fixes to the text
+  const processedText = applyPronunciationFixes(text);
+  
   // Build SSML with style and prosody
   const ssml = `
     <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" 
@@ -253,7 +310,7 @@ async function synthesizeAzure(
       <voice name="${voice}">
         ${style ? `<mstts:express-as style="${style}">` : ''}
           <prosody rate="${rate || 0}%" pitch="${pitch || 0}%" volume="+10%">
-            ${text}
+            ${processedText}
           </prosody>
         ${style ? '</mstts:express-as>' : ''}
       </voice>
@@ -375,7 +432,7 @@ serve(async (req) => {
     }
 
     // Get user metadata
-    const preschoolId = user.user_metadata?.preschool_id || 'unknown';
+    const preschoolId = user.user_metadata?.preschool_id || null; // Allow null for parents
     const userId = user.id;
 
     // =========================================================================

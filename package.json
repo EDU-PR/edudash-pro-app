@@ -50,6 +50,7 @@
     "eas:new": "./scripts/switch-eas-project.sh new",
     "ota:mark1": "./scripts/switch-eas-project.sh old && eas update --channel production",
     "ota:release8": "./scripts/switch-eas-project.sh new && eas update --channel production",
+    "ota:playstore": "NODE_OPTIONS=\"--max-old-space-size=8192\" EAS_PROJECT_ID=playstore npx eas update --branch production",
     "start": "npx expo start --dev-client --host localhost",
     "start:clear": "npx expo start --dev-client --host localhost --clear",
     "open:android": "adb reverse tcp:8081 tcp:8081 && adb reverse tcp:8083 tcp:8083 && adb shell am start -n com.edudashpro/expo.modules.devlauncher.launcher.DevLauncherActivity -a android.intent.action.VIEW -d \"exp://expo-development-client/?url=http://127.0.0.1:8081\"",

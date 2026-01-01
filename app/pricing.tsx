@@ -85,6 +85,7 @@ export default function PricingScreen() {
       originalPrice: undefined,
       originalPriceAnnual: undefined,
       popular: false,
+      showFreeTrial: true,
       features: [
         '10 AI queries/month',
         'Basic homework help',
@@ -225,9 +226,9 @@ export default function PricingScreen() {
           >
             <Text style={styles.promoEmoji}>🔥</Text>
             <View style={styles.promoContent}>
-              <Text style={styles.promoTitle}>LAUNCH SPECIAL: 50% OFF FOR 6 MONTHS!</Text>
+              <Text style={styles.promoTitle}>LAUNCH SPECIAL: 50% OFF FOR 3 MONTHS!</Text>
               <Text style={styles.promoSubtitle}>
-                🎁 Join before Dec 31, 2025 • R49.50/mo (was R99) or R99.50/mo (was R199) for 6 months
+                🎁 Join before Mar 31, 2026 • R49.50/mo (was R99) or R99.50/mo (was R199) for 3 months
               </Text>
             </View>
             <Text style={styles.promoEmoji}>⚡</Text>
@@ -243,12 +244,6 @@ export default function PricingScreen() {
           <Text style={styles.subtitle}>
             Transparent pricing for parents and schools across South Africa
           </Text>
-          
-          {!isOnTrial && (
-            <View style={styles.trialBanner}>
-              <Text style={styles.trialBannerText}>🎉 7-Day Free Trial • No Credit Card Required</Text>
-            </View>
-          )}
         </View>
 
         {/* User Type Toggle - Hide for parents, they only see parent plans */}
@@ -308,6 +303,7 @@ export default function PricingScreen() {
                   popular={plan.popular}
                   isEnterprise={isEnterprise}
                   hasPromo={hasPromo}
+                  showFreeTrial={(plan as any).showFreeTrial}
                   features={plan.features}
                   userType={userType}
                   isLoggedIn={isLoggedIn}
@@ -322,7 +318,7 @@ export default function PricingScreen() {
                     }
                     if (price === 0) {
                       if (isLoggedIn) {
-                        router.push('/dashboard/parent' as `/${string}`);
+                        router.push('/screens/parent-dashboard' as `/${string}`);
                       } else {
                         router.push('/(auth)/sign-in' as `/${string}`);
                       }
@@ -387,6 +383,7 @@ function PlanCard({
   popular,
   isEnterprise,
   hasPromo,
+  showFreeTrial,
   features,
   userType,
   isLoggedIn,
@@ -399,6 +396,7 @@ function PlanCard({
   popular: boolean;
   isEnterprise: boolean;
   hasPromo: boolean;
+  showFreeTrial?: boolean;
   features: string[];
   userType: UserType;
   isLoggedIn: boolean;
@@ -417,6 +415,11 @@ function PlanCard({
       {hasPromo && originalPrice && (
         <View style={styles.promoBadge}>
           <Text style={styles.promoBadgeText}>🔥 LIMITED TIME: 50% OFF</Text>
+        </View>
+      )}
+      {showFreeTrial && (
+        <View style={[styles.promoBadge, { backgroundColor: '#10b981' }]}>
+          <Text style={styles.promoBadgeText}>🎉 7-DAY FREE TRIAL • NO CREDIT CARD REQUIRED</Text>
         </View>
       )}
       

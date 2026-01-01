@@ -3,7 +3,7 @@
 
 import ExcelJS from 'exceljs';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { Alert } from 'react-native';
 import { Buffer } from 'buffer';
@@ -103,7 +103,7 @@ class ExportServiceImpl {
       const base64 = Buffer.from(buffer as any).toString('base64');
       
       await FileSystem.writeAsStringAsync(filePath, base64, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
       
       if (await Sharing.isAvailableAsync()) {

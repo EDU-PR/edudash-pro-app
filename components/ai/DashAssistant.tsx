@@ -93,6 +93,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setIsNearBottom,
     unreadCount,
     setUnreadCount,
+    isRecording,
+    partialTranscript,
     flashListRef,
     inputRef,
     sendMessage,
@@ -102,11 +104,23 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     handleAttachFile,
     handleTakePhoto,
     handleInputMicPress,
+    stopVoiceRecording,
     handleRemoveAttachment,
     extractFollowUps,
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
+
+  // Scroll to bottom when keyboard shows to keep messages visible
+  useEffect(() => {
+    if (keyboardVisible && messages.length > 0) {
+      // Small delay to let keyboard animation complete on Android
+      const timer = setTimeout(() => {
+        scrollToBottom({ animated: true, delay: 50 });
+      }, Platform.OS === 'android' ? 150 : 50);
+      return () => clearTimeout(timer);
+    }
+  }, [keyboardVisible, scrollToBottom, messages.length]);
 
   // Render individual message
   const renderMessage = useCallback((message: DashMessage, index: number) => {
@@ -231,9 +245,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <KeyboardAvoidingView 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        enabled={Platform.OS === 'ios'}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         
@@ -339,6 +352,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           selectedAttachments={selectedAttachments}
           isLoading={isLoading}
           isUploading={isUploading}
+          isRecording={isRecording}
+          partialTranscript={partialTranscript}
           onSend={() => sendMessage()}
           onMicPress={handleInputMicPress}
           onTakePhoto={handleTakePhoto}
