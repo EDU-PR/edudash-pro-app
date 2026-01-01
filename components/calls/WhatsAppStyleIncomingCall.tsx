@@ -139,9 +139,12 @@ export function WhatsAppStyleIncomingCall({
   }, [isConnecting]);
 
   // Vibration and ringtone
-  // Stop when backgrounded - notification handles alert in background
+  // CRITICAL: Continue ringing even when backgrounded for incoming calls
+  // The ringtone should play to alert the user, notification handles visual alert
   useEffect(() => {
-    if (!isVisible || isConnecting || appState === 'background') {
+    // Only stop if call is no longer visible or user is connecting
+    // DO NOT stop for background state - we want the phone to keep ringing!
+    if (!isVisible || isConnecting) {
       if (soundRef.current) {
         soundRef.current.pause();
         soundRef.current.remove();

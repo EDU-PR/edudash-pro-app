@@ -48,7 +48,9 @@ export const useParentDashboard = () => {
           setData(cachedData);
           setLoading(false);
           setIsLoadingFromCache(false);
-          setTimeout(() => fetchData(true), 100);
+          // REMOVED: Background refresh that was causing infinite reloads
+          // The pull-to-refresh and manual refresh should be used instead
+          // Previously: setTimeout(() => fetchData(true), 100); <-- This caused loops!
           return;
         }
         setIsLoadingFromCache(false);
