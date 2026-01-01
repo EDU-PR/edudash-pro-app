@@ -520,8 +520,37 @@ export function VideoCallInterface({
         dailyRef.current = daily;
 
         // Event listeners
-        daily.on('joined-meeting', () => {
+        daily.on('joined-meeting', async () => {
           console.log('[VideoCall] Joined meeting');
+          
+          // CRITICAL: Ensure we're receiving remote tracks
+          try {
+            await daily.setSubscribeToTracksAutomatically(true);
+            await daily.updateReceiveSettings({ '*': { video: true, audio: true } });
+            console.log('[VideoCall] ✅ Configured to receive all tracks');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to configure track receiving:', err);
+          }
+          
+          // Ensure local video is enabled with retry
+          const enableLocalMedia = async (attempt: number = 1) => {
+            try {
+              await daily.setLocalVideo(true);
+              await daily.setLocalAudio(true);
+              setIsVideoEnabled(true);
+              setIsAudioEnabled(true);
+              console.log('[VideoCall] ✅ Local media enabled on attempt', attempt);
+              // Force update to get fresh track state
+              setTimeout(() => updateParticipants(), 300);
+            } catch (err) {
+              console.warn('[VideoCall] Enable local media failed attempt', attempt, ':', err);
+              if (attempt < 3) {
+                setTimeout(() => enableLocalMedia(attempt + 1), 500);
+              }
+            }
+          };
+          
+          await enableLocalMedia();
           setCallState('connected');
           updateParticipants();
         });
@@ -585,15 +614,47 @@ export function VideoCallInterface({
     }
   }, [isAudioEnabled]);
 
-  // Toggle camera
+  // Toggle camera with retry logic
   const toggleVideo = useCallback(async () => {
-    if (!dailyRef.current) return;
-    try {
-      await dailyRef.current.setLocalVideo(!isVideoEnabled);
-      setIsVideoEnabled(!isVideoEnabled);
-    } catch (err) {
-      console.error('[VideoCall] Toggle video error:', err);
+    if (!dailyRef.current) {
+      console.warn('[VideoCall] Cannot toggle video - Daily object not available');
+      return;
     }
+    
+    const newState = !isVideoEnabled;
+    console.log('[VideoCall] Toggling video to:', newState);
+    
+    const setVideo = async (enabled: boolean, attempt: number = 1) => {
+      try {
+        await dailyRef.current.setLocalVideo(enabled);
+        setIsVideoEnabled(enabled);
+        console.log('[VideoCall] ✅ Video toggled to', enabled, 'on attempt', attempt);
+        
+        // Refresh participant state
+        setTimeout(() => {
+          const participants = dailyRef.current?.participants();
+          if (participants) {
+            const remote = Object.entries(participants)
+              .filter(([id]) => id !== 'local')
+              .map(([id, p]) => ({ sessionId: id, ...p }));
+            setRemoteParticipants(remote);
+          }
+        }, 300);
+      } catch (err) {
+        console.warn('[VideoCall] Toggle video failed attempt', attempt, ':', err);
+        
+        // Only retry when enabling video (more likely to need camera re-acquisition)
+        if (enabled && attempt < 3) {
+          console.log('[VideoCall] Retrying enable video...');
+          setTimeout(() => setVideo(enabled, attempt + 1), 500);
+        } else {
+          setError(enabled ? 'Failed to enable camera. Please try again.' : 'Failed to disable camera.');
+          setTimeout(() => setError(null), 3000);
+        }
+      }
+    };
+    
+    await setVideo(newState);
   }, [isVideoEnabled]);
 
   // Flip camera
@@ -755,15 +816,24 @@ export function VideoCallInterface({
       </View>
 
       {/* Local Video Preview (Picture-in-Picture) */}
-      {localParticipant && isVideoEnabled && DailyMediaView && (
+      {DailyMediaView && (
         <View style={styles.localVideoContainer}>
-          <DailyMediaView
-            videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
-            audioTrack={null}
-            style={styles.localVideo}
-            objectFit="cover"
-            mirror={isFrontCamera}
-          />
+          {localParticipant && isVideoEnabled && localParticipant.tracks?.video?.state === 'playable' ? (
+            <DailyMediaView
+              videoTrack={localParticipant?.tracks?.video?.persistentTrack || localParticipant?.tracks?.video?.track || null}
+              audioTrack={null}
+              style={styles.localVideo}
+              objectFit="cover"
+              mirror={isFrontCamera}
+            />
+          ) : (
+            <View style={styles.localVideoPlaceholder}>
+              <Ionicons name={!isVideoEnabled ? "videocam-off" : "person"} size={24} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.localVideoPlaceholderText}>
+                {!isVideoEnabled ? 'Camera off' : callState === 'connecting' ? 'Starting...' : 'No video'}
+              </Text>
+            </View>
+          )}
         </View>
       )}
       
@@ -940,9 +1010,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    backgroundColor: '#1a1a2e',
   },
   localVideo: {
     flex: 1,
+  },
+  localVideoPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a2e',
+  },
+  localVideoPlaceholderText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 10,
+    marginTop: 4,
+    textAlign: 'center',
   },
   topOverlay: {
     position: 'absolute',

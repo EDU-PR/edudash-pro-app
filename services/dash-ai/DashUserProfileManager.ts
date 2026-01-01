@@ -45,6 +45,12 @@ export interface UserProfileManagerConfig {
     role: string;
     name?: string;
     organizationId?: string;
+    /** Organization type for context-aware AI persona */
+    organizationType?: string;
+    /** User's age group for content adaptation */
+    ageGroup?: 'child' | 'teen' | 'adult';
+    /** Date of birth for age calculation */
+    dateOfBirth?: string;
   };
 }
 
@@ -143,6 +149,8 @@ export class DashUserProfileManager {
       },
       context: {
         organization_id: this.config.currentUser.organizationId,
+        organization_type: this.config.currentUser.organizationType,
+        age_group: this.config.currentUser.ageGroup,
       },
       goals: {
         short_term: [],

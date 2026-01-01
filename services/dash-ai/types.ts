@@ -357,6 +357,10 @@ export interface DashUserProfile {
     current_students?: string[];
     current_subjects?: string[];
     organization_id?: string;
+    /** Organization type for context-aware AI */
+    organization_type?: string;
+    /** User's age group for content adaptation */
+    age_group?: 'child' | 'teen' | 'adult';
     grade_levels?: string[];
     responsibilities?: string[];
     preferred_language?: string;
