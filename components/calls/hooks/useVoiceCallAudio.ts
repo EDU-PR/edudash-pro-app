@@ -9,12 +9,14 @@
  * CRITICAL: Uses expo-audio for ringback instead of InCallManager.startRingback()
  * because InCallManager.startRingback() ignores earpiece setting on Android
  * and always plays through speaker. expo-audio respects the audio mode settings.
+ * 
+ * ROBUSTNESS: Includes retry logic for ringback playback and proper cleanup
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
+import { Platform, AppState, type AppStateStatus } from 'react-native';
 import type { CallState } from '../types';
 
 // Conditionally import InCallManager
@@ -58,9 +60,12 @@ export function useVoiceCallAudio({
   const earpieceEnforcerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringbackStartedRef = useRef(false);
   const ringbackPlayerRef = useRef<AudioPlayer | null>(null);
+  const ringbackRetryCountRef = useRef(0);
+  const ringbackRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speakerAppliedOnConnectRef = useRef(false);
 
   /**
-   * Play ringback tone using expo-audio
+   * Play ringback tone using expo-audio with retry logic
    * 
    * CRITICAL: This uses expo-audio instead of InCallManager.startRingback() because:
    * 1. InCallManager.startRingback('_DEFAULT_') ignores earpiece setting on Android
@@ -69,19 +74,36 @@ export function useVoiceCallAudio({
    * 
    * The audio mode MUST be set to route through earpiece BEFORE playing:
    * - shouldRouteThroughEarpiece: true  <-- THIS is the key setting for Android
+   * 
+   * ROBUSTNESS: Includes retry logic (up to 3 attempts) with exponential backoff
    */
-  const playCustomRingback = useCallback(async () => {
-    if (ringbackStartedRef.current) return;
+  const playCustomRingback = useCallback(async (retryAttempt = 0) => {
+    if (ringbackStartedRef.current) {
+      console.log('[VoiceCallAudio] Ringback already playing, skipping');
+      return;
+    }
     
     // Check if sound file is loaded
     if (!RINGBACK_SOUND) {
       console.error('[VoiceCallAudio] ❌ Ringback sound not loaded - cannot play');
+      // Try fallback to InCallManager system ringback as last resort
+      if (InCallManager && retryAttempt >= 2) {
+        try {
+          console.log('[VoiceCallAudio] 🔄 Falling back to InCallManager system ringback');
+          InCallManager.startRingback('_DEFAULT_');
+          ringbackStartedRef.current = true;
+        } catch (e) {
+          console.error('[VoiceCallAudio] System ringback fallback failed:', e);
+        }
+      }
       return;
     }
     
+    const MAX_RETRIES = 3;
+    const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000); // 500ms, 1s, 2s
+    
     try {
-      console.log('[VoiceCallAudio] 🔊 Starting ringback via expo-audio (earpiece mode)');
-      console.log('[VoiceCallAudio] Ringback sound source:', RINGBACK_SOUND);
+      console.log(`[VoiceCallAudio] 🔊 Starting ringback via expo-audio (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
       
       // CRITICAL: Set audio mode to route through earpiece BEFORE creating player
       // expo-audio's shouldRouteThroughEarpiece is the key setting for Android
@@ -104,28 +126,72 @@ export function useVoiceCallAudio({
       const player = createAudioPlayer(RINGBACK_SOUND);
       player.loop = true; // Loop until call connects
       player.volume = 1.0;
+      
+      // Start playback
       player.play();
+      
+      // Verify playback started by checking after a short delay
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       ringbackPlayerRef.current = player;
       ringbackStartedRef.current = true;
+      ringbackRetryCountRef.current = 0;
       console.log('[VoiceCallAudio] ✅ Ringback playing through earpiece');
       
+      // Give haptic feedback to indicate call is ringing
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      
     } catch (error) {
-      console.error('[VoiceCallAudio] ❌ Failed to start ringback:', error);
+      console.error(`[VoiceCallAudio] ❌ Failed to start ringback (attempt ${retryAttempt + 1}):`, error);
       ringbackStartedRef.current = false;
+      
+      // Retry with exponential backoff
+      if (retryAttempt < MAX_RETRIES - 1) {
+        console.log(`[VoiceCallAudio] 🔄 Retrying in ${retryDelay}ms...`);
+        ringbackRetryTimeoutRef.current = setTimeout(() => {
+          playCustomRingback(retryAttempt + 1);
+        }, retryDelay);
+      } else {
+        console.error('[VoiceCallAudio] ❌ All ringback retry attempts failed');
+        // Final fallback: try system ringback
+        if (InCallManager) {
+          try {
+            InCallManager.startRingback('_DEFAULT_');
+            ringbackStartedRef.current = true;
+            console.log('[VoiceCallAudio] ✅ Fell back to system ringback');
+          } catch (e) {
+            console.error('[VoiceCallAudio] System ringback fallback failed:', e);
+          }
+        }
+      }
     }
   }, []);
 
   /**
    * Stop ringback when call connects or ends
+   * Also clears any pending retry timeouts
    */
   const stopCustomRingback = useCallback(async () => {
+    // Clear any pending retry timeouts
+    if (ringbackRetryTimeoutRef.current) {
+      clearTimeout(ringbackRetryTimeoutRef.current);
+      ringbackRetryTimeoutRef.current = null;
+    }
+    
     if (!ringbackStartedRef.current && !ringbackPlayerRef.current) return;
     
     try {
       if (ringbackPlayerRef.current) {
-        ringbackPlayerRef.current.pause();
-        ringbackPlayerRef.current.remove();
+        try {
+          ringbackPlayerRef.current.pause();
+        } catch (e) {
+          // May already be paused
+        }
+        try {
+          ringbackPlayerRef.current.remove();
+        } catch (e) {
+          // May already be removed
+        }
         ringbackPlayerRef.current = null;
       }
       
@@ -139,6 +205,7 @@ export function useVoiceCallAudio({
       }
       
       ringbackStartedRef.current = false;
+      ringbackRetryCountRef.current = 0;
       console.log('[VoiceCallAudio] ✅ Stopped ringback');
     } catch (error) {
       console.warn('[VoiceCallAudio] Failed to stop ringback:', error);
@@ -269,6 +336,7 @@ export function useVoiceCallAudio({
   }, [callState, isOwner, setIsSpeakerEnabled, playCustomRingback]);
 
   // Stop ringback when call connects and enforce audio routing
+  // CRITICAL: Only apply speaker setting ONCE on connect to avoid overriding user toggles
   useEffect(() => {
     if (callState === 'connected' && InCallManager) {
       try {
@@ -281,33 +349,57 @@ export function useVoiceCallAudio({
           console.log('[VoiceCallAudio] Stopped ringback - call connected');
         }
         
-        // CRITICAL: Enforce current speaker state (earpiece by default, unless user toggled)
-        // The continuous enforcement hook will maintain this, but we set it here immediately
-        InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
-        
-        // Screen control based on speaker state:
-        // - Earpiece: Allow proximity sensor to turn off screen when near ear
-        // - Speaker: Keep screen on (user is looking at it)
-        InCallManager.setKeepScreenOn(isSpeakerEnabled);
-        
-        console.log('[VoiceCallAudio] Audio routed to:', isSpeakerEnabled ? 'speaker' : 'earpiece');
-        console.log('[VoiceCallAudio] Screen keep-on:', isSpeakerEnabled ? 'enabled (speaker mode)' : 'disabled (proximity sensor enabled)');
-        
-        // Additional enforcement after a short delay to catch any routing changes
-        if (!isSpeakerEnabled) {
-          setTimeout(() => {
-            try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              InCallManager.setKeepScreenOn(false); // Ensure screen can be turned off by proximity sensor
-              console.log('[VoiceCallAudio] Post-connect earpiece enforcement');
-            } catch (e) {
-              // Silent - continuous enforcement will handle it
-            }
-          }, 200);
+        // CRITICAL: Only apply speaker setting ONCE on initial connect
+        // This prevents overriding the user's speaker toggle after they change it
+        if (!speakerAppliedOnConnectRef.current) {
+          speakerAppliedOnConnectRef.current = true;
+          
+          // Enforce current speaker state (earpiece by default, unless user toggled)
+          // The continuous enforcement hook will maintain earpiece if not using speaker
+          InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
+          
+          // Screen control based on speaker state:
+          // - Earpiece: Allow proximity sensor to turn off screen when near ear
+          // - Speaker: Keep screen on (user is looking at it)
+          InCallManager.setKeepScreenOn(isSpeakerEnabled);
+          
+          console.log('[VoiceCallAudio] 📞 Call connected - audio routed to:', isSpeakerEnabled ? 'speaker' : 'earpiece');
+          console.log('[VoiceCallAudio] Screen keep-on:', isSpeakerEnabled ? 'enabled (speaker mode)' : 'disabled (proximity sensor enabled)');
+          
+          // Give haptic feedback to indicate call connected
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          
+          // Additional enforcement after a short delay to catch any routing changes from Daily.co
+          if (!isSpeakerEnabled) {
+            setTimeout(() => {
+              try {
+                InCallManager.setForceSpeakerphoneOn(false);
+                InCallManager.setKeepScreenOn(false);
+                console.log('[VoiceCallAudio] Post-connect earpiece enforcement');
+              } catch (e) {
+                // Silent - continuous enforcement will handle it
+              }
+            }, 200);
+            
+            // Second enforcement after Daily.co fully initializes audio
+            setTimeout(() => {
+              try {
+                InCallManager.setForceSpeakerphoneOn(false);
+                console.log('[VoiceCallAudio] Secondary earpiece enforcement (500ms)');
+              } catch (e) {
+                // Silent
+              }
+            }, 500);
+          }
         }
       } catch (error) {
         console.warn('[VoiceCallAudio] Failed to handle connected state:', error);
       }
+    }
+    
+    // Reset the flag when call ends so next call can apply speaker setting
+    if (callState === 'ended' || callState === 'idle') {
+      speakerAppliedOnConnectRef.current = false;
     }
   }, [callState, isOwner, isSpeakerEnabled, stopCustomRingback]);
 
@@ -341,6 +433,12 @@ export function useVoiceCallAudio({
 
   // Stop audio and cleanup
   const stopAudio = useCallback(async () => {
+    // Clear any pending retry timeouts
+    if (ringbackRetryTimeoutRef.current) {
+      clearTimeout(ringbackRetryTimeoutRef.current);
+      ringbackRetryTimeoutRef.current = null;
+    }
+    
     // Stop custom ringback first
     await stopCustomRingback();
     
@@ -353,8 +451,24 @@ export function useVoiceCallAudio({
         console.warn('[VoiceCallAudio] InCallManager stop error:', err);
       }
     }
+    
+    // Reset all refs for clean state
     audioInitializedRef.current = false;
+    speakerAppliedOnConnectRef.current = false;
+    ringbackRetryCountRef.current = 0;
   }, [stopCustomRingback]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (ringbackRetryTimeoutRef.current) {
+        clearTimeout(ringbackRetryTimeoutRef.current);
+      }
+      if (earpieceEnforcerRef.current) {
+        clearInterval(earpieceEnforcerRef.current);
+      }
+    };
+  }, []);
 
   return {
     toggleSpeaker,

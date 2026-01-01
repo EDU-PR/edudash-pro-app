@@ -111,8 +111,10 @@ export function StartLessonModal(props: StartLessonModalProps) {
     onAdvancedSettingsChange,
   } = props;
 
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [advancedRotation] = useState(new Animated.Value(0));
+  // Default to showing advanced settings so teachers can see all options immediately
+  // This addresses the issue where teachers couldn't find lesson settings
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(true);
+  const [advancedRotation] = useState(new Animated.Value(1)); // Start rotated (expanded state)
 
   const toggleAdvancedSettings = () => {
     Animated.timing(advancedRotation, {
