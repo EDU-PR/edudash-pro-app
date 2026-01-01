@@ -108,7 +108,10 @@
     },
     "production-apk": {
       "extends": "production",
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": {
+        "EAS_PROJECT_ID": "playstore"
+      }
     },
     "playstore": {
       "extends": "production",
