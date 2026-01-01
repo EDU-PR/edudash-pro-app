@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { createCheckout } from '@/lib/payments';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
+import { getAvailableProducts, purchaseProduct, REVENUECAT_CONFIG } from '@/lib/revenuecat/config';
 
 interface SubscriptionPlan {
   id: string;
@@ -394,6 +396,78 @@ export default function SubscriptionSetupScreen() {
         user_id: profile?.id || null,
       });
       
+      // For parent plans on mobile, use RevenueCat (Google Play / App Store)
+      if (isPlanForParent && Platform.OS !== 'web') {
+        try {
+          // Map plan tier to RevenueCat product ID
+          const tierLower = plan.tier.toLowerCase().replace(/-/g, '_');
+          let productId: string;
+          
+          if (tierLower === 'parent_starter' || tierLower === 'starter') {
+            productId = annual 
+              ? REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_ANNUAL 
+              : REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_MONTHLY;
+          } else if (tierLower === 'parent_plus' || tierLower === 'premium' || tierLower === 'pro') {
+            productId = annual 
+              ? REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_ANNUAL 
+              : REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_MONTHLY;
+          } else {
+            throw new Error(`Unknown parent plan tier: ${plan.tier}`);
+          }
+          
+          track('revenuecat_purchase_started', {
+            plan_tier: plan.tier,
+            product_id: productId,
+            billing: annual ? 'annual' : 'monthly',
+          });
+          
+          const purchaseResult = await purchaseProduct(productId);
+          
+          if (purchaseResult.success) {
+            track('revenuecat_purchase_success', {
+              plan_tier: plan.tier,
+              product_id: productId,
+            });
+            
+            // Update user tier in database
+            try {
+              const newTier = tierLower.startsWith('parent_') ? tierLower : `parent_${tierLower}`;
+              await assertSupabase()
+                .from('user_ai_tiers')
+                .upsert({
+                  user_id: profile?.id,
+                  tier: newTier,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'user_id' });
+            } catch (dbErr) {
+              console.error('Failed to update tier in DB:', dbErr);
+              // Don't fail - RevenueCat webhook will sync
+            }
+            
+            Alert.alert(
+              'Purchase Successful!',
+              `You are now subscribed to ${plan.name}. Enjoy your premium features!`,
+              [{ text: 'OK', onPress: () => router.push('/') }]
+            );
+          } else {
+            if (purchaseResult.error?.includes('cancelled')) {
+              track('revenuecat_purchase_cancelled', { plan_tier: plan.tier });
+              // User cancelled - don't show error
+            } else {
+              throw new Error(purchaseResult.error || 'Purchase failed');
+            }
+          }
+          return;
+        } catch (rcError: any) {
+          track('revenuecat_purchase_failed', {
+            plan_tier: plan.tier,
+            error: rcError.message,
+          });
+          throw rcError;
+        }
+      }
+      
+      // For school plans or web, use PayFast checkout
       // Get user email for PayFast
       const userEmail = profile?.email || (await assertSupabase().auth.getUser()).data.user?.email;
       
