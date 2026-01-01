@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -44,8 +45,9 @@ export function PaymentUploadModal({
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [uploading, setUploading] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  const styles = createStyles(theme);
+  const styles = createStyles(theme, insets);
 
   const handleImagePicker = async () => {
     try {
@@ -166,7 +168,7 @@ export function PaymentUploadModal({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Upload Proof of Payment</Text>
           <TouchableOpacity onPress={handleClose}>
@@ -261,18 +263,19 @@ export function PaymentUploadModal({
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: any, insets: { top: number; bottom: number }) => StyleSheet.create({
   modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingTop: Math.max(16, insets.top),
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
@@ -332,7 +335,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   currencyPrefix: { fontSize: 16, color: theme.textSecondary, marginRight: 4 },
   textInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: theme.text },
-  modalFooter: { padding: 16, borderTopWidth: 1, borderTopColor: theme.border },
+  modalFooter: { 
+    padding: 16, 
+    paddingBottom: Math.max(16, insets.bottom),
+    borderTopWidth: 1, 
+    borderTopColor: theme.border 
+  },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',

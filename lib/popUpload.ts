@@ -7,6 +7,7 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { supabase } from './supabase';
+import { base64ToUint8Array } from './utils/base64';
 
 // Upload types
 export type POPUploadType = 'proof_of_payment' | 'picture_of_progress';
@@ -279,13 +280,9 @@ export const uploadPOPFile = async (
       encoding: FileSystem.EncodingType.Base64,
     });
     
-    // Convert base64 to blob
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
+    // Convert base64 to blob using React Native compatible utility
+    // Note: atob() is a Web API not available in React Native runtime
+    const byteArray = base64ToUint8Array(base64);
     const blob = new Blob([byteArray], { type: finalFileType });
     
     // Upload to Supabase Storage

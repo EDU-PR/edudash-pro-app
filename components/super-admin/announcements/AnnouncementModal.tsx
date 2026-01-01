@@ -211,6 +211,19 @@ export function AnnouncementModal({
                 thumbColor={formData.show_banner ? '#00f5ff' : '#9ca3af'}
               />
             </View>
+
+            <View style={styles.switchRow}>
+              <View style={styles.switchLabelContainer}>
+                <Text style={styles.switchLabel}>Send Push Notification</Text>
+                <Text style={styles.switchHint}>Notify users with registered devices</Text>
+              </View>
+              <Switch
+                value={formData.send_push_notification}
+                onValueChange={(value) => onUpdateField('send_push_notification', value)}
+                trackColor={{ false: '#374151', true: '#10b98140' }}
+                thumbColor={formData.send_push_notification ? '#10b981' : '#9ca3af'}
+              />
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -304,9 +317,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
+  switchLabelContainer: {
+    flex: 1,
+  },
   switchLabel: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  switchHint: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginTop: 2,
   },
 });

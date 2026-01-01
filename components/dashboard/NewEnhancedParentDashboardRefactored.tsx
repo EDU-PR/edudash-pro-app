@@ -41,6 +41,7 @@ import { useParentDashboard } from '@/hooks/useDashboardData';
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
 import { ChildSwitcher } from './parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
+import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -313,15 +314,16 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               {/* Tier Badge */}
               <View style={[
                 styles.tierBadge, 
-                { backgroundColor: tier === 'free' ? theme.textSecondary + '20' : theme.success + '20' }
+                { backgroundColor: (!tier || tier === 'free') ? theme.textSecondary + '20' : theme.success + '20' }
               ]}>
                 <Text style={[
                   styles.tierBadgeText, 
-                  { color: tier === 'free' ? theme.textSecondary : theme.success }
+                  { color: (!tier || tier === 'free') ? theme.textSecondary : theme.success }
                 ]}>
-                  {tier === 'free' ? t('subscription.free', { defaultValue: 'Free' }) :
-                   tier === 'parent_starter' ? t('subscription.starter', { defaultValue: 'Starter' }) :
-                   tier === 'parent_plus' ? t('subscription.plus', { defaultValue: 'Plus' }) :
+                  {(!tier || tier === 'free') ? t('subscription.free', { defaultValue: 'Free' }) :
+                   (tier === 'parent_starter' || tier === 'starter') ? t('subscription.starter', { defaultValue: 'Starter' }) :
+                   (tier === 'parent_plus' || tier === 'pro' || tier === 'premium') ? t('subscription.plus', { defaultValue: 'Plus' }) :
+                   tier === 'enterprise' ? t('subscription.enterprise', { defaultValue: 'Enterprise' }) :
                    t('subscription.premium', { defaultValue: 'Premium' })}
                 </Text>
               </View>
@@ -395,6 +397,13 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             </View>
           ) : null;
         })()}
+
+        {/* Ad Banner for Free Tier Users (Android only) */}
+        <AdBannerWithUpgrade 
+          screen="parent_dashboard" 
+          showUpgradeCTA={true} 
+          margin={12} 
+        />
 
         {/* Metrics Grid */}
         <CollapsibleSection 
@@ -471,6 +480,13 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             />
           </CollapsibleSection>
         )}
+
+        {/* Bottom Ad Banner for Free Tier Users (Android only) */}
+        <AdBannerWithUpgrade 
+          screen="parent_dashboard_bottom" 
+          showUpgradeCTA={false} 
+          margin={16} 
+        />
       </ScrollView>
     </View>
   );
