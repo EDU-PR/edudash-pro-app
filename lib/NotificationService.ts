@@ -266,6 +266,19 @@ class NotificationService {
       showBadge: true,
     });
 
+    // Messages channel - for chat messages (matches backend channelId)
+    await Notifications.setNotificationChannelAsync('messages', {
+      name: 'Messages',
+      description: 'Chat messages from teachers and parents',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#4ade80',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
     // Urgent notifications - high priority with distinct vibration
     await Notifications.setNotificationChannelAsync('urgent', {
       name: 'Urgent Notifications',
@@ -293,7 +306,7 @@ class NotificationService {
       showBadge: true,
     });
 
-    // Social/communication - message-like notifications
+    // Social/communication - message-like notifications (legacy, keep for backwards compatibility)
     await Notifications.setNotificationChannelAsync('social', {
       name: 'Communication',
       description: 'Messages and communication from teachers/parents',
@@ -322,6 +335,32 @@ class NotificationService {
       bypassDnd: true,
     });
 
+    // Announcements channel - school announcements
+    await Notifications.setNotificationChannelAsync('announcements', {
+      name: 'School Announcements',
+      description: 'Important announcements from your school',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 400, 200, 400],
+      lightColor: '#3b82f6',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Homework channel - assignments and grading
+    await Notifications.setNotificationChannelAsync('homework', {
+      name: 'Homework & Assignments',
+      description: 'Assignment submissions and grading notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 150, 300],
+      lightColor: '#10b981',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
     // Reminders channel - for scheduled tasks and homework due dates
     await Notifications.setNotificationChannelAsync('reminders', {
       name: 'Reminders',
@@ -348,7 +387,59 @@ class NotificationService {
       showBadge: true,
     });
 
-    console.log('Android notification channels configured with 7 channels');
+    // Billing channel - payments and subscriptions
+    await Notifications.setNotificationChannelAsync('billing', {
+      name: 'Billing & Payments',
+      description: 'Payment confirmations and subscription updates',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#22c55e',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Invoices channel - invoice notifications
+    await Notifications.setNotificationChannelAsync('invoices', {
+      name: 'Invoices',
+      description: 'Invoice notifications and payment reminders',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#f59e0b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // Admin channel - administrative notifications
+    await Notifications.setNotificationChannelAsync('admin', {
+      name: 'Administrative',
+      description: 'Administrative notifications for principals',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 300, 100, 300],
+      lightColor: '#ef4444',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    // General channel - fallback for other notifications
+    await Notifications.setNotificationChannelAsync('general', {
+      name: 'General',
+      description: 'General notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 200],
+      lightColor: '#64748b',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+
+    console.log('Android notification channels configured with 14 channels');
   }
 
   /**

@@ -474,6 +474,43 @@ Cross-platform subscription management.
 | Restore Purchases | Cross-device restore |
 | Subscription Analytics | Churn, LTV, MRR tracking |
 
+### 3.4 CI/CD Automation & AI-Triggered Builds 🆕
+**Priority**: Medium | **Status**: Planned
+
+Automated build and deployment pipeline with Dash AI integration.
+
+| Feature | Description |
+|---------|-------------|
+| GitHub Actions Workflow | Auto-trigger on push/PR |
+| EAS Build Integration | Programmatic build triggers |
+| Dash AI Build Commands | "Build production APK" via chat |
+| Play Store Submission | Auto-submit to internal track |
+| App Store Submission | Auto-submit for TestFlight |
+| Build Status Notifications | Push/email on build complete |
+| Version Bumping | Auto-increment build numbers |
+| Release Notes AI | Generate notes from commits |
+
+**Dash AI Capabilities**:
+```typescript
+// AI-triggered build commands
+const CI_CD_CAPABILITIES = {
+  'ci.trigger_build': true,        // "Dash, build production APK"
+  'ci.check_build_status': true,   // "What's the build status?"
+  'ci.submit_to_store': true,      // "Submit to Play Store internal track"
+  'ci.generate_release_notes': true,
+  'ci.rollback_release': true,
+};
+```
+
+**Implementation**:
+- GitHub Actions workflow for CI/CD
+- EAS CLI programmatic API calls
+- Supabase Edge Function for build orchestration
+- WebSocket notifications for build progress
+- Super-Admin authorization required for store submissions
+
+**Current Status**: Manual builds via `eas build` CLI. Automation planned for Phase 3.
+
 ---
 
 ## Phase 4: STEM & Robotics (Q3 2026)

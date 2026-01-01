@@ -173,9 +173,28 @@ export class DashAICore {
       getUserProfile: () => this.profileManager.getUserProfile(),
     });
 
+    // Create a mapper function to convert DashUserProfile to the simpler UserProfile format
+    // used by DashPromptBuilder (which needs organization_type, age_group, etc. at top level)
+    const mapProfileForPromptBuilder = () => {
+      const dashProfile = this.profileManager.getUserProfile();
+      if (!dashProfile) return undefined;
+      
+      return {
+        role: dashProfile.role,
+        full_name: dashProfile.name,
+        display_name: dashProfile.name,
+        grade_level: dashProfile.context?.grade_levels?.[0],
+        preferred_language: dashProfile.context?.preferred_language,
+        subscription_tier: dashProfile.preferences?.ai_autonomy_level, // Map to subscription context
+        organization_name: dashProfile.context?.organization_id, // Will be resolved by caller
+        organization_type: dashProfile.context?.organization_type,
+        age_group: dashProfile.context?.age_group,
+      };
+    };
+
     this.promptBuilder = new DashPromptBuilder({
       personality: this.personality,
-      getUserProfile: () => this.profileManager.getUserProfile(),
+      getUserProfile: mapProfileForPromptBuilder,
     });
 
     // Initialize facades

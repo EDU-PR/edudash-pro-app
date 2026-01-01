@@ -206,18 +206,30 @@ export function useStartLessonLogic(
     setError(null);
 
     try {
+      // Generate a unique room name to avoid conflicts
+      const roomName = `lesson-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      
       const { data: roomData, error: roomError } = await supabase.functions.invoke('daily-rooms', {
         body: {
-          name: lessonTitle,
-          properties: {
-            max_participants: 50,
-            enable_recording: subscriptionTier.toLowerCase() !== 'free',
-            exp: Math.floor(Date.now() / 1000) + (effectiveDuration * 60),
-          },
+          name: roomName,
+          isPrivate: false, // Public for class lessons
+          expiryMinutes: effectiveDuration + 15, // Add buffer time
+          maxParticipants: 50,
         },
       });
 
-      if (roomError || !roomData?.url) throw new Error('Failed to create meeting room');
+      // Handle specific error cases
+      if (roomError) {
+        console.error('[LiveLesson] Room creation error:', roomError);
+        throw new Error(roomError.message || 'Failed to create meeting room. Please try again.');
+      }
+      
+      // Check for room data - could be nested in 'room' object
+      const room = roomData?.room || roomData;
+      if (!room?.url) {
+        console.error('[LiveLesson] No room URL in response:', roomData);
+        throw new Error('Meeting room created but URL not returned. Please try again.');
+      }
 
       const scheduledStart = isScheduled 
         ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -232,8 +244,8 @@ export function useStartLessonLogic(
           class_id: selectedClass,
           preschool_id: preschoolId,
           title: lessonTitle,
-          meeting_url: roomData.url,
-          meeting_id: roomData.name,
+          meeting_url: room.url,
+          meeting_id: room.name || roomName,
           scheduled_start: scheduledStart,
           scheduled_end: scheduledEnd,
           status: isScheduled ? 'scheduled' : 'live',
@@ -248,7 +260,7 @@ export function useStartLessonLogic(
             className: selectedClassData?.name || 'Class',
             lessonTitle,
             teacherName,
-            meetingUrl: roomData.url,
+            meetingUrl: room.url,
             scheduledStart,
             isScheduled,
           },
@@ -264,7 +276,7 @@ export function useStartLessonLogic(
         setIsScheduled(false);
       } else {
         Alert.alert('Success', 'Live lesson started! Opening meeting...', [
-          { text: 'OK', onPress: () => Linking.openURL(roomData.url) },
+          { text: 'OK', onPress: () => Linking.openURL(room.url) },
         ]);
         setShowModal(false);
       }

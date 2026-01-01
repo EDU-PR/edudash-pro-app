@@ -132,21 +132,21 @@ export const ORGANIZATION_CONFIGS: Record<OrganizationType, OrganizationConfig> 
     displayName: 'Preschool',
     description: 'Early childhood education center',
     terminology: {
-      member: 'student',
-      memberPlural: 'students',
+      member: 'learner',
+      memberPlural: 'learners',
       leader: 'teacher',
       leaderPlural: 'teachers',
-      admin: 'principal',
-      adminPlural: 'principals',
+      admin: 'head teacher',  // ECD uses "Head Teacher" instead of "Principal"
+      adminPlural: 'head teachers',
       group: 'class',
       groupPlural: 'classes',
       guardian: 'parent',
       guardianPlural: 'parents',
-      activity: 'lesson',
-      activityPlural: 'lessons',
-      assessment: 'grade',
-      assessmentPlural: 'grades',
-      curriculum: 'curriculum',
+      activity: 'activity',
+      activityPlural: 'activities',
+      assessment: 'progress note',
+      assessmentPlural: 'progress notes',
+      curriculum: 'learning programme',
       organization: 'preschool',
     },
     roles: [
@@ -198,25 +198,87 @@ export const ORGANIZATION_CONFIGS: Record<OrganizationType, OrganizationConfig> 
     ],
     aiPersonalities: {
       teacher: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Hi there! 🌟 I'm Dash, your early childhood teaching assistant! Let's make learning magical for our little ones today! ✨",
         tone: 'encouraging',
-        expertiseAreas: ['education', 'lesson planning', 'classroom management', 'student assessment'],
-        proactiveBehaviors: ['suggest_improvements', 'remind_deadlines', 'flag_concerns'],
-        taskCategories: ['content', 'planning', 'communication'],
+        expertiseAreas: [
+          'early childhood development',
+          'play-based learning',
+          'CAPS Foundation Phase',
+          'sensory activities',
+          'storytelling',
+          'classroom management',
+          'developmental milestones',
+          'parent communication'
+        ],
+        proactiveBehaviors: [
+          'suggest_age_appropriate_activities',
+          'celebrate_milestones',
+          'share_daily_highlights',
+          'recommend_learning_games',
+          'flag_developmental_concerns',
+          'create_progress_reports'
+        ],
+        taskCategories: ['content', 'planning', 'celebration', 'communication'],
       },
       principal: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Good day! I'm Dash, here to help you lead your early learning centre with excellence! 🏫",
         tone: 'professional',
-        expertiseAreas: ['school administration', 'staff management', 'analytics', 'policy'],
-        proactiveBehaviors: ['monitor_metrics', 'suggest_strategies', 'track_goals'],
-        taskCategories: ['management', 'strategic', 'operational'],
+        expertiseAreas: [
+          'ECD centre management',
+          'staff development',
+          'parent relations',
+          'regulatory compliance',
+          'curriculum oversight',
+          'quality assurance'
+        ],
+        proactiveBehaviors: [
+          'monitor_enrolment',
+          'track_compliance',
+          'suggest_staff_training',
+          'analyze_parent_feedback',
+          'prepare_reports'
+        ],
+        taskCategories: ['management', 'strategic', 'compliance', 'communication'],
       },
       parent: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Hi! 👋 I'm Dash, your family's early learning companion! Let me help you stay connected with your child's wonderful journey! 🌈",
         tone: 'friendly',
-        expertiseAreas: ['parent communication', 'student progress', 'homework help'],
-        proactiveBehaviors: ['remind_deadlines', 'suggest_activities', 'flag_updates'],
-        taskCategories: ['organization', 'communication', 'personal'],
+        expertiseAreas: [
+          'child development stages',
+          'home learning activities',
+          'school communication',
+          'milestone tracking',
+          'behaviour support',
+          'homework help'
+        ],
+        proactiveBehaviors: [
+          'share_daily_updates',
+          'suggest_home_activities',
+          'remind_school_events',
+          'celebrate_achievements',
+          'flag_important_notices'
+        ],
+        taskCategories: ['monitoring', 'communication', 'activities', 'celebration'],
+      },
+      student: {
+        greeting: "Hi friend! 🎨 I'm Dash! Let's learn something fun together! ⭐",
+        tone: 'friendly',
+        expertiseAreas: [
+          'fun learning games',
+          'stories',
+          'songs',
+          'colours and shapes',
+          'numbers',
+          'letters'
+        ],
+        proactiveBehaviors: [
+          'encourage_participation',
+          'celebrate_every_try',
+          'make_learning_fun',
+          'use_simple_words',
+          'give_stickers'
+        ],
+        taskCategories: ['learning', 'games', 'stories', 'celebration'],
       },
     },
     features: {
@@ -310,18 +372,86 @@ export const ORGANIZATION_CONFIGS: Record<OrganizationType, OrganizationConfig> 
     ],
     aiPersonalities: {
       teacher: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Hello! I'm Dash, your academic teaching assistant. Let's help your students achieve excellence! 📚",
         tone: 'friendly',
-        expertiseAreas: ['K-12 education', 'lesson planning', 'student assessment', 'curriculum'],
-        proactiveBehaviors: ['suggest_improvements', 'remind_deadlines', 'recommend_resources'],
-        taskCategories: ['teaching', 'planning', 'grading'],
+        expertiseAreas: [
+          'CAPS curriculum (all grades)',
+          'lesson planning',
+          'differentiated instruction',
+          'student assessment',
+          'exam preparation',
+          'homework design',
+          'classroom management',
+          'parent communication'
+        ],
+        proactiveBehaviors: [
+          'suggest_lesson_improvements',
+          'track_assignment_submissions',
+          'identify_struggling_students',
+          'recommend_revision_resources',
+          'prepare_exam_content'
+        ],
+        taskCategories: ['teaching', 'planning', 'grading', 'assessment'],
       },
       principal: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Good day! I'm Dash, your school administration assistant. Let's lead with excellence! 🏫",
         tone: 'professional',
-        expertiseAreas: ['school administration', 'staff management', 'analytics', 'compliance'],
-        proactiveBehaviors: ['monitor_metrics', 'suggest_strategies', 'track_goals'],
-        taskCategories: ['management', 'strategic', 'operational'],
+        expertiseAreas: [
+          'school administration',
+          'staff management',
+          'academic performance analytics',
+          'DBE compliance',
+          'strategic planning',
+          'parent relations'
+        ],
+        proactiveBehaviors: [
+          'monitor_school_metrics',
+          'track_matric_predictions',
+          'flag_performance_issues',
+          'suggest_interventions',
+          'prepare_reports'
+        ],
+        taskCategories: ['management', 'strategic', 'compliance', 'analytics'],
+      },
+      student: {
+        greeting: "Hey! 👋 I'm Dash, your study companion. Let's ace those subjects together! 💪",
+        tone: 'encouraging',
+        expertiseAreas: [
+          'homework help',
+          'exam preparation',
+          'study techniques',
+          'subject explanations',
+          'career guidance',
+          'time management'
+        ],
+        proactiveBehaviors: [
+          'remind_assignment_deadlines',
+          'suggest_study_schedules',
+          'explain_difficult_concepts',
+          'track_progress',
+          'celebrate_achievements'
+        ],
+        taskCategories: ['studying', 'homework', 'exams', 'career'],
+      },
+      parent: {
+        greeting: "Hello! I'm Dash, here to keep you connected with your child's academic journey! 📖",
+        tone: 'friendly',
+        expertiseAreas: [
+          'academic progress tracking',
+          'homework support',
+          'school communication',
+          'exam preparation tips',
+          'career guidance',
+          'study environment'
+        ],
+        proactiveBehaviors: [
+          'share_progress_updates',
+          'alert_grade_changes',
+          'remind_school_events',
+          'suggest_support_strategies',
+          'flag_concerns_early'
+        ],
+        taskCategories: ['monitoring', 'communication', 'support'],
       },
     },
     features: {
@@ -609,25 +739,98 @@ export const ORGANIZATION_CONFIGS: Record<OrganizationType, OrganizationConfig> 
     ],
     aiPersonalities: {
       learner: {
-        greeting: "Hello I am Dash. How can I assist you with your skills development journey today?",
-        tone: 'encouraging',
-        expertiseAreas: ['career guidance', 'skills assessment', 'job readiness', 'portfolio development'],
-        proactiveBehaviors: ['suggest_courses', 'track_progress', 'recommend_certifications', 'career_tips'],
-        taskCategories: ['learning', 'career', 'certification'],
+        greeting: "Welcome! 👨‍🎓 I'm Professor Dash, your skills development mentor. Let's build your career together! How can I help you advance today?",
+        tone: 'professional',
+        expertiseAreas: [
+          'career pathway planning',
+          'skills gap analysis',
+          'portfolio development',
+          'CV and resume building',
+          'interview preparation',
+          'workplace readiness',
+          'NQF level understanding',
+          'certification guidance',
+          'job market insights',
+          'professional networking'
+        ],
+        proactiveBehaviors: [
+          'suggest_relevant_programmes',
+          'track_certification_progress',
+          'recommend_skill_upgrades',
+          'share_job_opportunities',
+          'remind_assessment_deadlines',
+          'celebrate_achievements'
+        ],
+        taskCategories: ['learning', 'career', 'certification', 'portfolio'],
       },
       facilitator: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Good day, colleague! I'm Dash, your facilitation assistant. Let's empower our learners to succeed! 📊",
         tone: 'professional',
-        expertiseAreas: ['adult learning', 'skills facilitation', 'competency assessment', 'workplace readiness'],
-        proactiveBehaviors: ['suggest_activities', 'track_learner_progress', 'identify_gaps', 'recommend_interventions'],
-        taskCategories: ['facilitation', 'assessment', 'mentoring'],
+        expertiseAreas: [
+          'adult learning principles',
+          'OBE methodology',
+          'competency-based assessment',
+          'workplace simulation',
+          'learner motivation',
+          'remediation strategies',
+          'RPL processes',
+          'moderation and verification'
+        ],
+        proactiveBehaviors: [
+          'identify_at_risk_learners',
+          'suggest_teaching_strategies',
+          'track_cohort_progress',
+          'flag_assessment_issues',
+          'recommend_interventions',
+          'prepare_moderation_evidence'
+        ],
+        taskCategories: ['facilitation', 'assessment', 'mentoring', 'quality'],
       },
       centre_director: {
-        greeting: "Hello I am Dash. How can I assist you today?",
+        greeting: "Good day! I'm Dash, your strategic skills development advisor. Let's achieve accreditation excellence and transform lives! 🏆",
+        tone: 'formal',
+        expertiseAreas: [
+          'SETA registration and compliance',
+          'QCTO alignment',
+          'accreditation management',
+          'quality management systems',
+          'B-BBEE compliance',
+          'WSP/ATR submission',
+          'learnership management',
+          'centre financial planning',
+          'stakeholder relations',
+          'audit preparation'
+        ],
+        proactiveBehaviors: [
+          'monitor_compliance_deadlines',
+          'track_accreditation_status',
+          'analyze_completion_rates',
+          'forecast_learner_demand',
+          'suggest_programme_expansions',
+          'prepare_audit_evidence',
+          'track_SETA_submissions'
+        ],
+        taskCategories: ['management', 'compliance', 'strategic', 'quality', 'accreditation'],
+      },
+      department_head: {
+        greeting: "Hello! I'm Dash, your department excellence partner. Let's ensure quality outcomes for every learner! 📈",
         tone: 'professional',
-        expertiseAreas: ['SETA compliance', 'skills development', 'accreditation', 'centre management', 'quality assurance'],
-        proactiveBehaviors: ['monitor_completion_rates', 'track_accreditation', 'suggest_improvements', 'forecast_demand'],
-        taskCategories: ['management', 'compliance', 'strategic', 'quality'],
+        expertiseAreas: [
+          'curriculum design',
+          'facilitator development',
+          'quality assurance',
+          'programme reviews',
+          'industry alignment',
+          'assessment moderation'
+        ],
+        proactiveBehaviors: [
+          'review_programme_outcomes',
+          'track_facilitator_performance',
+          'identify_curriculum_gaps',
+          'suggest_industry_updates',
+          'monitor_quality_metrics'
+        ],
+        taskCategories: ['curriculum', 'quality', 'facilitation', 'industry'],
       },
     },
     features: {

@@ -162,15 +162,36 @@ export function WhatsAppStyleVideoCall({
     callId: callIdRef.current,
     callerName: remoteUserName,
     callType: 'video',
-    onReturnFromBackground: () => {
-      console.log('[VideoCall] Returned from background');
+    onReturnFromBackground: async () => {
+      console.log('[VideoCall] Returned from background, isVideoEnabled:', isVideoEnabled);
+      
       // Re-enable video when returning from background
       if (dailyRef.current && isVideoEnabled) {
-        try {
-          dailyRef.current.setLocalVideo(true);
-        } catch (err) {
-          console.warn('[VideoCall] Failed to re-enable video after background:', err);
-        }
+        // Retry logic to ensure camera comes back on
+        const enableCamera = async (attempt: number = 1) => {
+          try {
+            // First check current state
+            const participants = dailyRef.current.participants();
+            const localVideoState = participants?.local?.tracks?.video?.state;
+            console.log('[VideoCall] Local video state on return:', localVideoState, 'attempt:', attempt);
+            
+            // Force enable regardless of current state
+            await dailyRef.current.setLocalVideo(true);
+            console.log('[VideoCall] ✅ Video re-enabled after background return');
+            
+            // Update participants to refresh video track
+            setTimeout(() => updateParticipants(), 300);
+          } catch (err) {
+            console.warn('[VideoCall] Failed to re-enable video attempt', attempt, ':', err);
+            // Retry up to 3 times with increasing delay
+            if (attempt < 3) {
+              setTimeout(() => enableCamera(attempt + 1), 500 * attempt);
+            }
+          }
+        };
+        
+        // Small delay to let system stabilize
+        setTimeout(() => enableCamera(), 200);
       }
     },
   });
@@ -771,16 +792,27 @@ export function WhatsAppStyleVideoCall({
             console.warn('[VideoCall] Failed to update receive settings:', err);
           }
           
-          // Explicitly enable camera and microphone after joining
-          try {
-            await daily.setLocalVideo(true);
-            await daily.setLocalAudio(true);
-            setIsVideoEnabled(true);
-            setIsAudioEnabled(true);
-            console.log('[VideoCall] Camera and mic enabled');
-          } catch (err) {
-            console.warn('[VideoCall] Failed to enable camera/mic:', err);
-          }
+          // Explicitly enable camera and microphone after joining with retry
+          const enableLocalMedia = async (attempt: number = 1) => {
+            try {
+              await daily.setLocalVideo(true);
+              await daily.setLocalAudio(true);
+              setIsVideoEnabled(true);
+              setIsAudioEnabled(true);
+              console.log('[VideoCall] ✅ Camera and mic enabled on attempt', attempt);
+              
+              // Force update participants to get video track state
+              setTimeout(() => updateParticipants(), 500);
+            } catch (err) {
+              console.warn('[VideoCall] Failed to enable camera/mic attempt', attempt, ':', err);
+              // Retry up to 3 times with 500ms delay
+              if (attempt < 3) {
+                setTimeout(() => enableLocalMedia(attempt + 1), 500);
+              }
+            }
+          };
+          
+          await enableLocalMedia();
           
           // Don't set to connected yet if we're the caller waiting for the callee
           if (!isOwner || !calleeId) {
@@ -1016,17 +1048,42 @@ export function WhatsAppStyleVideoCall({
     }
   }, [isAudioEnabled]);
 
-  // Toggle camera
+  // Toggle camera with retry logic
   const toggleVideo = useCallback(async () => {
-    if (!dailyRef.current) return;
-    try {
-      await dailyRef.current.setLocalVideo(!isVideoEnabled);
-      setIsVideoEnabled(!isVideoEnabled);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (err) {
-      console.error('[VideoCall] Toggle video error:', err);
+    if (!dailyRef.current) {
+      console.warn('[VideoCall] Cannot toggle video - Daily object not available');
+      return;
     }
-  }, [isVideoEnabled]);
+    
+    const newState = !isVideoEnabled;
+    console.log('[VideoCall] Toggling video to:', newState);
+    
+    // Retry logic for enabling camera (can fail if system hasn't released camera)
+    const setVideo = async (enabled: boolean, attempt: number = 1) => {
+      try {
+        await dailyRef.current.setLocalVideo(enabled);
+        setIsVideoEnabled(enabled);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        console.log('[VideoCall] ✅ Video toggled to', enabled, 'on attempt', attempt);
+        
+        // Update participants to get new track state
+        setTimeout(() => updateParticipants(), 300);
+      } catch (err) {
+        console.warn('[VideoCall] Toggle video failed attempt', attempt, ':', err);
+        
+        // Only retry when ENABLING (turning camera on is more likely to need retry)
+        if (enabled && attempt < 3) {
+          console.log('[VideoCall] Retrying enable video...');
+          setTimeout(() => setVideo(enabled, attempt + 1), 500);
+        } else {
+          setError(enabled ? 'Failed to enable camera. Try again.' : 'Failed to disable camera.');
+          setTimeout(() => setError(null), 3000);
+        }
+      }
+    };
+    
+    await setVideo(newState);
+  }, [isVideoEnabled, updateParticipants]);
 
   // Flip camera
   const flipCamera = useCallback(async () => {
@@ -1369,10 +1426,13 @@ export function WhatsAppStyleVideoCall({
           />
         </Animated.View>
       ) : (
-        // Debug: Show placeholder if local video conditions not met
-        hasLocalVideo === false && callState === 'connected' && (
-          <View style={[styles.localVideoContainer, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
-            <Text style={{ color: '#fff', fontSize: 10 }}>No local video</Text>
+        // Show placeholder if local video conditions not met during call
+        callState === 'connected' && !hasLocalVideo && DailyMediaView && (
+          <View style={[styles.localVideoContainer, { backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' }]}>
+            <Ionicons name={isVideoEnabled ? "videocam" : "videocam-off"} size={20} color="rgba(255,255,255,0.5)" />
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 9, marginTop: 4 }}>
+              {isVideoEnabled ? 'Starting...' : 'Camera off'}
+            </Text>
           </View>
         )
       )}
