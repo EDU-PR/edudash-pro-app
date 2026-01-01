@@ -197,7 +197,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "d3bb7cfc-56c8-4266-be3a-9892dab09c0c"
+        "projectId": "accd5738-9ee6-434c-a3be-668d9674f541"
       },
       "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",
@@ -205,7 +205,7 @@
       "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
     },
     "updates": {
-      "url": "https://u.expo.dev/d3bb7cfc-56c8-4266-be3a-9892dab09c0c"
+      "url": "https://u.expo.dev/accd5738-9ee6-434c-a3be-668d9674f541"
     }
   }
 }
