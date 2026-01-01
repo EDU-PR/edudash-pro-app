@@ -150,6 +150,7 @@ export function useAnnouncements() {
       is_active: announcement.is_active,
       is_pinned: announcement.is_pinned,
       show_banner: announcement.show_banner,
+      send_push_notification: false, // Default to false when editing
       scheduled_at: announcement.scheduled_at,
       expires_at: announcement.expires_at,
     });
@@ -172,11 +173,37 @@ export function useAnnouncements() {
     try {
       setSaving(true);
 
+      // Persist announcement to database
+      const supabase = assertSupabase();
+      const { data: dbAnnouncement, error: insertError } = await supabase
+        .from('platform_announcements')
+        .insert({
+          title: formData.title,
+          content: formData.content,
+          type: formData.type,
+          priority: formData.priority,
+          target_audience: formData.target_audience,
+          target_schools: formData.target_schools,
+          is_active: formData.is_active,
+          is_pinned: formData.is_pinned,
+          show_banner: formData.show_banner,
+          scheduled_at: formData.scheduled_at || null,
+          expires_at: formData.expires_at || null,
+          created_by: profile?.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to insert announcement:', insertError);
+        throw new Error(insertError.message);
+      }
+
       const newAnnouncement: PlatformAnnouncement = {
-        id: Date.now().toString(),
+        id: dbAnnouncement?.id || Date.now().toString(),
         ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: dbAnnouncement?.created_at || new Date().toISOString(),
+        updated_at: dbAnnouncement?.updated_at || new Date().toISOString(),
         created_by: profile?.id || 'unknown',
         views_count: 0,
         click_count: 0,
@@ -190,23 +217,95 @@ export function useAnnouncements() {
         target_audience: formData.target_audience,
         has_banner: formData.show_banner,
         is_pinned: formData.is_pinned,
+        send_push: formData.send_push_notification,
       });
 
-      await assertSupabase()
+      // Send push notifications if enabled
+      if (formData.send_push_notification) {
+        try {
+          // Build the target role filter based on target_audience
+          let targetRoles: string[] = [];
+          if (formData.target_audience === 'all') {
+            targetRoles = ['principal', 'teacher', 'parent'];
+          } else if (formData.target_audience === 'principals') {
+            targetRoles = ['principal'];
+          } else if (formData.target_audience === 'teachers') {
+            targetRoles = ['teacher'];
+          } else if (formData.target_audience === 'parents') {
+            targetRoles = ['parent'];
+          }
+
+          // Insert push notifications for users with push tokens
+          // This query gets all users with push tokens that match the target audience
+          const { data: pushTokens, error: tokenError } = await supabase
+            .from('push_tokens')
+            .select('user_id, token, profiles!inner(role, preschool_id)')
+            .in('profiles.role', targetRoles.length > 0 ? targetRoles : ['principal', 'teacher', 'parent']);
+
+          if (tokenError) {
+            console.warn('Failed to fetch push tokens:', tokenError);
+          } else if (pushTokens && pushTokens.length > 0) {
+            // Filter by specific schools if needed
+            let filteredTokens = pushTokens;
+            if (formData.target_audience === 'specific_schools' && formData.target_schools.length > 0) {
+              filteredTokens = pushTokens.filter((t: any) => 
+                formData.target_schools.includes(t.profiles?.preschool_id)
+              );
+            }
+
+            // Insert notifications into push_notifications table
+            const notifications = filteredTokens.map((t: any) => ({
+              user_id: t.user_id,
+              title: formData.title,
+              body: formData.content.substring(0, 200) + (formData.content.length > 200 ? '...' : ''),
+              data: JSON.stringify({ 
+                type: 'announcement', 
+                announcement_id: newAnnouncement.id,
+                priority: formData.priority,
+              }),
+              status: 'pending',
+            }));
+
+            if (notifications.length > 0) {
+              const { error: notifyError } = await supabase
+                .from('push_notifications')
+                .insert(notifications);
+
+              if (notifyError) {
+                console.warn('Failed to queue push notifications:', notifyError);
+              } else {
+                console.log(`Queued ${notifications.length} push notifications`);
+              }
+            }
+          }
+        } catch (pushError) {
+          console.warn('Push notification error (non-fatal):', pushError);
+          // Don't fail the announcement creation if push fails
+        }
+      }
+
+      await supabase
         .from('audit_logs')
         .insert({
           admin_user_id: profile?.id,
           action: 'platform_announcement_created',
           details: {
+            announcement_id: newAnnouncement.id,
             announcement_title: formData.title,
             announcement_type: formData.type,
             priority: formData.priority,
             target_audience: formData.target_audience,
             is_active: formData.is_active,
+            send_push: formData.send_push_notification,
           },
         });
 
-      Alert.alert('Success', 'Announcement created successfully');
+      Alert.alert(
+        'Success', 
+        formData.send_push_notification 
+          ? 'Announcement created and push notifications queued!'
+          : 'Announcement created successfully'
+      );
       closeModal();
     } catch (error) {
       console.error('Failed to create announcement:', error);

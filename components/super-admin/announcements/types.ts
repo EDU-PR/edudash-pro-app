@@ -43,6 +43,7 @@ export interface AnnouncementForm {
   is_active: boolean;
   is_pinned: boolean;
   show_banner: boolean;
+  send_push_notification: boolean;
   scheduled_at?: string;
   expires_at?: string;
 }
@@ -63,4 +64,5 @@ export const INITIAL_FORM_STATE: AnnouncementForm = {
   is_active: true,
   is_pinned: false,
   show_banner: false,
+  send_push_notification: false,
 };
