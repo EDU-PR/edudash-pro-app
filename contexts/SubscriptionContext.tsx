@@ -93,11 +93,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           orgId = (user?.user_metadata as any)?.organization_id;
           
           // If not in metadata, query profiles table (current standard)
+          let userRole: string | undefined;
           if ((!schoolId || !orgId) && user.id) {
             try {
               const { data: profileData, error: profileError } = await assertSupabase()
                 .from('profiles')
-                .select('preschool_id, organization_id')
+                .select('preschool_id, organization_id, role')
                 .eq('id', user.id)
                 .maybeSingle();
               
@@ -107,7 +108,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               
               if (profileData?.preschool_id) schoolId = profileData.preschool_id;
               if (profileData?.organization_id) orgId = profileData.organization_id;
-              console.log('[SubscriptionContext] Profile data:', { schoolId, orgId });
+              if (profileData?.role) userRole = profileData.role;
+              console.log('[SubscriptionContext] Profile data:', { schoolId, orgId, userRole });
             } catch (profileErr) {
               console.error('[SubscriptionContext] Exception querying profiles:', profileErr);
             }
@@ -197,8 +199,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             }
           }
 
-          // Organization path (only if user doesn't have a personal tier)
-          if (orgId && mounted && (source === 'unknown' || t === 'free')) {
+          // Organization path - ONLY for TEACHERS who have NO personal tier record
+          // Parents NEVER inherit from organization - they must have their own subscription
+          const isTeacher = userRole === 'teacher' || userRole === 'principal' || userRole === 'admin';
+          if (orgId && mounted && source === 'unknown' && isTeacher) {
             try {
               const { data: org } = await assertSupabase()
                 .from('organizations')
@@ -211,13 +215,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 if (orgKnownTiers.includes(tierStr as Tier)) {
                   t = tierStr as Tier;
                   source = 'organization';
+                  console.log('[SubscriptionContext] Teacher inheriting organization tier:', t);
                 }
               }
             } catch {/* ignore */}
+          } else if (orgId && source === 'unknown' && !isTeacher) {
+            console.log('[SubscriptionContext] Parent/Student - not inheriting org tier, using personal tier');
           }
           
-          // If still unknown or free, check school subscription
-          if (schoolId && mounted && (source === 'unknown' || t === 'free')) {
+          // School subscription - ONLY for teachers/staff who have no personal or org tier
+          // Parents don't inherit from school either
+          if (schoolId && mounted && source === 'unknown' && isTeacher) {
             try {
               const { data: sub } = await assertSupabase()
                 .from('subscriptions')
