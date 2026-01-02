@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "edudashpro",
     "owner": "dash-t",
-    "version": "1.0.13",
-    "runtimeVersion": "1.0.13",
+    "version": "1.0.14",
+    "runtimeVersion": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -71,9 +71,10 @@
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "versionCode": 18,
+      "versionCode": 19,
       "intentFilters": [
         {
           "action": "VIEW",

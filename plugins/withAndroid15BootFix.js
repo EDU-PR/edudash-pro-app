@@ -41,19 +41,33 @@ const withAndroid15BootFix = (config) => {
     
     // List of receivers to disable (from expo-audio and other libs that cause Android 15 issues)
     // These receivers try to start foreground services on BOOT_COMPLETED which is restricted
+    // 
+    // Google Play error specifically mentions:
+    // - expo.modules.audio.service.AudioRecordingService.startForegroundWithNotification
+    // - expo.modules.audio.service.AudioControlsService.postOrStartForegroundNotification
+    //
+    // These are triggered by BOOT_COMPLETED receivers in expo-audio
     const receiversToDisable = [
-      // expo-audio module receivers
+      // expo-audio module receivers that listen to BOOT_COMPLETED
       'expo.modules.audio.AudioBroadcastReceiver',
-      // Add any other problematic receivers here as they're discovered
+      'expo.modules.audio.AudioModule$AudioBroadcastReceiver',
+      'expo.modules.audio.service.AudioBroadcastReceiver',
+      // Service classes that also act as receivers
+      'expo.modules.audio.service.AudioControlsService',
+      'expo.modules.audio.service.AudioRecordingService',
     ];
     
     // Add tools:node="remove" entries for problematic receivers
     for (const receiverName of receiversToDisable) {
-      const exists = application.receiver.some(
+      const existingIndex = application.receiver.findIndex(
         (r) => r.$['android:name'] === receiverName
       );
       
-      if (!exists) {
+      if (existingIndex >= 0) {
+        // Modify existing receiver to add tools:node="remove"
+        application.receiver[existingIndex].$['tools:node'] = 'remove';
+        console.log(`[withAndroid15BootFix] ✅ Modified receiver for removal: ${receiverName}`);
+      } else {
         // Add receiver with tools:node="remove" to prevent it from being included
         application.receiver.push({
           $: {
@@ -72,6 +86,7 @@ const withAndroid15BootFix = (config) => {
     
     // List of expo-audio services that need proper foreground service types
     // We override them to ensure they have compatible types and don't cause issues
+    // IMPORTANT: These services must NOT be started from BOOT_COMPLETED receivers
     const audioServices = [
       {
         name: 'expo.modules.audio.service.AudioControlsService',
@@ -84,16 +99,33 @@ const withAndroid15BootFix = (config) => {
     ];
     
     for (const serviceConfig of audioServices) {
-      let service = application.service.find(
+      let serviceIndex = application.service.findIndex(
         (s) => s.$['android:name'] === serviceConfig.name
       );
       
-      if (service) {
+      if (serviceIndex >= 0) {
+        let service = application.service[serviceIndex];
         // Update existing service
         service.$['android:foregroundServiceType'] = serviceConfig.foregroundServiceType;
         service.$['tools:replace'] = 'android:foregroundServiceType';
         // Important: Disable exported to prevent issues
         service.$['android:exported'] = 'false';
+        
+        // Remove any BOOT_COMPLETED intent-filters from this service
+        if (service['intent-filter']) {
+          service['intent-filter'] = service['intent-filter'].filter((filter) => {
+            const actions = filter.action || [];
+            const hasBootCompleted = actions.some(
+              (a) => a.$?.['android:name']?.includes('BOOT_COMPLETED')
+            );
+            if (hasBootCompleted) {
+              console.log(`[withAndroid15BootFix] ✅ Removed BOOT_COMPLETED intent-filter from: ${serviceConfig.name}`);
+              return false;
+            }
+            return true;
+          });
+        }
+        
         console.log(`[withAndroid15BootFix] ✅ Updated service: ${serviceConfig.name}`);
       } else {
         // Add service declaration with override
@@ -106,6 +138,17 @@ const withAndroid15BootFix = (config) => {
           },
         });
         console.log(`[withAndroid15BootFix] ✅ Added service: ${serviceConfig.name}`);
+      }
+    }
+    
+    // Also remove any uses-permission for RECEIVE_BOOT_COMPLETED
+    if (androidManifest.manifest['uses-permission']) {
+      const bootPermIndex = androidManifest.manifest['uses-permission'].findIndex(
+        (p) => p.$?.['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED'
+      );
+      if (bootPermIndex >= 0) {
+        androidManifest.manifest['uses-permission'].splice(bootPermIndex, 1);
+        console.log('[withAndroid15BootFix] ✅ Removed RECEIVE_BOOT_COMPLETED permission');
       }
     }
     
