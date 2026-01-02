@@ -120,7 +120,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/pop-review');
         break;
       case 'payments':
-        router.push('/screens/financial-dashboard');
+        router.push('/screens/pop-review');
         break;
       case 'reports':
         router.push('/screens/teacher-reports');

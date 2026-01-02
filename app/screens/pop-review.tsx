@@ -109,6 +109,7 @@ export default function POPReviewScreen() {
     try {
       const supabase = assertSupabase();
       
+      // Fetch POP uploads with student data (avoid FK join for profiles)
       const { data, error: fetchError } = await supabase
         .from('pop_uploads')
         .select(`
@@ -117,11 +118,6 @@ export default function POPReviewScreen() {
             first_name,
             last_name,
             student_code
-          ),
-          uploader:profiles!pop_uploads_uploaded_by_fkey (
-            first_name,
-            last_name,
-            email
           )
         `)
         .eq('preschool_id', organizationId)
@@ -132,7 +128,19 @@ export default function POPReviewScreen() {
         console.error('Error fetching POP uploads:', fetchError);
         setError(fetchError.message);
       } else {
-        setUploads(data || []);
+        // Fetch uploader profiles separately to avoid FK constraint issues
+        const uploadsWithProfiles = await Promise.all((data || []).map(async (upload) => {
+          if (upload.uploaded_by) {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('first_name, last_name, email')
+              .eq('id', upload.uploaded_by)
+              .single();
+            return { ...upload, uploader: profileData };
+          }
+          return upload;
+        }));
+        setUploads(uploadsWithProfiles);
         setError(null);
       }
     } catch (err: any) {

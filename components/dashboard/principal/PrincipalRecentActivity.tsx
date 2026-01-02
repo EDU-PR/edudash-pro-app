@@ -73,7 +73,7 @@ export const PrincipalRecentActivity: React.FC<PrincipalRecentActivityProps> = (
       time: t('common.now', { defaultValue: 'Now' }),
       icon: 'card',
       color: '#F59E0B',
-      actionRoute: '/screens/financial-dashboard',
+      actionRoute: '/screens/pop-review',
     }] : []),
   ];
 
