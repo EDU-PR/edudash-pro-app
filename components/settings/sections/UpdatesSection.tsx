@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import type { ViewStyle, TextStyle } from 'react-native';
 
 interface UpdatesSectionProps {
@@ -24,6 +24,13 @@ interface UpdatesSectionProps {
     settingTitle: TextStyle;
     settingSubtitle: TextStyle;
   };
+}
+
+// Get version info from native build (more accurate than Constants)
+function getVersionDisplay(): string {
+  const version = Application.nativeApplicationVersion || 'n/a';
+  const build = Application.nativeBuildVersion || '';
+  return build ? `${version} (${build})` : version;
 }
 
 export function UpdatesSection({
@@ -90,7 +97,7 @@ export function UpdatesSection({
                   ? t('settings.updates.ready_to_install') 
                   : updateError 
                   ? t('settings.updates.check_failed') 
-                  : t('settings.updates.current_version', { version: Constants.expoConfig?.version ?? 'n/a' })}
+                  : t('settings.updates.current_version', { version: getVersionDisplay() })}
               </Text>
             </View>
           </View>

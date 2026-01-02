@@ -209,7 +209,7 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       'Select Your Bank',
       'Choose your bank to open their website or app store:',
       [
-        ...banks.slice(0, 5).map(app => ({
+        ...banks.map(app => ({
           text: app.name,
           onPress: async () => {
             try {
