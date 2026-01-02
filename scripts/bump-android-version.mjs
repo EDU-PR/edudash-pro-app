@@ -45,10 +45,18 @@ if (typeof expo.version === 'string') {
   }
 }
 
-// Keep runtimeVersion in sync with version if present
-if (typeof expo.runtimeVersion === 'string' && typeof expo.version === 'string') {
-  expo.runtimeVersion = expo.version;
-}
+// IMPORTANT: Do NOT auto-bump runtimeVersion!
+// runtimeVersion should only change when native code changes (new SDK, new native modules).
+// Keeping runtimeVersion stable allows OTA updates to work for existing users.
+// 
+// To manually bump runtimeVersion when needed:
+//   1. Update expo.runtimeVersion in app.json manually
+//   2. This will create a new "native version" and old OTA updates won't apply
+//
+// Previous behavior (removed): auto-sync runtimeVersion with version
+// if (typeof expo.runtimeVersion === 'string' && typeof expo.version === 'string') {
+//   expo.runtimeVersion = expo.version;
+// }
 
 fs.writeFileSync(appJsonPath, JSON.stringify(app, null, 2) + '\n');
 
