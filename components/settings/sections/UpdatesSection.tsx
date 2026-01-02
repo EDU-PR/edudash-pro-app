@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import * as Application from 'expo-application';
+import * as Updates from 'expo-updates';
 import type { ViewStyle, TextStyle } from 'react-native';
 
 interface UpdatesSectionProps {
@@ -26,11 +27,21 @@ interface UpdatesSectionProps {
   };
 }
 
-// Get version info from native build (more accurate than Constants)
+// Get version info - prefer runtime version (OTA) over native build version
 function getVersionDisplay(): string {
-  const version = Application.nativeApplicationVersion || 'n/a';
-  const build = Application.nativeBuildVersion || '';
-  return build ? `${version} (${build})` : version;
+  // Runtime version from OTA updates (reflects the actual code running)
+  const runtimeVersion = Updates.runtimeVersion;
+  // Native build version (from the installed APK)
+  const nativeVersion = Application.nativeApplicationVersion || 'n/a';
+  const buildNumber = Application.nativeBuildVersion || '';
+  
+  // Use runtime version if available (more accurate for OTA updates)
+  if (runtimeVersion) {
+    return buildNumber ? `${runtimeVersion} (${buildNumber})` : runtimeVersion;
+  }
+  
+  // Fallback to native version
+  return buildNumber ? `${nativeVersion} (${buildNumber})` : nativeVersion;
 }
 
 export function UpdatesSection({
