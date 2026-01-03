@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -56,6 +56,14 @@ export default function ParentPaymentsScreen() {
   const [activeTab, setActiveTab] = useState<PaymentTabType>('upcoming');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFeeAmount, setSelectedFeeAmount] = useState('');
+
+  // Refresh data when screen comes into focus (e.g., from notification tap)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ParentPayments] Screen focused, refreshing data...');
+      reloadFees();
+    }, [reloadFees])
+  );
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
