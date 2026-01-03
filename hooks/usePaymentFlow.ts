@@ -66,9 +66,12 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
 
   const fetchBankDetails = async () => {
     if (!preschoolId) {
+      console.log('[usePaymentFlow] No preschoolId provided, skipping bank details fetch');
       setLoading(false);
       return;
     }
+
+    console.log('[usePaymentFlow] Fetching bank details for preschoolId:', preschoolId);
 
     try {
       const supabase = assertSupabase();
@@ -76,13 +79,15 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       // For preschools, the organization_id in organization_bank_accounts IS the preschool_id
       // (preschools use their own ID as the organization_id for bank accounts)
       
-      // First try to get bank account directly using preschoolId as organization_id
-      const { data: bankAccount } = await supabase
+      // First try to get primary bank account using preschoolId as organization_id
+      const { data: bankAccount, error: bankError } = await supabase
         .from('organization_bank_accounts')
         .select('*')
         .eq('organization_id', preschoolId)
         .eq('is_primary', true)
-        .single();
+        .maybeSingle(); // Use maybeSingle to avoid error when no rows found
+
+      console.log('[usePaymentFlow] Primary bank account query result:', { bankAccount, bankError });
 
       if (bankAccount) {
         setBankDetails({
@@ -99,15 +104,17 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       }
 
       // Fallback - check for any active bank account (not marked as primary)
-      const { data: anyAccount } = await supabase
+      const { data: anyAccounts, error: anyError } = await supabase
         .from('organization_bank_accounts')
         .select('*')
         .eq('organization_id', preschoolId)
         .eq('is_active', true)
-        .limit(1)
-        .single();
+        .limit(1);
 
-      if (anyAccount) {
+      console.log('[usePaymentFlow] Any bank account query result:', { anyAccounts, anyError });
+
+      if (anyAccounts && anyAccounts.length > 0) {
+        const anyAccount = anyAccounts[0];
         setBankDetails({
           id: anyAccount.id,
           account_name: anyAccount.account_name,
@@ -122,12 +129,14 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       }
 
       // Final fallback - try organization_payment_methods table
-      const { data: paymentMethod } = await supabase
+      const { data: paymentMethod, error: pmError } = await supabase
         .from('organization_payment_methods')
         .select('*')
         .eq('organization_id', preschoolId)
         .eq('method_name', 'bank_transfer')
-        .single();
+        .maybeSingle();
+
+      console.log('[usePaymentFlow] Payment methods query result:', { paymentMethod, pmError });
 
       if (paymentMethod) {
         setBankDetails({
@@ -137,9 +146,11 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
           account_number: paymentMethod.account_number || 'Contact school',
           branch_code: paymentMethod.branch_code,
         });
+      } else {
+        console.log('[usePaymentFlow] No bank details found for preschoolId:', preschoolId);
       }
     } catch (error) {
-      console.error('Error fetching bank details:', error);
+      console.error('[usePaymentFlow] Error fetching bank details:', error);
     } finally {
       setLoading(false);
     }
