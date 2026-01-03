@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAds } from '@/contexts/AdsContext';
 import { track } from '@/lib/analytics';
 
 interface PremiumFeatureBannerProps {
@@ -42,6 +43,12 @@ interface PremiumFeatureBannerProps {
    * Callback when back/close is pressed (for fullscreen variant)
    */
   onClose?: () => void;
+
+  /**
+   * Callback when user earns a free trial via rewarded ad
+   * If provided, enables the "Watch Ad for Free Trial" button
+   */
+  onRewardedUnlock?: () => void;
 }
 
 /**
@@ -81,14 +88,20 @@ export default function PremiumFeatureBanner({
   variant = 'fullscreen',
   containerStyle,
   onClose,
+  onRewardedUnlock,
 }: PremiumFeatureBannerProps) {
   const { theme, isDark } = useTheme();
   const { tier } = useSubscription();
   const { profile } = useAuth();
+  const { offerRewarded, canShowBanner } = useAds();
+  const [isLoadingAd, setIsLoadingAd] = useState(false);
   
   // Role-aware tier naming
   const isParent = profile?.role === 'parent';
   const tierName = isParent ? 'Plus' : 'Premium';
+
+  // Check if rewarded ads are available (Android only, free tier)
+  const canShowRewardedAd = canShowBanner && Platform.OS === 'android' && onRewardedUnlock;
 
   const handleUpgradePress = () => {
     track('premium.upgrade_clicked', {
@@ -108,6 +121,49 @@ export default function PremiumFeatureBanner({
         from: screen,
       },
     });
+  };
+
+  const handleWatchAdPress = async () => {
+    if (!onRewardedUnlock) return;
+    
+    setIsLoadingAd(true);
+    track('premium.rewarded_ad_attempt', {
+      screen,
+      feature: featureName,
+      current_tier: tier,
+    });
+
+    try {
+      const result = await offerRewarded(`premium_preview_${screen}`);
+      
+      if (result.rewarded) {
+        track('premium.rewarded_ad_completed', {
+          screen,
+          feature: featureName,
+          current_tier: tier,
+        });
+        onRewardedUnlock();
+      } else if (result.shown) {
+        track('premium.rewarded_ad_skipped', {
+          screen,
+          feature: featureName,
+        });
+      } else {
+        track('premium.rewarded_ad_unavailable', {
+          screen,
+          feature: featureName,
+        });
+      }
+    } catch (error) {
+      console.error('[PremiumFeatureBanner] Rewarded ad error:', error);
+      track('premium.rewarded_ad_error', {
+        screen,
+        feature: featureName,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    } finally {
+      setIsLoadingAd(false);
+    }
   };
 
   const handleBackPress = () => {
@@ -170,6 +226,28 @@ export default function PremiumFeatureBanner({
               Upgrade to {tierName}
             </Text>
           </TouchableOpacity>
+
+          {/* Watch Ad for Free Trial - Android only */}
+          {canShowRewardedAd && (
+            <TouchableOpacity
+              style={[styles.watchAdButton, { borderColor: theme.border }]}
+              onPress={handleWatchAdPress}
+              disabled={isLoadingAd}
+              accessibilityRole="button"
+              accessibilityLabel="Watch an ad to try this feature for free"
+            >
+              {isLoadingAd ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : (
+                <>
+                  <Ionicons name="play-circle" size={20} color={theme.primary} />
+                  <Text style={[styles.watchAdButtonText, { color: theme.primary }]}>
+                    Watch Ad for Free Trial
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
           
           <Text style={[styles.benefitsText, { color: theme.textSecondary }]}>
             Unlock this feature and many more with a {tierName} subscription
@@ -291,6 +369,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  watchAdButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
+    minWidth: 200,
+    minHeight: 44,
+  },
+  watchAdButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
     marginLeft: 8,
   },
   benefitsText: {
