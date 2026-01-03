@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,33 @@ export default function ManageSubscriptionScreen() {
   const styles = createStyles(theme);
 
   const isFreeTier = !tier || tier === 'free';
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      t('settings.billing.cancel_subscription', { defaultValue: 'Cancel Subscription' }),
+      t('settings.billing.cancel_confirm', { 
+        defaultValue: 'To cancel your subscription, please contact our support team. Your subscription will remain active until the end of your current billing period.' 
+      }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('settings.billing.email_support', { defaultValue: 'Email Support' }),
+          onPress: () => {
+            const subject = encodeURIComponent('Subscription Cancellation Request');
+            const body = encodeURIComponent(`Hi EduDash Pro Support,\n\nI would like to cancel my subscription.\n\nAccount Email: ${profile?.email || 'N/A'}\nUser ID: ${profile?.id || 'N/A'}\nCurrent Plan: ${tier || 'Unknown'}\n\nPlease process my cancellation request.\n\nThank you.`);
+            Linking.openURL(`mailto:support@edudashpro.org.za?subject=${subject}&body=${body}`);
+          },
+        },
+        {
+          text: t('settings.billing.whatsapp_support', { defaultValue: 'WhatsApp' }),
+          onPress: () => {
+            const message = encodeURIComponent(`Hi, I would like to cancel my EduDash Pro subscription.\n\nEmail: ${profile?.email || 'N/A'}\nPlan: ${tier || 'Unknown'}`);
+            Linking.openURL(`https://wa.me/27123456789?text=${message}`);
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -88,14 +115,22 @@ export default function ManageSubscriptionScreen() {
                 <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
               
-              <View style={styles.infoBox}>
-                <Ionicons name="information-circle" size={20} color={theme.primary} />
-                <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                  {t('settings.billing.payfast_note', { 
-                    defaultValue: 'Subscriptions are managed through PayFast. To cancel or modify your subscription, please contact support or visit your PayFast account.' 
-                  })}
-                </Text>
-              </View>
+              {/* Cancel Subscription Button */}
+              <TouchableOpacity
+                style={[styles.cancelButton, { borderColor: theme.error }]}
+                onPress={handleCancelSubscription}
+              >
+                <Ionicons name="close-circle-outline" size={24} color={theme.error} />
+                <View style={styles.actionContent}>
+                  <Text style={[styles.actionTitle, { color: theme.error }]}>
+                    {t('settings.billing.cancel_subscription', { defaultValue: 'Cancel Subscription' })}
+                  </Text>
+                  <Text style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
+                    {t('settings.billing.cancel_subtitle', { defaultValue: 'End your subscription at the billing period' })}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
             </>
           )}
         </Card>
@@ -164,6 +199,15 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginTop: 8,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
   actionContent: {
     flex: 1,
