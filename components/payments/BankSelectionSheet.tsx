@@ -194,6 +194,19 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyContainer}>
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  No banking apps available
+                </Text>
+              </View>
+            )}
+            initialNumToRender={10}
+            getItemLayout={(data, index) => ({
+              length: 66, // bankItem height (44 + 14*2 padding) + marginBottom 8
+              offset: 66 * index,
+              index,
+            })}
           />
 
           {/* Cancel button */}
@@ -223,7 +236,8 @@ const styles = StyleSheet.create({
   container: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '70%',
+    maxHeight: '80%',
+    minHeight: 400,
   },
   handleContainer: {
     alignItems: 'center',
@@ -288,5 +302,12 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
   },
 });
