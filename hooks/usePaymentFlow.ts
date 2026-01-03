@@ -73,40 +73,14 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     try {
       const supabase = assertSupabase();
       
-      // First get organization_id from preschool
-      const { data: preschool } = await supabase
-        .from('preschools')
-        .select('organization_id, name')
-        .eq('id', preschoolId)
-        .single();
-
-      if (!preschool?.organization_id) {
-        // Try to get bank details from organization_payment_methods
-        const { data: paymentMethod } = await supabase
-          .from('organization_payment_methods')
-          .select('*')
-          .eq('organization_id', preschoolId)
-          .eq('method_name', 'bank_transfer')
-          .single();
-
-        if (paymentMethod) {
-          setBankDetails({
-            id: paymentMethod.id,
-            account_name: paymentMethod.display_name || preschool?.name || 'School Account',
-            bank_name: paymentMethod.bank_name || 'Contact school for details',
-            account_number: paymentMethod.account_number || 'Contact school',
-            branch_code: paymentMethod.branch_code,
-          });
-        }
-        setLoading(false);
-        return;
-      }
-
-      // Get organization bank account
+      // For preschools, the organization_id in organization_bank_accounts IS the preschool_id
+      // (preschools use their own ID as the organization_id for bank accounts)
+      
+      // First try to get bank account directly using preschoolId as organization_id
       const { data: bankAccount } = await supabase
         .from('organization_bank_accounts')
         .select('*')
-        .eq('organization_id', preschool.organization_id)
+        .eq('organization_id', preschoolId)
         .eq('is_primary', true)
         .single();
 
@@ -115,31 +89,54 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
           id: bankAccount.id,
           account_name: bankAccount.account_name,
           bank_name: bankAccount.bank_name,
-          account_number: bankAccount.account_number_masked || 'Contact school',
+          account_number: bankAccount.account_number_masked || bankAccount.account_number || 'Contact school',
           branch_code: bankAccount.branch_code,
           swift_code: bankAccount.swift_code,
           account_type: bankAccount.account_type,
         });
-      } else {
-        // Fallback - check for any bank account
-        const { data: anyAccount } = await supabase
-          .from('organization_bank_accounts')
-          .select('*')
-          .eq('organization_id', preschool.organization_id)
-          .eq('is_active', true)
-          .limit(1)
-          .single();
+        setLoading(false);
+        return;
+      }
 
-        if (anyAccount) {
-          setBankDetails({
-            id: anyAccount.id,
-            account_name: anyAccount.account_name,
-            bank_name: anyAccount.bank_name,
-            account_number: anyAccount.account_number_masked || 'Contact school',
-            branch_code: anyAccount.branch_code,
-            swift_code: anyAccount.swift_code,
-          });
-        }
+      // Fallback - check for any active bank account (not marked as primary)
+      const { data: anyAccount } = await supabase
+        .from('organization_bank_accounts')
+        .select('*')
+        .eq('organization_id', preschoolId)
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+
+      if (anyAccount) {
+        setBankDetails({
+          id: anyAccount.id,
+          account_name: anyAccount.account_name,
+          bank_name: anyAccount.bank_name,
+          account_number: anyAccount.account_number_masked || anyAccount.account_number || 'Contact school',
+          branch_code: anyAccount.branch_code,
+          swift_code: anyAccount.swift_code,
+          account_type: anyAccount.account_type,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Final fallback - try organization_payment_methods table
+      const { data: paymentMethod } = await supabase
+        .from('organization_payment_methods')
+        .select('*')
+        .eq('organization_id', preschoolId)
+        .eq('method_name', 'bank_transfer')
+        .single();
+
+      if (paymentMethod) {
+        setBankDetails({
+          id: paymentMethod.id,
+          account_name: paymentMethod.display_name || 'School Account',
+          bank_name: paymentMethod.bank_name || 'Contact school for details',
+          account_number: paymentMethod.account_number || 'Contact school',
+          branch_code: paymentMethod.branch_code,
+        });
       }
     } catch (error) {
       console.error('Error fetching bank details:', error);
