@@ -111,6 +111,52 @@ export function PaymentUploadModal({
     try {
       const supabase = assertSupabase();
 
+      // Check for existing pending POP uploads for this student to prevent duplicates
+      const { data: existingPOPs, error: checkError } = await supabase
+        .from('pop_uploads')
+        .select('id, status, created_at, payment_amount')
+        .eq('student_id', selectedChildId)
+        .eq('upload_type', 'proof_of_payment')
+        .in('status', ['pending', 'submitted'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (checkError) {
+        console.error('Error checking existing POPs:', checkError);
+      }
+
+      if (existingPOPs && existingPOPs.length > 0) {
+        const existingPOP = existingPOPs[0];
+        const createdDate = new Date(existingPOP.created_at).toLocaleDateString();
+        
+        // Show confirmation dialog
+        Alert.alert(
+          'Existing Upload Found',
+          `You already have a pending proof of payment uploaded on ${createdDate}${existingPOP.payment_amount ? ` for R${existingPOP.payment_amount}` : ''}.\n\nDo you want to upload another one?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setUploading(false) },
+            { 
+              text: 'Upload Anyway', 
+              onPress: () => proceedWithUpload(),
+            },
+          ]
+        );
+        return;
+      }
+
+      await proceedWithUpload();
+    } catch (error: any) {
+      Alert.alert('Upload Failed', error.message || 'Failed to upload proof of payment');
+      setUploading(false);
+    }
+  };
+
+  const proceedWithUpload = async () => {
+    if (!selectedFile || !selectedChildId || !userId) return;
+
+    try {
+      const supabase = assertSupabase();
+
       const uploadResult = await uploadPOPFile(
         selectedFile.uri,
         'proof_of_payment',
