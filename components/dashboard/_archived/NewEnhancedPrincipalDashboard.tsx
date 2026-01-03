@@ -541,7 +541,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
                     router.push('/screens/principal-registrations');
                     break;
                   case 'classes':
-                    router.push('/screens/class-details');
+                    router.push('/screens/class-teacher-management');
                     break;
                   case 'pending_payments':
                     router.push('/screens/financial-dashboard');

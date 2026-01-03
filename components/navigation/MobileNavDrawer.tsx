@@ -90,7 +90,7 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
       return [
         { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/teacher-dashboard' },
         { id: 'students', label: 'Students', icon: 'people', route: '/screens/student-management' },
-        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-details' },
+        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-teacher-management' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-messages' },
         { id: 'calendar', label: 'Calendar', icon: 'calendar', route: '/screens/calendar' },
         { id: 'reports', label: 'Reports', icon: 'document-text', route: '/screens/teacher-reports' },
@@ -111,7 +111,7 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
         { id: 'students', label: 'Students', icon: 'people', route: '/screens/student-management' },
         { id: 'teachers', label: 'Teachers', icon: 'briefcase', route: '/screens/teacher-management' },
         { id: 'registrations', label: 'Registrations', icon: 'person-add', route: '/screens/principal-registrations' },
-        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-details' },
+        { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-teacher-management' },
         { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle', route: '/screens/attendance' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-messages' },
         { id: 'financials', label: 'Financials', icon: 'cash', route: '/screens/financial-dashboard' },

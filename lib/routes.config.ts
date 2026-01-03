@@ -72,7 +72,7 @@ const routes: RouteConfig[] = [
     importFn: () => import('../app/screens/attendance'),
     priority: 'high',
     estimatedSize: 110,
-    prefetchRoutes: ['class-details'],
+    prefetchRoutes: ['class-teacher-management'],
     roles: ['teacher', 'principal'],
   },
 

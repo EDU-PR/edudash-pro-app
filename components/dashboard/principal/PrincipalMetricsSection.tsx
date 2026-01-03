@@ -126,7 +126,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         router.push('/screens/principal-registrations');
         break;
       case 'classes':
-        router.push('/screens/class-details');
+        router.push('/screens/class-teacher-management');
         break;
       case 'pending_payments':
         router.push('/screens/pop-review');

@@ -263,7 +263,7 @@ export const TeacherClasses: React.FC<TeacherClassesProps> = ({ myClasses, showA
       key={classInfo.id}
       style={styles.classCard}
       onPress={() => {
-        router.push(`/screens/class-details?classId=${classInfo.id}&className=${encodeURIComponent(classInfo.name)}`);
+        router.push(`/screens/class-teacher-management?classId=${classInfo.id}&className=${encodeURIComponent(classInfo.name)}`);
       }}
     >
       <View style={styles.classHeader}>
