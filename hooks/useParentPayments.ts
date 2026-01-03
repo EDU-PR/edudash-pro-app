@@ -7,6 +7,8 @@ import type { PaymentChild, StudentFee, FeeStructure, PaymentMethod, POPUpload }
 export function useParentPayments() {
   const { user, profile } = useAuth();
   const appState = useRef(AppState.currentState);
+  // Use ref for loadFees to avoid stale closure issues in realtime callbacks
+  const loadFeesRef = useRef<(() => Promise<void>) | undefined>(undefined);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,32 +115,17 @@ export function useParentPayments() {
           const ageGroup = ageMatch ? ageMatch[1] : '';
           const description = `${month} ${year} School Fees${ageGroup ? ` (${ageGroup}${!ageGroup.includes('year') && !ageGroup.includes('month') ? ' years' : ''})` : ''}`;
           
-          // Determine status based on both student_fees.status AND POP uploads
-          let effectiveStatus = f.status;
-          
-          // Check if there's a POP upload that could affect the status
-          // Match by payment_date being close to the fee's due_date (same month/year)
-          // or by similar amount
+          // SIMPLIFIED: Trust database student_fees.status as source of truth
+          // The approvePayment function in usePrincipalHub already updates this to 'paid'
+          // Find matching POP just for display purposes (pop_status field)
           const matchingPOP = popUploadsData.find((pop: any) => {
             if (!pop.payment_date) return false;
             const popDate = new Date(pop.payment_date);
             const feeDate = new Date(f.due_date);
-            // Match if same month/year OR similar amount
             const sameMonth = popDate.getMonth() === feeDate.getMonth() && popDate.getFullYear() === feeDate.getFullYear();
             const similarAmount = pop.payment_amount && Math.abs(pop.payment_amount - (f.final_amount || f.amount)) < 10;
             return sameMonth || similarAmount;
           });
-          
-          if (matchingPOP) {
-            if (matchingPOP.status === 'approved') {
-              effectiveStatus = 'paid';
-            } else if (matchingPOP.status === 'pending') {
-              effectiveStatus = 'pending_verification';
-            } else if (matchingPOP.status === 'rejected') {
-              // Keep original status but could show as needs attention
-              effectiveStatus = f.status;
-            }
-          }
           
           return {
             id: f.id,
@@ -149,7 +136,7 @@ export function useParentPayments() {
             due_date: f.due_date,
             grace_period_days: 7,
             paid_date: f.paid_date,
-            status: effectiveStatus,
+            status: f.status, // Trust database status directly
             pop_status: matchingPOP?.status, // Include POP status for UI display
           };
         });
@@ -203,6 +190,11 @@ export function useParentPayments() {
     }
   }, [selectedChildId, children, profile?.preschool_id, getNextFeeMonth]);
 
+  // Keep loadFeesRef in sync with latest loadFees
+  useEffect(() => {
+    loadFeesRef.current = loadFees;
+  }, [loadFees]);
+
   useEffect(() => {
     loadChildren();
   }, [loadChildren]);
@@ -218,8 +210,9 @@ export function useParentPayments() {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log('[Payments] App came to foreground, refreshing data...');
-        if (selectedChildId) {
-          loadFees();
+        // Use ref to get fresh loadFees reference, not stale closure
+        if (selectedChildId && loadFeesRef.current) {
+          loadFeesRef.current();
         }
       }
       appState.current = nextAppState;
@@ -227,16 +220,16 @@ export function useParentPayments() {
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
-  }, [selectedChildId, loadFees]);
-  // Realtime subscription for POP status updates
+  }, [selectedChildId]); // Removed loadFees dependency - using ref instead
+  // Realtime subscription for POP status updates AND student_fees changes
   useEffect(() => {
     if (!selectedChildId) return;
     
     const supabase = assertSupabase();
     
-    // Subscribe to pop_uploads changes for this child
+    // Subscribe to BOTH pop_uploads AND student_fees changes for this child
     const subscription = supabase
-      .channel(`pop_uploads_${selectedChildId}`)
+      .channel(`payments_${selectedChildId}`)
       .on(
         'postgres_changes',
         {
@@ -246,8 +239,8 @@ export function useParentPayments() {
           filter: `student_id=eq.${selectedChildId}`,
         },
         (payload) => {
-          console.log('[Payments] POP status updated:', payload.new);
-          // Update local state with new status
+          console.log('[Payments] POP status updated via realtime:', payload.new);
+          // Update local POP state
           setPOPUploads((prev) => 
             prev.map((upload) => 
               upload.id === payload.new.id 
@@ -255,8 +248,27 @@ export function useParentPayments() {
                 : upload
             )
           );
-          // Also reload fees to reflect any payment status changes
-          loadFees();
+          // Reload fees using ref to get fresh function
+          if (loadFeesRef.current) {
+            loadFeesRef.current();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'student_fees',
+          filter: `student_id=eq.${selectedChildId}`,
+        },
+        (payload) => {
+          console.log('[Payments] Fee status updated via realtime:', payload.new);
+          // Reload fees to reflect the database change
+          // This is the KEY fix - when principal approves, student_fees.status changes
+          if (loadFeesRef.current) {
+            loadFeesRef.current();
+          }
         }
       )
       .subscribe();
@@ -264,7 +276,7 @@ export function useParentPayments() {
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [selectedChildId, loadFees]);
+  }, [selectedChildId]); // Removed loadFees dependency - using ref instead
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

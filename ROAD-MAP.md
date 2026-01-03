@@ -644,6 +644,7 @@ Interactive challenges for hands-on learning.
 | Error Boundaries | Comprehensive error handling | Low |
 | Analytics Pipeline | Unified event tracking | Medium |
 | Documentation | API and code docs | Medium |
+| Web Realtime Payments | Add realtime subscriptions to `web/src/lib/hooks/useParentPayments.ts` for live payment status updates | Low |
 
 ### Infrastructure
 

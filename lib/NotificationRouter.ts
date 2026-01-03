@@ -327,6 +327,13 @@ function handleNotificationInteraction(data: NotificationPayload): void {
       router.push('/screens/homework' as any);
       break;
       
+    case 'payment_approved':
+    case 'pop_approved':
+    case 'payment_status':
+      // Navigate to fees & payments screen when payment is approved
+      router.push('/screens/parent-payments' as any);
+      break;
+      
     default:
       // Unknown type - go to main dashboard
       router.push('/screens/parent-dashboard' as any);
