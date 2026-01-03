@@ -54,6 +54,7 @@ export default function PaymentFlowScreen() {
     setShowBankSelector,
     copiedField,
     formattedAmount,
+    paymentInitiated,
     copyToClipboard,
     openBankingApp,
     sharePaymentDetails,
@@ -268,12 +269,24 @@ export default function PaymentFlowScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.secondaryButton, { borderColor: theme.primary }]}
-            onPress={() => setShowUploadModal(true)}
+            style={[
+              styles.secondaryButton, 
+              { borderColor: paymentInitiated ? theme.primary : theme.textSecondary },
+              !paymentInitiated && styles.disabledButton
+            ]}
+            onPress={() => paymentInitiated && setShowUploadModal(true)}
+            disabled={!paymentInitiated}
           >
-            <Ionicons name="cloud-upload-outline" size={20} color={theme.primary} />
-            <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
-              Upload Proof of Payment
+            <Ionicons 
+              name="cloud-upload-outline" 
+              size={20} 
+              color={paymentInitiated ? theme.primary : theme.textSecondary} 
+            />
+            <Text style={[
+              styles.secondaryButtonText, 
+              { color: paymentInitiated ? theme.primary : theme.textSecondary }
+            ]}>
+              {paymentInitiated ? 'Upload Proof of Payment' : 'Complete Step 1 First'}
             </Text>
           </TouchableOpacity>
         </View>

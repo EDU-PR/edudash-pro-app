@@ -29,6 +29,7 @@ interface UsePaymentFlowReturn {
   setShowBankSelector: (show: boolean) => void;
   copiedField: string | null;
   formattedAmount: string;
+  paymentInitiated: boolean; // Track if user has clicked "Open Banking App"
   copyToClipboard: (text: string, field: string) => Promise<void>;
   openBankingApp: () => void;
   sharePaymentDetails: () => Promise<void>;
@@ -54,6 +55,7 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showBankSelector, setShowBankSelector] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [paymentInitiated, setPaymentInitiated] = useState(false); // Track if banking app was opened
 
   // Parse amount from params
   const parsedAmount = feeAmount ? parseFloat(feeAmount) : 0;
@@ -94,7 +96,8 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
           id: bankAccount.id,
           account_name: bankAccount.account_name,
           bank_name: bankAccount.bank_name,
-          account_number: bankAccount.account_number_masked || bankAccount.account_number || 'Contact school',
+          // Use FULL account number for payment flow - parents need the real number to make EFT
+          account_number: bankAccount.account_number || bankAccount.account_number_masked || 'Contact school',
           branch_code: bankAccount.branch_code,
           swift_code: bankAccount.swift_code,
           account_type: bankAccount.account_type,
@@ -119,7 +122,8 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
           id: anyAccount.id,
           account_name: anyAccount.account_name,
           bank_name: anyAccount.bank_name,
-          account_number: anyAccount.account_number_masked || anyAccount.account_number || 'Contact school',
+          // Use FULL account number for payment flow - parents need the real number to make EFT
+          account_number: anyAccount.account_number || anyAccount.account_number_masked || 'Contact school',
           branch_code: anyAccount.branch_code,
           swift_code: anyAccount.swift_code,
           account_type: anyAccount.account_type,
@@ -167,6 +171,8 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   }, []);
 
   const openBankingApp = useCallback(() => {
+    // Mark payment as initiated - enables Upload POP button
+    setPaymentInitiated(true);
     // Open the bank selection sheet instead of Alert
     setShowBankSelector(true);
   }, []);
@@ -206,6 +212,7 @@ Please use the reference number when making payment.`;
     setShowBankSelector,
     copiedField,
     formattedAmount,
+    paymentInitiated,
     copyToClipboard,
     openBankingApp,
     sharePaymentDetails,

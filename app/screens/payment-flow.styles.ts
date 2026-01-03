@@ -230,6 +230,9 @@ export const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   helpText: {
     fontSize: 13,
     color: theme.textSecondary,
