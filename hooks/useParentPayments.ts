@@ -71,15 +71,87 @@ export function useParentPayments() {
       const selectedChild = children.find(c => c.id === selectedChildId);
       const childPreschoolId = selectedChild?.preschool_id || profile?.preschool_id;
 
-      // Get student fees
+      // Get POP uploads FIRST so we can use them to determine fee status
+      const { data: uploads } = await supabase
+        .from('pop_uploads')
+        .select('*')
+        .eq('student_id', selectedChildId)
+        .eq('upload_type', 'proof_of_payment')
+        .order('created_at', { ascending: false });
+      
+      const popUploadsData = uploads || [];
+      setPOPUploads(popUploadsData as POPUpload[]);
+
+      // Get student fees with fee structure details
       const { data: fees } = await supabase
         .from('student_fees')
-        .select('*')
+        .select(`
+          *,
+          fee_structures (
+            name,
+            fee_type,
+            description
+          )
+        `)
         .eq('student_id', selectedChildId)
         .order('due_date', { ascending: true });
 
       if (fees && fees.length > 0) {
-        setStudentFees(fees as StudentFee[]);
+        // Map database fields to expected StudentFee interface
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        const mappedFees: StudentFee[] = fees.map((f: any) => {
+          // Generate month-specific description from due_date
+          const dueDate = new Date(f.due_date);
+          const month = monthNames[dueDate.getMonth()];
+          const year = dueDate.getFullYear();
+          const baseName = f.fee_structures?.name || f.fee_structures?.description || 'School Fees';
+          // Extract age group if present (e.g., "Monthly School Fees - Ages 4-6" -> "4-6 years")
+          const ageMatch = baseName.match(/Ages?\s*([\d]+-[\d]+|[\d]+\s*(?:months?|years?)?)/i);
+          const ageGroup = ageMatch ? ageMatch[1] : '';
+          const description = `${month} ${year} School Fees${ageGroup ? ` (${ageGroup}${!ageGroup.includes('year') && !ageGroup.includes('month') ? ' years' : ''})` : ''}`;
+          
+          // Determine status based on both student_fees.status AND POP uploads
+          let effectiveStatus = f.status;
+          
+          // Check if there's a POP upload that could affect the status
+          // Match by payment_date being close to the fee's due_date (same month/year)
+          // or by similar amount
+          const matchingPOP = popUploadsData.find((pop: any) => {
+            if (!pop.payment_date) return false;
+            const popDate = new Date(pop.payment_date);
+            const feeDate = new Date(f.due_date);
+            // Match if same month/year OR similar amount
+            const sameMonth = popDate.getMonth() === feeDate.getMonth() && popDate.getFullYear() === feeDate.getFullYear();
+            const similarAmount = pop.payment_amount && Math.abs(pop.payment_amount - (f.final_amount || f.amount)) < 10;
+            return sameMonth || similarAmount;
+          });
+          
+          if (matchingPOP) {
+            if (matchingPOP.status === 'approved') {
+              effectiveStatus = 'paid';
+            } else if (matchingPOP.status === 'pending') {
+              effectiveStatus = 'pending_verification';
+            } else if (matchingPOP.status === 'rejected') {
+              // Keep original status but could show as needs attention
+              effectiveStatus = f.status;
+            }
+          }
+          
+          return {
+            id: f.id,
+            student_id: f.student_id,
+            fee_type: f.fee_structures?.fee_type || 'tuition',
+            description,
+            amount: f.final_amount || f.amount,
+            due_date: f.due_date,
+            grace_period_days: 7,
+            paid_date: f.paid_date,
+            status: effectiveStatus,
+            pop_status: matchingPOP?.status, // Include POP status for UI display
+          };
+        });
+        setStudentFees(mappedFees);
       }
 
       // Get fee structure for the school
@@ -123,17 +195,7 @@ export function useParentPayments() {
         }
       }
 
-      // Get POP uploads for this child
-      const { data: uploads } = await supabase
-        .from('pop_uploads')
-        .select('*')
-        .eq('student_id', selectedChildId)
-        .eq('upload_type', 'proof_of_payment')
-        .order('created_at', { ascending: false });
-      
-      if (uploads) {
-        setPOPUploads(uploads as POPUpload[]);
-      }
+      // POP uploads already loaded at the start of this function
     } catch (error) {
       console.error('[Payments] Error loading fees:', error);
     }
@@ -149,6 +211,44 @@ export function useParentPayments() {
     }
   }, [selectedChildId, loadFees]);
 
+  // Realtime subscription for POP status updates
+  useEffect(() => {
+    if (!selectedChildId) return;
+    
+    const supabase = assertSupabase();
+    
+    // Subscribe to pop_uploads changes for this child
+    const subscription = supabase
+      .channel(`pop_uploads_${selectedChildId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'pop_uploads',
+          filter: `student_id=eq.${selectedChildId}`,
+        },
+        (payload) => {
+          console.log('[Payments] POP status updated:', payload.new);
+          // Update local state with new status
+          setPOPUploads((prev) => 
+            prev.map((upload) => 
+              upload.id === payload.new.id 
+                ? { ...upload, ...payload.new } as POPUpload
+                : upload
+            )
+          );
+          // Also reload fees to reflect any payment status changes
+          loadFees();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [selectedChildId, loadFees]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadChildren();
@@ -157,15 +257,29 @@ export function useParentPayments() {
 
   // Computed values
   const upcomingFees = useMemo(() => {
-    return studentFees.filter(f => f.status === 'pending' || f.status === 'overdue' || f.status === 'partially_paid');
+    // Include pending_verification as it's still "upcoming" until fully verified
+    return studentFees.filter(f => 
+      f.status === 'pending' || 
+      f.status === 'overdue' || 
+      f.status === 'partially_paid' ||
+      f.status === 'pending_verification'
+    );
   }, [studentFees]);
 
   const paidFees = useMemo(() => {
     return studentFees.filter(f => f.status === 'paid');
   }, [studentFees]);
 
+  // Fees awaiting POP verification (separate from pending)
+  const pendingVerificationFees = useMemo(() => {
+    return studentFees.filter(f => f.status === 'pending_verification');
+  }, [studentFees]);
+
   const outstandingBalance = useMemo(() => {
-    return upcomingFees.reduce((sum, f) => sum + f.amount, 0);
+    // Don't include pending_verification in outstanding balance since payment was made
+    return upcomingFees
+      .filter(f => f.status !== 'pending_verification')
+      .reduce((sum, f) => sum + f.amount, 0);
   }, [upcomingFees]);
 
   const selectedChild = useMemo(() => {
@@ -185,6 +299,7 @@ export function useParentPayments() {
     popUploads,
     upcomingFees,
     paidFees,
+    pendingVerificationFees,
     outstandingBalance,
     onRefresh,
     reloadFees: loadFees,

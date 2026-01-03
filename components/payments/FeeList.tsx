@@ -14,6 +14,17 @@ interface FeeCardProps {
 export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps) {
   const styles = createStyles(theme);
   const statusInfo = getFeeStatusColor(fee.due_date, fee.grace_period_days);
+  
+  // Handle pending_verification status specially
+  const isPendingVerification = fee.status === 'pending_verification';
+  const displayStatus = isPendingVerification ? 'Awaiting Verification' : 
+    fee.status === 'pending' ? 'Pending' : 
+    fee.status === 'paid' ? 'Paid' :
+    fee.status === 'overdue' ? 'Overdue' :
+    fee.status;
+  
+  const statusColor = isPendingVerification ? theme.warning : statusInfo.color;
+  const statusBgColor = isPendingVerification ? theme.warning + '20' : statusInfo.bgColor;
 
   return (
     <View style={styles.feeCard}>
@@ -27,32 +38,58 @@ export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps)
         </View>
         <Text style={styles.feeAmount}>{formatCurrency(fee.amount)}</Text>
       </View>
-      <View style={[styles.statusBadge, { backgroundColor: statusInfo.bgColor }]}>
-        <Ionicons name="time-outline" size={12} color={statusInfo.color} />
-        <Text style={[styles.statusText, { color: statusInfo.color }]}>
-          {fee.status === 'pending' ? 'Pending' : fee.status}
+      <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
+        <Ionicons 
+          name={isPendingVerification ? "hourglass-outline" : "time-outline"} 
+          size={12} 
+          color={statusColor} 
+        />
+        <Text style={[styles.statusText, { color: statusColor }]}>
+          {displayStatus}
         </Text>
       </View>
-      <View style={[styles.dueSoonLabel, { backgroundColor: statusInfo.bgColor }]}>
-        <Text style={[styles.dueSoonLabelText, { color: statusInfo.color }]}>
-          {statusInfo.label}
-        </Text>
-      </View>
+      {isPendingVerification && (
+        <View style={[styles.verificationNotice, { backgroundColor: theme.warning + '10', borderColor: theme.warning + '30' }]}>
+          <Ionicons name="document-text-outline" size={16} color={theme.warning} />
+          <Text style={[styles.verificationNoticeText, { color: theme.textSecondary }]}>
+            Your proof of payment has been uploaded and is being reviewed by the school.
+          </Text>
+        </View>
+      )}
+      {!isPendingVerification && (
+        <View style={[styles.dueSoonLabel, { backgroundColor: statusInfo.bgColor }]}>
+          <Text style={[styles.dueSoonLabelText, { color: statusInfo.color }]}>
+            {statusInfo.label}
+          </Text>
+        </View>
+      )}
       <View style={styles.feeActions}>
-        <TouchableOpacity 
-          style={styles.payNowButton}
-          onPress={() => onPayPress?.(fee)}
-        >
-          <Ionicons name="card-outline" size={16} color="#fff" />
-          <Text style={styles.payNowText}>Pay Now</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.uploadProofButton}
-          onPress={() => onUploadPress(fee)}
-        >
-          <Ionicons name="cloud-upload-outline" size={16} color={theme.primary} />
-          <Text style={[styles.uploadProofText, { color: theme.primary }]}>Upload Proof</Text>
-        </TouchableOpacity>
+        {!isPendingVerification && (
+          <>
+            <TouchableOpacity 
+              style={styles.payNowButton}
+              onPress={() => onPayPress?.(fee)}
+            >
+              <Ionicons name="card-outline" size={16} color="#fff" />
+              <Text style={styles.payNowText}>Pay Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.uploadProofButton}
+              onPress={() => onUploadPress(fee)}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color={theme.primary} />
+              <Text style={[styles.uploadProofText, { color: theme.primary }]}>Upload Proof</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {isPendingVerification && (
+          <View style={styles.pendingActionNotice}>
+            <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+            <Text style={[styles.pendingActionText, { color: theme.success }]}>
+              POP Uploaded - Awaiting Review
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -181,6 +218,27 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderColor: theme.primary + '40',
   },
   uploadProofText: { fontSize: 14, fontWeight: '600' },
+  verificationNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  verificationNoticeText: { flex: 1, fontSize: 12, lineHeight: 18 },
+  pendingActionNotice: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: theme.success + '15',
+  },
+  pendingActionText: { fontSize: 14, fontWeight: '600' },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: theme.text, marginTop: 12, marginBottom: 4 },
   emptySubtitle: { fontSize: 14, color: theme.textSecondary, textAlign: 'center' },

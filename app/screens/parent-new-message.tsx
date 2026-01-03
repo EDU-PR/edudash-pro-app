@@ -42,7 +42,7 @@ export default function ParentNewMessageScreen() {
   const createThread = useCreateThread();
   
   // Fetch children linked to this parent
-  const { data: children, isLoading, error } = useQuery({
+  const { data: children, isLoading, error, refetch } = useQuery({
     queryKey: ['parent', 'children-for-messages', user?.id],
     queryFn: async (): Promise<Child[]> => {
       if (!user?.id) return [];
@@ -67,7 +67,10 @@ export default function ParentNewMessageScreen() {
         .eq('parent_id', user.id)
         .eq('status', 'approved');
       
-      if (error) throw error;
+      if (error) {
+        console.error('[ParentNewMessage] Query error:', error);
+        throw new Error(error.message || 'Failed to load children');
+      }
       
       // Transform data
       return (data || []).map((link: any) => {
@@ -86,6 +89,7 @@ export default function ParentNewMessageScreen() {
       }).filter((c: any) => c.id);
     },
     enabled: !!user?.id,
+    retry: 2,
   });
   
   const handleStartMessage = async () => {
@@ -315,6 +319,14 @@ export default function ParentNewMessageScreen() {
           <Ionicons name="warning-outline" size={48} color={theme.error} />
           <Text style={styles.errorTitle}>{t('common.error', { defaultValue: 'Error' })}</Text>
           <Text style={styles.errorText}>{t('parent.failedToLoadChildren', { defaultValue: 'Unable to load your children. Please try again.' })}</Text>
+          <Text style={[styles.errorText, { fontSize: 12, marginTop: 4 }]}>{error.message}</Text>
+          <TouchableOpacity 
+            style={[styles.startButton, { marginTop: 16, paddingHorizontal: 24 }]} 
+            onPress={() => refetch()}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.startButtonText}>{t('common.retry', { defaultValue: 'Try Again' })}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );

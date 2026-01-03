@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { PaymentUploadModal } from '@/components/payments';
 import { BankDetailRow } from '@/components/payments/BankDetailRow';
+import { BankSelectionSheet } from '@/components/payments/BankSelectionSheet';
 import { usePaymentFlow } from '@/hooks/usePaymentFlow';
 import { createStyles } from './payment-flow.styles';
 import type { PaymentChild } from '@/types/payments';
@@ -49,6 +50,8 @@ export default function PaymentFlowScreen() {
     bankDetails,
     showUploadModal,
     setShowUploadModal,
+    showBankSelector,
+    setShowBankSelector,
     copiedField,
     formattedAmount,
     copyToClipboard,
@@ -293,6 +296,12 @@ export default function PaymentFlowScreen() {
         preschoolId={preschoolId}
         initialAmount={feeAmount || ''}
         theme={theme}
+      />
+
+      {/* Bank Selection Sheet */}
+      <BankSelectionSheet
+        visible={showBankSelector}
+        onClose={() => setShowBankSelector(false)}
       />
     </SafeAreaView>
   );

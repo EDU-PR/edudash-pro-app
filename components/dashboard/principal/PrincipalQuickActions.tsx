@@ -54,18 +54,11 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       badge: stats?.pendingRegistrations?.total ?? pendingRegistrationsCount,
     },
     {
-      id: 'pop_review',
-      title: t('dashboard.review_pop', { defaultValue: 'Review Payments' }),
-      icon: 'receipt',
-      color: '#059669',
-      badge: stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount,
-    },
-    {
       id: 'payments',
-      title: t('dashboard.view_payments', { defaultValue: 'View Finances' }),
-      icon: 'card',
+      title: t('dashboard.review_payments', { defaultValue: 'Review Payments' }),
+      icon: 'receipt',
       color: '#10B981',
-      badge: stats?.pendingPayments?.total ?? pendingPaymentsCount,
+      badge: stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount,
     },
     {
       id: 'reports',
@@ -115,9 +108,6 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
     switch (actionId) {
       case 'registrations':
         router.push('/screens/principal-registrations');
-        break;
-      case 'pop_review':
-        router.push('/screens/pop-review');
         break;
       case 'payments':
         router.push('/screens/pop-review');

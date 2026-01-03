@@ -27,7 +27,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // App identifiers
-const ANDROID_PACKAGE_NAME = 'org.edudashpro.app';
+const ANDROID_PACKAGE_NAME = 'com.edudashpro.app';
 const IOS_APP_ID = ''; // Add when iOS app is published
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}`;
 const APP_STORE_URL = IOS_APP_ID ? `https://apps.apple.com/app/id${IOS_APP_ID}` : '';

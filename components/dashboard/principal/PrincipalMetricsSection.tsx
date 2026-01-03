@@ -129,6 +129,8 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         router.push('/screens/class-details');
         break;
       case 'pending_payments':
+        router.push('/screens/pop-review');
+        break;
       case 'fees_collected':
         router.push('/screens/financial-dashboard');
         break;

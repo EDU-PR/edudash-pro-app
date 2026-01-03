@@ -405,5 +405,60 @@
     "needs_attention": "kudinga ukunakwa",
     "low": "phansi",
     "high": "phezulu"
+  },
+  "alerts": {
+    "success": "Kuphumelele",
+    "error": "Iphutha",
+    "warning": "Isexwayiso",
+    "info": "Ulwazi",
+    "confirm": "Qinisekisa",
+    "permission_needed": "Imvume iyadingeka",
+    "permission_denied": "Imvume Yenqatshiwe",
+    "missing_info": "Ulwazi Olulahlekile",
+    "invalid": "Okungalungile",
+    "failed": "Kuhlulekile",
+    "unavailable": "Akutholakali",
+    "registration": {
+      "submitted_title": "Kufakwe Ngempumelelo",
+      "submitted_message": "Isicelo sakho sokubhalisa sithunyelwe esikoleni. Uzaziswa uma sesibuyekezwe.",
+      "duplicate_title": "Ukubhalisa Okuphindwe Kabili",
+      "duplicate_message": "Isicelo sokubhalisa sikhona kakade kuleli ngane kulesi sikole.",
+      "request_withdrawn": "Isicelo sokubhalisa sihoxisiwe"
+    },
+    "profile": {
+      "updated": "Iphrofayela ibuyekeziwe ngempumelelo",
+      "update_failed": "Yehlulekile ukubuyekeza iphrofayela",
+      "picture_updated": "Isithombe sephrofayela sibuyekeziwe!",
+      "picture_failed": "Yehlulekile ukubuyekeza isithombe sephrofayela"
+    },
+    "biometric": {
+      "setup_required": "Sicela usethe izigxivizo zeminwe noma ukuqashelwa kobuso ezilungiselelweni zedivayisi.",
+      "disabled": "Ukungena nge-Biometric Kukhubazwe",
+      "disabled_message": "Uzodinga ukusebenzisa iphasiwedi yakho ukungena.",
+      "enabled": "Ukungena nge-Biometric Kunikwe Amandla",
+      "enabled_message": "Manje ungasebenzisa ukuqinisekiswa nge-biometric.",
+      "update_failed": "Yehlulekile ukubuyekeza izilungiselelo ze-biometric."
+    },
+    "camera": {
+      "permission_message": "Sidinga izimvume zekhamela roll ukukhetha isithombe sephrofayela.",
+      "camera_permission_message": "Sidinga izimvume zekhamela ukuthatha isithombe."
+    },
+    "teacher": {
+      "no_email": "Le phrofayela yothisha ayinayo i-imeyili.",
+      "invite_sent": "Isimemo sithunyelwe ku-{{email}}",
+      "invite_failed": "Yehlulekile ukuthumela isimemo."
+    },
+    "code": {
+      "sent": "Ikhodi yokuqinisekisa ithunyelwe.",
+      "copied": "Kukopishelwe ku-clipboard"
+    },
+    "password": {
+      "changed": "Iphasiwedi ishintshwe ngempumelelo"
+    },
+    "request": {
+      "sent": "Isicelo Sithunyelwe",
+      "withdrawn": "Isicelo Sihoxisiwe",
+      "failed": "Yehlulekile ukuthumela isicelo"
+    }
   }
 }

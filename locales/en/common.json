@@ -2116,5 +2116,60 @@
       "feature3": "Limited time offer - ends Dec 31",
       "cta": "Register Now & Save R200"
     }
+  },
+  "alerts": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Information",
+    "confirm": "Confirm",
+    "permission_needed": "Permission needed",
+    "permission_denied": "Permission Denied",
+    "missing_info": "Missing Information",
+    "invalid": "Invalid",
+    "failed": "Failed",
+    "unavailable": "Unavailable",
+    "registration": {
+      "submitted_title": "Submitted Successfully",
+      "submitted_message": "Your registration request has been sent to the school. You will be notified once it is reviewed.",
+      "duplicate_title": "Duplicate Registration",
+      "duplicate_message": "A registration request already exists for this child at this school.",
+      "request_withdrawn": "Registration request withdrawn"
+    },
+    "profile": {
+      "updated": "Profile updated successfully",
+      "update_failed": "Failed to update profile",
+      "picture_updated": "Profile picture updated!",
+      "picture_failed": "Failed to update profile picture"
+    },
+    "biometric": {
+      "setup_required": "Please set up fingerprint or face recognition in device settings.",
+      "disabled": "Biometric Login Disabled",
+      "disabled_message": "You will need to use your password to sign in.",
+      "enabled": "Biometric Login Enabled",
+      "enabled_message": "You can now use biometric authentication.",
+      "update_failed": "Failed to update biometric settings."
+    },
+    "camera": {
+      "permission_message": "We need camera roll permissions to select a profile picture.",
+      "camera_permission_message": "We need camera permissions to take a photo."
+    },
+    "teacher": {
+      "no_email": "This teacher profile has no email.",
+      "invite_sent": "Invitation sent to {{email}}",
+      "invite_failed": "Failed to send invite."
+    },
+    "code": {
+      "sent": "A verification code has been sent.",
+      "copied": "Copied to clipboard"
+    },
+    "password": {
+      "changed": "Password changed successfully"
+    },
+    "request": {
+      "sent": "Request Sent",
+      "withdrawn": "Request Withdrawn",
+      "failed": "Failed to send request"
+    }
   }
 }

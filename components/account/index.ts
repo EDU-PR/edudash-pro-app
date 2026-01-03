@@ -11,3 +11,5 @@ export { SettingsModal } from './SettingsModal';
 export { EditProfileModal } from './EditProfileModal';
 export { ThemeSettingsModal } from './ThemeSettingsModal';
 export { AccountActions } from './AccountActions';
+export { ProfileSwitcher } from './ProfileSwitcher';
+export type { StoredAccount } from './ProfileSwitcher';
