@@ -645,6 +645,7 @@ Interactive challenges for hands-on learning.
 | Analytics Pipeline | Unified event tracking | Medium |
 | Documentation | API and code docs | Medium |
 | Web Realtime Payments | Add realtime subscriptions to `web/src/lib/hooks/useParentPayments.ts` for live payment status updates | Low |
+| Self-Service Subscription Cancel | Implement PayFast token cancellation API in Edge Function for direct in-app subscription cancellation | Medium |
 
 ### Infrastructure
 
