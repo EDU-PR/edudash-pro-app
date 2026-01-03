@@ -1,6 +1,6 @@
 # EduDash Pro Product Roadmap
 
-> **Version**: 2.0.4 | **Last Updated**: January 3, 2026  
+> **Version**: 2.1.0 | **Last Updated**: January 3, 2026  
 > **Current App Version**: 1.0.11 | **Runtime**: 1.0.11
 
 This document outlines the product roadmap for EduDash Pro, including completed features, in-progress work, and planned enhancements.
@@ -10,13 +10,15 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 ## Table of Contents
 
 1. [Current Status](#current-status)
-2. [Phase 1: Core Enhancements (Q1 2026)](#phase-1-core-enhancements-q1-2026)
-3. [Phase 2: Communication & Verification (Q1-Q2 2026)](#phase-2-communication--verification-q1-q2-2026)
-4. [Phase 3: Advanced Platform Features (Q2-Q3 2026)](#phase-3-advanced-platform-features-q2-q3-2026)
-5. [Phase 4: STEM & Robotics (Q3 2026)](#phase-4-stem--robotics-q3-2026)
-6. [Phase 5: Enterprise & Scale (Q4 2026)](#phase-5-enterprise--scale-q4-2026)
-7. [Technical Debt & Infrastructure](#technical-debt--infrastructure)
-8. [Database Migrations Required](#database-migrations-required)
+2. [SOA Multi-Organization Support (Q1 2026)](#soa-soil-of-africa-multi-organization-support-q1-2026)
+3. [Phase 1: Core Enhancements (Q1 2026)](#phase-1-core-enhancements-q1-2026)
+4. [Phase 1.5: State-of-the-Art Parent Features (Q1 2026)](#phase-15-state-of-the-art-parent-features-q1-2026)
+5. [Phase 2: Communication & Verification (Q1-Q2 2026)](#phase-2-communication--verification-q1-q2-2026)
+6. [Phase 3: Advanced Platform Features (Q2-Q3 2026)](#phase-3-advanced-platform-features-q2-q3-2026)
+7. [Phase 4: STEM & Robotics (Q3 2026)](#phase-4-stem--robotics-q3-2026)
+8. [Phase 5: Enterprise & Scale (Q4 2026)](#phase-5-enterprise--scale-q4-2026)
+9. [Technical Debt & Infrastructure](#technical-debt--infrastructure)
+10. [Database Migrations Required](#database-migrations-required)
 
 ---
 
@@ -80,6 +82,9 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Subscription management
 - [x] Invoice generation
 - [x] Registration fee processing
+- [x] Bank transfer + POP upload system (Preschools)
+- [x] **Membership Payment System** - Bank transfer, POP upload, PayFast for membership orgs (`20260103165835_soa_skills_development_and_membership_payments.sql`)
+- [x] **EduDash Pro Payment Intermediary** - Platform collects payments, disburses to organizations
 
 #### Invite System (NEW - Jan 2026)
 - [x] **Unified join_requests table** - Single table for all invite types (`20260103020855_unified_join_requests_system.sql`)
@@ -157,6 +162,105 @@ Unified system for users to discover and request to join organizations, and for 
 - `components/organizations/OrganizationCard.tsx` - Reusable org display card
 - `components/organizations/JoinRequestCard.tsx` - Reusable request card with actions
 - `hooks/useJoinRequests.ts` - React Query hooks for all request operations
+
+---
+
+## SOA (Soil of Africa) Multi-Organization Support (Q1 2026)
+
+EduDash Pro expands to support membership organizations like Soil of Africa with skills development programs, regional structures, and membership payment workflows.
+
+### SOA Phase 1: Configuration (Week 1) 🔧
+**Priority**: Critical | **Status**: In Progress (Jan 3, 2026)
+
+Infrastructure setup for SOA and generic membership organizations.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Upgrade to Supabase Pro | $25/mo for production scale (7GB DB, 50GB storage) | ⏳ Pending |
+| Add `skills_development` org type | Database enum extension | ✅ Done |
+| Add `membership_org` org type | For generic membership organizations | ✅ Done |
+| Add `npo` org type | Non-profit organization support | ✅ Done |
+| Test SOA member registration | Verify existing flow works | ⏳ Testing |
+| Verify CEO Dashboard | Ensure real data loads correctly | ⏳ Testing |
+| Verify Youth President Dashboard | Test wing-specific views | ⏳ Testing |
+
+**Migration**: `20260103165835_soa_skills_development_and_membership_payments.sql`
+
+### SOA Phase 2: SOA Launch (Weeks 2-3) 🚀
+**Priority**: High | **Status**: Planned
+
+Full SOA configuration and membership payment system activation.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Configure SOA organization settings | Dashboard features, branding | ⏳ Planned |
+| Set up SOA fee structures | Community (Free), Active (R250/yr), VIP (R1000/yr) | ✅ Seeded |
+| Enable PayFast for membership | Member can pay online via PayFast | ⏳ Planned |
+| Enable bank transfer + POP | Members upload proof of payment | ⏳ Planned |
+| EduDash Pro as intermediary | Platform collects, then disburses to orgs | ⏳ Planned |
+| Membership POP approval workflow | Similar to school fee POP approval | ⏳ Planned |
+| Test appointment workflow | President → Regional Manager flow | ⏳ Planned |
+| Wing financial allocation | Budget tracking per Youth/Women wing | ⏳ Planned |
+
+**New Tables Created**:
+- `membership_fees` - Individual fee records per member
+- `membership_pop_uploads` - POP uploads for membership payments
+- `platform_collected_payments` - Payments collected by EduDash Pro
+- `platform_disbursements` - Payouts from EduDash Pro to organizations
+
+**Payment Flow**:
+```
+Member → PayFast/Bank Transfer → EduDash Pro
+                                    ↓
+                           (2.5% platform fee)
+                                    ↓
+EduDash Pro → Bank Transfer → Organization Account
+```
+
+### SOA Phase 3: Enhancements (Month 2) 📈
+**Priority**: Medium | **Status**: Planned
+
+Advanced features for membership organizations.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Wings financial reporting | Dashboard for Youth/Women wing budgets | ⏳ Planned |
+| Sponsor management module | Track sponsors, donations, acknowledgments | ⏳ Planned |
+| AI-powered program recommendations | Match members to skills programs | ⏳ Planned |
+| Bulk communication tools | Mass SMS/email to members by region/tier | ⏳ Planned |
+| Member ID card generation | Digital ID cards with QR codes | ⏳ Planned |
+| Event registration system | Members register for events via app | ⏳ Planned |
+| Membership renewal reminders | Auto-notify expiring memberships | ⏳ Planned |
+| Annual report generation | AI-generated org performance reports | ⏳ Planned |
+
+### SOA Membership Tier Structure
+
+| Tier | Annual Fee | Benefits |
+|------|------------|----------|
+| **Community** | Free | Community events, newsletter, online access |
+| **Active** | R250 | + Skills programs, networking, mentorship, regional meetups |
+| **VIP** | R1,000 | + Priority placement, 1-on-1 coaching, VIP events, sponsor networking, certificates |
+
+### Generic Organization Support
+
+The same infrastructure supports any membership-based organization:
+- NPOs and NGOs
+- Professional associations
+- Sports clubs
+- Alumni associations
+- Religious organizations
+- Community groups
+
+**Configuration via `organizations.config` JSONB**:
+```json
+{
+  "membership_enabled": true,
+  "payment_intermediary": true,
+  "wings_enabled": ["youth", "women"],
+  "regions_enabled": true,
+  "ai_features": ["program_recommendations", "report_generation"]
+}
+```
 
 ---
 
