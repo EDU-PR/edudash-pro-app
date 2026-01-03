@@ -35,6 +35,9 @@ interface NotificationRequest {
     | 'report_approved'
     | 'report_rejected'
     | 'incoming_call'
+    | 'child_registration_submitted'
+    | 'child_registration_approved'
+    | 'child_registration_rejected'
     | 'custom'
   preschool_id?: string
   user_ids?: string[]
@@ -423,6 +426,53 @@ function getNotificationTemplate(eventType: string, context: any = {}): Notifica
       channelId: 'incoming-calls', // Match the channel we create in CallHeadlessTask
       _contentAvailable: true, // Wake app in background (iOS) / triggers data handling (Android)
       categoryId: 'incoming_call' // For action buttons
+    },
+    // Child registration notifications (from in-app parent submissions)
+    child_registration_submitted: {
+      title: '👶 New Child Registration',
+      body: context.child_name
+        ? `${context.parent_name || 'A parent'} submitted a registration for ${context.child_name}`
+        : 'A new child registration request has been submitted',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        screen: 'principal-registrations'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
+    },
+    child_registration_approved: {
+      title: '✅ Registration Approved',
+      body: context.child_name
+        ? `Your registration for ${context.child_name} has been approved!`
+        : 'Your child registration has been approved',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        screen: 'dashboard'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    child_registration_rejected: {
+      title: '❌ Registration Update',
+      body: context.child_name && context.rejection_reason
+        ? `Registration for ${context.child_name}: ${context.rejection_reason}`
+        : context.rejection_reason || 'Your child registration needs attention',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        rejection_reason: context.rejection_reason,
+        screen: 'parent-child-registration'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
     }
   }
 

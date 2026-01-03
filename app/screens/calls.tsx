@@ -28,6 +28,7 @@ import { useMarkCallsSeen } from '@/hooks/useMissedCalls';
 import { useCallHistory, filterCalls, getCallCounts, CallFilter } from '@/hooks/useCallHistory';
 import { CallItem } from '@/components/calls/CallItem';
 import { CallFilterChip } from '@/components/calls/CallFilterChip';
+import { ContactsPicker } from '@/components/calls/ContactsPicker';
 
 // Custom Header Component
 interface ScreenHeaderProps {
@@ -83,6 +84,7 @@ export default function CallsScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [filterType, setFilterType] = useState<CallFilter>('all');
+  const [showContactsPicker, setShowContactsPicker] = useState(false);
   
   const { data: calls = [], isLoading, refetch } = useCallHistory();
   const [refreshing, setRefreshing] = useState(false);
@@ -256,6 +258,13 @@ export default function CallsScreen() {
             <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
               {t('calls.no_calls_desc', { defaultValue: 'Your call history will appear here. Start a conversation and make a call!' })}
             </Text>
+            <TouchableOpacity
+              style={[styles.startCallButton, { backgroundColor: theme.primary }]}
+              onPress={() => setShowContactsPicker(true)}
+            >
+              <Ionicons name="call" size={20} color="#fff" />
+              <Text style={styles.startCallButtonText}>{t('calls.start_call', { defaultValue: 'Start a Call' })}</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           filteredCalls.map((call: any) => (
@@ -268,6 +277,34 @@ export default function CallsScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* FAB for new call */}
+      <TouchableOpacity
+        style={[
+          fabStyles.fab, 
+          { 
+            backgroundColor: theme.primary, 
+            bottom: insets.bottom + 24,
+          }
+        ]}
+        onPress={() => setShowContactsPicker(true)}
+        activeOpacity={0.85}
+      >
+        <View style={fabStyles.fabInner}>
+          <Ionicons name="add" size={28} color="#fff" />
+        </View>
+      </TouchableOpacity>
+
+      {/* Contacts Picker */}
+      <ContactsPicker
+        visible={showContactsPicker}
+        onClose={() => setShowContactsPicker(false)}
+        onSelectContact={(contact, callType) => {
+          setShowContactsPicker(false);
+          const name = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+          handleCall(contact.id, name, callType);
+        }}
+      />
     </View>
   );
 }
@@ -347,6 +384,30 @@ const styles = StyleSheet.create({
   },
 });
 
+const fabStyles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+
 const callStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
@@ -405,6 +466,21 @@ const callStyles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  startCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 16,
+    gap: 8,
+  },
+  startCallButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

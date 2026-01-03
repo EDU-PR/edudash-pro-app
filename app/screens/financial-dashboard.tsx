@@ -275,6 +275,14 @@ export default function FinanceDashboard() {
       <View style={styles.actionGrid}>
         <TouchableOpacity 
           style={styles.actionButton}
+          onPress={() => router.push('/screens/pop-review')}
+        >
+          <Ionicons name="checkmark-circle" size={24} color="#F59E0B" />
+          <Text style={styles.actionText}>{t('finance_dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.actionButton}
           onPress={() => router.push('/screens/financial-transactions')}
         >
           <Ionicons name="list" size={24} color={theme?.primary || Colors.light.tint} />

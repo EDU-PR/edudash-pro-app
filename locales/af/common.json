@@ -907,5 +907,60 @@
     "deleted": "Item suksesvol verwyder",
     "created": "Item suksesvol geskep",
     "updated": "Item suksesvol opgedateer"
+  },
+  "alerts": {
+    "success": "Sukses",
+    "error": "Fout",
+    "warning": "Waarskuwing",
+    "info": "Inligting",
+    "confirm": "Bevestig",
+    "permission_needed": "Toestemming benodig",
+    "permission_denied": "Toestemming Geweier",
+    "missing_info": "Ontbrekende Inligting",
+    "invalid": "Ongeldig",
+    "failed": "Misluk",
+    "unavailable": "Onbeskikbaar",
+    "registration": {
+      "submitted_title": "Suksesvol Ingedien",
+      "submitted_message": "Jou registrasieversoek is na die skool gestuur. Jy sal in kennis gestel word sodra dit hersien is.",
+      "duplicate_title": "Duplikaat Registrasie",
+      "duplicate_message": "'n Registrasieversoek bestaan reeds vir hierdie kind by hierdie skool.",
+      "request_withdrawn": "Registrasieversoek teruggetrek"
+    },
+    "profile": {
+      "updated": "Profiel suksesvol opgedateer",
+      "update_failed": "Kon nie profiel opdateer nie",
+      "picture_updated": "Profielfoto opgedateer!",
+      "picture_failed": "Kon nie profielfoto opdateer nie"
+    },
+    "biometric": {
+      "setup_required": "Stel asseblief vingerafdruk of gesigsherkenning op in toestel instellings.",
+      "disabled": "Biometriese Aanmelding Gedeaktiveer",
+      "disabled_message": "Jy sal jou wagwoord moet gebruik om aan te meld.",
+      "enabled": "Biometriese Aanmelding Geaktiveer",
+      "enabled_message": "Jy kan nou biometriese verifikasie gebruik.",
+      "update_failed": "Kon nie biometriese instellings opdateer nie."
+    },
+    "camera": {
+      "permission_message": "Ons benodig kamerarol toestemmings om 'n profielfoto te kies.",
+      "camera_permission_message": "Ons benodig kamera toestemmings om 'n foto te neem."
+    },
+    "teacher": {
+      "no_email": "Hierdie onderwyser profiel het geen e-pos nie.",
+      "invite_sent": "Uitnodiging gestuur na {{email}}",
+      "invite_failed": "Kon nie uitnodiging stuur nie."
+    },
+    "code": {
+      "sent": "'n Verifikasiekode is gestuur.",
+      "copied": "Na knipbord gekopieer"
+    },
+    "password": {
+      "changed": "Wagwoord suksesvol verander"
+    },
+    "request": {
+      "sent": "Versoek Gestuur",
+      "withdrawn": "Versoek Teruggetrek",
+      "failed": "Kon nie versoek stuur nie"
+    }
   }
 }

@@ -69,7 +69,7 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
         return;
       }
 
-      // Get user's organization membership (maybeSingle to handle users not in any org)
+      // First, check organization_members (for SOA/organization members)
       const { data: member, error: memberError } = await supabase
         .from('organization_members')
         .select('organization_id, organizations(id, name, dashboard_settings)')
@@ -79,20 +79,11 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
       console.log('[Branding] Member query result:', { member, memberError });
 
       if (memberError) {
-        // Actual error occurred
         console.log('[Branding] Error querying membership:', memberError.message);
         logger.info('[Branding] Error querying membership:', memberError.message);
-        setIsLoading(false);
-        return;
       }
       
-      if (!member) {
-        // User not in any organization (e.g., Super-Admin)
-        console.log('[Branding] User not in any organization (platform-level user)');
-        setIsLoading(false);
-        return;
-      }
-
+      // If user is in an organization with dashboard_settings, use that
       if (member?.organization_id && member.organizations) {
         const org = member.organizations as any;
         console.log('[Branding] Organization found:', org.id, org.name);
@@ -102,14 +93,45 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
         
         if (org.dashboard_settings) {
           setSettings(org.dashboard_settings as DashboardSettings);
-          console.log('[Branding] Settings applied:', org.dashboard_settings);
+          console.log('[Branding] Settings applied from organization:', org.dashboard_settings);
           logger.info('[Branding] Loaded organization branding:', org.dashboard_settings);
-        } else {
-          console.log('[Branding] No dashboard_settings found in organization');
+          setIsLoading(false);
+          return;
         }
-      } else {
-        console.log('[Branding] No organization found for member');
       }
+
+      // Fallback: Check user's preschool for branding (for preschool staff/parents)
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('preschool_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile?.preschool_id) {
+        console.log('[Branding] User has preschool_id:', profile.preschool_id);
+        
+        // Check if preschool belongs to an organization with branding
+        const { data: preschool } = await supabase
+          .from('preschools')
+          .select('id, name, organization_id, organizations(id, name, dashboard_settings)')
+          .eq('id', profile.preschool_id)
+          .maybeSingle();
+
+        if (preschool?.organizations) {
+          const org = preschool.organizations as any;
+          if (org.dashboard_settings) {
+            console.log('[Branding] Using preschool organization branding:', org.dashboard_settings);
+            setOrganizationId(org.id);
+            setOrganizationName(org.name);
+            setSettings(org.dashboard_settings as DashboardSettings);
+            logger.info('[Branding] Loaded preschool organization branding');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      console.log('[Branding] No branding found for user');
     } catch (err: any) {
       logger.error('[Branding] Error fetching branding:', err);
       setError(err.message);

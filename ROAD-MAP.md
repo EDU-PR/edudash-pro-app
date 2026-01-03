@@ -1,6 +1,6 @@
 # EduDash Pro Product Roadmap
 
-> **Version**: 2.0.2 | **Last Updated**: January 1, 2026  
+> **Version**: 2.0.4 | **Last Updated**: January 3, 2026  
 > **Current App Version**: 1.0.11 | **Runtime**: 1.0.11
 
 This document outlines the product roadmap for EduDash Pro, including completed features, in-progress work, and planned enhancements.
@@ -30,6 +30,7 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Authentication (Email, Google OAuth, OTP)
 - [x] Session management with refresh tokens (24-hour expiry configured)
 - [x] Multi-account support (switch profiles)
+- [x] **Profile Switcher UI** - Quick account switching with biometric auth (`components/account/ProfileSwitcher.tsx`)
 
 #### Educational Features
 - [x] Preschool management (classes, students)
@@ -80,6 +81,14 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 - [x] Invoice generation
 - [x] Registration fee processing
 
+#### Invite System (NEW - Jan 2026)
+- [x] **Unified join_requests table** - Single table for all invite types (`20260103020855_unified_join_requests_system.sql`)
+- [x] **InviteService** - Complete invite management service (`services/InviteService.ts`)
+- [x] Invite code generation (6-char human-readable)
+- [x] Secure invite tokens
+- [x] Accept/reject flows with RLS
+- [x] Deep link support for invite sharing
+
 ---
 
 ## Phase 1: Core Enhancements (Q1 2026)
@@ -124,40 +133,30 @@ This document outlines the product roadmap for EduDash Pro, including completed 
 
 **Files**: `locales/*.json`
 
-### 1.4 Organization Join Requests 🆕
-**Priority**: High | **Status**: Planned
+### 1.4 Organization Join Requests ✅
+**Priority**: High | **Status**: Completed (Jan 3, 2026)
 
-Allow users to discover and request to join existing organizations/schools on the platform.
+Unified system for users to discover and request to join organizations, and for admins to invite users.
 
-| Feature | Description |
-|---------|-------------|
-| Organization Directory | Browse public schools/orgs |
-| Search & Filter | By location, type, name |
-| Join Request Form | Submit request with details |
-| Admin Approval Flow | Principal/admin reviews requests |
-| Auto-Enrollment | Upon approval, add to org |
-| Notification System | Alerts for request status |
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Unified `join_requests` table | Single table for all join/invite types | ✅ Done |
+| Request type enum | teacher_invite, parent_join, member_join, guardian_claim, staff_invite, learner_enroll | ✅ Done |
+| InviteService | Complete service with all CRUD operations | ✅ Done |
+| Invite code generation | 6-char human-readable codes | ✅ Done |
+| Secure tokens | For accepting invites | ✅ Done |
+| RLS policies | Role-based access control | ✅ Done |
+| Accept/reject RPCs | Database functions for workflow | ✅ Done |
+| Deep link support | Share invite links | ✅ Done |
 
-**Database Changes**:
-```sql
-CREATE TABLE join_requests (
-  id UUID PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id),
-  organization_id UUID REFERENCES organizations(id),
-  preschool_id UUID REFERENCES preschools(id),
-  request_type TEXT, -- 'student', 'parent', 'teacher', 'member'
-  status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
-  message TEXT,
-  reviewed_by UUID REFERENCES profiles(id),
-  reviewed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**Screens Needed**:
-- `app/screens/discover-organizations.tsx`
-- `app/screens/join-request.tsx`
-- `app/screens/principal-join-requests.tsx`
+**Files Created**:
+- `supabase/migrations/20260103020855_unified_join_requests_system.sql`
+- `services/InviteService.ts`
+- `app/screens/discover-organizations.tsx` - Browse public orgs and submit join requests
+- `app/screens/admin/manage-join-requests.tsx` - Admin view to approve/reject requests
+- `components/organizations/OrganizationCard.tsx` - Reusable org display card
+- `components/organizations/JoinRequestCard.tsx` - Reusable request card with actions
+- `hooks/useJoinRequests.ts` - React Query hooks for all request operations
 
 ---
 

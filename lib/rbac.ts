@@ -922,8 +922,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       try {
         debug('[Profile] Calling get_my_org_member RPC for org:', resolvedOrgId);
         const { data: memberData, error: memberError } = await assertSupabase()
-          .rpc('get_my_org_member', { p_org_id: resolvedOrgId as any })
-          .maybeSingle();
+          .rpc('get_my_org_member', { p_org_id: resolvedOrgId as any });
         
         debug('[Profile] get_my_org_member result:', { memberData, memberError });
         
@@ -931,9 +930,11 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
           debug('[Profile] get_my_org_member error:', memberError);
         }
         
-        if (memberData) {
-          orgMember = memberData as any;
-          debug('[Profile] orgMember set with member_type:', (memberData as any)?.member_type);
+        // RPC returns array, take first result if exists
+        const memberResult = Array.isArray(memberData) ? memberData[0] : memberData;
+        if (memberResult) {
+          orgMember = memberResult as any;
+          debug('[Profile] orgMember set with member_type:', (memberResult as any)?.member_type);
         } else {
           debug('[Profile] No membership data returned from get_my_org_member');
         }

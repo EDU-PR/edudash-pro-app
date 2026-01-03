@@ -1,0 +1,227 @@
+/**
+ * ContactsPicker - Select contacts to make a call
+ * Modal bottom sheet for selecting users to call
+ */
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useQuery } from '@tanstack/react-query';
+import { assertSupabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface Contact {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  avatar_url?: string;
+}
+
+interface ContactsPickerProps {
+  visible: boolean;
+  onClose: () => void;
+  onSelectContact: (contact: Contact, callType: 'voice' | 'video') => void;
+}
+
+export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPickerProps) {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const { user, profile } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Fetch contacts (users from same preschool/organization)
+  const { data: contacts = [], isLoading } = useQuery({
+    queryKey: ['call-contacts', user?.id, profile?.preschool_id],
+    queryFn: async (): Promise<Contact[]> => {
+      if (!user?.id) return [];
+      
+      const client = assertSupabase();
+      
+      // Get users from same preschool
+      let query = client
+        .from('profiles')
+        .select('id, first_name, last_name, role, avatar_url')
+        .neq('id', user.id);
+      
+      if (profile?.preschool_id) {
+        query = query.eq('preschool_id', profile.preschool_id);
+      }
+      
+      const { data, error } = await query
+        .in('role', ['principal', 'teacher', 'parent'])
+        .order('first_name');
+      
+      if (error) {
+        console.error('[ContactsPicker] Error:', error);
+        return [];
+      }
+      
+      return (data || []).filter(c => c.first_name || c.last_name);
+    },
+    enabled: visible && !!user?.id,
+  });
+
+  // Filter contacts by search
+  const filteredContacts = useMemo(() => {
+    if (!searchQuery.trim()) return contacts;
+    const query = searchQuery.toLowerCase();
+    return contacts.filter(c => 
+      `${c.first_name} ${c.last_name}`.toLowerCase().includes(query) ||
+      c.role?.toLowerCase().includes(query)
+    );
+  }, [contacts, searchQuery]);
+
+  // Group contacts by role
+  const groupedContacts = useMemo(() => {
+    const groups: { [key: string]: Contact[] } = {};
+    filteredContacts.forEach(contact => {
+      const role = contact.role || 'other';
+      if (!groups[role]) groups[role] = [];
+      groups[role].push(contact);
+    });
+    return Object.entries(groups).sort(([a], [b]) => {
+      const order = ['principal', 'teacher', 'parent', 'other'];
+      return order.indexOf(a) - order.indexOf(b);
+    });
+  }, [filteredContacts]);
+
+  const getRoleLabel = (role: string) => {
+    const labels: { [key: string]: string } = {
+      principal: t('roles.principal', { defaultValue: 'Principal' }),
+      teacher: t('roles.teacher', { defaultValue: 'Teachers' }),
+      parent: t('roles.parent', { defaultValue: 'Parents' }),
+      other: t('roles.other', { defaultValue: 'Other' }),
+    };
+    return labels[role] || role;
+  };
+
+  const getInitials = (contact: Contact) => {
+    return `${contact.first_name?.[0] || ''}${contact.last_name?.[0] || ''}`.toUpperCase() || '?';
+  };
+
+  const renderContact = ({ item }: { item: Contact }) => (
+    <View style={[styles.contactItem, { backgroundColor: theme.surface }]}>
+      <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
+        <Text style={[styles.avatarText, { color: theme.primary }]}>{getInitials(item)}</Text>
+      </View>
+      <View style={styles.contactInfo}>
+        <Text style={[styles.contactName, { color: theme.text }]}>
+          {`${item.first_name || ''} ${item.last_name || ''}`.trim()}
+        </Text>
+        <Text style={[styles.contactRole, { color: theme.textSecondary }]}>
+          {getRoleLabel(item.role)}
+        </Text>
+      </View>
+      <View style={styles.callButtons}>
+        <TouchableOpacity
+          style={[styles.callButton, { backgroundColor: '#10B981' + '20' }]}
+          onPress={() => onSelectContact(item, 'voice')}
+        >
+          <Ionicons name="call" size={20} color="#10B981" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.callButton, { backgroundColor: theme.primary + '20' }]}
+          onPress={() => onSelectContact(item, 'video')}
+        >
+          <Ionicons name="videocam" size={20} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.overlay}>
+        <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom }]}>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.title, { color: theme.text }]}>
+              {t('calls.new_call', { defaultValue: 'New Call' })}
+            </Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search */}
+          <View style={[styles.searchContainer, { backgroundColor: theme.surface }]}>
+            <Ionicons name="search" size={20} color={theme.textSecondary} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.text }]}
+              placeholder={t('common.search', { defaultValue: 'Search contacts...' })}
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Contacts List */}
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
+            </View>
+          ) : filteredContacts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                {searchQuery 
+                  ? t('calls.no_contacts_found', { defaultValue: 'No contacts found' })
+                  : t('calls.no_contacts', { defaultValue: 'No contacts available' })}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredContacts}
+              renderItem={renderContact}
+              keyExtractor={item => item.id}
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
+  title: { fontSize: 20, fontWeight: '700' },
+  closeButton: { padding: 4 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', margin: 16, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8 },
+  searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 16 },
+  contactItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 8 },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontWeight: '600' },
+  contactInfo: { flex: 1, marginLeft: 12 },
+  contactName: { fontSize: 16, fontWeight: '500' },
+  contactRole: { fontSize: 13, marginTop: 2 },
+  callButtons: { flexDirection: 'row', gap: 8 },
+  callButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
+  emptyText: { fontSize: 16 },
+});

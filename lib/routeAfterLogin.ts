@@ -388,17 +388,44 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/super-admin-dashboard' };
     
     case 'admin':
-      // Check if user is CEO of Soil of Africa organization
-      console.log('[ROUTE DEBUG] Admin routing - checking for CEO membership');
+      // Check if user is CEO of Soil of Africa organization or has a special membership role
+      console.log('[ROUTE DEBUG] Admin routing - checking for special membership');
       if (profile.organization_id) {
-        // Check organization_members for CEO/national_admin member_type
+        // Check organization_members for special member_type
         const memberType = (profile as any)?.organization_membership?.member_type;
         
         console.log('[ROUTE DEBUG] Member type:', memberType);
         
+        // CEO / National Admin
         if (memberType === 'national_admin' || memberType === 'ceo') {
           console.log('[ROUTE DEBUG] CEO/national_admin detected - routing to membership CEO dashboard');
           return { path: '/screens/membership/ceo-dashboard' };
+        }
+        
+        // Youth Wing executives
+        if (memberType === 'youth_president' || memberType === 'youth_deputy') {
+          console.log('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
+          return { path: '/screens/membership/youth-president-dashboard' };
+        }
+        if (memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
+          console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
+          return { path: '/screens/membership/youth-president-dashboard' };
+        }
+        
+        // Women's Wing executives
+        if (memberType === 'women_president' || memberType === 'women_deputy') {
+          console.log('[ROUTE DEBUG] Women wing executive detected - routing to women dashboard');
+          return { path: '/screens/membership/women-dashboard' };
+        }
+        if (memberType === 'women_secretary' || memberType === 'women_treasurer') {
+          console.log('[ROUTE DEBUG] Women wing staff detected - routing to women dashboard');
+          return { path: '/screens/membership/women-dashboard' };
+        }
+        
+        // Regional executives
+        if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator') {
+          console.log('[ROUTE DEBUG] Regional coordinator detected - routing to regional dashboard');
+          return { path: '/screens/membership/regional-dashboard' };
         }
       }
       

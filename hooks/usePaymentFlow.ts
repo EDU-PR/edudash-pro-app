@@ -25,10 +25,12 @@ interface UsePaymentFlowReturn {
   bankDetails: SchoolBankDetails | null;
   showUploadModal: boolean;
   setShowUploadModal: (show: boolean) => void;
+  showBankSelector: boolean;
+  setShowBankSelector: (show: boolean) => void;
   copiedField: string | null;
   formattedAmount: string;
   copyToClipboard: (text: string, field: string) => Promise<void>;
-  openBankingApp: () => Promise<void>;
+  openBankingApp: () => void;
   sharePaymentDetails: () => Promise<void>;
 }
 
@@ -50,6 +52,7 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   const [loading, setLoading] = useState(true);
   const [bankDetails, setBankDetails] = useState<SchoolBankDetails | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showBankSelector, setShowBankSelector] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Parse amount from params
@@ -78,11 +81,11 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
         .single();
 
       if (!preschool?.organization_id) {
-        // Try to get bank details from payment_methods
+        // Try to get bank details from organization_payment_methods
         const { data: paymentMethod } = await supabase
-          .from('payment_methods')
+          .from('organization_payment_methods')
           .select('*')
-          .eq('preschool_id', preschoolId)
+          .eq('organization_id', preschoolId)
           .eq('method_name', 'bank_transfer')
           .single();
 
@@ -155,94 +158,9 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     }
   }, []);
 
-  const openBankingApp = useCallback(async () => {
-    // First, check which banking apps are installed
-    const installedApps: typeof BANKING_APPS = [];
-    const notInstalledApps: typeof BANKING_APPS = [];
-    
-    for (const app of BANKING_APPS) {
-      try {
-        const canOpen = await Linking.canOpenURL(app.scheme);
-        if (canOpen) {
-          installedApps.push(app);
-        } else {
-          notInstalledApps.push(app);
-        }
-      } catch {
-        notInstalledApps.push(app);
-      }
-    }
-    
-    // If we found installed apps, show only those first
-    if (installedApps.length > 0) {
-      Alert.alert(
-        'Open Banking App',
-        'Select your installed banking app:',
-        [
-          ...installedApps.map(app => ({
-            text: app.name,
-            onPress: async () => {
-              try {
-                await Linking.openURL(app.scheme);
-              } catch (error) {
-                console.error('Error opening banking app:', error);
-                // Fallback to website
-                Linking.openURL(app.fallbackUrl);
-              }
-            },
-          })),
-          {
-            text: 'Other Banks',
-            onPress: () => showAllBanksDialog(notInstalledApps),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-    } else {
-      // No apps detected, show all options
-      showAllBanksDialog(BANKING_APPS);
-    }
-  }, []);
-  
-  const showAllBanksDialog = useCallback((banks: typeof BANKING_APPS) => {
-    Alert.alert(
-      'Select Your Bank',
-      'Choose your bank to open their website or app store:',
-      [
-        ...banks.map(app => ({
-          text: app.name,
-          onPress: async () => {
-            try {
-              const canOpen = await Linking.canOpenURL(app.scheme);
-              if (canOpen) {
-                await Linking.openURL(app.scheme);
-              } else {
-                // Offer to open Play Store or website
-                Alert.alert(
-                  `${app.name} Not Installed`,
-                  'Would you like to:',
-                  [
-                    { 
-                      text: 'Open Website', 
-                      onPress: () => Linking.openURL(app.fallbackUrl)
-                    },
-                    { 
-                      text: 'Get App', 
-                      onPress: () => Linking.openURL(`market://details?id=${app.playStoreId}`)
-                    },
-                    { text: 'Cancel', style: 'cancel' },
-                  ]
-                );
-              }
-            } catch (error) {
-              console.error('Error:', error);
-              Linking.openURL(app.fallbackUrl);
-            }
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+  const openBankingApp = useCallback(() => {
+    // Open the bank selection sheet instead of Alert
+    setShowBankSelector(true);
   }, []);
 
   const sharePaymentDetails = useCallback(async () => {
@@ -276,6 +194,8 @@ Please use the reference number when making payment.`;
     bankDetails,
     showUploadModal,
     setShowUploadModal,
+    showBankSelector,
+    setShowBankSelector,
     copiedField,
     formattedAmount,
     copyToClipboard,

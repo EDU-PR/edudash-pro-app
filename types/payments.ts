@@ -21,8 +21,9 @@ export interface StudentFee {
   due_date: string;
   grace_period_days?: number;
   paid_date?: string;
-  status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
+  status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived' | 'pending_verification';
   payment_method?: string;
+  pop_status?: 'pending' | 'approved' | 'rejected' | 'needs_revision'; // Status of linked POP upload
 }
 
 export interface FeeStructure {

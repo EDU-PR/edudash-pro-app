@@ -63,7 +63,7 @@ import * as Linking from 'expo-linking';
 // Inner component with access to AuthContext
 function LayoutContent() {
   const pathname = usePathname();
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const { isDark } = useTheme();
   const [showFAB, setShowFAB] = useState(false);
   const [statusBarKey, setStatusBarKey] = useState(0);
@@ -111,20 +111,23 @@ function LayoutContent() {
       pathname === '/(auth)/sign-in' ||
       pathname === '/landing' ||
       pathname === '/' ||
-      pathname.includes('auth-callback'));
+      pathname.includes('auth-callback') ||
+      pathname.includes('sign-up') ||
+      pathname.includes('signup') ||
+      pathname.includes('register'));
   
-  // Show FAB after auth loads and brief delay
+  // Show FAB after auth loads and brief delay - ONLY if user is logged in
   useEffect(() => {
-    if (!authLoading && !isAuthRoute) {
+    if (!authLoading && !isAuthRoute && user) {
       const timer = setTimeout(() => setShowFAB(true), 800);
       return () => clearTimeout(timer);
     } else {
       setShowFAB(false);
     }
-  }, [authLoading, isAuthRoute]);
+  }, [authLoading, isAuthRoute, user]);
   
-  // Determine if FAB should be visible (user pref + route logic)
-  const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB;
+  // Determine if FAB should be visible (user pref + route logic + must be logged in)
+  const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB && !!user;
   
   return (
     <View style={styles.container}>

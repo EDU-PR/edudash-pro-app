@@ -661,12 +661,35 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const available = await provider.isAvailable();
       
       if (!available) {
+        // Voice recognition not available - provide helpful guidance
+        const androidMessage = `Speech recognition is not available on this device.
+
+To enable voice input:
+1. Install or update the Google app from Play Store
+2. Go to Settings → Apps → Google → Permissions → Microphone
+3. Enable "Offline speech recognition" in Google Settings
+4. Restart EduDash Pro
+
+Alternatively, you can use text input to chat with Dash.`;
+
+        const iosMessage = `Speech recognition is not available.
+
+To enable voice input:
+1. Go to Settings → Privacy → Speech Recognition
+2. Enable speech recognition for EduDash Pro
+3. Restart the app
+
+You can also use text input to chat with Dash.`;
+
         Alert.alert(
-          'Voice Unavailable',
-          Platform.OS === 'android' 
-            ? 'Speech recognition is not available on this device.\n\nPossible solutions:\n• Ensure Google app is installed and up-to-date\n• Check device settings for Speech Recognition\n• Some devices may not support on-device speech recognition\n• Try using text input instead'
-            : 'Speech recognition is not available on this device. Please check your device settings and microphone permissions.',
-          [{ text: 'OK' }]
+          'Voice Input Unavailable',
+          Platform.OS === 'android' ? androidMessage : iosMessage,
+          [
+            { text: 'Use Text Input', style: 'default' },
+            Platform.OS === 'android' 
+              ? { text: 'Open Play Store', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.googlequicksearchbox') }
+              : { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
         );
         return;
       }

@@ -61,7 +61,7 @@ interface POPUpload {
   student?: {
     first_name: string;
     last_name: string;
-    student_code?: string;
+    student_id?: string;
   };
   uploader?: {
     first_name: string;
@@ -117,7 +117,7 @@ export default function POPReviewScreen() {
           student:students (
             first_name,
             last_name,
-            student_code
+            student_id
           )
         `)
         .eq('preschool_id', organizationId)

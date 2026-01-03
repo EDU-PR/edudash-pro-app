@@ -425,6 +425,41 @@ export default function SchoolSettingsScreen() {
           })}
         </View>
 
+        {/* Banking & Payments */}
+        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('school_settings.section.banking_payments', { defaultValue: 'Banking & Payments' })}</Text>
+          <TouchableOpacity 
+            style={[styles.settingRow, { backgroundColor: theme.surface }]} 
+            onPress={() => router.push('/screens/school-settings')}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons name="card" size={22} color={theme.primary} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: theme.text }]}>{t('school_settings.label.bank_account', { defaultValue: 'Bank Account Details' })}</Text>
+                <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>
+                  {t('school_settings.label.bank_account_desc', { defaultValue: 'Configure bank details for receiving payments' })}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.settingRow, { backgroundColor: theme.surface }]} 
+            onPress={() => router.push('/screens/pop-review')}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons name="checkmark-circle" size={22} color="#F59E0B" style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: theme.text }]}>{t('school_settings.label.pending_approvals', { defaultValue: 'Pending Payment Approvals' })}</Text>
+                <Text style={{ fontSize: 13, color: theme.textSecondary, marginTop: 2 }}>
+                  {t('school_settings.label.pending_approvals_desc', { defaultValue: 'Review and approve proof of payment uploads' })}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
         {/* Advanced Settings */}
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('school_settings.section.advanced_settings', { defaultValue: 'Advanced Settings' })}</Text>

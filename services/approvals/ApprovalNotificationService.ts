@@ -68,7 +68,7 @@ export class ApprovalNotificationService {
    * Notify parent that their payment proof was approved
    * Channel: educational (default priority) with celebration tone
    */
-  static async notifyParentPOPApproved(pop: ProofOfPayment): Promise<void> {
+  static async notifyParentPOPApproved(pop: ProofOfPayment & { invoice_number?: string }): Promise<void> {
     try {
       // Get school name and student name for personalization
       const { data: preschool } = await supabase
@@ -86,13 +86,18 @@ export class ApprovalNotificationService {
       const schoolName = preschool?.name || 'your school';
       const studentName = student ? `${student.first_name} ${student.last_name}` : 'your child';
       const amount = FinancialDataService.formatCurrency(pop.payment_amount);
+      
+      // Build message with invoice number if available
+      const invoiceInfo = pop.invoice_number ? ` Invoice: ${pop.invoice_number}.` : '';
+      const bodyMessage = `Your payment of ${amount} for ${studentName} has been approved.${invoiceInfo} Thank you!`;
 
+      // Insert notification record for audit trail
       await supabase
         .from('push_notifications')
         .insert({
           recipient_user_id: pop.submitted_by,
           title: '🎉 Payment Approved!',
-          body: `Your payment of ${amount} for ${studentName} has been approved. Welcome to the ${schoolName} family!`,
+          body: bodyMessage,
           notification_type: 'payment_approved',
           preschool_id: pop.preschool_id,
           status: 'sent',
@@ -101,15 +106,52 @@ export class ApprovalNotificationService {
             pop_id: pop.id,
             student_id: pop.student_id,
             amount: pop.payment_amount,
+            invoice_number: pop.invoice_number,
             approved_at: pop.approved_at,
-            action_url: '/dashboard/parent',
+            action_url: '/dashboard/parent/payments',
             channel: 'educational',
             priority: 'high',
             celebration: true
           }
         });
 
-      console.log(`✅ Notified parent ${pop.parent_name} of POP approval`);
+      // Call notifications-dispatcher to actually send push notification
+      try {
+        const { error: dispatchError } = await supabase.functions.invoke('notifications-dispatcher', {
+          body: {
+            event_type: 'payment_confirmed',
+            user_ids: [pop.submitted_by],
+            preschool_id: pop.preschool_id,
+            student_id: pop.student_id,
+            include_push: true,
+            template_override: {
+              title: '🎉 Payment Approved!',
+              body: bodyMessage,
+              data: {
+                type: 'pop_approved',
+                pop_id: pop.id,
+                student_id: pop.student_id,
+                amount: pop.payment_amount,
+                invoice_number: pop.invoice_number,
+                approved_at: pop.approved_at,
+                action_url: '/dashboard/parent/payments',
+                channel: 'educational',
+                priority: 'high',
+              }
+            }
+          }
+        });
+
+        if (dispatchError) {
+          console.error('Failed to dispatch push notification:', dispatchError);
+        } else {
+          console.log(`✅ Push notification dispatched to parent ${pop.parent_name}`);
+        }
+      } catch (dispatchErr) {
+        console.error('Error invoking notifications-dispatcher:', dispatchErr);
+      }
+
+      console.log(`✅ Notified parent ${pop.parent_name} of POP approval with invoice: ${pop.invoice_number || 'none'}`);
     } catch (error) {
       console.error('Error notifying parent of POP approval:', error);
     }
@@ -124,6 +166,7 @@ export class ApprovalNotificationService {
       const amount = FinancialDataService.formatCurrency(pop.payment_amount);
       const reason = pop.rejection_reason || 'Unable to verify payment details';
 
+      // Insert notification record for audit trail
       await supabase
         .from('push_notifications')
         .insert({
@@ -145,6 +188,42 @@ export class ApprovalNotificationService {
             requires_action: true
           }
         });
+
+      // Call notifications-dispatcher to actually send push notification
+      try {
+        const { error: dispatchError } = await supabase.functions.invoke('notifications-dispatcher', {
+          body: {
+            event_type: 'payment_required',
+            user_ids: [pop.submitted_by],
+            preschool_id: pop.preschool_id,
+            student_id: pop.student_id,
+            include_push: true,
+            template_override: {
+              title: '⚠️ Payment Review Needed',
+              body: `Your payment proof (${amount}) needs attention. ${reason}. Please resubmit or contact us.`,
+              data: {
+                type: 'pop_rejected',
+                pop_id: pop.id,
+                student_id: pop.student_id,
+                amount: pop.payment_amount,
+                rejection_reason: pop.rejection_reason,
+                action_url: '/dashboard/parent/payments',
+                channel: 'urgent',
+                priority: 'high',
+                requires_action: true
+              }
+            }
+          }
+        });
+
+        if (dispatchError) {
+          console.error('Failed to dispatch rejection push notification:', dispatchError);
+        } else {
+          console.log(`✅ Rejection push notification dispatched to parent ${pop.parent_name}`);
+        }
+      } catch (dispatchErr) {
+        console.error('Error invoking notifications-dispatcher for rejection:', dispatchErr);
+      }
 
       console.log(`✅ Notified parent ${pop.parent_name} of POP rejection`);
     } catch (error) {

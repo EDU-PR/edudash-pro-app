@@ -2,6 +2,7 @@
  * useRegistrations Hook
  * 
  * Manages state and business logic for principal registration reviews.
+ * Supports both registration_requests (EduSitePro sync) and child_registration_requests (in-app).
  * Extracted from principal-registrations.tsx per WARP.md file size standards.
  */
 
@@ -47,6 +48,14 @@ export interface Registration {
   reviewed_date?: string;
   rejection_reason?: string;
   created_at: string;
+  // Source tracking
+  source?: 'edusite' | 'in-app';
+  // Additional fields from child_registration_requests
+  medical_info?: string;
+  dietary_requirements?: string;
+  special_needs?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
 }
 
 export type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -113,7 +122,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     message: '',
   });
 
-  // Fetch registrations
+  // Fetch registrations from both tables
   const fetchRegistrations = useCallback(async () => {
     if (!organizationId) {
       console.log('⏳ [Registrations] Waiting for organizationId...');
@@ -126,25 +135,97 @@ export function useRegistrations(): UseRegistrationsReturn {
       
       console.log('📍 [Registrations] Fetching for organization:', organizationId);
 
-      const { data, error: fetchError } = await supabase
+      // Fetch from registration_requests (EduSitePro sync)
+      const { data: edusiteData, error: edusiteError } = await supabase
         .from('registration_requests')
         .select('*')
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        // Handle table not existing
-        if (fetchError.code === '42P01' || fetchError.message?.includes('does not exist')) {
-          console.log('ℹ️ [Registrations] Table not found - data needs to sync from EduSitePro');
-          setRegistrations([]);
-          setFilteredRegistrations([]);
-          return;
-        }
-        throw fetchError;
+      // Fetch from child_registration_requests (in-app submissions)
+      const { data: inAppData, error: inAppError } = await supabase
+        .from('child_registration_requests')
+        .select(`
+          id,
+          child_first_name,
+          child_last_name,
+          child_birth_date,
+          child_gender,
+          medical_info,
+          dietary_requirements,
+          special_needs,
+          emergency_contact_name,
+          emergency_contact_phone,
+          notes,
+          parent_id,
+          preschool_id,
+          status,
+          reviewed_by,
+          reviewed_at,
+          rejection_reason,
+          created_at,
+          parent:profiles!parent_id(first_name, last_name, email, phone)
+        `)
+        .eq('preschool_id', organizationId)
+        .order('created_at', { ascending: false });
+
+      if (edusiteError && edusiteError.code !== '42P01') {
+        console.warn('⚠️ [Registrations] EduSite fetch error:', edusiteError);
+      }
+      if (inAppError && inAppError.code !== '42P01') {
+        console.warn('⚠️ [Registrations] In-app fetch error:', inAppError);
       }
 
-      console.log('✅ [Registrations] Found:', data?.length || 0, 'registrations');
-      setRegistrations(data || []);
+      // Transform in-app registrations to match Registration interface
+      const transformedInApp: Registration[] = (inAppData || []).map((item: any) => ({
+        id: item.id,
+        organization_id: item.preschool_id,
+        // Guardian info from joined parent profile
+        guardian_name: item.parent 
+          ? `${item.parent.first_name || ''} ${item.parent.last_name || ''}`.trim() 
+          : 'Parent',
+        guardian_email: item.parent?.email || '',
+        guardian_phone: item.parent?.phone || '',
+        // Student info
+        student_first_name: item.child_first_name,
+        student_last_name: item.child_last_name,
+        student_dob: item.child_birth_date,
+        student_gender: item.child_gender,
+        // Documents - in-app doesn't require documents
+        documents_uploaded: true,
+        // Payment - in-app doesn't require payment upfront
+        registration_fee_paid: true,
+        payment_verified: true,
+        // Status
+        status: item.status,
+        reviewed_by: item.reviewed_by,
+        reviewed_date: item.reviewed_at,
+        rejection_reason: item.rejection_reason,
+        created_at: item.created_at,
+        // Source tracking
+        source: 'in-app' as const,
+        // Additional fields
+        medical_info: item.medical_info,
+        dietary_requirements: item.dietary_requirements,
+        special_needs: item.special_needs,
+        emergency_contact_name: item.emergency_contact_name,
+        emergency_contact_phone: item.emergency_contact_phone,
+      }));
+
+      // Add source to EduSite registrations
+      const transformedEdusite: Registration[] = (edusiteData || []).map((item: any) => ({
+        ...item,
+        source: 'edusite' as const,
+      }));
+
+      // Combine and sort by created_at
+      const combined = [...transformedEdusite, ...transformedInApp].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      console.log('✅ [Registrations] Found:', combined.length, 'total registrations', 
+        `(${transformedEdusite.length} EduSite, ${transformedInApp.length} in-app)`);
+      setRegistrations(combined);
     } catch (err: any) {
       console.error('❌ [Registrations] Error:', err);
       setError(err.message || 'Failed to load registrations');
@@ -219,17 +300,21 @@ export function useRegistrations(): UseRegistrationsReturn {
     }
   };
 
-  // Check if registration can be approved (needs POP)
+  // Check if registration can be approved (needs POP for EduSite, always true for in-app)
   const canApprove = (item: Registration): boolean => {
-    // Must have proof of payment uploaded to approve
+    // In-app registrations don't require proof of payment upfront
+    if (item.source === 'in-app') return true;
+    // EduSite registrations need proof of payment
     return !!item.proof_of_payment_url;
   };
 
   // Approve registration
   const handleApprove = (registration: Registration) => {
+    const isInApp = registration.source === 'in-app';
+    
     Alert.alert(
       'Approve Registration',
-      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?`,
+      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?${isInApp ? '\n\nThis will create a student profile.' : ''}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -239,36 +324,72 @@ export function useRegistrations(): UseRegistrationsReturn {
             try {
               const supabase = assertSupabase();
               
-              const { error: updateError } = await supabase
-                .from('registration_requests')
-                .update({
-                  status: 'approved',
-                  reviewed_by: user?.email,
-                  reviewed_date: new Date().toISOString(),
-                })
-                .eq('id', registration.id);
+              if (isInApp) {
+                // Update child_registration_requests table
+                const { error: updateError } = await supabase
+                  .from('child_registration_requests')
+                  .update({
+                    status: 'approved',
+                    reviewed_by: user?.id,
+                    reviewed_at: new Date().toISOString(),
+                  })
+                  .eq('id', registration.id);
 
-              if (updateError) throw updateError;
+                if (updateError) throw updateError;
 
-              // Call sync function to create accounts and send email
-              const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
-                body: { registration_id: registration.id },
-              });
+                // Send notification to parent
+                try {
+                  await supabase.functions.invoke('notifications-dispatcher', {
+                    body: {
+                      event_type: 'child_registration_approved',
+                      user_ids: [registration.organization_id], // parent_id stored in this field for in-app
+                      registration_id: registration.id,
+                      child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+                    },
+                  });
+                } catch (notifErr) {
+                  console.warn('Failed to send approval notification:', notifErr);
+                }
 
-              if (syncError) {
-                setSuccessModal({
-                  visible: true,
-                  title: 'Partial Success',
-                  message: 'Registration approved, but account creation may have failed. Please contact admin.',
-                  icon: 'warning',
-                });
-              } else {
                 setSuccessModal({
                   visible: true,
                   title: 'Success',
-                  message: '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
+                  message: '✅ Registration approved!\n\n👶 Child registration confirmed\n📱 Parent notified',
                   icon: 'checkmark-circle',
                 });
+              } else {
+                // Original EduSite flow
+                const { error: updateError } = await supabase
+                  .from('registration_requests')
+                  .update({
+                    status: 'approved',
+                    reviewed_by: user?.id,
+                    reviewed_date: new Date().toISOString(),
+                  })
+                  .eq('id', registration.id);
+
+                if (updateError) throw updateError;
+
+                // Call sync function to create accounts and send email
+                const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
+                  body: { registration_id: registration.id },
+                });
+
+                if (syncError) {
+                  setSuccessModal({
+                    visible: true,
+                    title: 'Partial Success',
+                    message: 'Registration approved, but account creation may have failed. Please contact admin.',
+                    icon: 'warning',
+                  });
+                } else {
+                  setSuccessModal({
+                    visible: true,
+                    title: 'Success',
+                    message: '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
+                    icon: 'checkmark-circle',
+                  });
+                }
               }
 
               fetchRegistrations();
@@ -286,6 +407,8 @@ export function useRegistrations(): UseRegistrationsReturn {
 
   // Reject registration
   const handleReject = (registration: Registration) => {
+    const isInApp = registration.source === 'in-app';
+    
     Alert.prompt(
       'Reject Registration',
       `Enter reason for rejecting ${registration.student_first_name} ${registration.student_last_name}'s registration:`,
@@ -304,17 +427,48 @@ export function useRegistrations(): UseRegistrationsReturn {
             try {
               const supabase = assertSupabase();
               
-              const { error } = await supabase
-                .from('registration_requests')
-                .update({
-                  status: 'rejected',
-                  reviewed_by: user?.email,
-                  reviewed_date: new Date().toISOString(),
-                  rejection_reason: reason,
-                })
-                .eq('id', registration.id);
+              if (isInApp) {
+                // Update child_registration_requests table
+                const { error } = await supabase
+                  .from('child_registration_requests')
+                  .update({
+                    status: 'rejected',
+                    reviewed_by: user?.id,
+                    reviewed_at: new Date().toISOString(),
+                    rejection_reason: reason,
+                  })
+                  .eq('id', registration.id);
 
-              if (error) throw error;
+                if (error) throw error;
+
+                // Send notification to parent
+                try {
+                  await supabase.functions.invoke('notifications-dispatcher', {
+                    body: {
+                      event_type: 'child_registration_rejected',
+                      user_ids: [registration.organization_id], // parent_id stored for in-app
+                      registration_id: registration.id,
+                      child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+                      rejection_reason: reason,
+                    },
+                  });
+                } catch (notifErr) {
+                  console.warn('Failed to send rejection notification:', notifErr);
+                }
+              } else {
+                // Original EduSite flow
+                const { error } = await supabase
+                  .from('registration_requests')
+                  .update({
+                    status: 'rejected',
+                    reviewed_by: user?.id,
+                    reviewed_date: new Date().toISOString(),
+                    rejection_reason: reason,
+                  })
+                  .eq('id', registration.id);
+
+                if (error) throw error;
+              }
 
               Alert.alert('Rejected', 'Registration has been rejected.');
               fetchRegistrations();

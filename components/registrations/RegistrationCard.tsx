@@ -128,6 +128,28 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
           </Text>
         </View>
       </View>
+      
+      {/* Source Badge */}
+      {item.source && (
+        <View style={[
+          styles.sourceBadge, 
+          { backgroundColor: item.source === 'in-app' ? '#8B5CF620' : '#3B82F620' }
+        ]}>
+          <Ionicons 
+            name={item.source === 'in-app' ? 'phone-portrait-outline' : 'globe-outline'} 
+            size={12} 
+            color={item.source === 'in-app' ? '#8B5CF6' : '#3B82F6'} 
+          />
+          <Text style={{ 
+            color: item.source === 'in-app' ? '#8B5CF6' : '#3B82F6',
+            fontSize: 11,
+            marginLeft: 4,
+            fontWeight: '500',
+          }}>
+            {item.source === 'in-app' ? 'App Registration' : 'Website'}
+          </Text>
+        </View>
+      )}
 
       {/* Guardian Info */}
       <View style={styles.section}>

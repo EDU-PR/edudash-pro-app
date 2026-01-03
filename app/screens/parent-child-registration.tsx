@@ -219,6 +219,28 @@ export default function ParentChildRegistrationScreen() {
         if (__DEV__) {
           console.log('[Child Registration] Insert successful:', response.data);
         }
+        
+        // Send notification to principals about the new registration
+        try {
+          const registrationData = response.data[0];
+          await assertSupabase().functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'child_registration_submitted',
+              preschool_id: selectedOrganizationId,
+              role_targets: ['principal', 'principal_admin'],
+              registration_id: registrationData.id,
+              child_name: `${firstName} ${lastName}`,
+              parent_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : undefined,
+            },
+          });
+          if (__DEV__) {
+            console.log('[Child Registration] Notification sent to principals');
+          }
+        } catch (notifError) {
+          // Don't block success - just log the error
+          console.warn('[Child Registration] Failed to send notification:', notifError);
+        }
+        
         // Success - show alert and reset form (continues below)
       } else if (response.error) {
         // Handle error
