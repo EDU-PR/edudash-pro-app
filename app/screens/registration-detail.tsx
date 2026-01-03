@@ -118,9 +118,15 @@ export default function RegistrationDetailScreen() {
           .from('registration_requests')
           .select('*')
           .eq('id', id)
-          .single();
+          .maybeSingle(); // Use maybeSingle to avoid 406 error when not found
 
         if (fetchError) throw fetchError;
+        
+        if (!data) {
+          setError('Registration not found. It may have been deleted or you do not have permission to view it.');
+          setLoading(false);
+          return;
+        }
         
         setRegistration(data);
       } catch (err: any) {
