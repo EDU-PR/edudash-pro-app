@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PrincipalDashboardWrapper } from '@/components/dashboard/PrincipalDashboardWrapper';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function PrincipalDashboardScreen() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -15,6 +16,13 @@ export default function PrincipalDashboardScreen() {
   
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
+
+  // Reset navigation guard when screen gains focus (allows navigation after returning)
+  useFocusEffect(
+    useCallback(() => {
+      navigationAttempted.current = false;
+    }, [])
+  );
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
