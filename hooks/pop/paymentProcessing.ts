@@ -106,7 +106,6 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
         .update({ 
           status: 'paid', 
           paid_date: new Date().toISOString().split('T')[0],
-          paid_amount: data.payment_amount || fees[0].amount,
         })
         .eq('id', feeId);
       

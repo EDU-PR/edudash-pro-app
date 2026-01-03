@@ -626,8 +626,12 @@ export const usePrincipalHub = () => {
       );
       
       // Get REAL financial data from transactions
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Use Date object to correctly handle December -> January rollover
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      
+      const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
       
       // Fetch actual financial transactions for current month
       const { data: currentMonthTransactions } = await assertSupabase()
@@ -636,12 +640,12 @@ export const usePrincipalHub = () => {
         .eq('preschool_id', preschoolId)
         .eq('type', 'fee_payment')
         .eq('status', 'completed')
-        .gte('created_at', `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`)
-        .lt('created_at', `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`) || { data: [] };
+        .gte('created_at', formatDateStr(currentMonthStart))
+        .lt('created_at', formatDateStr(nextMonthStart)) || { data: [] };
       
-      // Fetch previous month for comparison
-      const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-      const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+      // Fetch previous month for comparison (Date handles year rollover automatically)
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
       
       const { data: previousMonthTransactions } = await assertSupabase()
         .from('financial_transactions')
@@ -649,8 +653,8 @@ export const usePrincipalHub = () => {
         .eq('preschool_id', preschoolId)
         .eq('type', 'fee_payment')
         .eq('status', 'completed')
-        .gte('created_at', `${prevYear}-${prevMonth.toString().padStart(2, '0')}-01`)
-        .lt('created_at', `${prevYear}-${(prevMonth + 1).toString().padStart(2, '0')}-01`) || { data: [] };
+        .gte('created_at', formatDateStr(prevMonthStart))
+        .lt('created_at', formatDateStr(prevMonthEnd)) || { data: [] };
       
       // Calculate real revenue
       const currentMonthRevenue = (currentMonthTransactions || []).reduce((sum: number, transaction: any) => {

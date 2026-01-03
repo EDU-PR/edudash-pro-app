@@ -49,42 +49,57 @@ export default function ParentNewMessageScreen() {
       
       const client = assertSupabase();
       
-      // Get students linked to this parent
+      // Get students linked to this parent via parent_id column on students table
+      // Note: parent_student_links table doesn't exist - students.parent_id is the relationship
       const { data, error } = await client
-        .from('parent_student_links')
+        .from('students')
         .select(`
-          student:students(
+          id,
+          first_name,
+          last_name,
+          class:classes(
             id,
-            first_name,
-            last_name,
-            class:classes(
-              id,
-              name,
-              teacher:profiles(id, first_name, last_name)
-            )
+            name,
+            teacher_id
           )
         `)
         .eq('parent_id', user.id)
-        .eq('status', 'approved');
+        .eq('is_active', true);
       
       if (error) {
         console.error('[ParentNewMessage] Query error:', error);
         throw new Error(error.message || 'Failed to load children');
       }
       
+      // Fetch teacher profiles separately to avoid nested relationship issues
+      const teacherIds = [...new Set((data || [])
+        .map((s: any) => s.class?.teacher_id)
+        .filter(Boolean))];
+      
+      let teacherMap: Record<string, { first_name: string; last_name: string }> = {};
+      if (teacherIds.length > 0) {
+        const { data: teachers } = await client
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', teacherIds);
+        teacherMap = (teachers || []).reduce((acc: any, t: any) => {
+          acc[t.id] = t;
+          return acc;
+        }, {});
+      }
+      
       // Transform data
-      return (data || []).map((link: any) => {
-        const student = link.student;
+      return (data || []).map((student: any) => {
         const classInfo = student?.class;
-        const teacher = classInfo?.teacher;
+        const teacher = classInfo?.teacher_id ? teacherMap[classInfo.teacher_id] : null;
         
         return {
-          id: student?.id,
-          first_name: student?.first_name,
-          last_name: student?.last_name,
+          id: student.id,
+          first_name: student.first_name,
+          last_name: student.last_name,
           class_name: classInfo?.name,
           teacher_name: teacher ? `${teacher.first_name} ${teacher.last_name}`.trim() : undefined,
-          teacher_id: teacher?.id,
+          teacher_id: classInfo?.teacher_id,
         };
       }).filter((c: any) => c.id);
     },
