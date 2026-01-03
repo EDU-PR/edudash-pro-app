@@ -59,7 +59,7 @@ export const useNewEnhancedTeacherState = () => {
         router.push('/screens/assign-homework');
         break;
       case 'view_classes':
-        router.push('/screens/class-details');
+        router.push('/screens/class-teacher-management');
         break;
       case 'parent_communication':
         router.push('/screens/teacher-message-list');

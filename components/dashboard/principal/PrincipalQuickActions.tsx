@@ -125,7 +125,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/teacher-management');
         break;
       case 'classes':
-        router.push('/screens/class-details');
+        router.push('/screens/class-teacher-management');
         break;
       case 'settings':
         router.push('/screens/school-settings');
