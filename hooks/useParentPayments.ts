@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import type { PaymentChild, StudentFee, FeeStructure, PaymentMethod, POPUpload } from '@/types/payments';
 
 export function useParentPayments() {
   const { user, profile } = useAuth();
+  const appState = useRef(AppState.currentState);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -211,6 +213,21 @@ export function useParentPayments() {
     }
   }, [selectedChildId, loadFees]);
 
+  // Refresh data when app comes to foreground (e.g., after notification tap)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('[Payments] App came to foreground, refreshing data...');
+        if (selectedChildId) {
+          loadFees();
+        }
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [selectedChildId, loadFees]);
   // Realtime subscription for POP status updates
   useEffect(() => {
     if (!selectedChildId) return;
