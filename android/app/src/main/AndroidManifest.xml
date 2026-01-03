@@ -40,19 +40,63 @@
       <action android:name="android.speech.RecognitionService"/>
     </intent>
   </queries>
-  <!-- Banking Apps for South Africa -->
+  <!-- Banking Apps for South Africa - Correct package names for Android 11+ visibility -->
   <queries>
-    <package android:name="com.fnb.connect.ui"/>
-    <package android:name="com.standardbank.smartbankingza"/>
-    <package android:name="za.co.absa.absasecure"/>
-    <package android:name="com.nedbank.nedbank"/>
+    <!-- FNB -->
+    <package android:name="za.co.fnb.connect.itt"/>
+    <!-- Standard Bank -->
+    <package android:name="com.standardbank.sb"/>
+    <!-- ABSA -->
+    <package android:name="com.barclays.africa"/>
+    <!-- Nedbank -->
+    <package android:name="za.co.nedbank.nedbank"/>
+    <!-- Capitec -->
     <package android:name="za.co.capitecbank.production"/>
-    <package android:name="za.co.fnb.cellphone.banking"/>
-    <package android:name="za.co.investec"/>
+    <!-- TymeBank -->
     <package android:name="za.co.tymebank"/>
-    <package android:name="za.co.africanbank.application"/>
-    <package android:name="za.co.bidvestbank"/>
+    <!-- Discovery Bank -->
     <package android:name="com.discoverycoza"/>
+    <!-- Investec -->
+    <package android:name="za.co.investec"/>
+    <!-- African Bank -->
+    <package android:name="za.co.africanbank.application"/>
+    <!-- Intent queries for banking app URL schemes -->
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="fnbbanking"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="standardbank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="absabanking"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="nedbankmoneyapp"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="capitecbank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="tymebank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="discoverybank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="investec"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="africanbank"/>
+    </intent>
   </queries>
   <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true" android:enableOnBackInvokedCallback="false" android:appComponentFactory="androidx.core.app.CoreComponentFactory" android:fullBackupContent="@xml/secure_store_backup_rules" android:dataExtractionRules="@xml/secure_store_data_extraction_rules">
     <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" tools:replace="android:value"/>

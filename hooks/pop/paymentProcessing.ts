@@ -74,21 +74,49 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
-    const { data: fees } = await supabase
+    // First try to find a fee matching the payment month
+    let { data: fees } = await supabase
       .from('student_fees')
-      .select('id')
+      .select('id, due_date, amount')
       .eq('student_id', data.student_id)
-      .in('status', ['pending', 'overdue', 'partially_paid'])
+      .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
       .gte('due_date', monthStart)
       .lte('due_date', monthEnd)
       .limit(1);
     
-    if (fees?.length) {
-      await supabase
+    // If no fee found for the payment month, get the oldest pending fee
+    if (!fees?.length) {
+      logger.info('[updateFeeStatus] No fee found for payment month, looking for oldest pending fee');
+      const { data: oldestFees } = await supabase
         .from('student_fees')
-        .update({ status: 'paid', paid_date: new Date().toISOString().split('T')[0] })
-        .eq('id', fees[0].id);
-      logger.info('✅ Student fee marked as paid');
+        .select('id, due_date, amount')
+        .eq('student_id', data.student_id)
+        .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
+        .order('due_date', { ascending: true })
+        .limit(1);
+      fees = oldestFees;
+    }
+    
+    if (fees?.length) {
+      const feeId = fees[0].id;
+      logger.info(`[updateFeeStatus] Marking fee ${feeId} as paid for student ${data.student_id}`);
+      
+      const { error: updateError } = await supabase
+        .from('student_fees')
+        .update({ 
+          status: 'paid', 
+          paid_date: new Date().toISOString().split('T')[0],
+          paid_amount: data.payment_amount || fees[0].amount,
+        })
+        .eq('id', feeId);
+      
+      if (updateError) {
+        logger.error('Failed to update fee status:', updateError);
+      } else {
+        logger.info('✅ Student fee marked as paid');
+      }
+    } else {
+      logger.warn(`[updateFeeStatus] No pending fees found for student ${data.student_id}`);
     }
   } catch (err) {
     logger.error('Error updating fee:', err);
