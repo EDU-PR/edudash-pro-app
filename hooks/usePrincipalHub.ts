@@ -317,7 +317,7 @@ export const usePrincipalHub = () => {
           .from('classes')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .or('is_active.eq.true,is_active.is.null'),
+          .or('active.eq.true,active.is.null'),
           
         // Get pending applications from enrollment_applications
         assertSupabase()
@@ -509,7 +509,7 @@ export const usePrincipalHub = () => {
               .from('classes')
               .select('id', { count: 'exact', head: true })
               .eq('teacher_id', effectiveUserId)
-              .or('is_active.eq.true,is_active.is.null')
+              .or('active.eq.true,active.is.null')
               .eq('preschool_id', preschoolId);
             teacherClassesCount = classesCountRes?.count || 0;
 
@@ -517,7 +517,7 @@ export const usePrincipalHub = () => {
               .from('classes')
               .select('id')
               .eq('teacher_id', effectiveUserId)
-              .or('is_active.eq.true,is_active.is.null')
+              .or('active.eq.true,active.is.null')
               .eq('preschool_id', preschoolId);
             teacherClasses = classesRes?.data || [];
           }
@@ -531,7 +531,7 @@ export const usePrincipalHub = () => {
               .from('classes')
               .select('id')
               .is('teacher_id', null)
-              .or('is_active.eq.true,is_active.is.null')
+              .or('active.eq.true,active.is.null')
               .eq('preschool_id', preschoolId);
             const unassigned = unassignedRes?.data || [];
             if (unassigned.length > 0) {

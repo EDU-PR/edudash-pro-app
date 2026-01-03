@@ -51,7 +51,7 @@ export function useClassTeacherManagement({
           capacity,
           room_number,
           teacher_id,
-          is_active,
+          active,
           users:teacher_id (
             id,
             first_name,
@@ -81,7 +81,7 @@ export function useClassTeacherManagement({
           room_number: cls.room_number,
           teacher_id: cls.teacher_id,
           teacher_name: teacherName,
-          is_active: cls.is_active ?? true,
+          is_active: cls.active ?? true,
         } as ClassInfo;
       });
 
@@ -207,7 +207,7 @@ export function useClassTeacherManagement({
           room_number: classForm.room_number.trim() || null,
           teacher_id: classForm.teacher_id || null,
           preschool_id: schoolId,
-          is_active: true,
+          active: true,
         });
 
       if (error) {

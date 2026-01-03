@@ -117,7 +117,9 @@ export class PrincipalHubService {
       try {
         const now = new Date();
         const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-01`;
-        const nextMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2,'0')}-01`;
+        // Calculate next month correctly (handle December -> January rollover)
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const nextMonthStart = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2,'0')}-01`;
         const { data: tx } = await assertSupabase()
           .from('financial_transactions')
           .select('amount, type, status')

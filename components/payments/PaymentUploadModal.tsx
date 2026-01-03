@@ -110,36 +110,52 @@ export function PaymentUploadModal({
     setUploading(true);
     try {
       const supabase = assertSupabase();
+      const today = new Date();
+      const last24Hours = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-      // Check for existing pending POP uploads for this student to prevent duplicates
+      // Check for existing pending OR recently approved POP uploads for this student
       const { data: existingPOPs, error: checkError } = await supabase
         .from('pop_uploads')
         .select('id, status, created_at, payment_amount')
         .eq('student_id', selectedChildId)
         .eq('upload_type', 'proof_of_payment')
-        .in('status', ['pending', 'submitted'])
+        .or(`status.in.(pending,submitted),and(status.eq.approved,created_at.gte.${last24Hours})`)
         .order('created_at', { ascending: false })
-        .limit(1);
+        .limit(5);
 
       if (checkError) {
         console.error('Error checking existing POPs:', checkError);
       }
 
-      if (existingPOPs && existingPOPs.length > 0) {
-        const existingPOP = existingPOPs[0];
-        const createdDate = new Date(existingPOP.created_at).toLocaleDateString();
+      // Check for pending uploads - warn but allow override
+      const pendingPOP = existingPOPs?.find(p => ['pending', 'submitted'].includes(p.status));
+      if (pendingPOP) {
+        const createdDate = new Date(pendingPOP.created_at).toLocaleDateString();
         
-        // Show confirmation dialog
+        // Show confirmation dialog for pending - can override
         Alert.alert(
-          'Existing Upload Found',
-          `You already have a pending proof of payment uploaded on ${createdDate}${existingPOP.payment_amount ? ` for R${existingPOP.payment_amount}` : ''}.\n\nDo you want to upload another one?`,
+          'Pending Upload Found',
+          `You already have a pending proof of payment uploaded on ${createdDate}${pendingPOP.payment_amount ? ` for R${pendingPOP.payment_amount}` : ''}.\n\nWait for it to be reviewed before uploading another.`,
           [
             { text: 'Cancel', style: 'cancel', onPress: () => setUploading(false) },
             { 
               text: 'Upload Anyway', 
+              style: 'destructive',
               onPress: () => proceedWithUpload(),
             },
           ]
+        );
+        return;
+      }
+
+      // Check for recently approved uploads - block completely
+      const recentApproved = existingPOPs?.find(p => p.status === 'approved');
+      if (recentApproved) {
+        const createdDate = new Date(recentApproved.created_at).toLocaleDateString();
+        Alert.alert(
+          'Recent Upload Approved',
+          `Your proof of payment from ${createdDate}${recentApproved.payment_amount ? ` for R${recentApproved.payment_amount}` : ''} was already approved.\n\nYou don't need to upload again unless you made a new payment.`,
+          [{ text: 'OK', onPress: () => setUploading(false) }]
         );
         return;
       }
