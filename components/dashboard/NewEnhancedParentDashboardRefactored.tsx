@@ -42,6 +42,7 @@ import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } f
 import { ChildSwitcher } from './parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
+import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -66,6 +67,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const insets = useSafeAreaInsets();
+  
+  // Onboarding hints state
+  const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
+  const [showLiveClassesHint, dismissLiveClassesHint] = useOnboardingHint('parent_live_classes');
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
   
@@ -230,6 +235,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         action: 'messages',
         glow: unreadCount > 0,
         badge: unreadCount,
+        priority: unreadCount > 5 ? 'important' : unreadCount > 0 ? 'informational' : undefined,
       },
       {
         title: t('parent.missed_calls', { defaultValue: 'Missed Calls' }),
@@ -240,6 +246,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         action: 'calls',
         glow: missedCallsCount > 0,
         badge: missedCallsCount,
+        priority: missedCallsCount > 2 ? 'urgent' : missedCallsCount > 0 ? 'important' : undefined,
       },
       {
         title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }),
@@ -250,6 +257,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         action: 'view_homework',
         glow: pendingHomework > 0,
         badge: pendingHomework,
+        priority: pendingHomework > 3 ? 'urgent' : pendingHomework > 0 ? 'important' : undefined,
       },
       {
         title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }),
@@ -260,19 +268,20 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         action: 'check_attendance',
         glow: false,
         badge: 0,
+        priority: attendanceRate < 75 ? 'urgent' : attendanceRate < 90 ? 'important' : 'informational',
       },
     ];
   }, [dashboardData, unreadMessageCount, missedCallsCount, theme, t]);
 
-  // Quick actions - enhanced with more AI features
+  // Quick actions - enhanced with parent-friendly labels
   const quickActions = useMemo(() => [
-    { id: 'view_homework', title: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book', color: theme.primary },
-    { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar', color: theme.success },
-    { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school', color: theme.secondary },
-    { id: 'messages', title: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', color: theme.info },
-    { id: 'events', title: t('parent.events', { defaultValue: 'Events' }), icon: 'calendar-outline', color: theme.warning },
-    { id: 'calls', title: t('parent.calls', { defaultValue: 'Calls' }), icon: 'call', color: '#10B981' },
-    { id: 'payments', title: t('parent.payments', { defaultValue: 'Payments & POP' }), icon: 'card', color: '#059669' },
+    { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
+    { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
+    { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
+    { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
+    { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
+    { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
+    { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: '#059669' },
     { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
     { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
   ], [t, theme, tier]);
@@ -372,28 +381,26 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           return shouldShowBanner ? (
             <View style={styles.upgradeBanner}>
               <View style={styles.upgradeBannerContent}>
-                <Ionicons name="diamond" size={20} color="#FFD700" />
+                <View style={styles.upgradeBannerIconContainer}>
+                  <Ionicons name="sparkles" size={16} color="#FFD700" />
+                </View>
                 <View style={styles.upgradeBannerText}>
                   <Text style={styles.upgradeBannerTitle}>
-                    {t('dashboard.unlock_features', { defaultValue: 'Unlock Premium Features' })}
-                  </Text>
-                  <Text style={styles.upgradeBannerSubtitle}>
-                    {t('dashboard.upgrade_subtitle', { defaultValue: 'Get AI homework help, advanced insights, and priority support' })}
+                    {t('dashboard.upgrade_value', { defaultValue: 'Save time with AI homework help' })}
                   </Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.upgradeBannerButton}
+                  onPress={() => {
+                    track('parent.dashboard.upgrade_cta_clicked', { source: 'free_tier_banner', tier });
+                    router.push('/pricing');
+                  }}
+                >
+                  <Text style={styles.upgradeBannerButtonText}>
+                    {t('common.upgrade', { defaultValue: 'Upgrade' })}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.upgradeBannerButton}
-                onPress={() => {
-                  track('parent.dashboard.upgrade_cta_clicked', { source: 'free_tier_banner', tier });
-                  router.push('/pricing');
-                }}
-              >
-                <Text style={styles.upgradeBannerButtonText}>
-                  {t('common.upgrade', { defaultValue: 'Upgrade' })}
-                </Text>
-                <Ionicons name="arrow-forward" size={14} color={theme.primary} />
-              </TouchableOpacity>
             </View>
           ) : null;
         })()}
@@ -407,7 +414,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
 
         {/* Metrics Grid */}
         <CollapsibleSection 
-          title={t('dashboard.overview', { defaultValue: 'Overview' })}
+          title={t('dashboard.todays_overview', { defaultValue: "Today's Overview" })}
           sectionId="overview"
           icon="📊"
           defaultCollapsed={collapsedSections.has('overview')}
@@ -424,6 +431,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                 trend={metric.trend}
                 glow={metric.glow}
                 badge={metric.badge}
+                priority={metric.priority as 'urgent' | 'important' | 'informational' | undefined}
                 onPress={() => {
                   track('parent.dashboard.metric_clicked', { metric: metric.title });
                   if (metric.action) {
@@ -443,6 +451,17 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           defaultCollapsed={collapsedSections.has('quick-actions')}
           onToggle={toggleSection}
         >
+          {/* Onboarding hint for Quick Actions */}
+          {showQuickActionsHint && (
+            <OnboardingHint
+              hintId="parent_quick_actions"
+              message={t('hints.quick_actions_message', { defaultValue: "Tap any card below to quickly access homework, messages, fees, or get help from our AI assistant." })}
+              icon="sparkles"
+              position="bottom"
+              screen="parent_dashboard"
+              onDismiss={dismissQuickActionsHint}
+            />
+          )}
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
               <View key={action.id} style={action.disabled ? { opacity: 0.5 } : undefined}>
@@ -475,6 +494,17 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             defaultCollapsed={collapsedSections.has('live-classes')}
             onToggle={toggleSection}
           >
+            {/* Onboarding hint for Live Classes */}
+            {showLiveClassesHint && !showQuickActionsHint && (
+              <OnboardingHint
+                hintId="parent_live_classes"
+                message={t('hints.live_classes_message', { defaultValue: "When your child's teacher starts a live class, you'll see it here. Tap to join and watch together!" })}
+                icon="videocam"
+                position="bottom"
+                screen="parent_dashboard"
+                onDismiss={dismissLiveClassesHint}
+              />
+            )}
             <JoinLiveLesson 
               preschoolId={profile.preschool_id}
             />
@@ -569,50 +599,51 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) => Styl
   },
   upgradeBanner: {
     backgroundColor: theme.cardBackground,
-    borderRadius: isSmallScreen ? 12 : 16,
-    padding: isSmallScreen ? 14 : 16,
+    borderRadius: isSmallScreen ? 10 : 12,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    paddingHorizontal: isSmallScreen ? 12 : 14,
     marginBottom: cardGap,
     borderWidth: 1,
-    borderColor: theme.primary + '30',
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: theme.primary + '20',
   },
   upgradeBannerContent: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+  },
+  upgradeBannerIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   upgradeBannerText: {
     flex: 1,
-    marginLeft: 10,
   },
   upgradeBannerTitle: {
-    fontSize: isSmallScreen ? 14 : 16,
-    fontWeight: '700',
+    fontSize: isSmallScreen ? 13 : 14,
+    fontWeight: '600',
     color: theme.text,
-    marginBottom: 4,
   },
   upgradeBannerSubtitle: {
-    fontSize: isSmallScreen ? 12 : 13,
+    fontSize: isSmallScreen ? 11 : 12,
     color: theme.textSecondary,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   upgradeBannerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.primary,
-    paddingVertical: isSmallScreen ? 10 : 12,
-    paddingHorizontal: isSmallScreen ? 16 : 20,
-    borderRadius: isSmallScreen ? 8 : 10,
-    gap: 6,
+    paddingVertical: isSmallScreen ? 6 : 8,
+    paddingHorizontal: isSmallScreen ? 12 : 14,
+    borderRadius: isSmallScreen ? 6 : 8,
   },
   upgradeBannerButtonText: {
-    fontSize: isSmallScreen ? 14 : 15,
-    fontWeight: '700',
+    fontSize: isSmallScreen ? 12 : 13,
+    fontWeight: '600',
     color: theme.onPrimary,
   },
 });

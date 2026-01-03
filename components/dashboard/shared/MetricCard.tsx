@@ -29,6 +29,8 @@ export interface MetricCardProps {
   glow?: boolean;
   /** Optional badge count (shown on icon) */
   badge?: number;
+  /** Priority level for visual indicator - 🔴 urgent, 🟡 important, 🟢 informational */
+  priority?: 'urgent' | 'important' | 'informational';
 }
 
 export const MetricCard: React.FC<MetricCardProps> = ({ 
@@ -43,6 +45,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   cardWidth: customCardWidth,
   glow = false,
   badge,
+  priority,
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme, customCardWidth);
@@ -123,6 +126,22 @@ export const MetricCard: React.FC<MetricCardProps> = ({
     return trendLabels[trendType] || trendType;
   };
 
+  // Priority indicator colors and labels
+  const getPriorityInfo = (priorityLevel?: 'urgent' | 'important' | 'informational') => {
+    switch (priorityLevel) {
+      case 'urgent':
+        return { color: '#DC2626', label: 'Urgent', icon: '🔴' };
+      case 'important':
+        return { color: '#F59E0B', label: 'Important', icon: '🟡' };
+      case 'informational':
+        return { color: '#10B981', label: 'Info', icon: '🟢' };
+      default:
+        return null;
+    }
+  };
+
+  const priorityInfo = getPriorityInfo(priority);
+
   return (
     <Animated.View
       style={[
@@ -141,12 +160,21 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           size === 'large' && styles.metricCardLarge,
           size === 'small' && styles.metricCardSmall,
           glow && { borderWidth: 1, borderColor: color + '40' },
+          priorityInfo && { borderLeftWidth: 3, borderLeftColor: priorityInfo.color },
         ]}
         onPress={onPress}
         disabled={!onPress}
         activeOpacity={0.7}
       >
         <View style={styles.metricContent}>
+          {/* Priority indicator pill */}
+          {priorityInfo && (
+            <View style={[styles.priorityPill, { backgroundColor: priorityInfo.color + '15' }]}>
+              <Text style={[styles.priorityText, { color: priorityInfo.color }]}>
+                {priorityInfo.icon} {priorityInfo.label}
+              </Text>
+            </View>
+          )}
           <View style={styles.metricHeader}>
             <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
               <Ionicons 
@@ -247,6 +275,17 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       color: '#FFFFFF',
       fontSize: isSmallScreen ? 10 : 11,
       fontWeight: '700',
+    },
+    priorityPill: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: isSmallScreen ? 6 : 8,
+      paddingVertical: isSmallScreen ? 2 : 3,
+      borderRadius: 4,
+      marginBottom: 8,
+    },
+    priorityText: {
+      fontSize: isSmallScreen ? 9 : 10,
+      fontWeight: '600',
     },
     trendContainer: {
       backgroundColor: theme.surface,
