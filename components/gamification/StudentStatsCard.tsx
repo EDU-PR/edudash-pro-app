@@ -12,8 +12,8 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
-import { assertSupabase } from '@/lib/supabase';
+import { useTheme } from '../../contexts/ThemeContext';
+import { assertSupabase } from '../../lib/supabase';
 import { ProgressStars } from './ProgressStars';
 import { BadgeDisplay, Badge } from './BadgeDisplay';
 

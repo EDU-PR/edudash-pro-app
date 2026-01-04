@@ -19,6 +19,9 @@ export interface RegistrationData {
   address_line1: string;
   city: string;
   postal_code: string;
+  // Account credentials
+  password: string;
+  confirm_password: string;
   // Membership
   member_type: MemberType;
   membership_tier: MembershipTier;
@@ -42,6 +45,8 @@ export const initialRegistrationData: RegistrationData = {
   address_line1: '',
   city: '',
   postal_code: '',
+  password: '',
+  confirm_password: '',
   member_type: 'learner',
   membership_tier: 'standard',
   emergency_contact_name: '',

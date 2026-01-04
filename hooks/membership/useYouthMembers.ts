@@ -61,11 +61,13 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
         .select(`
           id,
           user_id,
+          organization_id,
           member_number,
           member_type,
           membership_status,
           membership_tier,
           join_date,
+          joined_date,
           first_name,
           last_name,
           email,
@@ -73,7 +75,9 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
           photo_url,
           province,
           region_id,
-          created_at
+          wing,
+          created_at,
+          updated_at
         `)
         .eq('organization_id', orgId)
         .in('member_type', YOUTH_MEMBER_TYPES)

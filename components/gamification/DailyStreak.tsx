@@ -13,7 +13,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // ====================================================================
 // TYPES
@@ -67,7 +67,7 @@ export function DailyStreak({
   messages = DEFAULT_MESSAGES,
   streakType = 'Learning',
 }: DailyStreakProps) {
-  const { colors, isDarkMode } = useTheme();
+  const { colors, isDark } = useTheme();
   const fireAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
