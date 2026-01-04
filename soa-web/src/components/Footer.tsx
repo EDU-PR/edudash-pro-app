@@ -90,6 +90,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/donate" className="text-soa-gold hover:text-yellow-400 transition font-medium">
+                  ❤️ Donate
+                </Link>
+              </li>
+              <li>
                 <Link href="/register" className="text-gray-400 hover:text-white transition">
                   Become a Member
                 </Link>
@@ -161,6 +166,23 @@ export function Footer() {
                 </a>
               </li>
             </ul>
+
+            {/* Banking Details */}
+            <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
+              <h5 className="text-sm font-semibold text-soa-gold mb-2">💳 Banking Details</h5>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><span className="text-gray-500">Bank:</span> FNB / RMB</p>
+                <p><span className="text-gray-500">Account:</span> 63158326679</p>
+                <p><span className="text-gray-500">Branch:</span> 250655</p>
+                <p><span className="text-gray-500">Ref:</span> Name + Donation</p>
+              </div>
+              <Link 
+                href="/donate" 
+                className="inline-block mt-2 text-xs text-soa-gold hover:text-yellow-400 transition"
+              >
+                View full details →
+              </Link>
+            </div>
           </div>
         </div>
       </div>
