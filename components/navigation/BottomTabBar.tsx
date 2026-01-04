@@ -265,6 +265,48 @@ const TAB_ITEMS: TabItem[] = [
     route: '/screens/settings', 
     roles: ['national_admin'] 
   },
+
+  // Youth President tabs (Youth Wing)
+  { 
+    id: 'youth-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/membership/youth-president-dashboard', 
+    roles: ['youth_president'] 
+  },
+  { 
+    id: 'youth-members', 
+    label: 'Members',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/membership/members-list', 
+    roles: ['youth_president'] 
+  },
+  { 
+    id: 'youth-events', 
+    label: 'Events',
+    icon: 'calendar-outline', 
+    activeIcon: 'calendar', 
+    route: '/screens/membership/events', 
+    roles: ['youth_president'] 
+  },
+  { 
+    id: 'youth-approvals', 
+    label: 'Approvals',
+    icon: 'checkmark-circle-outline', 
+    activeIcon: 'checkmark-circle', 
+    route: '/screens/membership/pending-approvals', 
+    roles: ['youth_president'] 
+  },
+  { 
+    id: 'youth-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/membership/settings', 
+    roles: ['youth_president'] 
+  },
 ];
 
 export function BottomTabBar() {
@@ -300,15 +342,27 @@ export function BottomTabBar() {
   // Check if user is CEO (member_type === 'ceo' or role === 'national_admin')
   const isCEO = memberType === 'ceo' || orgRole === 'national_admin';
   
-  // Filter tabs by role - CEO gets ONLY CEO tabs, others get role-based tabs
+  // Check if user is Youth President (member_type === 'youth_president')
+  const isYouthPresident = memberType === 'youth_president' || memberType === 'youth_deputy';
+  
+  // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
     if (!item.roles) return false; // Require explicit role assignment
+    
     // If user is CEO, ONLY show CEO tabs (national_admin role)
     if (isCEO) {
       return item.roles.includes('national_admin');
     }
-    // Otherwise, filter by profile role (exclude CEO tabs)
-    return item.roles.includes(userRole) && !item.roles.includes('national_admin');
+    
+    // If user is Youth President, ONLY show youth president tabs
+    if (isYouthPresident) {
+      return item.roles.includes('youth_president');
+    }
+    
+    // Otherwise, filter by profile role (exclude special membership tabs)
+    return item.roles.includes(userRole) && 
+           !item.roles.includes('national_admin') && 
+           !item.roles.includes('youth_president');
   });
 
   // Check if current route matches tab
