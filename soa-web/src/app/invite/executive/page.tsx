@@ -83,7 +83,7 @@ function ExecutiveInviteContent() {
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
         .is('user_id', null)
-        .single();
+        .maybeSingle();
 
       if (joinRequest) {
         const org = joinRequest.organizations as any;

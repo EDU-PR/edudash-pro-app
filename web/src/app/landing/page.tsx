@@ -43,16 +43,22 @@ function LandingInner() {
         const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
 
         // EMAIL CONFIRMATION
-        if ((flow === "email-confirm" || searchParams.get("type") === "email") && tokenHash) {
+        if ((flow === "email-confirm" || searchParams.get("type") === "email" || searchParams.get("type") === "signup") && tokenHash) {
           setMessage("Verifying your email...");
           try {
             const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
             if (error) throw error;
-            setMessage("Email verified! Redirecting to dashboard...");
+            
+            // Sign out on web so user signs in fresh in the app
+            await supabase.auth.signOut();
+            
+            setMessage("Email verified! Opening the app...");
             setStatus("done");
+            
+            // Deep link to the native app for sign-in
             setTimeout(() => {
-              router.push("/dashboard");
-            }, 1000);
+              tryOpenApp("(auth)/sign-in?emailVerified=true");
+            }, 1500);
             return;
           } catch (e: any) {
             setStatus("error");

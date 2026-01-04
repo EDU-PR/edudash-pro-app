@@ -55,24 +55,27 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
     ];
   }
   
-  // Check if user is Youth President
-  if (memberType === 'youth_president') {
+  // Check if user is Youth President or Youth Executive (Deputy, Secretary, Treasurer)
+  if (memberType === 'youth_president' || memberType === 'youth_deputy' || 
+      memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
+    const isPresident = memberType === 'youth_president';
     return [
       { id: 'home', label: 'Youth Dashboard', icon: 'people', route: '/screens/membership/youth-president-dashboard' },
       { id: 'members', label: 'Youth Members', icon: 'person-circle', route: '/screens/membership/members-list' },
       { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
       { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/membership/programs' },
+      ...(isPresident ? [{ id: 'invite', label: 'Recruit Members', icon: 'person-add', route: '/screens/membership/youth-invite-code' }] : []),
       { id: 'budget', label: 'Budget Requests', icon: 'wallet', route: '/screens/membership/budget-requests' },
       { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/membership/announcements' },
       { id: 'reports', label: 'Reports', icon: 'bar-chart', route: '/screens/membership/reports' },
-      { id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' },
+      ...(isPresident ? [{ id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' }] : []),
       { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
       { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
       { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
     ];
   }
   
-  // Check if user is Youth Deputy/Secretary/Treasurer
+  // Check if user is other Youth wing member (coordinator, facilitator, mentor, member)
   if (memberType?.startsWith('youth_')) {
     return [
       { id: 'home', label: 'Youth Dashboard', icon: 'people', route: '/screens/membership/youth-president-dashboard' },

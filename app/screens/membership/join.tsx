@@ -89,7 +89,7 @@ export default function JoinByCodeScreen() {
     try {
       const supabase = assertSupabase();
       
-      // Query the region_invite_codes table
+      // Query the region_invite_codes table - use maybeSingle to avoid 406 error
       const { data: codeData, error: codeError } = await supabase
         .from('region_invite_codes')
         .select(`
@@ -117,7 +117,7 @@ export default function JoinByCodeScreen() {
         `)
         .eq('code', inviteCode.toUpperCase())
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (codeError || !codeData) {
         setCodeError('Invalid invite code. Please check and try again.');

@@ -3,19 +3,21 @@
  * Handles deep links for member/youth invites
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { useEduDashAlert } from '@/components/ui/EduDashAlert';
 
 export default function MemberInviteScreen() {
   const { code } = useLocalSearchParams<{ code?: string }>();
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, AlertComponent } = useEduDashAlert();
 
   const [loading, setLoading] = useState(true);
   const [inviteDetails, setInviteDetails] = useState<any>(null);
@@ -36,7 +38,7 @@ export default function MemberInviteScreen() {
     try {
       const supabase = assertSupabase();
       
-      // Look up the invite code
+      // Look up the invite code - use maybeSingle() to avoid 406 when no results
       const { data, error: queryError } = await supabase
         .from('join_requests')
         .select(`
@@ -49,7 +51,7 @@ export default function MemberInviteScreen() {
         `)
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
-        .single();
+        .maybeSingle();
 
       if (queryError || !data) {
         setError('Invalid or expired invite code');
@@ -115,13 +117,33 @@ export default function MemberInviteScreen() {
         })
         .eq('id', user.id);
 
-      Alert.alert(
-        'Welcome!',
-        `You've successfully joined ${inviteDetails.organizations?.name || 'the organization'}!`,
-        [{ text: 'OK', onPress: () => router.replace('/') }]
-      );
+      showAlert({
+        type: 'success',
+        title: 'Welcome!',
+        message: `You've successfully joined ${inviteDetails.organizations?.name || 'the organization'}!`,
+        buttons: [
+          { text: 'Continue', style: 'default', onPress: () => router.replace('/') }
+        ],
+      });
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to join organization');
+      // Handle duplicate key error - user is already a member
+      if (e?.code === '23505') {
+        showAlert({
+          type: 'info',
+          title: 'Already a Member',
+          message: `You're already a member of ${inviteDetails?.organizations?.name || 'this organization'}. No need to join again!`,
+          buttons: [
+            { text: 'Go to Dashboard', style: 'default', onPress: () => router.replace('/') }
+          ],
+        });
+      } else {
+        showAlert({
+          type: 'error',
+          title: 'Unable to Join',
+          message: e?.message || 'Failed to join organization. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      }
     } finally {
       setJoining(false);
     }
@@ -236,6 +258,7 @@ export default function MemberInviteScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      <AlertComponent />
     </SafeAreaView>
   );
 }

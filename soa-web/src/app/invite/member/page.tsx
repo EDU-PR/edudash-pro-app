@@ -80,7 +80,7 @@ function MemberInviteContent() {
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
         .is('requester_id', null)
-        .single();
+        .maybeSingle();
 
       if (joinRequest) {
         const org = joinRequest.organizations as any;
@@ -106,7 +106,7 @@ function MemberInviteContent() {
         `)
         .eq('code', code.toUpperCase())
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (regionInvite) {
         const org = regionInvite.organizations as any;

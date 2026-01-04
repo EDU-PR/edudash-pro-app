@@ -15,6 +15,7 @@ interface UseMemberDetailReturn {
   updateMember: (updates: Partial<OrganizationMember>) => Promise<boolean>;
   suspendMember: () => Promise<boolean>;
   activateMember: () => Promise<boolean>;
+  deleteMember: () => Promise<boolean>;
 }
 
 export function useMemberDetail(memberId: string | null): UseMemberDetailReturn {
@@ -50,6 +51,7 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
           user_id,
           member_number,
           member_type,
+          wing,
           first_name,
           last_name,
           id_number,
@@ -99,6 +101,7 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
         user_id: memberData.user_id,
         member_number: memberData.member_number || `SOA-${memberData.id?.slice(0, 8) || 'UNKNOWN'}`,
         member_type: memberData.member_type || 'member',
+        wing: memberData.wing || 'main',
         first_name: memberData.first_name || 'Unknown',
         last_name: memberData.last_name || '',
         id_number: memberData.id_number,
@@ -246,6 +249,35 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
     }
   }, [memberId, fetchMember]);
 
+  // Delete member (soft delete by setting status to 'removed')
+  const deleteMember = useCallback(async (): Promise<boolean> => {
+    if (!memberId) return false;
+
+    try {
+      const supabase = assertSupabase();
+      const { error: deleteError } = await supabase
+        .from('organization_members')
+        .update({
+          membership_status: 'revoked',
+          seat_status: 'revoked',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', memberId);
+
+      if (deleteError) {
+        console.error('[useMemberDetail] Error deleting member:', deleteError);
+        setError(deleteError.message);
+        return false;
+      }
+
+      return true;
+    } catch (err: any) {
+      console.error('[useMemberDetail] Delete exception:', err);
+      setError(err.message || 'Failed to remove member');
+      return false;
+    }
+  }, [memberId]);
+
   // Initial fetch
   useEffect(() => {
     fetchMember();
@@ -260,5 +292,6 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
     updateMember,
     suspendMember,
     activateMember,
+    deleteMember,
   };
 }

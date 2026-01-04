@@ -47,7 +47,7 @@ function AdminInviteContent() {
       try {
         const supabase = getSupabase();
         
-        // Query invitations table for admin invites
+        // Query invitations table for admin invites - use maybeSingle to avoid 406
         const { data: invitation, error: inviteError } = await supabase
           .from('invitations')
           .select(`
@@ -65,7 +65,7 @@ function AdminInviteContent() {
           .eq('invite_token', token)
           .eq('status', 'pending')
           .gt('expires_at', new Date().toISOString())
-          .single();
+          .maybeSingle();
 
         if (inviteError || !invitation) {
           setError('Invalid or expired invite token');

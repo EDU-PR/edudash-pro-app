@@ -96,7 +96,7 @@ export default function JoinPage() {
     try {
       const supabase = getSupabase();
       
-      // Query the region_invite_codes table
+      // Query the region_invite_codes table - use maybeSingle to avoid 406 error
       const { data: inviteData, error: inviteError } = await supabase
         .from('region_invite_codes')
         .select(`
@@ -118,7 +118,7 @@ export default function JoinPage() {
         `)
         .eq('code', inviteCode.toUpperCase())
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (inviteError || !inviteData) {
         setCodeError('Invalid invite code. Please check and try again.');
