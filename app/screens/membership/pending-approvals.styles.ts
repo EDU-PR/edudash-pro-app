@@ -20,7 +20,7 @@ export const styles = StyleSheet.create({
   tabsList: { paddingHorizontal: 16 },
   tab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginRight: 8 },
   tabText: { fontSize: 14, fontWeight: '600' },
-  listContent: { padding: 16, flexGrow: 1 },
+  listContent: { padding: 16, paddingBottom: 100, flexGrow: 1 },
   approvalCard: { padding: 16, borderRadius: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   typeIconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

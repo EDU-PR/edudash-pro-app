@@ -131,6 +131,7 @@ export default function YouthInviteCodeScreen() {
           expires_at: expiresAt,
           message: description, // Use 'message' column instead of 'notes'
           status: 'pending',
+          requested_role: 'youth_member', // Explicitly set role for youth wing invites
         })
         .select()
         .single();
