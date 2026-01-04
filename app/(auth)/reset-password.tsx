@@ -133,12 +133,12 @@ export default function ResetPasswordScreen() {
   if (validSession === null) {
     return (
       <LinearGradient
-        colors={marketingTokens.colors.gradients.darkBase}
+        colors={[marketingTokens.colors.bg.base, marketingTokens.colors.bg.elevated]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={marketingTokens.colors.cyan} />
+            <ActivityIndicator size="large" color={marketingTokens.colors.accent.cyan400} />
             <Text style={styles.loadingText}>Verifying your session...</Text>
           </View>
         </SafeAreaView>
@@ -150,7 +150,7 @@ export default function ResetPasswordScreen() {
   if (validSession === false) {
     return (
       <LinearGradient
-        colors={marketingTokens.colors.gradients.darkBase}
+        colors={[marketingTokens.colors.bg.base, marketingTokens.colors.bg.elevated]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
@@ -190,7 +190,7 @@ export default function ResetPasswordScreen() {
   // Valid session - show password reset form
   return (
     <LinearGradient
-      colors={marketingTokens.colors.gradients.darkBase}
+      colors={[marketingTokens.colors.bg.base, marketingTokens.colors.bg.elevated]}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
@@ -223,7 +223,7 @@ export default function ResetPasswordScreen() {
             <GlassCard style={styles.card}>
               <View style={styles.iconContainer}>
                 <LinearGradient
-                  colors={[marketingTokens.colors.cyan, marketingTokens.colors.purple]}
+                  colors={[marketingTokens.colors.accent.cyan400, marketingTokens.colors.accent.indigo500]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.iconGradient}
@@ -328,16 +328,12 @@ export default function ResetPasswordScreen() {
 
               {/* Submit Button */}
               <GradientButton
+                label={loading ? 'Updating...' : 'Update Password'}
                 onPress={handleResetPassword}
                 disabled={loading}
+                loading={loading}
                 style={styles.submitButton}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Update Password</Text>
-                )}
-              </GradientButton>
+              />
             </GlassCard>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -411,7 +407,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   errorButton: {
-    backgroundColor: marketingTokens.colors.cyan,
+    backgroundColor: marketingTokens.colors.accent.cyan400,
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
@@ -464,7 +460,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: marketingTokens.colors.cyan,
+    color: marketingTokens.colors.accent.cyan400,
     textAlign: 'center',
     marginBottom: 8,
   },
