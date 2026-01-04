@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+// No supabase needed - just redirects
 
 export default function InviteIndexPage() {
   const searchParams = useSearchParams();

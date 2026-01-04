@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 
 interface AdminInviteData {
@@ -30,7 +30,7 @@ export default function AdminInvitePage() {
       }
 
       try {
-        const supabase = createClient();
+        const supabase = getSupabase();
         
         // Query invitations table for admin invites
         const { data: invitation, error: inviteError } = await supabase
