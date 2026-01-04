@@ -4,7 +4,8 @@
  * WARP.md compliant: <500 lines, separate styles, React Query
  */
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -54,7 +55,7 @@ export default function PendingApprovalsScreen() {
   const renderRequest = ({ item }: { item: ApprovalRequest }) => {
     const typeConfig = APPROVAL_TYPE_CONFIG[item.type];
     return (
-      <View style={[styles.approvalCard, { backgroundColor: colors.card }]}>
+      <View style={[styles.approvalCard, { backgroundColor: colors.cardBackground }]}>
         <View style={styles.cardHeader}>
           <View style={[styles.typeIconContainer, { backgroundColor: typeConfig.color + '20' }]}>
             <Ionicons name={typeConfig.icon as any} size={22} color={typeConfig.color} />
@@ -132,7 +133,7 @@ export default function PendingApprovalsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
         <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading requests...</Text>
@@ -142,10 +143,10 @@ export default function PendingApprovalsScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <View style={styles.container}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -157,7 +158,7 @@ export default function PendingApprovalsScreen() {
 
         {/* Stats Bar */}
         {stats && (
-          <View style={[styles.statsBar, { backgroundColor: colors.card }]}>
+          <View style={[styles.statsBar, { backgroundColor: colors.cardBackground }]}>
             <View style={styles.statItem}>
               <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.pending}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
@@ -179,7 +180,7 @@ export default function PendingApprovalsScreen() {
             {TABS.map(tab => (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.tab, { backgroundColor: activeTab === tab.id ? colors.primary : colors.card }]}
+                style={[styles.tab, { backgroundColor: activeTab === tab.id ? colors.primary : colors.cardBackground }]}
                 onPress={() => setActiveTab(tab.id)}
               >
                 <Text style={[styles.tabText, { color: activeTab === tab.id ? '#fff' : colors.text }]}>{tab.label}</Text>

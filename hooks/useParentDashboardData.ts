@@ -166,8 +166,7 @@ export function useParentDashboardData() {
               classes!left(id, name, grade_level)
             `)
             .or(`parent_id.eq.${internalUserId},guardian_id.eq.${internalUserId}`)
-            .eq('is_active', true)
-            .maybeSingle() : { data: null } as any;
+            .eq('is_active', true) : { data: null } as any;
 
           let directChildrenList: any[] = [];
           if (directChildren) {

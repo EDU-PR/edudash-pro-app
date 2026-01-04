@@ -178,7 +178,7 @@ export default function StudentManagementScreen() {
       setClasses(classesData || []);
 
       // Get students with comprehensive information
-      const { data: studentsData } = await assertSupabase()
+      const { data: studentsData, error: studentsError } = await assertSupabase()
         .from('students')
         .select(`
           id,
@@ -191,16 +191,37 @@ export default function StudentManagementScreen() {
           guardian_id,
           is_active,
           status,
-          classes (name),
-          users!parent_id (name)
+          classes (name)
         `)
         .eq('preschool_id', preschoolId)
         .order('first_name');
+
+      if (studentsError) {
+        console.error('Students query error:', studentsError);
+      }
+
+      // Fetch parent names separately to avoid relationship issues
+      const parentIds = [...new Set((studentsData || [])
+        .map((s: any) => s.parent_id || s.guardian_id)
+        .filter(Boolean))];
+      
+      let parentMap: Record<string, string> = {};
+      if (parentIds.length > 0) {
+        const { data: parents } = await assertSupabase()
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', parentIds);
+        parentMap = (parents || []).reduce((acc: any, p: any) => {
+          acc[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+          return acc;
+        }, {});
+      }
 
       // Process student data with age calculations and appropriate grouping
       const processedStudents = (studentsData || []).map((student: any) => {
         const ageInfo = calculateAgeInfo(student.date_of_birth);
         const ageGroup = findAgeGroup(ageInfo.age_months, ageGroupsData || []);
+        const parentId = student.parent_id || student.guardian_id;
         
         return {
           ...student,
@@ -208,7 +229,7 @@ export default function StudentManagementScreen() {
           age_years: ageInfo.age_years,
           age_group_name: ageGroup?.name,
           class_name: student.classes?.name,
-          parent_name: student.users?.name,
+          parent_name: parentId ? parentMap[parentId] : undefined,
         };
       });
 

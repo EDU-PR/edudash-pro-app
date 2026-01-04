@@ -26,6 +26,7 @@ import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { assertSupabase } from '@/lib/supabase';
 import {
   DashboardBackground,
+  DashboardWallpaperBackground,
   DashboardWallpaperSettings,
   type DashboardSettings,
 } from '@/components/membership/dashboard';
@@ -50,11 +51,11 @@ interface YouthStats {
 // Youth Wing Executive Actions
 const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Events', icon: 'calendar', color: '#10B981', route: '/screens/membership/events' },
-  { id: '3', label: 'Programs', icon: 'school', color: '#8B5CF6', route: '/screens/membership/programs' },
-  { id: '4', label: 'Budget', icon: 'wallet', color: '#F59E0B', route: '/screens/membership/budget-requests' },
-  { id: '5', label: 'Reports', icon: 'bar-chart', color: '#EF4444', route: '/screens/membership/reports' },
-  { id: '6', label: 'Announcements', icon: 'megaphone', color: '#06B6D4', route: '/screens/membership/announcements' },
+  { id: '2', label: 'Invite', icon: 'person-add', color: '#10B981', route: '/screens/membership/youth-invite-code' },
+  { id: '3', label: 'Events', icon: 'calendar', color: '#8B5CF6', route: '/screens/membership/events' },
+  { id: '4', label: 'Programs', icon: 'school', color: '#06B6D4', route: '/screens/membership/programs' },
+  { id: '5', label: 'Budget', icon: 'wallet', color: '#F59E0B', route: '/screens/membership/budget-requests' },
+  { id: '6', label: 'Announcements', icon: 'megaphone', color: '#EF4444', route: '/screens/membership/announcements' },
 ];
 
 export default function YouthPresidentDashboard() {
@@ -180,19 +181,22 @@ export default function YouthPresidentDashboard() {
   // Loading state
   if (loading && !stats) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-            Loading youth dashboard...
-          </Text>
-        </View>
-      </SafeAreaView>
+      <DashboardWallpaperBackground>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+              Loading youth dashboard...
+            </Text>
+          </View>
+        </SafeAreaView>
+      </DashboardWallpaperBackground>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <DashboardWallpaperBackground>
+      <SafeAreaView style={styles.container} edges={['top']}>
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer 
         isOpen={isDrawerOpen} 
@@ -200,7 +204,7 @@ export default function YouthPresidentDashboard() {
       />
 
       {/* Custom Header */}
-      <View style={[styles.customHeader, { backgroundColor: theme.background }]}>
+      <View style={[styles.customHeader, { backgroundColor: theme.card + 'E6' }]}>
         <View style={styles.headerLeftSection}>
           <TouchableOpacity 
             style={styles.hamburgerButton}
@@ -502,6 +506,7 @@ export default function YouthPresidentDashboard() {
         showTriggerButton={false}
       />
     </SafeAreaView>
+    </DashboardWallpaperBackground>
   );
 }
 
