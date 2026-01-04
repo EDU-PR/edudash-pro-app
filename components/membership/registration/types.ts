@@ -25,6 +25,8 @@ export interface RegistrationData {
   // Emergency contact
   emergency_contact_name: string;
   emergency_contact_phone: string;
+  // Invite code (optional - from invite link)
+  invite_code?: string;
 }
 
 export const initialRegistrationData: RegistrationData = {
