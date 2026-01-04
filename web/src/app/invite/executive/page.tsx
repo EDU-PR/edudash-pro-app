@@ -4,14 +4,14 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.edudashpro';
 const APP_STORE_URL = 'https://apps.apple.com/app/edudash-pro/id6478437234';
 const APP_SCHEME = 'edudashpro';
 
-export default function ExecutiveInvitePage() {
+function ExecutiveInviteContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get('code') || '';
   
@@ -149,5 +149,21 @@ export default function ExecutiveInvitePage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-slate-900 to-slate-900 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+    </div>
+  );
+}
+
+export default function ExecutiveInvitePage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ExecutiveInviteContent />
+    </Suspense>
   );
 }

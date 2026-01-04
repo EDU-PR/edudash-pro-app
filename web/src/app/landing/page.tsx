@@ -144,9 +144,22 @@ function LandingInner() {
   );
 }
 
+function LoadingFallback() {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0f" }}>
+      <div style={{ width: 40, height: 40, border: "4px solid #00f5ff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<LoadingFallback />}>
       <LandingInner />
     </Suspense>
   );
