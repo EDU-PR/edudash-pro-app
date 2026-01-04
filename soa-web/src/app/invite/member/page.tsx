@@ -79,7 +79,7 @@ function MemberInviteContent() {
         `)
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
-        .is('user_id', null)
+        .is('requester_id', null)
         .single();
 
       if (joinRequest) {
