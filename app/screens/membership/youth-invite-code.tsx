@@ -77,12 +77,12 @@ export default function YouthInviteCodeScreen() {
         id: r.id,
         code: r.invite_code,
         organization_id: r.organization_id,
-        created_by: r.inviter_id,
-        max_uses: r.max_uses,
-        current_uses: r.usage_count || 0,
+        created_by: r.invited_by, // Fixed: was inviter_id
+        max_uses: null, // Column doesn't exist in DB
+        current_uses: 0, // Column doesn't exist in DB
         is_active: r.status === 'pending',
         expires_at: r.expires_at,
-        description: r.notes || 'Youth Invite',
+        description: r.message || 'Youth Invite', // Fixed: was notes
         created_at: r.created_at,
       }));
       setCodes(mapped);
@@ -113,7 +113,6 @@ export default function YouthInviteCodeScreen() {
     setLoading(true);
     try {
       const supabase = assertSupabase();
-      const uses = unlimited ? null : Number(maxUses) > 0 ? Number(maxUses) : 1;
       const days = Number(expiryDays);
       const expiresAt = isFinite(days) && days > 0
         ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
@@ -127,11 +126,10 @@ export default function YouthInviteCodeScreen() {
           organization_id: organizationId,
           request_type: 'member_join',
           invite_code: inviteCode,
-          invited_by: user.id, // Column name is invited_by, not inviter_id
+          invited_by: user.id,
           requester_id: user.id, // Required by valid_requester constraint
-          max_uses: uses,
           expires_at: expiresAt,
-          notes: description,
+          message: description, // Use 'message' column instead of 'notes'
           status: 'pending',
         })
         .select()
