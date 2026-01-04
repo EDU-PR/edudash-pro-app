@@ -64,19 +64,19 @@ export const MEMBERSHIP_TIERS: MembershipTierConfig[] = [
   { 
     tier: 'standard', 
     title: 'Standard', 
-    price: 600, 
+    price: 50, 
     features: ['Digital ID Card', 'Access to resources', 'Event notifications', 'Community access']
   },
   { 
     tier: 'premium', 
     title: 'Premium', 
-    price: 1200, 
+    price: 350, 
     features: ['All Standard features', 'Premium ID Card', 'Priority event booking', 'Exclusive workshops', 'Certificate programs']
   },
   { 
     tier: 'vip', 
     title: 'VIP', 
-    price: 2500, 
+    price: 600, 
     features: ['All Premium features', 'Executive ID Card', 'One-on-one mentoring', 'Leadership programs', 'Annual summit access', 'VIP networking events']
   },
 ];

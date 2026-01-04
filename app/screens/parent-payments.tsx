@@ -47,6 +47,7 @@ export default function ParentPaymentsScreen() {
     popUploads,
     upcomingFees,
     paidFees,
+    pendingVerificationFees,
     outstandingBalance,
     onRefresh,
     reloadFees,
@@ -139,6 +140,7 @@ export default function ParentPaymentsScreen() {
         <BalanceCard 
           outstandingBalance={outstandingBalance} 
           upcomingFeesCount={upcomingFees.length}
+          pendingVerificationCount={pendingVerificationFees.length}
           theme={theme} 
         />
 

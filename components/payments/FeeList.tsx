@@ -27,8 +27,12 @@ export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps)
   const statusBgColor = isPendingVerification ? theme.warning + '20' : statusInfo.bgColor;
 
   return (
-    <View style={styles.feeCard}>
-      <View style={styles.feeHeader}>
+    <View style={[
+      styles.feeCard, 
+      isPendingVerification && styles.feeCardPendingVerification,
+      isPendingVerification && { borderColor: theme.warning + '40', backgroundColor: theme.surface + 'CC' }
+    ]}>
+      <View style={[styles.feeHeader, isPendingVerification && { opacity: 0.7 }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.feeTitle}>{fee.description}</Text>
           <View style={styles.feeDateRow}>
@@ -36,7 +40,7 @@ export function FeeCard({ fee, onUploadPress, onPayPress, theme }: FeeCardProps)
             <Text style={styles.feeDueDate}>Due: {formatPaymentDate(fee.due_date)}</Text>
           </View>
         </View>
-        <Text style={styles.feeAmount}>{formatCurrency(fee.amount)}</Text>
+        <Text style={[styles.feeAmount, isPendingVerification && { opacity: 0.7 }]}>{formatCurrency(fee.amount)}</Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
         <Ionicons 
@@ -163,6 +167,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  feeCardPendingVerification: {
+    opacity: 0.75,
+    borderStyle: 'dashed',
+    borderWidth: 2,
   },
   feeHeader: {
     flexDirection: 'row',

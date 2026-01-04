@@ -1,9 +1,10 @@
 /**
  * Personal Information Step
- * Second step - collecting personal details
+ * Second step - collecting personal details and account credentials
  */
-import React from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { RegistrationData } from './types';
 
 interface PersonalStepProps {
@@ -13,11 +14,17 @@ interface PersonalStepProps {
 }
 
 export function PersonalStep({ data, onUpdate, theme }: PersonalStepProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const passwordsMatch = data.password === data.confirm_password;
+  const passwordValid = data.password.length >= 6;
+  
   return (
     <View style={styles.stepContent}>
       <Text style={[styles.stepTitle, { color: theme.text }]}>Personal Information</Text>
       <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
-        Tell us about yourself
+        Tell us about yourself and create your account
       </Text>
       
       <View style={styles.formSection}>
@@ -51,6 +58,71 @@ export function PersonalStep({ data, onUpdate, theme }: PersonalStepProps) {
           value={data.email}
           onChangeText={(v) => onUpdate('email', v)}
         />
+      </View>
+
+      {/* Account Password Section */}
+      <View style={[styles.formSection, { backgroundColor: theme.primary + '08', padding: 16, borderRadius: 12, marginVertical: 8 }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <Ionicons name="lock-closed" size={20} color={theme.primary} />
+          <Text style={[styles.formLabel, { color: theme.primary, marginBottom: 0, marginLeft: 8 }]}>Create Password *</Text>
+        </View>
+        <Text style={[{ color: theme.textSecondary, fontSize: 13, marginBottom: 12 }]}>
+          You'll use this to log in to your account
+        </Text>
+        
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[styles.input, styles.passwordInput, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+            placeholder="Password (min. 6 characters)"
+            placeholderTextColor={theme.textSecondary}
+            secureTextEntry={!showPassword}
+            value={data.password}
+            onChangeText={(v) => onUpdate('password', v)}
+          />
+          <TouchableOpacity 
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Ionicons name={showPassword ? "eye-off" : "eye"} size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        {data.password.length > 0 && !passwordValid && (
+          <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+            Password must be at least 6 characters
+          </Text>
+        )}
+        
+        <View style={[styles.passwordContainer, { marginTop: 12 }]}>
+          <TextInput
+            style={[styles.input, styles.passwordInput, { 
+              backgroundColor: theme.surface, 
+              color: theme.text, 
+              borderColor: data.confirm_password && !passwordsMatch ? '#ef4444' : theme.border 
+            }]}
+            placeholder="Confirm Password"
+            placeholderTextColor={theme.textSecondary}
+            secureTextEntry={!showConfirmPassword}
+            value={data.confirm_password}
+            onChangeText={(v) => onUpdate('confirm_password', v)}
+          />
+          <TouchableOpacity 
+            style={styles.eyeButton}
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          >
+            <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        {data.confirm_password.length > 0 && !passwordsMatch && (
+          <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+            Passwords do not match
+          </Text>
+        )}
+        {data.confirm_password.length > 0 && passwordsMatch && passwordValid && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+            <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+            <Text style={{ color: '#22c55e', fontSize: 12, marginLeft: 4 }}>Passwords match</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.formSection}>
@@ -161,6 +233,17 @@ const styles = StyleSheet.create({
   },
   inputHalf: {
     width: '48%',
+  },
+  passwordContainer: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 14,
+    top: 14,
   },
 });
 

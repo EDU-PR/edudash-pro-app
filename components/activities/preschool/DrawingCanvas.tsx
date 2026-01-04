@@ -16,7 +16,7 @@ import {
   Alert,
 } from 'react-native';
 import Svg, { Path, G } from 'react-native-svg';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
 // ====================================================================
@@ -136,7 +136,7 @@ export function DrawingCanvas({
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: themeColors.card }]}>
+      <View style={[styles.header, { backgroundColor: themeColors.cardBackground }]}>
         <TouchableOpacity onPress={onExit} style={styles.headerButton}>
           <Ionicons name="close" size={28} color={themeColors.text} />
         </TouchableOpacity>
@@ -176,7 +176,7 @@ export function DrawingCanvas({
       </View>
 
       {/* Tools */}
-      <View style={[styles.toolsContainer, { backgroundColor: themeColors.card }]}>
+      <View style={[styles.toolsContainer, { backgroundColor: themeColors.cardBackground }]}>
         {/* Color Palette */}
         <View style={styles.colorPalette}>
           {colors.map(color => (

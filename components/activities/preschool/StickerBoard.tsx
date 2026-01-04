@@ -17,7 +17,7 @@ import {
   PanResponder,
   GestureResponderEvent,
 } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
 // ====================================================================

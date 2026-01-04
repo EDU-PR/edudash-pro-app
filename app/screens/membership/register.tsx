@@ -129,6 +129,14 @@ export default function MemberRegistrationScreen() {
           Alert.alert('Invalid', 'Please enter a valid email address');
           return false;
         }
+        if (!formData.password || formData.password.length < 6) {
+          Alert.alert('Password Required', 'Please enter a password with at least 6 characters');
+          return false;
+        }
+        if (formData.password !== formData.confirm_password) {
+          Alert.alert('Password Mismatch', 'Passwords do not match');
+          return false;
+        }
         return true;
       case 'membership':
         return true;
@@ -160,12 +168,65 @@ export default function MemberRegistrationScreen() {
     
     try {
       const supabase = assertSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
       
+      // Check if user is already logged in
+      let { data: { user } } = await supabase.auth.getUser();
+      
+      // If not logged in, create a new account with the provided credentials
       if (!user) {
-        Alert.alert('Sign In Required', 'Please sign in or create an account first.');
-        router.push('/(auth)/sign-in');
-        return;
+        console.log('[Register] Creating new user account...');
+        
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              first_name: formData.first_name,
+              last_name: formData.last_name,
+              phone: formData.phone,
+            },
+          },
+        });
+        
+        if (signUpError) {
+          console.error('[Register] Sign up error:', signUpError);
+          if (signUpError.message.includes('already registered')) {
+            Alert.alert(
+              'Account Exists',
+              'An account with this email already exists. Would you like to sign in instead?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Sign In', 
+                  onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(formData.email)}`)
+                }
+              ]
+            );
+          } else {
+            Alert.alert('Sign Up Failed', signUpError.message);
+          }
+          return;
+        }
+        
+        if (!signUpData.user) {
+          Alert.alert('Error', 'Failed to create account. Please try again.');
+          return;
+        }
+        
+        user = signUpData.user;
+        console.log('[Register] User created successfully:', user.id);
+        
+        // Show confirmation email notice if email confirmation is required
+        if (!signUpData.session) {
+          Alert.alert(
+            'Check Your Email',
+            'We\'ve sent a confirmation link to your email. Please verify your email to complete registration.',
+            [{ text: 'OK', onPress: () => setCurrentStep('complete') }]
+          );
+          setGeneratedMemberNumber('PENDING-VERIFICATION');
+          setCurrentStep('complete');
+          return;
+        }
       }
 
       // Get next sequence number for the region
@@ -325,7 +386,8 @@ export default function MemberRegistrationScreen() {
 
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           ref={scrollRef}

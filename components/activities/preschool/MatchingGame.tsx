@@ -14,9 +14,9 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { assertSupabase } from '@/lib/supabase';
+import { assertSupabase } from '../../../lib/supabase';
 
 // ====================================================================
 // TYPES

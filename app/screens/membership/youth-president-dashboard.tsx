@@ -255,7 +255,7 @@ export default function YouthPresidentDashboard() {
           )}
 
           {/* Executive Summary Card */}
-        <Card padding={20} margin={0} style={[styles.summaryCard, { borderLeftColor: '#10B981' }]}>
+        <Card padding={20} margin={0} style={{ ...styles.summaryCard, borderLeftColor: '#10B981' }}>
           <View style={styles.summaryHeader}>
             <View style={[styles.summaryIconContainer, { backgroundColor: '#10B98115' }]}>
               <Ionicons name="people" size={28} color="#10B981" />
