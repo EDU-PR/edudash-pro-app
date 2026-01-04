@@ -164,7 +164,7 @@ export default function YouthExecutiveInviteScreen() {
 
   const shareInvite = async (code: string, positionLabel: string) => {
     try {
-      const shareUrl = `https://www.soilofafrica.org.za/invite/executive?code=${encodeURIComponent(code)}`;
+      const shareUrl = `https://www.soilofafrica.org/invite/executive?code=${encodeURIComponent(code)}`;
       const message = `🌟 SOA Youth Wing Executive Invitation\n\nYou've been invited to join as: ${positionLabel}\n\nUse invite code: ${code}\n\nDownload the app and enter this code:\n${shareUrl}`;
       await Share.share({ message });
     } catch (e: any) {
