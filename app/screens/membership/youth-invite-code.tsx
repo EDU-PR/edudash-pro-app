@@ -127,7 +127,7 @@ export default function YouthInviteCodeScreen() {
           organization_id: organizationId,
           request_type: 'member_join',
           invite_code: inviteCode,
-          inviter_id: user.id,
+          invited_by: user.id, // Column name is invited_by, not inviter_id
           requester_id: user.id, // Required by valid_requester constraint
           max_uses: uses,
           expires_at: expiresAt,
