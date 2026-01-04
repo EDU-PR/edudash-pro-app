@@ -12,7 +12,7 @@ import {
   registerCAPSTools,
   registerNavigationTools,
   registerSuperAdminTools,
-} from './tools';
+} from './tools/index';
 
 export interface AgentTool {
   name: string;
