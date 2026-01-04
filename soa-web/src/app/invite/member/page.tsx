@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -10,6 +10,21 @@ const APP_STORE_URL = 'https://apps.apple.com/app/edudash-pro/id6478437234';
 const APP_SCHEME = 'edudashpro';
 
 export default function MemberInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto"></div>
+          <p className="text-white mt-4">Loading...</p>
+        </div>
+      </div>
+    }>
+      <MemberInviteContent />
+    </Suspense>
+  );
+}
+
+function MemberInviteContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get('code') || '';
   

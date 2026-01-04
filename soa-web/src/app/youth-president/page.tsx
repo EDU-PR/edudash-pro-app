@@ -20,7 +20,7 @@ import {
   AlertCircle,
   FileText,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { getSupabase } from '@/lib/supabase';
 
 // Youth Wing Stats Interface
 interface YouthStats {
@@ -91,7 +91,7 @@ export default function YouthPresidentDashboardPage() {
 
   const fetchYouthData = async () => {
     try {
-      const supabase = createClient();
+      const supabase = getSupabase();
       
       // Get current user's org
       const { data: { user } } = await supabase.auth.getUser();

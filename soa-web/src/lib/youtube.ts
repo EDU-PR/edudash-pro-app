@@ -180,21 +180,28 @@ export async function fetchYouTubeVideos(
       statsData = await statsResponse.json();
     }
 
-    const statsMap = new Map(
+    interface VideoStats {
+      viewCount: number;
+      likeCount: number;
+      commentCount: number;
+      duration: string;
+    }
+
+    const statsMap = new Map<string, VideoStats>(
       statsData.items?.map((item: any) => [
         item.id,
         {
           viewCount: parseInt(item.statistics?.viewCount || '0'),
           likeCount: parseInt(item.statistics?.likeCount || '0'),
           commentCount: parseInt(item.statistics?.commentCount || '0'),
-          duration: item.contentDetails?.duration,
+          duration: item.contentDetails?.duration || '',
         },
       ]) || []
     );
 
     return validItems.map((item: any) => {
       const videoId = item.id.videoId;
-      const stats = statsMap.get(videoId) || {};
+      const stats = statsMap.get(videoId) || { viewCount: 0, likeCount: 0, commentCount: 0, duration: '' };
       
       return {
         id: videoId,
