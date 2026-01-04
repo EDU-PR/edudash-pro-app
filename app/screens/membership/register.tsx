@@ -4,7 +4,7 @@
  * 
  * Refactored to use modular step components following WARP.md standards
  */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   StyleSheet, 
@@ -16,7 +16,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -41,12 +41,23 @@ const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 export default function MemberRegistrationScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ inviteCode?: string }>();
   
   const [currentStep, setCurrentStep] = useState<StepType>('region');
   const [formData, setFormData] = useState<RegistrationData>(initialRegistrationData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedMemberNumber, setGeneratedMemberNumber] = useState('');
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Handle invite code from URL params
+  useEffect(() => {
+    if (params?.inviteCode) {
+      setInviteCode(params.inviteCode);
+      // Store invite code in form data for later use during registration
+      setFormData(prev => ({ ...prev, invite_code: params.inviteCode }));
+    }
+  }, [params?.inviteCode]);
 
   const currentStepIndex = REGISTRATION_STEPS.findIndex(s => s.key === currentStep);
   const progress = ((currentStepIndex + 1) / REGISTRATION_STEPS.length) * 100;
