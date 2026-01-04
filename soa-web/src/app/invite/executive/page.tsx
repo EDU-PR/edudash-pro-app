@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -17,6 +17,21 @@ interface ExecutiveInviteData {
 }
 
 export default function ExecutiveInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto"></div>
+          <p className="text-white mt-4">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ExecutiveInviteContent />
+    </Suspense>
+  );
+}
+
+function ExecutiveInviteContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get('code') || '';
   
@@ -26,18 +41,15 @@ export default function ExecutiveInvitePage() {
   const [inviteData, setInviteData] = useState<ExecutiveInviteData | null>(null);
 
   useEffect(() => {
-    // Detect platform
     const ua = navigator.userAgent.toLowerCase();
     if (/iphone|ipad|ipod/.test(ua)) {
       setPlatform('ios');
     } else if (/android/.test(ua)) {
       setPlatform('android');
     }
-
     validateInvite();
   }, []);
 
-  // Auto-attempt to open app on mobile
   useEffect(() => {
     if (code && !loading && (platform === 'android' || platform === 'ios') && !attemptedOpen) {
       const timer = setTimeout(() => openInApp(), 300);
@@ -78,7 +90,6 @@ export default function ExecutiveInvitePage() {
         const region = joinRequest.organization_regions as any;
         const inviter = joinRequest.profiles as any;
         
-        // Extract position from message or role
         let position = joinRequest.requested_role || 'Executive Member';
         if (joinRequest.message) {
           const match = joinRequest.message.match(/^(.+?)\s*invite/i);
@@ -168,7 +179,6 @@ export default function ExecutiveInvitePage() {
           </p>
         </div>
 
-        {/* Mobile: Open in App button */}
         {(platform === 'android' || platform === 'ios') && (
           <div className="space-y-3 mb-4">
             <button
@@ -194,7 +204,6 @@ export default function ExecutiveInvitePage() {
           </div>
         )}
 
-        {/* Download buttons */}
         <div className="space-y-3">
           {platform === 'desktop' ? (
             <>
