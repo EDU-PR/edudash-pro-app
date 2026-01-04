@@ -4,7 +4,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -12,7 +12,7 @@ const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.edudas
 const APP_STORE_URL = 'https://apps.apple.com/app/edudash-pro/id6478437234';
 const APP_SCHEME = 'edudashpro';
 
-export default function MemberInvitePage() {
+function MemberInviteContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get('code') || '';
   
@@ -205,5 +205,21 @@ export default function MemberInvitePage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+    </div>
+  );
+}
+
+export default function MemberInvitePage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <MemberInviteContent />
+    </Suspense>
   );
 }
