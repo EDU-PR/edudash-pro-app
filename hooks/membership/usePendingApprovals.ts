@@ -340,9 +340,12 @@ export function useProcessApproval() {
 
 // Helper functions
 function getRequestTypeTitle(requestType: string, role?: string | null): string {
+  // Map role to friendly display name
+  const roleName = role ? getRoleFriendlyName(role) : '';
+  
   switch (requestType) {
     case 'member_join':
-      return `New Member Registration${role ? ` - ${role}` : ''}`;
+      return `New Member Registration${roleName ? ` - ${roleName}` : ''}`;
     case 'parent_join':
       return 'Parent Join Request';
     case 'teacher_invite':
@@ -356,6 +359,28 @@ function getRequestTypeTitle(requestType: string, role?: string | null): string 
     default:
       return 'Membership Request';
   }
+}
+
+function getRoleFriendlyName(role: string): string {
+  const roleMap: Record<string, string> = {
+    'youth_member': 'Youth Member',
+    'youth': 'Youth Member',
+    'member': 'Member',
+    'parent': 'Parent',
+    'teacher': 'Teacher',
+    'learner': 'Learner',
+    'youth_president': 'Youth President',
+    'youth_deputy': 'Youth Deputy',
+    'youth_secretary': 'Youth Secretary',
+    'youth_treasurer': 'Youth Treasurer',
+    'youth_coordinator': 'Youth Coordinator',
+    'youth_prg': 'Youth PRO/PRG',
+    'regional_coordinator': 'Regional Coordinator',
+    'national_coordinator': 'National Coordinator',
+    'principal': 'Principal',
+    'admin': 'Admin',
+  };
+  return roleMap[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function mapJoinStatus(status: string): 'pending' | 'approved' | 'rejected' {
