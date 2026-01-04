@@ -161,7 +161,7 @@ export default function YouthInviteCodeScreen() {
   };
 
   const buildShareMessage = (code: string) => {
-    const shareUrl = `https://www.soilofafrica.org.za/invite/member?code=${encodeURIComponent(code)}`;
+    const shareUrl = `https://www.soilofafrica.org/invite/member?code=${encodeURIComponent(code)}`;
     return `🌱 Join the SOA Youth Wing!\n\nUse invite code: ${code}\n\nDownload the app and enter this code to join:\n${shareUrl}`;
   };
 

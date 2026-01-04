@@ -267,7 +267,7 @@ function RegisterPageContent() {
     
     // Generic fallback - don't expose technical details
     console.error('Registration error details:', err);
-    return 'Registration could not be completed. Please try again or contact support at info@soilofafrica.org.za';
+    return 'Registration could not be completed. Please try again or contact support at info@soilofafrica.org';
   };
 
   const handleSubmit = async () => {

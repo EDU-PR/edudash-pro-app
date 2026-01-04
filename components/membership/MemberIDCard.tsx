@@ -289,7 +289,7 @@ export function MemberIDCardBack({
       {/* Website */}
       <View style={styles.websiteSection}>
         <Text style={[styles.websiteText, { color: config.primaryColor, fontSize: 8 * scale }]}>
-          www.soilofafrica.org.za
+          www.soilofafrica.org
         </Text>
       </View>
     </View>

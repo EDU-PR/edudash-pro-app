@@ -290,7 +290,7 @@ export function generateCardPrintHTML(
           <span class="signature-label">AUTHORIZED SIGNATURE</span>
         </div>
         <div class="website">
-          <span class="website-text">www.soilofafrica.org.za</span>
+          <span class="website-text">www.soilofafrica.org</span>
         </div>
       </div>
     </body>
