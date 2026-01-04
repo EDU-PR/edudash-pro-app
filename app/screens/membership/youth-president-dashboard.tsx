@@ -51,11 +51,11 @@ interface YouthStats {
 // Youth Wing Executive Actions
 const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Invite', icon: 'person-add', color: '#10B981', route: '/screens/membership/youth-invite-code' },
-  { id: '3', label: 'Events', icon: 'calendar', color: '#8B5CF6', route: '/screens/membership/events' },
-  { id: '4', label: 'Programs', icon: 'school', color: '#06B6D4', route: '/screens/membership/programs' },
-  { id: '5', label: 'Budget', icon: 'wallet', color: '#F59E0B', route: '/screens/membership/budget-requests' },
-  { id: '6', label: 'Announcements', icon: 'megaphone', color: '#EF4444', route: '/screens/membership/announcements' },
+  { id: '2', label: 'Invite Members', icon: 'person-add', color: '#10B981', route: '/screens/membership/youth-invite-code' },
+  { id: '3', label: 'Office Structure', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/youth-executive-invite' },
+  { id: '4', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
+  { id: '5', label: 'Programs', icon: 'school', color: '#F59E0B', route: '/screens/membership/programs' },
+  { id: '6', label: 'Budget', icon: 'wallet', color: '#EF4444', route: '/screens/membership/budget-requests' },
 ];
 
 export default function YouthPresidentDashboard() {

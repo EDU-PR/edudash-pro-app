@@ -9,6 +9,19 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#0a0a0f',
     theme_color: '#00f5ff',
+    // Prefer native app over PWA install
+    prefer_related_applications: true,
+    related_applications: [
+      {
+        platform: 'play',
+        url: 'https://play.google.com/store/apps/details?id=com.edudashpro',
+        id: 'com.edudashpro',
+      },
+      {
+        platform: 'itunes',
+        url: 'https://apps.apple.com/app/edudash-pro/id6478437234',
+      },
+    ],
     icons: [
       {
         src: '/icon-192.png',

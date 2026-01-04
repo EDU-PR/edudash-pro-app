@@ -90,6 +90,7 @@ export function PWAInstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [showExpandedInstructions, setShowExpandedInstructions] = useState(false);
+  const [hasNativeApp, setHasNativeApp] = useState(false);
 
   useEffect(() => {
     const info = detectDevice();
@@ -100,59 +101,94 @@ export function PWAInstallPrompt() {
       return;
     }
 
-    // Check if user recently dismissed
-    try {
-      const dismissedTime = localStorage.getItem('pwa-prompt-dismissed');
-      if (dismissedTime) {
-        const parsedTime = parseInt(dismissedTime, 10);
-        if (!isNaN(parsedTime)) {
-          const timeSinceDismissed = Date.now() - parsedTime;
-          const fourHours = 4 * 60 * 60 * 1000;
-          if (timeSinceDismissed < fourHours) {
-            return;
+    // Check if native app is installed using getInstalledRelatedApps API
+    // This API respects the related_applications in the web app manifest
+    const checkNativeApp = async () => {
+      try {
+        if ('getInstalledRelatedApps' in navigator) {
+          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+          if (relatedApps && relatedApps.length > 0) {
+            // Native app is installed, don't show PWA install prompt
+            setHasNativeApp(true);
+            return true;
           }
         }
+      } catch (e) {
+        console.log('[PWA] Could not check for installed apps:', e);
       }
-    } catch {
-      // localStorage access failed, continue showing prompt
+      return false;
+    };
+
+    // Run native app check first
+    checkNativeApp().then((hasApp) => {
+      if (hasApp) {
+        // Native app installed, don't show PWA prompt
+        return;
+      }
+
+      // Continue with normal PWA prompt logic only if no native app
+      setupPWAPrompt(info);
+    });
+
+    function setupPWAPrompt(info: DeviceInfo) {
+      // Check if user recently dismissed
+      try {
+        const dismissedTime = localStorage.getItem('pwa-prompt-dismissed');
+        if (dismissedTime) {
+          const parsedTime = parseInt(dismissedTime, 10);
+          if (!isNaN(parsedTime)) {
+            const timeSinceDismissed = Date.now() - parsedTime;
+            const fourHours = 4 * 60 * 60 * 1000;
+            if (timeSinceDismissed < fourHours) {
+              return;
+            }
+          }
+        }
+      } catch {
+        // localStorage access failed, continue showing prompt
+      }
+
+      // Handle native install prompt (Chrome, Edge, Samsung, Opera on Android)
+      const handleBeforeInstallPrompt = (e: Event) => {
+        e.preventDefault();
+        setDeferredPrompt(e as BeforeInstallPromptEvent);
+        
+        // Show prompt after a short delay
+        setTimeout(() => setShowPrompt(true), 2000);
+      };
+
+      // Listen for the beforeinstallprompt event
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+      // Listen for app installed event
+      const handleAppInstalled = () => {
+        setShowPrompt(false);
+        setDeferredPrompt(null);
+        localStorage.removeItem('pwa-prompt-dismissed');
+      };
+      window.addEventListener('appinstalled', handleAppInstalled);
+
+      // For browsers that don't fire beforeinstallprompt (like Safari iOS), show manual instructions
+      const fallbackTimer = setTimeout(() => {
+        if (!deferredPrompt && !info.supportsInstall) {
+          if (info.isIOS || (info.browser === 'firefox' && !info.isAndroid) || info.browser === 'opera') {
+            setShowPrompt(true);
+          }
+        }
+      }, 3000);
+
+      // Store cleanup functions
+      (window as any).__pwaCleanup = () => {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.removeEventListener('appinstalled', handleAppInstalled);
+        clearTimeout(fallbackTimer);
+      };
     }
 
-    // Handle native install prompt (Chrome, Edge, Samsung, Opera on Android)
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      
-      // Show prompt after a short delay
-      setTimeout(() => setShowPrompt(true), 2000);
-    };
-
-    // Listen for the beforeinstallprompt event
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Listen for app installed event
-    const handleAppInstalled = () => {
-      setShowPrompt(false);
-      setDeferredPrompt(null);
-      localStorage.removeItem('pwa-prompt-dismissed');
-    };
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    // For browsers that don't fire beforeinstallprompt (like Safari iOS), show manual instructions
-    // Only show if: not standalone, doesn't support native install, and is on iOS/Safari
-    const fallbackTimer = setTimeout(() => {
-      if (!deferredPrompt && !info.supportsInstall) {
-        // Only show manual install instructions for browsers that don't support native prompt
-        // This includes Safari on iOS, Opera Mini, and Firefox on desktop
-        if (info.isIOS || (info.browser === 'firefox' && !info.isAndroid) || info.browser === 'opera') {
-          setShowPrompt(true);
-        }
-      }
-    }, 3000);
-
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-      clearTimeout(fallbackTimer);
+      if ((window as any).__pwaCleanup) {
+        (window as any).__pwaCleanup();
+      }
     };
   }, []);
 
@@ -185,8 +221,8 @@ export function PWAInstallPrompt() {
     }
   }, []);
 
-  // Don't render if already installed or info not loaded
-  if (!deviceInfo || deviceInfo.isStandalone || !showPrompt) {
+  // Don't render if already installed, native app installed, or info not loaded
+  if (!deviceInfo || deviceInfo.isStandalone || hasNativeApp || !showPrompt) {
     return null;
   }
 
