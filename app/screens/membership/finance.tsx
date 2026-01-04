@@ -12,6 +12,7 @@ import {
   Dimensions,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,84 +21,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { 
+  useFinancialSummary, 
+  useRecentPayments, 
+  useOverdueInvoices, 
+  useRegionalFinance,
+  type FinancialSummary,
+  type Payment,
+  type Invoice,
+  type RegionFinance,
+} from '@/hooks/membership/useFinanceData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Types
-interface FinancialSummary {
-  totalRevenue: number;
-  thisMonth: number;
-  outstanding: number;
-  pendingPayments: number;
-  collectionRate: number;
-}
-
-interface Invoice {
-  id: string;
-  invoice_number: string;
-  member_name: string;
-  member_number: string;
-  amount: number;
-  status: 'paid' | 'pending' | 'overdue' | 'cancelled';
-  due_date: string;
-  paid_date?: string;
-}
-
-interface Payment {
-  id: string;
-  member_name: string;
-  amount: number;
-  payment_method: 'card' | 'eft' | 'cash' | 'payfast';
-  reference: string;
-  created_at: string;
-  status: 'completed' | 'pending' | 'failed';
-}
-
-interface RegionFinance {
-  region: string;
-  code: string;
-  collected: number;
-  outstanding: number;
-  members_paid: number;
-  total_members: number;
-}
-
-// Mock Data
-const FINANCIAL_SUMMARY: FinancialSummary = {
-  totalRevenue: 1250000,
-  thisMonth: 185000,
-  outstanding: 320000,
-  pendingPayments: 47,
-  collectionRate: 78.5,
-};
-
-const RECENT_PAYMENTS: Payment[] = [
-  { id: '1', member_name: 'Thabo Mokoena', amount: 1200, payment_method: 'payfast', reference: 'PF-202412-001', created_at: '2024-12-23T10:30:00', status: 'completed' },
-  { id: '2', member_name: 'Sarah Johnson', amount: 2500, payment_method: 'eft', reference: 'EFT-202412-015', created_at: '2024-12-23T09:15:00', status: 'completed' },
-  { id: '3', member_name: 'James Ndlovu', amount: 1200, payment_method: 'card', reference: 'CARD-202412-089', created_at: '2024-12-22T16:45:00', status: 'pending' },
-  { id: '4', member_name: 'Nomvula Dlamini', amount: 5000, payment_method: 'eft', reference: 'EFT-202412-016', created_at: '2024-12-22T14:20:00', status: 'completed' },
-  { id: '5', member_name: 'Lindiwe Sithole', amount: 1200, payment_method: 'cash', reference: 'CASH-202412-003', created_at: '2024-12-22T11:00:00', status: 'completed' },
-];
-
-const OVERDUE_INVOICES: Invoice[] = [
-  { id: 'i1', invoice_number: 'INV-2024-0892', member_name: 'Sipho Nkosi', member_number: 'SOA-GP-24-00234', amount: 1200, status: 'overdue', due_date: '2024-12-01' },
-  { id: 'i2', invoice_number: 'INV-2024-0845', member_name: 'Maria van der Berg', member_number: 'SOA-WC-24-00089', amount: 2500, status: 'overdue', due_date: '2024-11-28' },
-  { id: 'i3', invoice_number: 'INV-2024-0801', member_name: 'David Pillay', member_number: 'SOA-KZN-24-00156', amount: 1200, status: 'overdue', due_date: '2024-11-25' },
-];
-
-const REGIONAL_FINANCE: RegionFinance[] = [
-  { region: 'Gauteng', code: 'GP', collected: 425000, outstanding: 85000, members_paid: 312, total_members: 387 },
-  { region: 'Western Cape', code: 'WC', collected: 285000, outstanding: 62000, members_paid: 198, total_members: 245 },
-  { region: 'KwaZulu-Natal', code: 'KZN', collected: 198000, outstanding: 78000, members_paid: 145, total_members: 201 },
-  { region: 'Eastern Cape', code: 'EC', collected: 125000, outstanding: 45000, members_paid: 89, total_members: 124 },
-  { region: 'Limpopo', code: 'LP', collected: 98000, outstanding: 32000, members_paid: 72, total_members: 98 },
-];
 
 const PAYMENT_METHOD_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   card: 'card-outline',
   eft: 'swap-horizontal-outline',
   cash: 'cash-outline',
   payfast: 'flash-outline',
+  other: 'ellipsis-horizontal-outline',
 };
 
 const STATUS_COLORS = {
@@ -117,9 +59,31 @@ export default function FinanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'invoices'>('overview');
 
+  // Fetch real data from hooks
+  const { data: financialSummary, isLoading: summaryLoading, refetch: refetchSummary } = useFinancialSummary();
+  const { data: recentPayments = [], isLoading: paymentsLoading, refetch: refetchPayments } = useRecentPayments(10);
+  const { data: overdueInvoices = [], isLoading: invoicesLoading, refetch: refetchInvoices } = useOverdueInvoices();
+  const { data: regionalFinance = [], isLoading: regionsLoading, refetch: refetchRegions } = useRegionalFinance();
+
+  const isLoading = summaryLoading || paymentsLoading || invoicesLoading || regionsLoading;
+
+  // Use fetched data with defaults
+  const summary: FinancialSummary = financialSummary || {
+    totalRevenue: 0,
+    thisMonth: 0,
+    outstanding: 0,
+    pendingPayments: 0,
+    collectionRate: 0,
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await Promise.all([
+      refetchSummary(),
+      refetchPayments(),
+      refetchInvoices(),
+      refetchRegions(),
+    ]);
     setRefreshing(false);
   };
 
@@ -155,8 +119,8 @@ export default function FinanceScreen() {
       >
         <View style={styles.heroHeader}>
           <View>
-            <Text style={styles.heroLabel}>Total Revenue (2024)</Text>
-            <Text style={styles.heroAmount}>{formatCurrency(FINANCIAL_SUMMARY.totalRevenue)}</Text>
+            <Text style={styles.heroLabel}>Total Revenue ({new Date().getFullYear()})</Text>
+            <Text style={styles.heroAmount}>{formatCurrency(summary.totalRevenue)}</Text>
           </View>
           <View style={styles.heroIconBg}>
             <Ionicons name="wallet-outline" size={32} color="#fff" />
@@ -166,19 +130,19 @@ export default function FinanceScreen() {
         <View style={styles.heroStats}>
           <View style={styles.heroStatItem}>
             <Text style={styles.heroStatLabel}>This Month</Text>
-            <Text style={styles.heroStatValue}>{formatCurrency(FINANCIAL_SUMMARY.thisMonth)}</Text>
+            <Text style={styles.heroStatValue}>{formatCurrency(summary.thisMonth)}</Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
             <Text style={styles.heroStatLabel}>Outstanding</Text>
             <Text style={[styles.heroStatValue, { color: '#FCD34D' }]}>
-              {formatCurrency(FINANCIAL_SUMMARY.outstanding)}
+              {formatCurrency(summary.outstanding)}
             </Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
             <Text style={styles.heroStatLabel}>Collection Rate</Text>
-            <Text style={styles.heroStatValue}>{FINANCIAL_SUMMARY.collectionRate}%</Text>
+            <Text style={styles.heroStatValue}>{summary.collectionRate}%</Text>
           </View>
         </View>
       </LinearGradient>
@@ -218,7 +182,7 @@ export default function FinanceScreen() {
       </View>
 
       {/* Overdue Invoices Alert */}
-      {OVERDUE_INVOICES.length > 0 && (
+      {overdueInvoices.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -232,7 +196,7 @@ export default function FinanceScreen() {
             </TouchableOpacity>
           </View>
           
-          {OVERDUE_INVOICES.map((invoice, index) => (
+          {overdueInvoices.map((invoice, index) => (
             <TouchableOpacity 
               key={invoice.id}
               style={[styles.overdueCard, { backgroundColor: '#FEE2E2' }]}
@@ -254,51 +218,55 @@ export default function FinanceScreen() {
       )}
 
       {/* Regional Finance Breakdown */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Regional Performance</Text>
-        </View>
-        
-        {REGIONAL_FINANCE.map((region, index) => {
-          const percentage = Math.round((region.members_paid / region.total_members) * 100);
+      {regionalFinance.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Regional Performance</Text>
+          </View>
           
-          return (
-            <View key={region.code} style={[styles.regionFinanceCard, { backgroundColor: theme.card }]}>
-              <View style={styles.regionFinanceHeader}>
-                <View style={styles.regionFinanceInfo}>
-                  <Text style={[styles.regionName, { color: theme.text }]}>{region.region}</Text>
-                  <Text style={[styles.regionMembers, { color: theme.textSecondary }]}>
-                    {region.members_paid}/{region.total_members} members paid
-                  </Text>
+          {regionalFinance.map((region, index) => {
+            const percentage = region.total_members > 0 
+              ? Math.round((region.members_paid / region.total_members) * 100)
+              : 0;
+            
+            return (
+              <View key={region.code} style={[styles.regionFinanceCard, { backgroundColor: theme.card }]}>
+                <View style={styles.regionFinanceHeader}>
+                  <View style={styles.regionFinanceInfo}>
+                    <Text style={[styles.regionName, { color: theme.text }]}>{region.region}</Text>
+                    <Text style={[styles.regionMembers, { color: theme.textSecondary }]}>
+                      {region.members_paid}/{region.total_members} members paid
+                    </Text>
+                  </View>
+                  <View style={styles.regionFinanceAmounts}>
+                    <Text style={[styles.regionCollected, { color: '#10B981' }]}>
+                      {formatCurrency(region.collected)}
+                    </Text>
+                    <Text style={[styles.regionOutstanding, { color: theme.textSecondary }]}>
+                      {formatCurrency(region.outstanding)} due
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.regionFinanceAmounts}>
-                  <Text style={[styles.regionCollected, { color: '#10B981' }]}>
-                    {formatCurrency(region.collected)}
-                  </Text>
-                  <Text style={[styles.regionOutstanding, { color: theme.textSecondary }]}>
-                    {formatCurrency(region.outstanding)} due
-                  </Text>
+                
+                <View style={styles.progressContainer}>
+                  <View style={[styles.progressBg, { backgroundColor: theme.border }]}>
+                    <View 
+                      style={[
+                        styles.progressFill, 
+                        { 
+                          backgroundColor: percentage >= 80 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444',
+                          width: `${percentage}%` 
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={[styles.progressText, { color: theme.textSecondary }]}>{percentage}%</Text>
                 </View>
               </View>
-              
-              <View style={styles.progressContainer}>
-                <View style={[styles.progressBg, { backgroundColor: theme.border }]}>
-                  <View 
-                    style={[
-                      styles.progressFill, 
-                      { 
-                        backgroundColor: percentage >= 80 ? '#10B981' : percentage >= 50 ? '#F59E0B' : '#EF4444',
-                        width: `${percentage}%` 
-                      }
-                    ]} 
-                  />
-                </View>
-                <Text style={[styles.progressText, { color: theme.textSecondary }]}>{percentage}%</Text>
-              </View>
-            </View>
-          );
-        })}
-      </View>
+            );
+          })}
+        </View>
+      )}
 
       {/* Recent Payments */}
       <View style={styles.section}>
@@ -309,47 +277,54 @@ export default function FinanceScreen() {
           </TouchableOpacity>
         </View>
         
-        {RECENT_PAYMENTS.slice(0, 4).map((payment) => (
-          <View key={payment.id} style={[styles.paymentCard, { backgroundColor: theme.card }]}>
-            <View style={[styles.paymentIcon, { backgroundColor: theme.surface }]}>
-              <Ionicons 
-                name={PAYMENT_METHOD_ICONS[payment.payment_method]} 
-                size={20} 
-                color={STATUS_COLORS[payment.status]} 
-              />
-            </View>
-            
-            <View style={styles.paymentInfo}>
-              <Text style={[styles.paymentName, { color: theme.text }]}>{payment.member_name}</Text>
-              <Text style={[styles.paymentRef, { color: theme.textSecondary }]}>
-                {payment.reference} • {formatTime(payment.created_at)}
-              </Text>
-            </View>
-            
-            <View style={styles.paymentRight}>
-              <Text style={[styles.paymentAmount, { color: theme.text }]}>
-                +{formatCurrency(payment.amount)}
-              </Text>
-              <View style={[styles.paymentStatus, { backgroundColor: STATUS_COLORS[payment.status] + '20' }]}>
-                <Text style={[styles.paymentStatusText, { color: STATUS_COLORS[payment.status] }]}>
-                  {payment.status}
+        {recentPayments.length === 0 && !paymentsLoading ? (
+          <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+            <Ionicons name="cash-outline" size={32} color={theme.textSecondary} />
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No recent payments</Text>
+          </View>
+        ) : (
+          recentPayments.slice(0, 4).map((payment) => (
+            <View key={payment.id} style={[styles.paymentCard, { backgroundColor: theme.card }]}>
+              <View style={[styles.paymentIcon, { backgroundColor: theme.surface }]}>
+                <Ionicons 
+                  name={PAYMENT_METHOD_ICONS[payment.payment_method] || 'ellipsis-horizontal-outline'} 
+                  size={20} 
+                  color={STATUS_COLORS[payment.status]} 
+                />
+              </View>
+              
+              <View style={styles.paymentInfo}>
+                <Text style={[styles.paymentName, { color: theme.text }]}>{payment.member_name}</Text>
+                <Text style={[styles.paymentRef, { color: theme.textSecondary }]}>
+                  {payment.reference} • {formatTime(payment.created_at)}
                 </Text>
               </View>
+              
+              <View style={styles.paymentRight}>
+                <Text style={[styles.paymentAmount, { color: theme.text }]}>
+                  +{formatCurrency(payment.amount)}
+                </Text>
+                <View style={[styles.paymentStatus, { backgroundColor: STATUS_COLORS[payment.status] + '20' }]}>
+                  <Text style={[styles.paymentStatusText, { color: STATUS_COLORS[payment.status] }]}>
+                    {payment.status}
+                  </Text>
+                </View>
+              </View>
             </View>
-          </View>
-        ))}
+          ))
+        )}
       </View>
     </ScrollView>
   );
 
   const renderPaymentsList = () => (
     <FlatList
-      data={RECENT_PAYMENTS}
+      data={recentPayments}
       renderItem={({ item: payment }) => (
         <View style={[styles.paymentCard, { backgroundColor: theme.card }]}>
           <View style={[styles.paymentIcon, { backgroundColor: theme.surface }]}>
             <Ionicons 
-              name={PAYMENT_METHOD_ICONS[payment.payment_method]} 
+              name={PAYMENT_METHOD_ICONS[payment.payment_method] || 'ellipsis-horizontal-outline'} 
               size={20} 
               color={STATUS_COLORS[payment.status]} 
             />
@@ -381,6 +356,13 @@ export default function FinanceScreen() {
       contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 20 }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+      }
+      ListEmptyComponent={
+        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+          <Ionicons name="cash-outline" size={48} color={theme.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>No Payments Yet</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Payments will appear here once recorded</Text>
+        </View>
       }
     />
   );

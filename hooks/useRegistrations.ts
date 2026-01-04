@@ -325,7 +325,49 @@ export function useRegistrations(): UseRegistrationsReturn {
               const supabase = assertSupabase();
               
               if (isInApp) {
-                // Update child_registration_requests table
+                // First, fetch the full registration data with parent info
+                const { data: regData, error: regError } = await supabase
+                  .from('child_registration_requests')
+                  .select('*, parent:profiles!parent_id(id, first_name, last_name)')
+                  .eq('id', registration.id)
+                  .single();
+
+                if (regError) throw regError;
+
+                // Create student record in students table
+                const { data: newStudent, error: studentError } = await supabase
+                  .from('students')
+                  .insert({
+                    first_name: regData.child_first_name,
+                    last_name: regData.child_last_name,
+                    date_of_birth: regData.child_birth_date,
+                    gender: regData.child_gender,
+                    medical_conditions: regData.medical_info,
+                    allergies: regData.dietary_requirements,
+                    notes: regData.special_needs ? `Special needs: ${regData.special_needs}` : regData.notes,
+                    emergency_contact_name: regData.emergency_contact_name,
+                    emergency_contact_phone: regData.emergency_contact_phone,
+                    parent_id: regData.parent_id,
+                    guardian_id: regData.parent_id,
+                    preschool_id: regData.preschool_id,
+                    is_active: true,
+                    status: 'active',
+                  })
+                  .select('id')
+                  .single();
+
+                if (studentError) throw studentError;
+
+                // Update parent's preschool_id if not set
+                if (regData.parent_id) {
+                  await supabase
+                    .from('profiles')
+                    .update({ preschool_id: regData.preschool_id })
+                    .eq('id', regData.parent_id)
+                    .is('preschool_id', null);
+                }
+
+                // Update child_registration_requests table with student_id reference
                 const { error: updateError } = await supabase
                   .from('child_registration_requests')
                   .update({
@@ -342,8 +384,9 @@ export function useRegistrations(): UseRegistrationsReturn {
                   await supabase.functions.invoke('notifications-dispatcher', {
                     body: {
                       event_type: 'child_registration_approved',
-                      user_ids: [registration.organization_id], // parent_id stored in this field for in-app
+                      user_ids: [regData.parent_id],
                       registration_id: registration.id,
+                      student_id: newStudent.id,
                       child_name: `${registration.student_first_name} ${registration.student_last_name}`,
                     },
                   });
@@ -354,7 +397,7 @@ export function useRegistrations(): UseRegistrationsReturn {
                 setSuccessModal({
                   visible: true,
                   title: 'Success',
-                  message: '✅ Registration approved!\n\n👶 Child registration confirmed\n📱 Parent notified',
+                  message: '✅ Registration approved!\n\n👶 Student profile created\n👤 Linked to parent\n📱 Parent notified',
                   icon: 'checkmark-circle',
                 });
               } else {

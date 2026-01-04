@@ -1,8 +1,12 @@
 /**
  * useAnnouncements Hook - React Query for Announcements Management
  * Handles fetching and creating announcements for Youth President
+ * 
+ * Data Source: organization_announcements table
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { assertSupabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Announcement {
   id: string;
@@ -16,69 +20,164 @@ export interface Announcement {
   readCount: number;
 }
 
-const MOCK_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: '1',
-    title: 'Annual Youth Conference Registration Open',
-    content: 'Registration for our 2025 Annual Youth Conference is now open! Early bird pricing available until January 31st.',
-    type: 'event',
-    audience: 'all',
-    isPinned: true,
-    createdAt: new Date(Date.now() - 86400000),
-    author: 'Youth President',
-    readCount: 145,
-  },
-  {
-    id: '2',
-    title: 'Leadership Training Workshop',
-    content: 'Mandatory leadership training for all zone coordinators and committee heads this Saturday.',
-    type: 'urgent',
-    audience: 'leaders',
-    isPinned: true,
-    createdAt: new Date(Date.now() - 172800000),
-    author: 'Youth President',
-    readCount: 32,
-  },
-  {
-    id: '3',
-    title: 'Community Service Day Success',
-    content: 'Thank you to all 78 volunteers who participated in our community service day. Together we cleaned 3 parks!',
-    type: 'update',
-    audience: 'all',
-    isPinned: false,
-    createdAt: new Date(Date.now() - 432000000),
-    author: 'Events Team',
-    readCount: 210,
-  },
-];
-
 export function useAnnouncements(filter: string = 'all') {
+  const { profile } = useAuth();
+  const organizationId = profile?.organization_id;
+
   return useQuery({
-    queryKey: ['announcements', filter],
+    queryKey: ['announcements', filter, organizationId],
     queryFn: async (): Promise<Announcement[]> => {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 300));
+      if (!organizationId) return [];
       
-      if (filter === 'all') return MOCK_ANNOUNCEMENTS;
-      if (filter === 'pinned') return MOCK_ANNOUNCEMENTS.filter(a => a.isPinned);
-      return MOCK_ANNOUNCEMENTS.filter(a => a.type === filter);
+      const supabase = assertSupabase();
+      
+      // Build query
+      let query = supabase
+        .from('organization_announcements')
+        .select(`
+          id,
+          title,
+          content,
+          announcement_type,
+          target_audience,
+          is_pinned,
+          created_at,
+          created_by,
+          expires_at
+        `)
+        .eq('organization_id', organizationId)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // Apply filters
+      if (filter === 'pinned') {
+        query = query.eq('is_pinned', true);
+      } else if (filter !== 'all' && ['general', 'event', 'urgent', 'update'].includes(filter)) {
+        query = query.eq('announcement_type', filter);
+      }
+
+      const { data: announcements, error } = await query;
+
+      if (error) {
+        console.error('Error fetching announcements:', error);
+        return [];
+      }
+
+      if (!announcements || announcements.length === 0) {
+        return [];
+      }
+
+      // Get creator names
+      const creatorIds = announcements
+        .filter(a => a.created_by)
+        .map(a => a.created_by);
+      
+      let creatorNames: Record<string, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', creatorIds);
+        
+        if (profiles) {
+          creatorNames = profiles.reduce((acc, p) => {
+            acc[p.id] = p.full_name || p.email || 'Unknown';
+            return acc;
+          }, {} as Record<string, string>);
+        }
+      }
+
+      // Get read counts from organization_announcement_recipients
+      const announcementIds = announcements.map(a => a.id);
+      const { data: readData } = await supabase
+        .from('organization_announcement_recipients')
+        .select('announcement_id')
+        .in('announcement_id', announcementIds)
+        .eq('read', true);
+
+      const readCounts: Record<string, number> = {};
+      if (readData) {
+        for (const r of readData) {
+          readCounts[r.announcement_id] = (readCounts[r.announcement_id] || 0) + 1;
+        }
+      }
+
+      return announcements.map(a => ({
+        id: a.id,
+        title: a.title || 'Untitled',
+        content: a.content || '',
+        type: mapAnnouncementType(a.announcement_type),
+        audience: mapAudience(a.target_audience),
+        isPinned: a.is_pinned || false,
+        createdAt: new Date(a.created_at),
+        author: a.created_by ? (creatorNames[a.created_by] || 'Unknown') : 'System',
+        readCount: readCounts[a.id] || 0,
+      }));
     },
+    enabled: !!organizationId,
     staleTime: 30000,
   });
 }
 
 export function useCreateAnnouncement() {
   const queryClient = useQueryClient();
+  const { user, profile } = useAuth();
+  const organizationId = profile?.organization_id;
   
   return useMutation({
     mutationFn: async (announcement: Omit<Announcement, 'id' | 'createdAt' | 'readCount'>) => {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return { ...announcement, id: Date.now().toString(), createdAt: new Date(), readCount: 0 };
+      if (!organizationId || !user?.id) {
+        throw new Error('Not authenticated or no organization');
+      }
+
+      const supabase = assertSupabase();
+      
+      const { data, error } = await supabase
+        .from('organization_announcements')
+        .insert({
+          organization_id: organizationId,
+          title: announcement.title,
+          content: announcement.content,
+          announcement_type: announcement.type,
+          target_audience: announcement.audience === 'all' ? ['all'] : [announcement.audience],
+          is_pinned: announcement.isPinned,
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      return {
+        ...announcement,
+        id: data.id,
+        createdAt: new Date(data.created_at),
+        readCount: 0,
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
     },
   });
+}
+
+// Helper functions
+function mapAnnouncementType(type: string | null): 'general' | 'event' | 'urgent' | 'update' {
+  if (!type) return 'general';
+  if (['general', 'event', 'urgent', 'update'].includes(type)) {
+    return type as 'general' | 'event' | 'urgent' | 'update';
+  }
+  return 'general';
+}
+
+function mapAudience(audience: string[] | null): 'all' | 'members' | 'leaders' {
+  if (!audience || audience.length === 0 || audience.includes('all')) {
+    return 'all';
+  }
+  if (audience.includes('leaders')) return 'leaders';
+  if (audience.includes('members')) return 'members';
+  return 'all';
 }
 
 export const ANNOUNCEMENT_TYPES = [

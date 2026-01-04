@@ -117,6 +117,7 @@ export class InviteService {
           request_type: params.type,
           organization_id: params.organizationId,
           preschool_id: params.preschoolId,
+          requester_id: user.id, // Always set for constraint compliance
           requester_email: params.email,
           requester_phone: params.phone,
           invited_by: user.id,

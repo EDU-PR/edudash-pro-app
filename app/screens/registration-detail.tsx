@@ -114,21 +114,89 @@ export default function RegistrationDetailScreen() {
       try {
         const supabase = assertSupabase();
         
+        // First try registration_requests (EduSite sync)
         const { data, error: fetchError } = await supabase
           .from('registration_requests')
           .select('*')
           .eq('id', id)
-          .maybeSingle(); // Use maybeSingle to avoid 406 error when not found
+          .maybeSingle();
 
-        if (fetchError) throw fetchError;
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          throw fetchError;
+        }
         
-        if (!data) {
-          setError('Registration not found. It may have been deleted or you do not have permission to view it.');
+        if (data) {
+          setRegistration(data);
+          setLoading(false);
+          return;
+        }
+
+        // If not found, try child_registration_requests (in-app submissions)
+        const { data: inAppData, error: inAppError } = await supabase
+          .from('child_registration_requests')
+          .select(`
+            id,
+            child_first_name,
+            child_last_name,
+            child_birth_date,
+            child_gender,
+            medical_info,
+            dietary_requirements,
+            special_needs,
+            emergency_contact_name,
+            emergency_contact_phone,
+            notes,
+            parent_id,
+            preschool_id,
+            status,
+            reviewed_by,
+            reviewed_at,
+            rejection_reason,
+            created_at,
+            parent:profiles!parent_id(first_name, last_name, email, phone)
+          `)
+          .eq('id', id)
+          .maybeSingle();
+
+        if (inAppError && inAppError.code !== 'PGRST116') {
+          throw inAppError;
+        }
+
+        if (inAppData) {
+          // Transform to Registration interface
+          const transformed: Registration = {
+            id: inAppData.id,
+            organization_id: inAppData.preschool_id,
+            guardian_name: inAppData.parent 
+              ? `${inAppData.parent.first_name || ''} ${inAppData.parent.last_name || ''}`.trim() 
+              : 'Parent',
+            guardian_email: inAppData.parent?.email || '',
+            guardian_phone: inAppData.parent?.phone || '',
+            student_first_name: inAppData.child_first_name,
+            student_last_name: inAppData.child_last_name,
+            student_dob: inAppData.child_birth_date,
+            student_gender: inAppData.child_gender,
+            documents_uploaded: true,
+            registration_fee_paid: true,
+            payment_verified: true,
+            status: inAppData.status,
+            reviewed_by: inAppData.reviewed_by,
+            rejection_reason: inAppData.rejection_reason,
+            notes: inAppData.notes,
+            created_at: inAppData.created_at,
+            // In-app registrations don't have these fields
+            proof_of_payment_url: undefined,
+            id_document_url: undefined,
+            birth_certificate_url: undefined,
+            immunization_record_url: undefined,
+          };
+          setRegistration(transformed);
           setLoading(false);
           return;
         }
         
-        setRegistration(data);
+        // Not found in either table
+        setError('Registration not found. It may have been deleted or you do not have permission to view it.');
       } catch (err: any) {
         console.error('Error fetching registration:', err);
         setError(err.message || 'Failed to load registration');

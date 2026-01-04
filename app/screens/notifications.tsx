@@ -354,78 +354,82 @@ const useNotifications = () => {
         return false;
       };
       
-      // Try to fetch from notifications table if it exists
+      // Build notifications from various sources (composite approach)
+      const notifications: Notification[] = [];
+      
+      // Try to fetch from in_app_notifications table first
       try {
-        const { data, error } = await client
-          .from('notifications')
+        const { data: inAppNotifs, error: inAppError } = await client
+          .from('in_app_notifications')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(30);
         
-        if (!error && data) {
-          // Filter out cleared and mark as read if in our local read set
-          return data
-            .filter(n => !isCleared(n.id, n.created_at))
-            .map(n => ({
-              ...n,
-              read: n.read || readIds.has(n.id),
-            })) as Notification[];
-        }
-      } catch {
-        // Table might not exist, fall back to composite notifications
-      }
-      
-      // Fallback: Build notifications from various sources
-      const notifications: Notification[] = [];
-      
-      // Get unread messages
-      try {
-        const { data: threads } = await client
-          .from('message_threads')
-          .select(`
-            id,
-            updated_at,
-            message_participants!inner(user_id, last_read_at),
-            messages(content, created_at, sender:profiles!sender_id(first_name, last_name))
-          `)
-          .eq('message_participants.user_id', user.id)
-          .gt('updated_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-          .order('updated_at', { ascending: false })
-          .limit(10);
-        
-        threads?.forEach((thread: any) => {
-          const lastMessage = thread.messages?.[0];
-          if (lastMessage) {
-            const senderName = lastMessage.sender 
-              ? `${lastMessage.sender.first_name} ${lastMessage.sender.last_name}`.trim()
-              : 'Someone';
-            const notifId = `msg-${thread.id}`;
-            
-            // Check if message is read - either by last_read_at or local storage
-            const participant = Array.isArray(thread.message_participants) 
-              ? thread.message_participants[0] 
-              : thread.message_participants;
-            const lastReadAt = participant?.last_read_at;
-            const messageTime = new Date(lastMessage.created_at).getTime();
-            const readTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
-            const isReadByDb = lastReadAt && readTime >= messageTime;
-            
-            // Only add if not cleared
-            if (!isCleared(notifId, lastMessage.created_at)) {
+        if (!inAppError && inAppNotifs?.length) {
+          inAppNotifs.forEach((n: any) => {
+            const notifId = `in-app-${n.id}`;
+            if (!isCleared(notifId, n.created_at)) {
               notifications.push({
                 id: notifId,
-                type: 'message',
-                title: `New message from ${senderName}`,
-                body: lastMessage.content?.substring(0, 100) || 'New message',
-                data: { threadId: thread.id },
-                read: isReadByDb || readIds.has(notifId),
-                created_at: lastMessage.created_at,
-                sender_name: senderName,
+                type: n.type || 'system',
+                title: n.title || 'Notification',
+                body: n.body || n.message || '',
+                data: n.data,
+                read: n.read || readIds.has(notifId),
+                created_at: n.created_at,
               });
             }
+          });
+        }
+      } catch (e) {
+        console.log('[Notifications] in_app_notifications not available:', e);
+      }
+      
+      // Get unread messages - use same approach as badge count
+      try {
+        // First get threads where user is participant
+        const { data: participants } = await client
+          .from('message_participants')
+          .select('thread_id, last_read_at')
+          .eq('user_id', user.id);
+        
+        if (participants?.length) {
+          // For each thread, get latest unread message if any
+          for (const participant of participants.slice(0, 15)) {
+            const { data: unreadMessages } = await client
+              .from('messages')
+              .select('id, content, created_at, sender_id, sender:profiles!sender_id(first_name, last_name)')
+              .eq('thread_id', participant.thread_id)
+              .gt('created_at', participant.last_read_at || '1970-01-01')
+              .neq('sender_id', user.id)
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (unreadMessages?.length) {
+              const msg = unreadMessages[0];
+              const senderName = msg.sender 
+                ? `${(msg.sender as any).first_name || ''} ${(msg.sender as any).last_name || ''}`.trim()
+                : 'Someone';
+              const notifId = `msg-${participant.thread_id}`;
+              
+              // Only add if not cleared
+              if (!isCleared(notifId, msg.created_at)) {
+                notifications.push({
+                  id: notifId,
+                  type: 'message',
+                  title: `New message from ${senderName}`,
+                  body: msg.content?.substring(0, 100) || 'New message',
+                  data: { threadId: participant.thread_id },
+                  read: readIds.has(notifId),
+                  created_at: msg.created_at,
+                  sender_name: senderName,
+                });
+              }
+            }
           }
-        });
+        }
       } catch (e) {
         console.log('[Notifications] Error fetching messages:', e);
       }

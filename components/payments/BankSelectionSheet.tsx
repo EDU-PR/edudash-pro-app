@@ -120,22 +120,39 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
     onBankSelected?.(bank);
     
     try {
-      // Try to open the app with custom scheme
-      const canOpen = await Linking.canOpenURL(bank.scheme);
+      // On Android, canOpenURL is unreliable for custom schemes even with queries declared
+      // Instead, try to open directly and catch the error
       
-      if (canOpen) {
+      // First try: Open via Play Store intent (most reliable on Android)
+      // This opens the app if installed, or shows Play Store page if not
+      const playStoreIntent = `market://details?id=${bank.playStoreId}`;
+      const playStoreWeb = bank.marketUrl;
+      
+      // Try opening the app directly first
+      try {
         await Linking.openURL(bank.scheme);
+        console.log(`✅ Opened ${bank.name} via scheme: ${bank.scheme}`);
         return;
+      } catch (schemeError) {
+        console.log(`📱 ${bank.name} scheme failed, trying alternatives...`);
       }
-      
-      // App not installed - show options
+
+      // If scheme failed, offer options to user
       Alert.alert(
-        t('payments.app_not_installed', { defaultValue: `${bank.name} App` }),
-        t('payments.install_or_website', { defaultValue: `Would you like to install ${bank.name} or open their website?` }),
+        bank.name,
+        t('payments.open_bank_options', { 
+          defaultValue: `How would you like to open ${bank.name}?` 
+        }),
         [
           {
-            text: t('payments.get_app', { defaultValue: 'Get App' }),
-            onPress: () => Linking.openURL(bank.marketUrl),
+            text: t('payments.open_app_store', { defaultValue: 'Open in Play Store' }),
+            onPress: async () => {
+              try {
+                await Linking.openURL(playStoreIntent);
+              } catch {
+                await Linking.openURL(playStoreWeb);
+              }
+            },
           },
           {
             text: t('payments.open_website', { defaultValue: 'Open Website' }),
@@ -146,7 +163,7 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
       );
     } catch (error) {
       console.error('Error opening banking app:', error);
-      // Fallback to website
+      // Ultimate fallback to website
       Linking.openURL(bank.fallbackUrl);
     }
   };
