@@ -38,7 +38,15 @@ interface YouthInviteCode {
   expires_at: string | null;
   description: string;
   created_at: string;
+  requested_role?: string;
 }
+
+// Youth Wing roles that can be assigned via invite
+const YOUTH_ROLES = [
+  { id: 'youth_member', label: 'Youth Member', description: 'Standard youth wing member' },
+  { id: 'youth_volunteer', label: 'Youth Volunteer', description: 'Active volunteer in youth programs' },
+  { id: 'youth_coordinator', label: 'Youth Coordinator', description: 'Coordinates youth activities in their area' },
+] as const;
 
 export default function YouthInviteCodeScreen() {
   const { user, profile } = useAuth();
@@ -56,6 +64,7 @@ export default function YouthInviteCodeScreen() {
   const [maxUses, setMaxUses] = useState('50');
   const [expiryDays, setExpiryDays] = useState('30');
   const [description, setDescription] = useState('Youth Wing Invite');
+  const [selectedRole, setSelectedRole] = useState<string>('youth_member');
 
   const loadCodes = useCallback(async () => {
     if (!organizationId) return;
@@ -84,6 +93,7 @@ export default function YouthInviteCodeScreen() {
         expires_at: r.expires_at,
         description: r.message || 'Youth Invite', // Fixed: was notes
         created_at: r.created_at,
+        requested_role: r.requested_role || 'youth_member',
       }));
       setCodes(mapped);
     } catch (e: any) {
@@ -131,7 +141,7 @@ export default function YouthInviteCodeScreen() {
           expires_at: expiresAt,
           message: description, // Use 'message' column instead of 'notes'
           status: 'pending',
-          requested_role: 'youth_member', // Explicitly set role for youth wing invites
+          requested_role: selectedRole, // Use selected role from form
         })
         .select()
         .single();
@@ -281,6 +291,30 @@ export default function YouthInviteCodeScreen() {
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Create New Invite</Text>
                 
+                {/* Role Selection */}
+                <Text style={styles.inputLabel}>Invite Role</Text>
+                <View style={styles.roleSelector}>
+                  {YOUTH_ROLES.map((role) => (
+                    <TouchableOpacity
+                      key={role.id}
+                      style={[
+                        styles.roleOption,
+                        { backgroundColor: theme.surface, borderColor: theme.border },
+                        selectedRole === role.id && { borderColor: theme.primary, backgroundColor: `${theme.primary}15` },
+                      ]}
+                      onPress={() => setSelectedRole(role.id)}
+                    >
+                      <View style={styles.roleOptionHeader}>
+                        <Text style={[styles.roleLabel, { color: theme.text }]}>{role.label}</Text>
+                        {selectedRole === role.id && (
+                          <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                        )}
+                      </View>
+                      <Text style={[styles.roleDescription, { color: theme.textSecondary }]}>{role.description}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 <View style={styles.fieldRow}>
                   <Text style={styles.inputLabel}>Description</Text>
                   <TextInput
@@ -633,5 +667,27 @@ const createStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontSize: 14,
+  },
+  roleSelector: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  roleOption: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  roleOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  roleLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  roleDescription: {
+    fontSize: 12,
+    marginTop: 4,
   },
 });

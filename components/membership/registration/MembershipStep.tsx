@@ -13,9 +13,18 @@ interface MembershipStepProps {
   data: RegistrationData;
   onUpdate: (field: keyof RegistrationData, value: string) => void;
   theme: any;
+  inviteRole?: string | null;
+  inviteOrgName?: string | null;
 }
 
-export function MembershipStep({ data, onUpdate, theme }: MembershipStepProps) {
+// Map invite roles to display names
+const INVITE_ROLE_DISPLAY: Record<string, string> = {
+  'youth_member': 'Youth Member',
+  'youth_volunteer': 'Youth Volunteer',
+  'youth_coordinator': 'Youth Coordinator',
+};
+
+export function MembershipStep({ data, onUpdate, theme, inviteRole, inviteOrgName }: MembershipStepProps) {
   const formatCurrency = (amount: number) => {
     return `R${amount.toLocaleString()}`;
   };
@@ -26,6 +35,24 @@ export function MembershipStep({ data, onUpdate, theme }: MembershipStepProps) {
       <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
         Select your role and membership tier
       </Text>
+      
+      {/* Show invite role banner if coming from invite */}
+      {inviteRole && (
+        <View style={[styles.inviteBanner, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}>
+          <Ionicons name="ticket-outline" size={20} color={theme.primary} />
+          <View style={styles.inviteBannerText}>
+            <Text style={[styles.inviteRoleLabel, { color: theme.text }]}>
+              Invited as: <Text style={{ fontWeight: '700' }}>{INVITE_ROLE_DISPLAY[inviteRole] || inviteRole}</Text>
+            </Text>
+            {inviteOrgName && (
+              <Text style={[styles.inviteOrgLabel, { color: theme.textSecondary }]}>
+                {inviteOrgName}
+              </Text>
+            )}
+          </View>
+          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+        </View>
+      )}
       
       {/* Member Type Selection */}
       <Text style={[styles.sectionLabel, { color: theme.text }]}>I want to join as a:</Text>
@@ -226,5 +253,25 @@ const styles = StyleSheet.create({
   featureText: {
     fontSize: 13,
     marginLeft: 8,
+  },
+  inviteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
+    gap: 12,
+  },
+  inviteBannerText: {
+    flex: 1,
+  },
+  inviteRoleLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  inviteOrgLabel: {
+    fontSize: 13,
+    marginTop: 2,
   },
 });
