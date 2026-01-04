@@ -48,15 +48,52 @@ export default function MemberRegistrationScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedMemberNumber, setGeneratedMemberNumber] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<string | null>(null);
+  const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Handle invite code from URL params
+  // Handle invite code from URL params - fetch details including role
   useEffect(() => {
-    if (params?.inviteCode) {
+    async function fetchInviteDetails() {
+      if (!params?.inviteCode) return;
+      
       setInviteCode(params.inviteCode);
-      // Store invite code in form data for later use during registration
       setFormData(prev => ({ ...prev, invite_code: params.inviteCode }));
+      
+      try {
+        const supabase = assertSupabase();
+        const { data: invite } = await supabase
+          .from('join_requests')
+          .select('requested_role, organizations(name)')
+          .eq('invite_code', params.inviteCode.toUpperCase())
+          .eq('status', 'pending')
+          .single();
+        
+        if (invite) {
+          const role = invite.requested_role || 'youth_member';
+          setInviteRole(role);
+          // Pre-select the role in the form based on invite
+          const memberTypeMap: Record<string, string> = {
+            'youth_member': 'learner',
+            'youth_volunteer': 'volunteer',
+            'youth_coordinator': 'facilitator',
+          };
+          setFormData(prev => ({ 
+            ...prev, 
+            member_type: (memberTypeMap[role] || 'learner') as any,
+          }));
+          
+          const org = invite.organizations as any;
+          if (org?.name) {
+            setInviteOrgName(org.name);
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching invite details:', e);
+      }
     }
+    
+    fetchInviteDetails();
   }, [params?.inviteCode]);
 
   const currentStepIndex = REGISTRATION_STEPS.findIndex(s => s.key === currentStep);
@@ -206,6 +243,8 @@ export default function MemberRegistrationScreen() {
             data={formData}
             onUpdate={updateField}
             theme={theme}
+            inviteRole={inviteRole}
+            inviteOrgName={inviteOrgName}
           />
         );
       case 'payment':
