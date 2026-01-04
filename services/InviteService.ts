@@ -530,7 +530,7 @@ export class InviteService {
   private static generateInviteLink(code: string | null, token: string | null): string {
     // Get the app scheme and web URL
     const scheme = Constants.expoConfig?.scheme || 'edudashpro';
-    const webUrl = Constants.expoConfig?.extra?.webUrl || 'https://edudashpro.org.za';
+    const webUrl = Constants.expoConfig?.extra?.webUrl || 'https://www.soilofafrica.org.za';
     
     // For web, use the web URL
     if (Platform.OS === 'web') {
