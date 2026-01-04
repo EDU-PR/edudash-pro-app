@@ -65,7 +65,7 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
           member_type,
           membership_status,
           membership_tier,
-          joined_date,
+          join_date,
           first_name,
           last_name,
           email,

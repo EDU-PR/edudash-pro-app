@@ -93,10 +93,20 @@ export default function DonatePage() {
                     <h4 className="text-lg font-semibold">Bank Transfer (EFT)</h4>
                   </div>
                   <div className="space-y-2 text-sm text-white/90">
-                    <p><span className="text-white/60">Bank:</span> Standard Bank / FNB / Capitec</p>
-                    <p><span className="text-white/60">Account Name:</span> Soil of Africa</p>
-                    <p><span className="text-white/60">Account No:</span> Contact us for details</p>
+                    <p><span className="text-white/60">Bank:</span> FNB / RMB</p>
+                    <p><span className="text-white/60">Account Name:</span> Soil Of Africa Soa Npc</p>
+                    <p><span className="text-white/60">Account Type:</span> Gold Business Account</p>
+                    <p><span className="text-white/60">Account No:</span> 63158326679</p>
+                    <p><span className="text-white/60">Branch Code:</span> 250655</p>
                     <p><span className="text-white/60">Reference:</span> Your Name + "Donation"</p>
+                  </div>
+                  <div className="mt-4 p-3 bg-soa-gold/20 rounded-lg">
+                    <p className="text-xs text-white/80">
+                      💡 <strong>Tip:</strong> Please email proof of payment to{' '}
+                      <a href="mailto:donations@soilofafrica.org" className="text-soa-gold hover:underline">
+                        donations@soilofafrica.org
+                      </a>
+                    </p>
                   </div>
                 </div>
 
