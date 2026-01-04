@@ -46,6 +46,7 @@ export default function ExecutiveInviteScreen() {
     try {
       const supabase = assertSupabase();
       
+      // Use maybeSingle() to avoid 406 when no results found
       const { data, error: queryError } = await supabase
         .from('join_requests')
         .select(`
@@ -59,7 +60,7 @@ export default function ExecutiveInviteScreen() {
         .eq('invite_code', code.toUpperCase())
         .eq('request_type', 'staff_invite')
         .eq('status', 'pending')
-        .single();
+        .maybeSingle();
 
       if (queryError || !data) {
         setError('Invalid or expired executive invite code');

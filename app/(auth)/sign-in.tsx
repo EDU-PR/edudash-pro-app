@@ -73,10 +73,16 @@ console.log('[SignIn] Component rendering, theme:', theme);
 
   // Check for verification success message
   useEffect(() => {
-    if (searchParams.verified === 'true') {
+    if (searchParams.verified === 'true' || searchParams.emailVerified === 'true') {
       setSuccessMessage(t('auth.email_verified', { defaultValue: 'Email verified successfully! You can now sign in.' }));
       // Auto-dismiss after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
+    }
+    if (searchParams.emailVerificationFailed === 'true') {
+      Alert.alert(
+        t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
+        t('auth.verification_failed_message', { defaultValue: 'Email verification failed. Please try signing in to request a new verification email.' })
+      );
     }
   }, [searchParams, t]);
 

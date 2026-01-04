@@ -43,6 +43,7 @@ export default function MemberDetailScreen() {
     error, 
     suspendMember,
     activateMember,
+    deleteMember,
   } = useMemberDetail(memberId);
   
   // Loading state
@@ -115,8 +116,82 @@ export default function MemberDetailScreen() {
           },
         ]
       );
+    } else if (action === 'Delete' || action === 'Remove Member') {
+      Alert.alert(
+        'Remove Member',
+        `Are you sure you want to remove ${member.first_name} ${member.last_name} from the organization?\n\nThis will revoke their membership.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Remove', 
+            style: 'destructive',
+            onPress: async () => {
+              const success = await deleteMember();
+              if (success) {
+                Alert.alert('Success', 'Member has been removed', [
+                  { text: 'OK', onPress: () => router.back() }
+                ]);
+              }
+            }
+          },
+        ]
+      );
+    } else if (action === 'Message') {
+      // Navigate to message screen or open email/SMS
+      if (member.phone) {
+        Alert.alert(
+          'Contact Member',
+          `How would you like to contact ${member.first_name}?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'WhatsApp', 
+              onPress: () => {
+                const phone = member.phone?.replace(/\D/g, '');
+                const url = `whatsapp://send?phone=${phone}`;
+                import('react-native').then(({ Linking }) => Linking.openURL(url));
+              }
+            },
+            { 
+              text: 'Call', 
+              onPress: () => {
+                import('react-native').then(({ Linking }) => Linking.openURL(`tel:${member.phone}`));
+              }
+            },
+          ]
+        );
+      } else if (member.email) {
+        import('react-native').then(({ Linking }) => Linking.openURL(`mailto:${member.email}`));
+      } else {
+        Alert.alert('No Contact', 'This member has no contact details on file.');
+      }
+    } else if (action === 'Invoice') {
+      // Navigate to invoice/payment screen
+      router.push(`/screens/membership/member-invoice?memberId=${member.id}`);
+    } else if (action === 'Edit') {
+      router.push(`/screens/membership/edit-member?memberId=${member.id}`);
+    } else if (action === 'More') {
+      Alert.alert(
+        'More Actions',
+        `Select an action for ${member.first_name}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Change Role', onPress: () => handleAction('Change Role') },
+          { text: 'Transfer Region', onPress: () => handleAction('Transfer Region') },
+          { text: 'Remove Member', style: 'destructive', onPress: () => handleAction('Remove Member') },
+        ]
+      );
+    } else if (action === 'Change Role') {
+      Alert.alert('Coming Soon', 'Role change functionality will be available soon.');
+    } else if (action === 'Transfer Region') {
+      Alert.alert('Coming Soon', 'Region transfer functionality will be available soon.');
+    } else if (action === 'Renew Membership') {
+      Alert.alert('Renew Membership', `Renew ${member.first_name}'s membership for another year?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Renew', onPress: () => Alert.alert('Coming Soon', 'Payment integration coming soon.') },
+      ]);
     } else {
-      Alert.alert(action, `Perform ${action.toLowerCase()} action for ${member.first_name}?`);
+      Alert.alert(action, `Action "${action}" is not yet implemented.`);
     }
   };
 

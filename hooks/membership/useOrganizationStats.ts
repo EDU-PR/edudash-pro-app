@@ -24,7 +24,8 @@ export interface RegionWithStats {
   code: string;
   province_code: string | null;
   is_active: boolean;
-  manager_id: string | null;
+  manager_id: string | null; // organization_members.id for navigation
+  manager_user_id?: string | null; // Original user_id from organization_regions
   manager_name: string | null;
   manager_email: string | null;
   member_count: number;
@@ -160,14 +161,18 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
           const pendingCount = regionMembers.filter(m => m.membership_status === 'pending').length;
           
           // Get manager info if assigned
+          // NOTE: manager_id in organization_regions stores user_id, not organization_members.id
           let managerName = null;
           let managerEmail = null;
+          let managerMemberId = null; // The actual organization_members.id for navigation
           
           if (region.manager_id) {
-            const manager = members.find(m => m.id === region.manager_id);
+            // Find member by user_id since manager_id stores user_id
+            const manager = members.find(m => m.user_id === region.manager_id);
             if (manager) {
               managerName = `${manager.first_name || ''} ${manager.last_name || ''}`.trim();
               managerEmail = manager.email;
+              managerMemberId = manager.id; // This is the organization_members.id
             }
           }
 
@@ -184,7 +189,8 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
             code: region.code,
             province_code: region.province_code,
             is_active: region.is_active ?? true,
-            manager_id: region.manager_id,
+            manager_id: managerMemberId, // Use the organization_members.id, not user_id
+            manager_user_id: region.manager_id, // Keep original user_id for reference
             manager_name: managerName,
             manager_email: managerEmail,
             member_count: memberCount,

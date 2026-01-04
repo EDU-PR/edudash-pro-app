@@ -125,8 +125,10 @@ export default function MemberRegistrationScreen() {
           Alert.alert('Required', 'Please fill in all required fields');
           return false;
         }
-        if (!formData.email.includes('@')) {
-          Alert.alert('Invalid', 'Please enter a valid email address');
+        // Validate email format properly
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+          Alert.alert('Invalid Email', 'Please enter a valid email address (e.g., user@example.com)');
           return false;
         }
         if (!formData.password || formData.password.length < 6) {
@@ -185,6 +187,8 @@ export default function MemberRegistrationScreen() {
               last_name: formData.last_name,
               phone: formData.phone,
             },
+            // Redirect to Soil of Africa website after email confirmation
+            emailRedirectTo: 'https://www.soilofafrica.org/auth/callback?flow=email-confirm',
           },
         });
         
@@ -216,17 +220,20 @@ export default function MemberRegistrationScreen() {
         user = signUpData.user;
         console.log('[Register] User created successfully:', user.id);
         
-        // Show confirmation email notice if email confirmation is required
+        // Check if we have a session - if not, email confirmation is required
         if (!signUpData.session) {
+          console.log('[Register] No session after signup - email confirmation required');
+          // Email confirmation is required - don't try to sign in, just show success message
           Alert.alert(
-            'Check Your Email',
-            'We\'ve sent a confirmation link to your email. Please verify your email to complete registration.',
-            [{ text: 'OK', onPress: () => setCurrentStep('complete') }]
+            'Account Created! 🎉',
+            'Your account was created successfully. Please check your email to confirm your account, then sign in to complete your membership registration.',
+            [{ text: 'OK', onPress: () => router.push('/(auth)/sign-in') }]
           );
-          setGeneratedMemberNumber('PENDING-VERIFICATION');
-          setCurrentStep('complete');
-          return;
+          setIsSubmitting(false);
+          return; // Stop here - user must confirm email first
         }
+        
+        console.log('[Register] Session available after signup - continuing with membership setup');
       }
 
       // Get next sequence number for the region

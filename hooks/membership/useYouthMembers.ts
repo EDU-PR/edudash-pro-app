@@ -67,7 +67,6 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
           membership_status,
           membership_tier,
           join_date,
-          joined_date,
           first_name,
           last_name,
           email,
@@ -98,7 +97,12 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
       const { data: members, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
-      return members || [];
+      
+      // Map join_date to joined_date for type compatibility
+      return (members || []).map(member => ({
+        ...member,
+        joined_date: member.join_date || member.created_at,
+      }));
     },
     enabled: !!orgId,
     staleTime: 30000, // 30 seconds

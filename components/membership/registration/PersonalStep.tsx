@@ -16,9 +16,19 @@ interface PersonalStepProps {
 export function PersonalStep({ data, onUpdate, theme }: PersonalStepProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
   
   const passwordsMatch = data.password === data.confirm_password;
   const passwordValid = data.password.length >= 6;
+  
+  // Email validation
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+  
+  const emailValid = isValidEmail(data.email);
+  const showEmailError = emailTouched && data.email.length > 0 && !emailValid;
   
   return (
     <View style={styles.stepContent}>
@@ -50,14 +60,30 @@ export function PersonalStep({ data, onUpdate, theme }: PersonalStepProps) {
       <View style={styles.formSection}>
         <Text style={[styles.formLabel, { color: theme.text }]}>Email Address *</Text>
         <TextInput
-          style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+          style={[styles.input, { 
+            backgroundColor: theme.surface, 
+            color: theme.text, 
+            borderColor: showEmailError ? '#ef4444' : theme.border 
+          }]}
           placeholder="your@email.com"
           placeholderTextColor={theme.textSecondary}
           keyboardType="email-address"
           autoCapitalize="none"
           value={data.email}
           onChangeText={(v) => onUpdate('email', v)}
+          onBlur={() => setEmailTouched(true)}
         />
+        {showEmailError && (
+          <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+            Please enter a valid email address
+          </Text>
+        )}
+        {emailValid && data.email.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+            <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+            <Text style={{ color: '#10b981', fontSize: 12, marginLeft: 4 }}>Valid email</Text>
+          </View>
+        )}
       </View>
 
       {/* Account Password Section */}

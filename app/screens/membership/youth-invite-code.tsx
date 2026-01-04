@@ -41,11 +41,20 @@ interface YouthInviteCode {
   requested_role?: string;
 }
 
-// Youth Wing roles that can be assigned via invite
+// All Youth Wing roles that can be assigned via invite by Youth President
 const YOUTH_ROLES = [
-  { id: 'youth_member', label: 'Youth Member', description: 'Standard youth wing member' },
-  { id: 'youth_volunteer', label: 'Youth Volunteer', description: 'Active volunteer in youth programs' },
+  // Leadership & Executive
+  { id: 'youth_deputy', label: 'Youth Deputy President', description: 'Second in command of youth wing', isExecutive: true },
+  { id: 'youth_secretary', label: 'Youth Secretary', description: 'Handles youth wing administration', isExecutive: true },
+  { id: 'youth_treasurer', label: 'Youth Treasurer', description: 'Manages youth wing finances', isExecutive: true },
+  // Regional Management
+  { id: 'regional_manager', label: 'Youth Regional Manager', description: 'Manages youth activities in a province/region', isRegional: true },
   { id: 'youth_coordinator', label: 'Youth Coordinator', description: 'Coordinates youth activities in their area' },
+  // Support Roles
+  { id: 'youth_facilitator', label: 'Youth Facilitator', description: 'Facilitates youth programs and workshops' },
+  { id: 'youth_mentor', label: 'Youth Mentor', description: 'Mentors and guides younger members' },
+  // Standard Members  
+  { id: 'youth_member', label: 'Youth Member', description: 'Standard youth wing member' },
 ] as const;
 
 export default function YouthInviteCodeScreen() {

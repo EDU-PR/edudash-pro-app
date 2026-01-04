@@ -336,14 +336,17 @@ export function BottomTabBar() {
 
   // Determine user role - check for CEO/national_admin from organization membership
   const userRole = (profile?.role as string) || 'parent';
-  const memberType = (profile as any)?.organization_membership?.member_type;
+  const memberType = (profile as any)?.organization_membership?.member_type || (profile as any)?.member_type;
   const orgRole = (profile as any)?.organization_membership?.role;
   
   // Check if user is CEO (member_type === 'ceo' or role === 'national_admin')
-  const isCEO = memberType === 'ceo' || orgRole === 'national_admin';
+  const isCEO = memberType === 'ceo' || memberType === 'president' || orgRole === 'national_admin';
   
-  // Check if user is Youth President (member_type === 'youth_president')
-  const isYouthPresident = memberType === 'youth_president' || memberType === 'youth_deputy';
+  // Check if user is Youth President or Executive (all youth leadership roles)
+  const isYouthLeader = memberType === 'youth_president' || 
+                        memberType === 'youth_deputy' || 
+                        memberType === 'youth_secretary' || 
+                        memberType === 'youth_treasurer';
   
   // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
@@ -354,8 +357,8 @@ export function BottomTabBar() {
       return item.roles.includes('national_admin');
     }
     
-    // If user is Youth President, ONLY show youth president tabs
-    if (isYouthPresident) {
+    // If user is Youth Leader, ONLY show youth president tabs
+    if (isYouthLeader) {
       return item.roles.includes('youth_president');
     }
     

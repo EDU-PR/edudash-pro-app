@@ -145,7 +145,8 @@ export interface OrganizationMember {
   
   membership_tier: 'standard' | 'premium' | 'vip' | 'honorary';
   membership_status: 'pending' | 'active' | 'suspended' | 'expired' | 'cancelled';
-  joined_date: string;
+  join_date?: string; // Database column name
+  joined_date: string; // Mapped for display (alias of join_date)
   expiry_date?: string;
   
   photo_url?: string;
