@@ -105,7 +105,7 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
       // Fetch all members for this organization
       const { data: allMembers, error: membersError } = await supabase
         .from('organization_members')
-        .select('id, membership_status, member_type, role, region_id, created_at, first_name, last_name, email, phone')
+        .select('id, user_id, membership_status, member_type, role, region_id, created_at, first_name, last_name, email, phone')
         .eq('organization_id', orgId);
 
       if (membersError) {
