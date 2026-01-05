@@ -305,11 +305,19 @@ export default function MemberDetailScreen() {
         </TouchableOpacity>
         
         <TouchableOpacity 
+          style={[styles.bottomAction, { backgroundColor: '#DC262620' }]}
+          onPress={() => handleAction('Remove Member')}
+        >
+          <Ionicons name="trash-outline" size={20} color="#DC2626" />
+          <Text style={[styles.bottomActionText, { color: '#DC2626' }]}>Remove</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
           style={[styles.bottomAction, { backgroundColor: theme.primary }]}
           onPress={() => handleAction('Renew Membership')}
         >
           <Ionicons name="refresh-outline" size={20} color="#fff" />
-          <Text style={[styles.bottomActionText, { color: '#fff' }]}>Renew Membership</Text>
+          <Text style={[styles.bottomActionText, { color: '#fff' }]}>Renew</Text>
         </TouchableOpacity>
       </View>
       </DashboardWallpaperBackground>
