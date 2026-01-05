@@ -148,6 +148,7 @@ export const useParentDashboard = () => {
           lastName: child.last_name as string,
           grade: (child.grade_level as string) || 'Grade R',
           className: (child.classes as Record<string, unknown>)?.name as string || 'No Class',
+          classId: (child.classes as Record<string, unknown>)?.id as string || null,
           teacher: (child.classes as Record<string, unknown>)?.teacher_id 
             ? teacherMap[(child.classes as Record<string, unknown>).teacher_id as string] || 'No Teacher Assigned'
             : 'No Teacher Assigned'

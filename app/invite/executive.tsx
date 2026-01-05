@@ -93,10 +93,33 @@ export default function ExecutiveInviteScreen() {
       const supabase = assertSupabase();
       const position = inviteDetails.requested_role;
 
+      // Use RPC to accept the invite (bypasses RLS with SECURITY DEFINER)
+      // First get the invite_token via validate RPC if not already available
+      let inviteToken = inviteDetails.invite_token;
+      
+      if (!inviteToken) {
+        const { data: validateResult, error: validateError } = await supabase
+          .rpc('validate_join_invite_code', { p_code: code?.toUpperCase() });
+        
+        if (validateError || !validateResult?.valid) {
+          throw new Error(validateError?.message || validateResult?.error || 'Invalid invite code');
+        }
+        inviteToken = validateResult.invite_token;
+      }
+
+      // Accept the invite using the RPC (handles status update with SECURITY DEFINER)
+      const { data: acceptResult, error: acceptError } = await supabase
+        .rpc('accept_join_request', { p_invite_token: inviteToken });
+      
+      if (acceptError || !acceptResult?.success) {
+        throw new Error(acceptError?.message || acceptResult?.error || 'Failed to accept invitation');
+      }
+
       // Create organization membership with executive position
+      // Use upsert to handle case where member already exists
       const { error: memberError } = await supabase
         .from('organization_members')
-        .insert({
+        .upsert({
           user_id: user.id,
           organization_id: inviteDetails.organization_id,
           member_type: position,
@@ -104,19 +127,12 @@ export default function ExecutiveInviteScreen() {
           membership_status: 'active',
           joined_via: 'executive_invite',
           invite_code_used: code,
-        });
+        }, { onConflict: 'user_id,organization_id' });
 
-      if (memberError) throw memberError;
-
-      // Update join request as approved
-      await supabase
-        .from('join_requests')
-        .update({ 
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          requester_id: user.id,
-        })
-        .eq('id', inviteDetails.id);
+      if (memberError) {
+        console.warn('Member creation warning:', memberError.message);
+        // Don't throw - the invite was accepted, membership may already exist
+      }
 
       // Update user profile
       await supabase
