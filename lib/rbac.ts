@@ -971,6 +971,8 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       role: profile.role,
       first_name: profile.first_name,
       last_name: profile.last_name,
+      // Include full_name from database or construct from first/last name
+      full_name: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || undefined,
       avatar_url: profile.avatar_url,
       organization_id: resolvedOrgId || orgMember?.organization_id || (profile as any)?.organization_id || (profile as any)?.preschool_id,
       organization_name: org?.name,

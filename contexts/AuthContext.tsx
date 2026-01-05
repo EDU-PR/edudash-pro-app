@@ -56,6 +56,8 @@ function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
     role: p.role,
     first_name: p.first_name,
     last_name: p.last_name,
+    // Include full_name from source or construct from first/last name
+    full_name: p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || undefined,
     avatar_url: p.avatar_url,
     organization_id: p.organization_id,
     organization_name: p.organization_name,
@@ -66,13 +68,15 @@ function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
   } as any;
   
   // Use createEnhancedProfile from rbac to ensure all methods are attached
+  // Preserve member_type from organization_membership if available
   return createEnhancedProfile(baseProfile, {
     organization_id: p.organization_id,
     organization_name: p.organization_name,
-    plan_tier: p.plan_tier || 'free',
-    seat_status: p.seat_status || 'active',
-    invited_by: p.invited_by,
+    plan_tier: p.plan_tier || p.organization_membership?.plan_tier || 'free',
+    seat_status: p.seat_status || p.organization_membership?.seat_status || 'active',
+    invited_by: p.invited_by || p.organization_membership?.invited_by,
     created_at: p.created_at,
+    member_type: p.organization_membership?.member_type, // Preserve member_type for role-based nav
   });
 }
 
