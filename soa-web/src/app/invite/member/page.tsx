@@ -74,8 +74,7 @@ function MemberInviteContent() {
           invite_code,
           organization_id,
           invited_by,
-          organizations (name),
-          profiles!join_requests_invited_by_fkey (first_name, last_name)
+          organizations (name)
         `)
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
@@ -84,12 +83,24 @@ function MemberInviteContent() {
 
       if (joinRequest) {
         const org = joinRequest.organizations as any;
-        const inviter = joinRequest.profiles as any;
+        
+        // Fetch inviter profile separately (FK is to auth.users, not profiles)
+        let inviterName: string | undefined;
+        if (joinRequest.invited_by) {
+          const { data: inviterProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', joinRequest.invited_by)
+            .maybeSingle();
+          if (inviterProfile) {
+            inviterName = `${inviterProfile.first_name || ''} ${inviterProfile.last_name || ''}`.trim() || undefined;
+          }
+        }
         
         setInviteData({
           organizationName: org?.name || 'Soil of Africa',
           regionName: '',
-          inviterName: inviter ? `${inviter.first_name} ${inviter.last_name}`.trim() : undefined,
+          inviterName,
         });
         setLoading(false);
         return;

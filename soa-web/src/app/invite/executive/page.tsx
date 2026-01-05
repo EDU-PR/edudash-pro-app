@@ -77,8 +77,7 @@ function ExecutiveInviteContent() {
           message,
           invited_by,
           organizations (name),
-          organization_regions (name),
-          profiles!join_requests_invited_by_fkey (first_name, last_name)
+          organization_regions (name)
         `)
         .eq('invite_code', code.toUpperCase())
         .eq('status', 'pending')
@@ -88,7 +87,19 @@ function ExecutiveInviteContent() {
       if (joinRequest) {
         const org = joinRequest.organizations as any;
         const region = joinRequest.organization_regions as any;
-        const inviter = joinRequest.profiles as any;
+        
+        // Fetch inviter profile separately (FK is to auth.users, not profiles)
+        let inviterName: string | undefined;
+        if (joinRequest.invited_by) {
+          const { data: inviterProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', joinRequest.invited_by)
+            .maybeSingle();
+          if (inviterProfile) {
+            inviterName = `${inviterProfile.first_name || ''} ${inviterProfile.last_name || ''}`.trim() || undefined;
+          }
+        }
         
         let position = joinRequest.requested_role || 'Executive Member';
         if (joinRequest.message) {
@@ -100,7 +111,7 @@ function ExecutiveInviteContent() {
           organizationName: org?.name || 'Soil of Africa',
           regionName: region?.name || '',
           position,
-          inviterName: inviter ? `${inviter.first_name} ${inviter.last_name}`.trim() : undefined,
+          inviterName,
         });
       } else {
         setInviteData({
