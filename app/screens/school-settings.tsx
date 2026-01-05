@@ -53,13 +53,28 @@ export default function SchoolSettingsScreen() {
         if (!profile?.organization_id) return;
         const supabase = assertSupabase();
         
-        // Load school settings
-        const { data, error } = await supabase
+        // Load school/organization settings
+        // Try preschools first, then organizations (for membership orgs like SOA)
+        let data = null;
+        let error = null;
+        
+        ({ data, error } = await supabase
           .from('preschools')
           .select('settings, phone, name')
           .eq('id', profile.organization_id)
-          .single();
+          .maybeSingle());
+        
+        // If not in preschools, try organizations table
+        if (!data && !error) {
+          ({ data, error } = await supabase
+            .from('organizations')
+            .select('settings, phone, name')
+            .eq('id', profile.organization_id)
+            .maybeSingle());
+        }
+        
         if (error) throw error;
+        
         const configured = data?.settings?.whatsapp_number || data?.phone || '';
         if (active) setNumber(configured);
 
@@ -69,7 +84,7 @@ export default function SchoolSettingsScreen() {
           .select('*')
           .eq('organization_id', profile.organization_id)
           .eq('is_primary', true)
-          .single();
+          .maybeSingle();
 
         if (bankData && active) {
           setExistingBankId(bankData.id);

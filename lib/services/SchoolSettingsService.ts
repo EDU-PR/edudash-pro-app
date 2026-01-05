@@ -179,13 +179,29 @@ function deepMerge<T>(base: T, overrides: Partial<T>): T {
 
 export class SchoolSettingsService {
   static async get(schoolId: string): Promise<SchoolSettings> {
-    const { data, error } = await assertSupabase()
+    const supabase = assertSupabase();
+    
+    // Try preschools table first
+    let data = null;
+    let error = null;
+    
+    ({ data, error } = await supabase
       .from('preschools')
       .select('settings, name')
       .eq('id', schoolId)
-      .single();
+      .maybeSingle());
+
+    // If no preschool found, try organizations table (for membership orgs like SOA)
+    if (!data && !error) {
+      ({ data, error } = await supabase
+        .from('organizations')
+        .select('settings, name')
+        .eq('id', schoolId)
+        .maybeSingle());
+    }
 
     if (error) throw error;
+    
     const merged = deepMerge(DEFAULT_SCHOOL_SETTINGS, (data?.settings || {}) as Partial<SchoolSettings>);
     // If the merged name is the default sentinel or missing, prefer the DB school name
     if ((merged.schoolName === DEFAULT_SCHOOL_SETTINGS.schoolName || !merged.schoolName) && data?.name) {

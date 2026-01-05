@@ -12,6 +12,7 @@ import {
   Platform,
   ScrollView,
   Pressable,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
@@ -82,6 +83,53 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
       { id: 'members', label: 'Youth Members', icon: 'person-circle', route: '/screens/membership/members-list' },
       { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
       { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/membership/programs' },
+      { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
+      { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
+    ];
+  }
+
+  // Check if user is Regional Manager
+  if (memberType === 'regional_manager' || memberType === 'provincial_manager') {
+    return [
+      { id: 'home', label: 'Regional Dashboard', icon: 'map', route: '/screens/membership/dashboard' },
+      { id: 'members', label: 'Members', icon: 'people', route: '/screens/membership/members-list' },
+      { id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' },
+      { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
+      { id: 'reports', label: 'Reports', icon: 'bar-chart', route: '/screens/membership/reports' },
+      { id: 'invite', label: 'Invite Members', icon: 'person-add', route: '/screens/membership/regional-invite-code' },
+      { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
+      { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
+    ];
+  }
+
+  // Check if user is Women's League member
+  if (memberType?.startsWith('women_')) {
+    const isLeader = ['women_president', 'women_deputy', 'women_secretary', 'women_treasurer'].includes(memberType);
+    return [
+      { id: 'home', label: "Women's League", icon: 'flower', route: '/screens/membership/womens-league-dashboard' },
+      { id: 'members', label: 'Members', icon: 'people', route: '/screens/membership/members-list' },
+      { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
+      { id: 'programs', label: 'Programs', icon: 'heart', route: '/screens/membership/programs' },
+      ...(isLeader ? [{ id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' }] : []),
+      ...(isLeader ? [{ id: 'invite', label: 'Invite Members', icon: 'person-add', route: '/screens/membership/womens-invite-code' }] : []),
+      { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
+      { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
+    ];
+  }
+
+  // Check if user is Veterans League member
+  if (memberType?.startsWith('veterans_')) {
+    const isLeader = ['veterans_president', 'veterans_coordinator'].includes(memberType);
+    return [
+      { id: 'home', label: 'Veterans League', icon: 'medal', route: '/screens/membership/veterans-league-dashboard' },
+      { id: 'members', label: 'Members', icon: 'people', route: '/screens/membership/members-list' },
+      { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
+      { id: 'heritage', label: 'Heritage', icon: 'book', route: '/screens/membership/heritage' },
+      ...(isLeader ? [{ id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' }] : []),
+      ...(isLeader ? [{ id: 'invite', label: 'Invite Members', icon: 'person-add', route: '/screens/membership/veterans-invite-code' }] : []),
       { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
       { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
       { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
@@ -190,6 +238,15 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
     ? (memberType === 'ceo' || memberType === 'president' ? 'President' : 
        memberType.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
     : getRoleDisplayName(userRole);
+  
+  // Get display name with fallback chain: full_name -> first_name + last_name -> email -> 'Guest'
+  const displayName = profile?.full_name 
+    || (profile?.first_name && profile?.last_name 
+        ? `${profile.first_name} ${profile.last_name}` 
+        : profile?.first_name || profile?.email?.split('@')[0] || 'Guest');
+  
+  // Get avatar URL for profile picture
+  const avatarUrl = profile?.avatar_url;
 
   useEffect(() => {
     if (isOpen) {
@@ -265,11 +322,18 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
           <View style={styles.headerContent}>
             <View style={styles.userInfo}>
               <View style={styles.avatar}>
-                <Ionicons name="person" size={20} color={theme.primary} />
+                {avatarUrl ? (
+                  <Image 
+                    source={{ uri: avatarUrl }} 
+                    style={{ width: 40, height: 40, borderRadius: 20 }} 
+                  />
+                ) : (
+                  <Ionicons name="person" size={20} color={theme.primary} />
+                )}
               </View>
               <View style={styles.userText}>
                 <Text style={styles.userName} numberOfLines={1}>
-                  {profile?.full_name || 'Guest'}
+                  {displayName}
                 </Text>
                 <Text style={styles.userRole}>{displayRole}</Text>
               </View>

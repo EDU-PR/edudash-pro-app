@@ -49,7 +49,12 @@ export function useParentPayments() {
           directChildren.map(async (student) => {
             let schoolName = '';
             if (student.preschool_id) {
-              const { data: school } = await supabase.from('preschools').select('name').eq('id', student.preschool_id).single();
+              // Try preschools first, then organizations (for membership orgs like SOA)
+              let school = null;
+              ({ data: school } = await supabase.from('preschools').select('name').eq('id', student.preschool_id).maybeSingle());
+              if (!school) {
+                ({ data: school } = await supabase.from('organizations').select('name').eq('id', student.preschool_id).maybeSingle());
+              }
               schoolName = school?.name || '';
             }
             return { ...student, preschool_name: schoolName, student_code: student.student_id || student.id.slice(0, 8).toUpperCase() };
