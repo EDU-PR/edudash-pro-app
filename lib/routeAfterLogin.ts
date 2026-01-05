@@ -323,16 +323,24 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const hasOrganization = !!(profile.organization_id || (profile as any).preschool_id);
   const isIndependentUser = !hasOrganization;
   
-  // PRIORITY CHECK: Check organization_membership first for SOA/skills-based orgs
-  // This takes precedence over profile.role because SOA members may have default 'parent' role
+  // Get member type for SOA routing decisions
   const memberType = (profile as any)?.organization_membership?.member_type;
   const memberRole = (profile as any)?.organization_membership?.role;
   
   console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
   console.log('[ROUTE DEBUG] Organization membership role:', memberRole);
   
-  if (memberType && hasOrganization) {
-    // Route based on member_type for organization members (SOA, etc.)
+  // PRIORITY CHECK #1: Admin/Principal/Teacher roles from profile ALWAYS take precedence
+  // These are core platform roles that should not be overridden by organization_members.member_type
+  // This prevents issues where a principal has an org_member entry with member_type='learner'
+  const priorityRoles = ['super_admin', 'principal_admin', 'principal', 'admin', 'teacher'];
+  if (role && priorityRoles.includes(role)) {
+    console.log('[ROUTE DEBUG] Priority role detected:', role, '- skipping member_type routing');
+    // Fall through to role-based routing below (don't use member_type routing)
+  } else if (memberType && hasOrganization) {
+    // PRIORITY CHECK #2: For non-admin users, check organization_membership.member_type for SOA/skills-based orgs
+    // This takes precedence over profile.role because SOA members may have default 'parent' role
+    
     // CEO / National Admin / President
     if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president') {
       console.log('[ROUTE DEBUG] CEO/President detected via member_type - routing to CEO dashboard');
@@ -370,8 +378,9 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     
     // Regional/Provincial executives and managers
     if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator' ||
-        memberType === 'regional_manager' || memberType === 'provincial_manager') {
-      console.log('[ROUTE DEBUG] Regional/Provincial manager detected - routing to regional dashboard');
+        memberType === 'regional_manager' || memberType === 'provincial_manager' ||
+        memberType === 'branch_manager') {
+      console.log('[ROUTE DEBUG] Regional/Branch manager detected - routing to regional dashboard');
       return { path: '/screens/membership/dashboard' };  // Regional manager dashboard
     }
     
