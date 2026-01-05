@@ -142,6 +142,7 @@ export interface ParentDashboardData {
     lastName: string;
     grade: string;
     className: string;
+    classId: string | null;
     teacher: string;
   }>;
   attendanceRate: number;

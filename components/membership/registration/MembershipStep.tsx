@@ -36,52 +36,57 @@ export function MembershipStep({ data, onUpdate, theme, inviteRole, inviteOrgNam
         Select your role and membership tier
       </Text>
       
-      {/* Show invite role banner if coming from invite */}
-      {inviteRole && (
-        <View style={[styles.inviteBanner, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}>
-          <Ionicons name="ticket-outline" size={20} color={theme.primary} />
+      {/* Show invite role banner if coming from invite - role is locked */}
+      {inviteRole ? (
+        <View style={[styles.inviteBanner, { backgroundColor: theme.primary + '15', borderColor: theme.primary, marginBottom: 16 }]}>
+          <Ionicons name="ribbon-outline" size={24} color={theme.primary} />
           <View style={styles.inviteBannerText}>
-            <Text style={[styles.inviteRoleLabel, { color: theme.text }]}>
-              Invited as: <Text style={{ fontWeight: '700' }}>{INVITE_ROLE_DISPLAY[inviteRole] || inviteRole}</Text>
+            <Text style={[styles.inviteRoleLabel, { color: theme.textSecondary, fontSize: 12 }]}>
+              You've been invited as
+            </Text>
+            <Text style={[styles.inviteRoleValue, { color: theme.text, fontWeight: '700', fontSize: 16 }]}>
+              {INVITE_ROLE_DISPLAY[inviteRole] || inviteRole.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </Text>
             {inviteOrgName && (
               <Text style={[styles.inviteOrgLabel, { color: theme.textSecondary }]}>
-                {inviteOrgName}
+                at {inviteOrgName}
               </Text>
             )}
           </View>
-          <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
         </View>
+      ) : (
+        /* Only show member type selection if NOT coming from an invite with a pre-assigned role */
+        <>
+          <Text style={[styles.sectionLabel, { color: theme.text }]}>I want to join as a:</Text>
+          <View style={styles.typeGrid}>
+            {MEMBER_TYPES.map(type => (
+              <TouchableOpacity
+                key={type.type}
+                style={[
+                  styles.typeCard,
+                  { 
+                    backgroundColor: data.member_type === type.type ? theme.primary + '15' : theme.card,
+                    borderColor: data.member_type === type.type ? theme.primary : theme.border,
+                  }
+                ]}
+                onPress={() => onUpdate('member_type', type.type)}
+              >
+                <View style={[styles.typeIcon, { backgroundColor: theme.primary + '20' }]}>
+                  <Ionicons name={type.icon} size={24} color={theme.primary} />
+                </View>
+                <Text style={[styles.typeTitle, { color: theme.text }]}>{type.title}</Text>
+                <Text style={[styles.typeDesc, { color: theme.textSecondary }]}>{type.description}</Text>
+                {data.member_type === type.type && (
+                  <View style={[styles.typeCheck, { backgroundColor: theme.primary }]}>
+                    <Ionicons name="checkmark" size={14} color="#fff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
       )}
-      
-      {/* Member Type Selection */}
-      <Text style={[styles.sectionLabel, { color: theme.text }]}>I want to join as a:</Text>
-      <View style={styles.typeGrid}>
-        {MEMBER_TYPES.map(type => (
-          <TouchableOpacity
-            key={type.type}
-            style={[
-              styles.typeCard,
-              { 
-                backgroundColor: data.member_type === type.type ? theme.primary + '15' : theme.card,
-                borderColor: data.member_type === type.type ? theme.primary : theme.border,
-              }
-            ]}
-            onPress={() => onUpdate('member_type', type.type)}
-          >
-            <View style={[styles.typeIcon, { backgroundColor: theme.primary + '20' }]}>
-              <Ionicons name={type.icon} size={24} color={theme.primary} />
-            </View>
-            <Text style={[styles.typeTitle, { color: theme.text }]}>{type.title}</Text>
-            <Text style={[styles.typeDesc, { color: theme.textSecondary }]}>{type.description}</Text>
-            {data.member_type === type.type && (
-              <View style={[styles.typeCheck, { backgroundColor: theme.primary }]}>
-                <Ionicons name="checkmark" size={14} color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
 
       {/* Membership Tier Selection */}
       <Text style={[styles.sectionLabel, { color: theme.text, marginTop: 24 }]}>Membership Tier:</Text>
@@ -269,6 +274,11 @@ const styles = StyleSheet.create({
   inviteRoleLabel: {
     fontSize: 15,
     fontWeight: '500',
+  },
+  inviteRoleValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 2,
   },
   inviteOrgLabel: {
     fontSize: 13,

@@ -39,7 +39,7 @@ import { useParentDashboard } from '@/hooks/useDashboardData';
 
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
-import { ChildSwitcher } from './parent';
+import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadges } from './parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
@@ -507,6 +507,41 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             )}
             <JoinLiveLesson 
               preschoolId={profile.preschool_id}
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Teacher Quick Notes - Show notes from teacher to parent */}
+        {activeChildId && (
+          <TeacherQuickNotes
+            studentId={activeChildId}
+            maxItems={3}
+            showHeader={true}
+          />
+        )}
+
+        {/* Child Progress & Achievements */}
+        {activeChildId && (
+          <ChildProgressBadges
+            studentId={activeChildId}
+            compact={false}
+            showHeader={true}
+          />
+        )}
+
+        {/* Today's Activities - Show daily activities for child's class */}
+        {dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId && (
+          <CollapsibleSection 
+            title={t('dashboard.todays_activities', { defaultValue: "Today's Activities" })}
+            sectionId="daily-activities"
+            icon="☀️"
+            defaultCollapsed={collapsedSections.has('daily-activities')}
+            onToggle={toggleSection}
+          >
+            <DailyActivityFeed
+              classId={dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId}
+              studentId={activeChildId || undefined}
+              showHeader={false}
             />
           </CollapsibleSection>
         )}

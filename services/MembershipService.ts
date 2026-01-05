@@ -124,9 +124,31 @@ export interface MemberListFilters {
 
 /**
  * Create a new organization member
+ * Handles duplicate detection - returns existing member if already exists
  */
 export async function createMember(params: CreateMemberParams): Promise<OrganizationMember> {
   const supabase = assertSupabase();
+
+  // Check for existing member by email or ID number first
+  if (params.email || params.id_number) {
+    const existingQuery = supabase
+      .from('organization_members')
+      .select('*')
+      .eq('organization_id', params.organization_id);
+    
+    if (params.email) {
+      existingQuery.eq('email', params.email.trim());
+    } else if (params.id_number) {
+      existingQuery.eq('id_number', params.id_number.trim());
+    }
+    
+    const { data: existing } = await existingQuery.maybeSingle();
+    
+    if (existing) {
+      console.log('[MembershipService] Member already exists, returning existing record');
+      return existing as OrganizationMember;
+    }
+  }
 
   const { data, error } = await supabase
     .from('organization_members')
@@ -155,6 +177,23 @@ export async function createMember(params: CreateMemberParams): Promise<Organiza
     .single();
 
   if (error) {
+    // Handle unique constraint violation (409 Conflict)
+    if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      console.log('[MembershipService] Duplicate detected, fetching existing member');
+      
+      // Try to fetch the existing member
+      const { data: existingMember } = await supabase
+        .from('organization_members')
+        .select('*')
+        .eq('organization_id', params.organization_id)
+        .or(`email.eq.${params.email?.trim()},id_number.eq.${params.id_number?.trim()}`)
+        .maybeSingle();
+      
+      if (existingMember) {
+        return existingMember as OrganizationMember;
+      }
+    }
+    
     console.error('Failed to create member:', error);
     throw new Error(error.message || 'Failed to create member');
   }
