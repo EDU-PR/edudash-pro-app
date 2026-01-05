@@ -366,12 +366,25 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/membership/women-dashboard' };
     }
     
-    // Regional executives
-    if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator') {
-      console.log('[ROUTE DEBUG] Regional coordinator detected - routing to regional dashboard');
-      return { path: '/screens/membership/regional-dashboard' };
+    // Regional/Provincial executives and managers
+    if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator' ||
+        memberType === 'regional_manager' || memberType === 'provincial_manager') {
+      console.log('[ROUTE DEBUG] Regional/Provincial manager detected - routing to regional dashboard');
+      return { path: '/screens/membership/dashboard' };  // Regional manager dashboard
     }
     
+    // National coordinators
+    if (memberType === 'national_coordinator') {
+      console.log('[ROUTE DEBUG] National coordinator detected - routing to CEO dashboard');
+      return { path: '/screens/membership/ceo-dashboard' };
+    }
+    
+    // Executive members
+    if (memberType === 'executive') {
+      console.log('[ROUTE DEBUG] Executive member detected - routing to CEO dashboard');
+      return { path: '/screens/membership/ceo-dashboard' };
+    }
+
     // Regular main organization members (learner, facilitator, mentor, volunteer, etc.)
     if (['learner', 'facilitator', 'mentor', 'volunteer', 'member'].includes(memberType)) {
       console.log('[ROUTE DEBUG] Regular organization member detected - routing to learner dashboard');
