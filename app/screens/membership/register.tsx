@@ -220,64 +220,142 @@ export default function MemberRegistrationScreen() {
         user = signUpData.user;
         console.log('[Register] User created successfully:', user.id);
         
+        // IMPORTANT: Create membership record BEFORE checking session
+        // This ensures the user is added to the org even if email confirmation is required
+        
+        // Get next sequence number for the region
+        const { count: memberCount } = await supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('region_id', formData.region_id);
+        
+        // Generate member number
+        const year = new Date().getFullYear().toString().slice(-2);
+        const sequence = String((memberCount || 0) + 1).padStart(5, '0');
+        const memberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
+        
+        // Create organization member record (with pending status if email not confirmed)
+        const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
+        const { error: memberError } = await supabase
+          .from('organization_members')
+          .insert({
+            organization_id: SOIL_OF_AFRICA_ORG_ID,
+            region_id: formData.region_id,
+            user_id: user.id,
+            member_number: memberNumber,
+            member_type: formData.member_type || 'learner',
+            membership_tier: formData.membership_tier || 'standard',
+            membership_status: membershipStatus,
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            email: formData.email,
+            phone: formData.phone,
+            id_number: formData.id_number,
+            role: 'member',
+            join_date: new Date().toISOString(),
+            invite_code_used: inviteCode || null,
+            joined_via: inviteCode ? 'invite_code' : 'direct_registration',
+          });
+
+        if (memberError) {
+          console.error('[Register] Error creating member:', memberError);
+          if (memberError.code === '23505') {
+            Alert.alert('Already Registered', 'You are already a member of this organization.');
+          } else {
+            throw memberError;
+          }
+          return;
+        }
+        
+        // If invite code was used, mark it as used
+        if (inviteCode) {
+          await supabase
+            .from('join_requests')
+            .update({ 
+              status: 'approved',
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq('invite_code', inviteCode.toUpperCase())
+            .eq('status', 'pending');
+        }
+        
+        setGeneratedMemberNumber(memberNumber);
+        
         // Check if we have a session - if not, email confirmation is required
         if (!signUpData.session) {
           console.log('[Register] No session after signup - email confirmation required');
-          // Email confirmation is required - don't try to sign in, just show success message
+          // Email confirmation is required
           Alert.alert(
             'Account Created! 🎉',
-            'Your account was created successfully. Please check your email to confirm your account, then sign in to complete your membership registration.',
+            `Your account was created successfully!\n\nYour Member Number: ${memberNumber}\n\nPlease check your email to confirm your account, then sign in.`,
             [{ text: 'OK', onPress: () => router.push('/(auth)/sign-in') }]
           );
           setIsSubmitting(false);
-          return; // Stop here - user must confirm email first
+          return;
         }
         
-        console.log('[Register] Session available after signup - continuing with membership setup');
+        console.log('[Register] Session available after signup - membership setup complete');
       }
 
-      // Get next sequence number for the region
-      const { count } = await supabase
-        .from('organization_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('region_id', formData.region_id);
-      
-      // Generate member number
-      const year = new Date().getFullYear().toString().slice(-2);
-      const sequence = String((count || 0) + 1).padStart(5, '0');
-      const memberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
-      
-      // Create organization member record
-      const { error: memberError } = await supabase
-        .from('organization_members')
-        .insert({
-          organization_id: SOIL_OF_AFRICA_ORG_ID,
-          region_id: formData.region_id,
-          user_id: user.id,
-          member_number: memberNumber,
-          member_type: formData.member_type || 'learner',
-          membership_tier: formData.membership_tier || 'standard',
-          membership_status: 'active',
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
-          phone: formData.phone,
-          id_number: formData.id_number,
-          role: 'member',
-          join_date: new Date().toISOString(),
-        });
+      // If user already exists (was signed in), we still need to create membership
+      // But only if it wasn't already created above for new signups
+      if (!signUpData) {
+        // Existing user - need to create membership now
+        const { count: existingCount } = await supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('region_id', formData.region_id);
+        
+        const year = new Date().getFullYear().toString().slice(-2);
+        const sequence = String((existingCount || 0) + 1).padStart(5, '0');
+        const existingMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
+        
+        const { error: existingMemberError } = await supabase
+          .from('organization_members')
+          .insert({
+            organization_id: SOIL_OF_AFRICA_ORG_ID,
+            region_id: formData.region_id,
+            user_id: user.id,
+            member_number: existingMemberNumber,
+            member_type: formData.member_type || 'learner',
+            membership_tier: formData.membership_tier || 'standard',
+            membership_status: 'active',
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            email: formData.email,
+            phone: formData.phone,
+            id_number: formData.id_number,
+            role: 'member',
+            join_date: new Date().toISOString(),
+            invite_code_used: inviteCode || null,
+            joined_via: inviteCode ? 'invite_code' : 'direct_registration',
+          });
 
-      if (memberError) {
-        console.error('[Register] Error creating member:', memberError);
-        if (memberError.code === '23505') {
-          Alert.alert('Already Registered', 'You are already a member of this organization.');
-        } else {
-          throw memberError;
+        if (existingMemberError) {
+          console.error('[Register] Error creating member:', existingMemberError);
+          if (existingMemberError.code === '23505') {
+            Alert.alert('Already Registered', 'You are already a member of this organization.');
+          } else {
+            throw existingMemberError;
+          }
+          return;
         }
-        return;
+        
+        // If invite code was used, mark it as used
+        if (inviteCode) {
+          await supabase
+            .from('join_requests')
+            .update({ 
+              status: 'approved',
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq('invite_code', inviteCode.toUpperCase())
+            .eq('status', 'pending');
+        }
+        
+        setGeneratedMemberNumber(existingMemberNumber);
       }
 
-      setGeneratedMemberNumber(memberNumber);
       setCurrentStep('complete');
     } catch (error) {
       console.error('[Register] Registration error:', error);

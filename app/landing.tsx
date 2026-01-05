@@ -77,6 +77,15 @@ export default function LandingHandler() {
             const { data, error } = await assertSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
             if (error) throw error;
             
+            // Activate any pending_verification memberships for this user
+            if (data.user?.id) {
+              await assertSupabase()
+                .from('organization_members')
+                .update({ membership_status: 'active' })
+                .eq('user_id', data.user.id)
+                .eq('membership_status', 'pending_verification');
+            }
+            
             setMessage(t('landing.email_verified', { defaultValue: 'Email verified! Redirecting to sign in...' }));
             setStatus('done');
             
