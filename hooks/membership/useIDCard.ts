@@ -4,7 +4,13 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
-import { CARD_TEMPLATES, CardTemplate, OrganizationMember, MemberIDCard } from '@/components/membership/types';
+import { 
+  CARD_TEMPLATES, 
+  CardTemplate, 
+  OrganizationMember, 
+  MemberIDCard,
+  getCardTemplateForMember,
+} from '@/components/membership/types';
 import { assertSupabase } from '@/lib/supabase';
 
 // Fallback mock data - used only when real data can't be fetched
@@ -74,7 +80,8 @@ function generateQRData(memberData: OrganizationMember, cardData: any): string {
   }
 }
 
-// Get appropriate template based on membership tier
+// Get appropriate template based on member type and tier
+// NOTE: This is kept for backward compatibility but getCardTemplateForMember should be preferred
 function getMemberTierTemplate(tier: string): CardTemplate {
   switch (tier) {
     case 'vip':
@@ -179,8 +186,13 @@ export function useIDCard(memberId?: string) {
           
           if (cardData.card_template && CARD_TEMPLATES[cardData.card_template as CardTemplate]) {
             setSelectedTemplate(cardData.card_template as CardTemplate);
+          } else {
+            // Use the new template selection based on member type and tier
+            setSelectedTemplate(getCardTemplateForMember(transformedMember.member_type, transformedMember.membership_tier));
           }
         } else {
+          // No card in DB - create virtual card with appropriate template
+          const appropriateTemplate = getCardTemplateForMember(memberData.member_type, memberData.membership_tier);
           const virtualCard: MemberIDCard = {
             id: `virtual-${memberData.id}`,
             member_id: memberData.id,
@@ -190,14 +202,14 @@ export function useIDCard(memberId?: string) {
             status: 'active',
             issue_date: memberData.joined_date || new Date().toISOString(),
             expiry_date: memberData.expiry_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            card_template: getMemberTierTemplate(memberData.membership_tier),
+            card_template: appropriateTemplate,
             print_requested: false,
             printed: false,
             verification_count: 0,
             created_at: memberData.created_at,
           };
           setCard(virtualCard);
-          setSelectedTemplate(virtualCard.card_template as CardTemplate);
+          setSelectedTemplate(appropriateTemplate);
         }
       }
       

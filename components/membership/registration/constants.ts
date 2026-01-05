@@ -55,9 +55,31 @@ export const SA_REGIONS: RegionConfig[] = [
 ];
 
 export const MEMBER_TYPES: MemberTypeConfig[] = [
+  // Main Structure - Public Registration
   { type: 'learner', title: 'Learner', description: 'Join to learn and grow with our programs', icon: 'school-outline' },
-  { type: 'facilitator', title: 'Facilitator', description: 'Lead workshops and guide learners', icon: 'people-outline' },
   { type: 'mentor', title: 'Mentor', description: 'Provide guidance and support to members', icon: 'heart-outline' },
+  { type: 'facilitator', title: 'Facilitator', description: 'Lead workshops and guide learners', icon: 'people-outline' },
+  { type: 'volunteer', title: 'Volunteer', description: 'Contribute your time and skills', icon: 'hand-left-outline' },
+];
+
+// Wing-specific member types for invite-based registration
+export const YOUTH_MEMBER_TYPES: MemberTypeConfig[] = [
+  { type: 'youth_member', title: 'Youth Member', description: 'Standard youth wing member', icon: 'people-outline' },
+  { type: 'youth_mentor', title: 'Youth Mentor', description: 'Mentor younger members', icon: 'heart-outline' },
+  { type: 'youth_facilitator', title: 'Youth Facilitator', description: 'Lead youth programs', icon: 'easel-outline' },
+  { type: 'youth_coordinator', title: 'Youth Coordinator', description: 'Coordinate youth activities', icon: 'git-network-outline' },
+];
+
+export const WOMEN_MEMBER_TYPES: MemberTypeConfig[] = [
+  { type: 'women_member', title: "Women's Member", description: "Women's league member", icon: 'woman-outline' },
+  { type: 'women_mentor', title: "Women's Mentor", description: 'Mentor other women members', icon: 'heart-outline' },
+  { type: 'women_facilitator', title: "Women's Facilitator", description: 'Lead women programs', icon: 'easel-outline' },
+  { type: 'women_coordinator', title: "Women's Coordinator", description: 'Coordinate women activities', icon: 'git-network-outline' },
+];
+
+export const VETERANS_MEMBER_TYPES: MemberTypeConfig[] = [
+  { type: 'veterans_member', title: 'Veterans Member', description: 'Veterans league member', icon: 'medal-outline' },
+  { type: 'veterans_coordinator', title: 'Veterans Coordinator', description: 'Coordinate veterans activities', icon: 'git-network-outline' },
 ];
 
 export const MEMBERSHIP_TIERS: MembershipTierConfig[] = [
