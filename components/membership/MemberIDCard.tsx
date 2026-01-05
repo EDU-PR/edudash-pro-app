@@ -14,7 +14,8 @@ import {
   CARD_TEMPLATES,
   MEMBER_TYPE_LABELS,
   MEMBERSHIP_TIER_LABELS,
-  STATUS_COLORS 
+  STATUS_COLORS,
+  isExecutiveMemberType,
 } from './types';
 
 // Standard ID card dimensions (credit card size: 85.6mm x 53.98mm)
@@ -42,6 +43,9 @@ export function MemberIDCardFront({
   
   const fullName = `${member.first_name} ${member.last_name}`;
   const statusColor = STATUS_COLORS[member.membership_status] || STATUS_COLORS.pending;
+  
+  // Only executive members get their photo displayed on the card
+  const showPhoto = isExecutiveMemberType(member.member_type);
   
   const formattedExpiry = useMemo(() => {
     if (!card.expiry_date) return 'N/A';
@@ -105,7 +109,7 @@ export function MemberIDCardFront({
 
       {/* Main Content */}
       <View style={styles.mainContent}>
-        {/* Photo Section */}
+        {/* Photo Section - Only executives get photos */}
         <View style={styles.photoSection}>
           <View style={[
             styles.photoContainer, 
@@ -115,15 +119,34 @@ export function MemberIDCardFront({
               height: 90 * scale,
             }
           ]}>
-            {member.photo_url ? (
+            {showPhoto && member.photo_url ? (
               <Image 
                 source={{ uri: member.photo_url }} 
                 style={styles.photo}
                 resizeMode="cover"
               />
-            ) : (
+            ) : showPhoto && !member.photo_url ? (
+              // Executive without photo - show placeholder with person icon
               <View style={[styles.photoPlaceholder, { backgroundColor: config.primaryColor + '15' }]}>
                 <Ionicons name="person" size={40 * scale} color={config.primaryColor} />
+              </View>
+            ) : (
+              // Non-executive - show org logo or generic organization badge
+              <View style={[styles.photoPlaceholder, { backgroundColor: config.primaryColor + '10' }]}>
+                {member.organization?.logo_url ? (
+                  <Image 
+                    source={{ uri: member.organization.logo_url }} 
+                    style={{ width: 50 * scale, height: 50 * scale }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={{ alignItems: 'center' }}>
+                    <Ionicons name="shield-checkmark" size={36 * scale} color={config.primaryColor} />
+                    <Text style={{ fontSize: 6 * scale, color: config.primaryColor, marginTop: 2, fontWeight: '600' }}>
+                      MEMBER
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -192,11 +215,14 @@ export function MemberIDCardFront({
         </View>
       </View>
 
-      {/* Bottom Bar */}
+      {/* Bottom Bar - Card Number prominently displayed */}
       <View style={[styles.bottomBar, { backgroundColor: config.primaryColor + '10' }]}>
-        <View style={styles.bottomLeft}>
-          <Text style={[styles.cardNumber, { color: config.textColor, fontSize: 8 * scale }]}>
-            Card: {card.card_number}
+        <View style={styles.bottomCenter}>
+          <Text style={[styles.cardNumberLabel, { color: config.textColor + '80', fontSize: 6 * scale }]}>
+            CARD NUMBER
+          </Text>
+          <Text style={[styles.cardNumberValue, { color: config.textColor, fontSize: 10 * scale, fontWeight: '700', letterSpacing: 1 }]}>
+            {member.member_number}
           </Text>
         </View>
         <View style={styles.bottomRight}>
@@ -528,9 +554,22 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   bottomLeft: {},
-  bottomRight: {},
+  bottomCenter: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  bottomRight: {
+    alignItems: 'flex-end',
+  },
   cardNumber: {
     fontWeight: '500',
+  },
+  cardNumberLabel: {
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  cardNumberValue: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   issueDate: {},
 

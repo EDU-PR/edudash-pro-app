@@ -104,6 +104,20 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
     ];
   }
 
+  // Check if user is Branch Manager
+  if (memberType === 'branch_manager') {
+    return [
+      { id: 'home', label: 'Branch Dashboard', icon: 'git-branch', route: '/screens/membership/dashboard' },
+      { id: 'members', label: 'Members', icon: 'people', route: '/screens/membership/members-list' },
+      { id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' },
+      { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
+      { id: 'invite', label: 'Invite Members', icon: 'person-add', route: '/screens/membership/branch-manager-invite-code' },
+      { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
+      { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
+    ];
+  }
+
   // Check if user is Women's League member
   if (memberType?.startsWith('women_')) {
     const isLeader = ['women_president', 'women_deputy', 'women_secretary', 'women_treasurer'].includes(memberType);

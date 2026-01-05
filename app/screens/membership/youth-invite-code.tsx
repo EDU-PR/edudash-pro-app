@@ -47,8 +47,9 @@ const YOUTH_ROLES = [
   { id: 'youth_deputy', label: 'Youth Deputy President', description: 'Second in command of youth wing', isExecutive: true },
   { id: 'youth_secretary', label: 'Youth Secretary', description: 'Handles youth wing administration', isExecutive: true },
   { id: 'youth_treasurer', label: 'Youth Treasurer', description: 'Manages youth wing finances', isExecutive: true },
-  // Regional Management
+  // Regional/Branch Management
   { id: 'regional_manager', label: 'Youth Regional Manager', description: 'Manages youth activities in a province/region', isRegional: true },
+  { id: 'branch_manager', label: 'Youth Branch Manager', description: 'Manages youth activities at branch level', isBranch: true },
   { id: 'youth_coordinator', label: 'Youth Coordinator', description: 'Coordinates youth activities in their area' },
   // Support Roles
   { id: 'youth_facilitator', label: 'Youth Facilitator', description: 'Facilitates youth programs and workshops' },

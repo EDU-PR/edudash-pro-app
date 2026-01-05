@@ -12,7 +12,7 @@ export type OrganizationWingCode = 'main' | 'youth' | 'women' | 'veterans';
 // Main structure member types
 export type MainMemberType = 
   | 'learner' | 'mentor' | 'facilitator' | 'staff' | 'admin' 
-  | 'regional_manager' | 'national_admin';
+  | 'regional_manager' | 'branch_manager' | 'provincial_manager' | 'national_admin';
 
 // Youth Wing member types
 export type YouthMemberType = 
@@ -254,7 +254,9 @@ export const MEMBER_TYPE_LABELS: Record<string, string> = {
   facilitator: 'Facilitator',
   staff: 'Staff Member',
   admin: 'Administrator',
+  branch_manager: 'Branch Manager',
   regional_manager: 'Regional Manager',
+  provincial_manager: 'Provincial Manager',
   national_admin: 'National Administrator',
   
   // Youth Wing
@@ -340,7 +342,8 @@ export const APPOINTABLE_ROLES: Record<string, AllMemberTypes[]> = {
     // Veterans
     'veterans_president', 'veterans_coordinator', 'veterans_member',
   ],
-  regional_manager: ['facilitator', 'mentor', 'learner'],
+  regional_manager: ['branch_manager', 'facilitator', 'mentor', 'learner'],
+  branch_manager: ['facilitator', 'mentor', 'learner', 'youth_member'],
   youth_president: [
     'youth_deputy', 'youth_secretary', 'youth_treasurer',
     'youth_coordinator', 'youth_facilitator', 'youth_mentor', 'youth_member',
@@ -360,7 +363,9 @@ export const APPOINTABLE_ROLES: Record<string, AllMemberTypes[]> = {
 export const SPENDING_LIMITS: Record<string, number> = {
   national_admin: 100000,
   admin: 10000,
+  provincial_manager: 7500,
   regional_manager: 5000,
+  branch_manager: 3000,
   staff: 2000,
   youth_president: 5000,
   youth_deputy: 3000,
@@ -416,4 +421,67 @@ export function getRoleWing(role: AllMemberTypes): OrganizationWingCode {
   if (isWomensLeagueRole(role)) return 'women';
   if (isVeteransRole(role)) return 'veterans';
   return 'main';
+}
+
+// ============================================================================
+// Executive Member Types (get photos on ID cards, executive template)
+// ============================================================================
+
+/**
+ * Member types that are considered "executive" level.
+ * Executives get:
+ * - Photo displayed on ID card
+ * - Executive card template (black/gold design)
+ * - Higher visibility in member directories
+ */
+export const EXECUTIVE_MEMBER_TYPES: AllMemberTypes[] = [
+  // National Leadership
+  'ceo', 'president', 'executive', 'board_member', 'secretary_general', 'deputy_president', 'treasurer',
+  'national_admin',
+  // Provincial/Regional Management
+  'provincial_manager', 'regional_manager',
+  // Youth Wing Executives
+  'youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer',
+  // Women's League Executives
+  'women_president', 'women_deputy', 'women_secretary', 'women_treasurer',
+  // Veterans League Executives
+  'veterans_president',
+];
+
+/**
+ * Check if a member type is considered executive level.
+ * Executive members get special treatment like photos on ID cards.
+ */
+export function isExecutiveMemberType(memberType: AllMemberTypes | string): boolean {
+  return EXECUTIVE_MEMBER_TYPES.includes(memberType as AllMemberTypes);
+}
+
+/**
+ * Get the appropriate card template for a member based on role and tier.
+ * Executives automatically get 'executive' template.
+ * Learners get 'learner' template.
+ * Others get template based on tier.
+ */
+export function getCardTemplateForMember(
+  memberType: AllMemberTypes | string,
+  membershipTier: string
+): 'standard' | 'premium' | 'executive' | 'learner' {
+  // Executives always get executive template
+  if (isExecutiveMemberType(memberType)) {
+    return 'executive';
+  }
+  // Learners get learner template
+  if (memberType === 'learner') {
+    return 'learner';
+  }
+  // Others get template based on tier
+  switch (membershipTier) {
+    case 'vip':
+    case 'premium':
+      return 'premium';
+    case 'honorary':
+      return 'executive';
+    default:
+      return 'standard';
+  }
 }
