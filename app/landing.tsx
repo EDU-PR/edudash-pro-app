@@ -78,10 +78,32 @@ export default function LandingHandler() {
             if (error) throw error;
             
             // Activate any pending_verification memberships for this user
+            // Also sync profile data to membership record if missing
             if (data.user?.id) {
-              await assertSupabase()
+              const supabase = assertSupabase();
+              
+              // Get profile data
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name, email, phone')
+                .eq('id', data.user.id)
+                .single();
+              
+              // Parse full name into first/last
+              const nameParts = (profile?.full_name || '').trim().split(' ');
+              const firstName = nameParts[0] || '';
+              const lastName = nameParts.slice(1).join(' ') || '';
+              
+              // Update membership: activate and sync profile data
+              await supabase
                 .from('organization_members')
-                .update({ membership_status: 'active' })
+                .update({ 
+                  membership_status: 'active',
+                  first_name: firstName || undefined,
+                  last_name: lastName || undefined,
+                  email: profile?.email || data.user.email || undefined,
+                  phone: profile?.phone || undefined,
+                })
                 .eq('user_id', data.user.id)
                 .eq('membership_status', 'pending_verification');
             }

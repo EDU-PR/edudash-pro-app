@@ -249,24 +249,47 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
     }
   }, [memberId, fetchMember]);
 
-  // Delete member (soft delete by setting status to 'removed')
+  // Delete member (soft delete by setting status to 'revoked')
   const deleteMember = useCallback(async (): Promise<boolean> => {
     if (!memberId) return false;
 
     try {
       const supabase = assertSupabase();
-      const { error: deleteError } = await supabase
+      
+      // First get the member's organization_id (needed for RLS policy to match)
+      const { data: memberData, error: fetchErr } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('id', memberId)
+        .single();
+      
+      if (fetchErr || !memberData) {
+        console.error('[useMemberDetail] Error fetching member for delete:', fetchErr);
+        setError('Member not found');
+        return false;
+      }
+      
+      const { data, error: deleteError, count } = await supabase
         .from('organization_members')
         .update({
           membership_status: 'revoked',
           seat_status: 'revoked',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', memberId);
+        .eq('id', memberId)
+        .eq('organization_id', memberData.organization_id)
+        .select();
 
       if (deleteError) {
         console.error('[useMemberDetail] Error deleting member:', deleteError);
         setError(deleteError.message);
+        return false;
+      }
+      
+      // Check if update actually modified anything (RLS might block silently)
+      if (!data || data.length === 0) {
+        console.error('[useMemberDetail] Update returned no rows - possibly blocked by RLS');
+        setError('Permission denied. You may not have access to remove this member.');
         return false;
       }
 

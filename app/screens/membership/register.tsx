@@ -223,16 +223,34 @@ export default function MemberRegistrationScreen() {
         // IMPORTANT: Create membership record BEFORE checking session
         // This ensures the user is added to the org even if email confirmation is required
         
-        // Get next sequence number for the region
-        const { count: memberCount } = await supabase
-          .from('organization_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('region_id', formData.region_id);
+        // Generate random 6-digit member number (unique within org)
+        const generateRandomMemberNumber = async (): Promise<string> => {
+          let memberNum: string;
+          let isUnique = false;
+          let attempts = 0;
+          
+          while (!isUnique && attempts < 10) {
+            // Generate random 6-digit number (100000-999999)
+            const randomNum = Math.floor(100000 + Math.random() * 900000);
+            memberNum = String(randomNum);
+            
+            // Check if it's unique within the organization
+            const { count } = await supabase
+              .from('organization_members')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', SOIL_OF_AFRICA_ORG_ID)
+              .eq('member_number', memberNum);
+            
+            if (count === 0) {
+              isUnique = true;
+            }
+            attempts++;
+          }
+          
+          return memberNum!;
+        };
         
-        // Generate member number
-        const year = new Date().getFullYear().toString().slice(-2);
-        const sequence = String((memberCount || 0) + 1).padStart(5, '0');
-        const memberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
+        const memberNumber = await generateRandomMemberNumber();
         
         // Create organization member record (with pending status if email not confirmed)
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
@@ -300,15 +318,32 @@ export default function MemberRegistrationScreen() {
       // If user already exists (was signed in), we still need to create membership
       // But only if it wasn't already created above for new signups
       if (!signUpData) {
-        // Existing user - need to create membership now
-        const { count: existingCount } = await supabase
-          .from('organization_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('region_id', formData.region_id);
+        // Existing user - generate random member number
+        const generateRandomMemberNumberForExisting = async (): Promise<string> => {
+          let memberNum: string;
+          let isUnique = false;
+          let attempts = 0;
+          
+          while (!isUnique && attempts < 10) {
+            const randomNum = Math.floor(100000 + Math.random() * 900000);
+            memberNum = String(randomNum);
+            
+            const { count } = await supabase
+              .from('organization_members')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', SOIL_OF_AFRICA_ORG_ID)
+              .eq('member_number', memberNum);
+            
+            if (count === 0) {
+              isUnique = true;
+            }
+            attempts++;
+          }
+          
+          return memberNum!;
+        };
         
-        const year = new Date().getFullYear().toString().slice(-2);
-        const sequence = String((existingCount || 0) + 1).padStart(5, '0');
-        const existingMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
+        const existingMemberNumber = await generateRandomMemberNumberForExisting();
         
         const { error: existingMemberError } = await supabase
           .from('organization_members')

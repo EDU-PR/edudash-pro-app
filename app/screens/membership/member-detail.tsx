@@ -119,18 +119,24 @@ export default function MemberDetailScreen() {
     } else if (action === 'Delete' || action === 'Remove Member') {
       Alert.alert(
         'Remove Member',
-        `Are you sure you want to remove ${member.first_name} ${member.last_name} from the organization?\n\nThis will revoke their membership.`,
+        `Are you sure you want to remove ${member.first_name || ''} ${member.last_name || ''} from the organization?\n\nThis will revoke their membership.`,
         [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Remove', 
             style: 'destructive',
             onPress: async () => {
-              const success = await deleteMember();
-              if (success) {
-                Alert.alert('Success', 'Member has been removed', [
-                  { text: 'OK', onPress: () => router.back() }
-                ]);
+              try {
+                const success = await deleteMember();
+                if (success) {
+                  Alert.alert('Success', 'Member has been removed', [
+                    { text: 'OK', onPress: () => router.back() }
+                  ]);
+                } else {
+                  Alert.alert('Error', 'Failed to remove member. You may not have permission to perform this action.');
+                }
+              } catch (err: any) {
+                Alert.alert('Error', err.message || 'Failed to remove member');
               }
             }
           },
