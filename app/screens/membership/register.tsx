@@ -285,6 +285,24 @@ export default function MemberRegistrationScreen() {
           return;
         }
         
+        // IMPORTANT: Update the user's profile to link them to the organization
+        // This ensures the routing system can find their organization_membership
+        const { error: profileUpdateError } = await supabase
+          .from('profiles')
+          .update({ 
+            organization_id: SOIL_OF_AFRICA_ORG_ID,
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+          })
+          .eq('id', user.id);
+        
+        if (profileUpdateError) {
+          console.error('[Register] Error updating profile with org:', profileUpdateError);
+          // Non-fatal - continue with registration
+        } else {
+          console.log('[Register] Profile updated with organization_id');
+        }
+        
         // If invite code was used, mark it as used
         if (inviteCode) {
           await supabase
