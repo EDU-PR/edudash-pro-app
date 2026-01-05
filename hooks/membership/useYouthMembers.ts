@@ -80,6 +80,7 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
         `)
         .eq('organization_id', orgId)
         .in('member_type', YOUTH_MEMBER_TYPES)
+        .neq('membership_status', 'revoked')  // Always exclude revoked/removed members
         .order('created_at', { ascending: false });
 
       // Apply status filter
