@@ -323,6 +323,62 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const hasOrganization = !!(profile.organization_id || (profile as any).preschool_id);
   const isIndependentUser = !hasOrganization;
   
+  // PRIORITY CHECK: Check organization_membership first for SOA/skills-based orgs
+  // This takes precedence over profile.role because SOA members may have default 'parent' role
+  const memberType = (profile as any)?.organization_membership?.member_type;
+  const memberRole = (profile as any)?.organization_membership?.role;
+  
+  console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
+  console.log('[ROUTE DEBUG] Organization membership role:', memberRole);
+  
+  if (memberType && hasOrganization) {
+    // Route based on member_type for organization members (SOA, etc.)
+    // CEO / National Admin / President
+    if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president') {
+      console.log('[ROUTE DEBUG] CEO/President detected via member_type - routing to CEO dashboard');
+      return { path: '/screens/membership/ceo-dashboard' };
+    }
+    
+    // Youth Wing executives
+    if (memberType === 'youth_president' || memberType === 'youth_deputy') {
+      console.log('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
+      return { path: '/screens/membership/youth-president-dashboard' };
+    }
+    if (memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
+      console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
+      return { path: '/screens/membership/youth-president-dashboard' };
+    }
+    
+    // Other Youth Wing members (youth_member, youth_coordinator, youth_facilitator, youth_mentor)
+    // Route to youth dashboard (same screen, different permissions)
+    if (memberType?.startsWith('youth_')) {
+      console.log('[ROUTE DEBUG] Youth wing member detected - routing to youth dashboard');
+      return { path: '/screens/membership/youth-president-dashboard' };
+    }
+    
+    // Women's Wing executives
+    if (memberType === 'women_president' || memberType === 'women_deputy') {
+      console.log('[ROUTE DEBUG] Women wing executive detected - routing to women dashboard');
+      return { path: '/screens/membership/women-dashboard' };
+    }
+    if (memberType === 'women_secretary' || memberType === 'women_treasurer') {
+      console.log('[ROUTE DEBUG] Women wing staff detected - routing to women dashboard');
+      return { path: '/screens/membership/women-dashboard' };
+    }
+    
+    // Regional executives
+    if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator') {
+      console.log('[ROUTE DEBUG] Regional coordinator detected - routing to regional dashboard');
+      return { path: '/screens/membership/regional-dashboard' };
+    }
+    
+    // Regular main organization members (learner, facilitator, mentor, volunteer, etc.)
+    if (['learner', 'facilitator', 'mentor', 'volunteer', 'member'].includes(memberType)) {
+      console.log('[ROUTE DEBUG] Regular organization member detected - routing to learner dashboard');
+      return { path: '/screens/learner-dashboard' };
+    }
+  }
+  
   // Tenant kind detection (best-effort)
   const orgKind = (profile as any)?.organization_membership?.organization_kind
     || (profile as any)?.organization_kind
@@ -383,54 +439,14 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   }
 
   // Route based on role and tenant kind for organization members
+  // Note: member_type routing is already handled above for SOA/skills-based orgs
   switch (role) {
     case 'super_admin':
       return { path: '/screens/super-admin-dashboard' };
     
     case 'admin':
-      // Check if user is CEO of Soil of Africa organization or has a special membership role
-      console.log('[ROUTE DEBUG] Admin routing - checking for special membership');
-      if (profile.organization_id) {
-        // Check organization_members for special member_type
-        const memberType = (profile as any)?.organization_membership?.member_type;
-        
-        console.log('[ROUTE DEBUG] Member type:', memberType);
-        
-        // CEO / National Admin
-        if (memberType === 'national_admin' || memberType === 'ceo') {
-          console.log('[ROUTE DEBUG] CEO/national_admin detected - routing to membership CEO dashboard');
-          return { path: '/screens/membership/ceo-dashboard' };
-        }
-        
-        // Youth Wing executives
-        if (memberType === 'youth_president' || memberType === 'youth_deputy') {
-          console.log('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
-          return { path: '/screens/membership/youth-president-dashboard' };
-        }
-        if (memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
-          console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
-          return { path: '/screens/membership/youth-president-dashboard' };
-        }
-        
-        // Women's Wing executives
-        if (memberType === 'women_president' || memberType === 'women_deputy') {
-          console.log('[ROUTE DEBUG] Women wing executive detected - routing to women dashboard');
-          return { path: '/screens/membership/women-dashboard' };
-        }
-        if (memberType === 'women_secretary' || memberType === 'women_treasurer') {
-          console.log('[ROUTE DEBUG] Women wing staff detected - routing to women dashboard');
-          return { path: '/screens/membership/women-dashboard' };
-        }
-        
-        // Regional executives
-        if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator') {
-          console.log('[ROUTE DEBUG] Regional coordinator detected - routing to regional dashboard');
-          return { path: '/screens/membership/regional-dashboard' };
-        }
-      }
-      
-      // Regular organization admins go to org-admin-dashboard
-      console.log('[ROUTE DEBUG] Regular organization admin - routing to org-admin-dashboard');
+      // Regular organization admins (member_type routing already handled above)
+      console.log('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard');
       return { path: '/screens/org-admin-dashboard' };
     
     case 'principal_admin':
