@@ -66,6 +66,7 @@ export function useMembersList(options: UseMembersListOptions = {}): UseMembersL
           user_id,
           member_number,
           member_type,
+          wing,
           first_name,
           last_name,
           id_number,
@@ -89,7 +90,8 @@ export function useMembersList(options: UseMembersListOptions = {}): UseMembersL
             is_active
           )
         `, { count: 'exact' })
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .neq('membership_status', 'revoked');  // Always exclude revoked/removed members
 
       // Apply status filter
       if (statusFilter !== 'all') {
@@ -148,6 +150,7 @@ export function useMembersList(options: UseMembersListOptions = {}): UseMembersL
         user_id: member.user_id,
         member_number: member.member_number || `SOA-${member.id?.slice(0, 8) || 'UNKNOWN'}`,
         member_type: member.member_type || 'member',
+        wing: member.wing,
         first_name: member.first_name || 'Unknown',
         last_name: member.last_name || '',
         id_number: member.id_number,
