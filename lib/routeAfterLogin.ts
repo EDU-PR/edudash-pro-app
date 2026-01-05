@@ -330,20 +330,44 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
   console.log('[ROUTE DEBUG] Organization membership role:', memberRole);
   
-  // PRIORITY CHECK #1: Admin/Principal/Teacher roles from profile ALWAYS take precedence
-  // These are core platform roles that should not be overridden by organization_members.member_type
-  // This prevents issues where a principal has an org_member entry with member_type='learner'
-  const priorityRoles = ['super_admin', 'principal_admin', 'principal', 'admin', 'teacher'];
-  if (role && priorityRoles.includes(role)) {
-    console.log('[ROUTE DEBUG] Priority role detected:', role, '- skipping member_type routing');
-    // Fall through to role-based routing below (don't use member_type routing)
-  } else if (memberType && hasOrganization) {
-    // PRIORITY CHECK #2: For non-admin users, check organization_membership.member_type for SOA/skills-based orgs
-    // This takes precedence over profile.role because SOA members may have default 'parent' role
+  // Define SOA-specific member types that ALWAYS use member_type routing
+  // These are wing-specific roles that take priority over profile.role
+  // (because SOA users often have profile.role='admin' but specific member_type)
+  const soaSpecificMemberTypes = [
+    // Executive roles
+    'ceo', 'president', 'deputy_president', 'secretary_general', 'treasurer',
+    'national_admin', 'national_coordinator', 'executive', 'board_member',
+    // Youth wing
+    'youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer',
+    'youth_coordinator', 'youth_facilitator', 'youth_mentor', 'youth_member',
+    // Women's wing
+    'women_president', 'women_deputy', 'women_secretary', 'women_treasurer',
+    'women_coordinator', 'women_facilitator', 'women_mentor', 'women_member',
+    // Veterans league
+    'veterans_president', 'veterans_coordinator', 'veterans_member',
+    // Regional/Provincial
+    'regional_manager', 'regional_coordinator', 'provincial_manager', 'provincial_coordinator',
+    'branch_manager',
+  ];
+  
+  // PRIORITY CHECK #1: SOA-specific member types ALWAYS route based on member_type
+  // This ensures youth_president, women_president, regional_manager etc. go to correct dashboards
+  // regardless of their profile.role (which might be 'admin' or 'parent')
+  const hasSoaSpecificRole = memberType && soaSpecificMemberTypes.includes(memberType);
+  
+  if (hasSoaSpecificRole && hasOrganization) {
+    console.log('[ROUTE DEBUG] SOA-specific member_type detected:', memberType, '- using member_type routing');
     
-    // CEO / National Admin / President
-    if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president') {
+    // CEO / National Admin / President / Executive leadership
+    if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president' ||
+        memberType === 'deputy_president' || memberType === 'secretary_general' || memberType === 'treasurer') {
       console.log('[ROUTE DEBUG] CEO/President detected via member_type - routing to CEO dashboard');
+      return { path: '/screens/membership/ceo-dashboard' };
+    }
+    
+    // National coordinators and executives
+    if (memberType === 'national_coordinator' || memberType === 'executive' || memberType === 'board_member') {
+      console.log('[ROUTE DEBUG] National coordinator/executive detected - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
     }
     
@@ -358,7 +382,6 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     }
     
     // Other Youth Wing members (youth_member, youth_coordinator, youth_facilitator, youth_mentor)
-    // Route to youth dashboard (same screen, different permissions)
     if (memberType?.startsWith('youth_')) {
       console.log('[ROUTE DEBUG] Youth wing member detected - routing to youth dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
@@ -381,22 +404,21 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         memberType === 'regional_manager' || memberType === 'provincial_manager' ||
         memberType === 'branch_manager') {
       console.log('[ROUTE DEBUG] Regional/Branch manager detected - routing to regional dashboard');
-      return { path: '/screens/membership/dashboard' };  // Regional manager dashboard
+      return { path: '/screens/membership/dashboard' };
     }
+  }
+  
+  // PRIORITY CHECK #2: School admin/principal roles skip member_type routing
+  // This prevents principals with accidental org_member entries from going to wrong dashboards
+  // Note: 'admin' is NOT included here - SOA admins should use member_type routing above
+  const schoolAdminRoles = ['super_admin', 'principal_admin', 'principal', 'teacher'];
+  if (role && schoolAdminRoles.includes(role)) {
+    console.log('[ROUTE DEBUG] School admin role detected:', role, '- using profile role routing');
+    // Fall through to role-based routing below
+  } else if (memberType && hasOrganization) {
+    // PRIORITY CHECK #3: Generic member types for non-school-admin users
     
-    // National coordinators
-    if (memberType === 'national_coordinator') {
-      console.log('[ROUTE DEBUG] National coordinator detected - routing to CEO dashboard');
-      return { path: '/screens/membership/ceo-dashboard' };
-    }
-    
-    // Executive members
-    if (memberType === 'executive') {
-      console.log('[ROUTE DEBUG] Executive member detected - routing to CEO dashboard');
-      return { path: '/screens/membership/ceo-dashboard' };
-    }
-    
-    // Staff and admin
+    // Staff and admin (generic org admin - for SOA staff without specific wing role)
     if (memberType === 'staff' || memberType === 'admin') {
       console.log('[ROUTE DEBUG] Staff/Admin member detected - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
