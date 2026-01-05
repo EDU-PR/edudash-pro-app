@@ -72,15 +72,22 @@ export default function MemberRegistrationScreen() {
         if (invite) {
           const role = invite.requested_role || 'youth_member';
           setInviteRole(role);
-          // Pre-select the role in the form based on invite
+          // Map requested_role to member_type
+          // Most roles map to themselves, some have different display names
           const memberTypeMap: Record<string, string> = {
             'youth_member': 'learner',
             'youth_volunteer': 'volunteer',
             'youth_coordinator': 'facilitator',
+            'regional_manager': 'regional_manager',
+            'provincial_manager': 'provincial_manager',
+            'national_coordinator': 'national_coordinator',
+            'executive': 'executive',
+            'president': 'president',
+            'ceo': 'ceo',
           };
           setFormData(prev => ({ 
             ...prev, 
-            member_type: (memberTypeMap[role] || 'learner') as any,
+            member_type: (memberTypeMap[role] || role) as any,  // Fallback to role itself if not in map
           }));
           
           const org = invite.organizations as any;
