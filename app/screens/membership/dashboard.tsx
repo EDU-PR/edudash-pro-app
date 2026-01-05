@@ -7,7 +7,7 @@
  * - Regional standings showing all regions for healthy competition
  * - Real pending tasks and activities from database
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -16,12 +16,15 @@ import {
   TouchableOpacity, 
   RefreshControl,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useRegionalDashboard } from '@/hooks/useRegionalDashboard';
 
@@ -39,10 +42,24 @@ import {
   type LegacyActivityItem,
 } from '@/components/membership/regional-dashboard';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Regional Manager Quick Actions
+const REGIONAL_QUICK_ACTIONS = [
+  { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
+  { id: '2', label: 'Invite Members', icon: 'person-add', color: '#10B981', route: '/screens/membership/regional-invite-code' },
+  { id: '3', label: 'Approvals', icon: 'checkmark-circle', color: '#F59E0B', route: '/screens/membership/pending-approvals' },
+  { id: '4', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
+  { id: '5', label: 'Reports', icon: 'bar-chart', color: '#8B5CF6', route: '/screens/membership/reports' },
+  { id: '6', label: 'Documents', icon: 'document-text', color: '#EF4444', route: '/screens/membership/documents' },
+];
+
 export default function OrganizationDashboard() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const notificationCount = useNotificationBadgeCount();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Use the new hook for real data
   const {
@@ -155,33 +172,48 @@ export default function OrganizationDashboard() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Stack.Screen
-        options={{
-          title: 'Regional Dashboard',
-          headerLargeTitle: true,
-          headerRight: () => (
-            <View style={styles.headerButtons}>
-              <View style={[styles.regionBadgeHeader, { backgroundColor: regionColor }]}>
-                <Text style={styles.regionBadgeText}>RM - {regionCode}</Text>
-              </View>
-              <TouchableOpacity style={styles.headerButton}>
-                <Ionicons name="notifications-outline" size={24} color={theme.primary} />
-                {stats.pendingApplications > 0 && (
-                  <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
-                    <Text style={styles.notificationCount}>{stats.pendingApplications}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerButton}>
-                <Ionicons name="search-outline" size={24} color={theme.text} />
-              </TouchableOpacity>
-            </View>
-          ),
-        }}
-      />
+    <DashboardWallpaperBackground>
+      <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]} edges={['top']}>
+        {/* Mobile Navigation Drawer */}
+        <MobileNavDrawer 
+          isOpen={isDrawerOpen} 
+          onClose={() => setIsDrawerOpen(false)} 
+        />
 
-      <DashboardWallpaperBackground>
+        {/* Custom Header */}
+        <View style={[styles.customHeader, { backgroundColor: theme.card + 'E6' }]}>
+          <View style={styles.headerLeftSection}>
+            <TouchableOpacity 
+              style={styles.hamburgerButton}
+              onPress={() => setIsDrawerOpen(true)}
+            >
+              <Ionicons name="menu" size={26} color={theme.text} />
+            </TouchableOpacity>
+            <View style={styles.headerLeft}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>Regional Manager</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{regionName || 'Your Region'}</Text>
+            </View>
+          </View>
+          <View style={styles.headerButtons}>
+            <View style={[styles.regionBadgeHeader, { backgroundColor: regionColor || '#3B82F6' }]}>
+              <Text style={styles.regionBadgeText}>RM - {regionCode || 'REG'}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => router.push('/screens/notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color={theme.primary} />
+              {notificationCount > 0 && (
+                <View style={[styles.notificationBadge, { backgroundColor: '#EF4444' }]}>
+                  <Text style={styles.notificationCount}>
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
           showsVerticalScrollIndicator={false}
@@ -197,6 +229,25 @@ export default function OrganizationDashboard() {
             stats={heroStats}
           />
 
+          {/* Quick Actions Grid */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Actions</Text>
+            <View style={styles.actionsGrid}>
+              {REGIONAL_QUICK_ACTIONS.map((action) => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={[styles.actionCard, { backgroundColor: theme.card }]}
+                  onPress={() => router.push(action.route as any)}
+                >
+                  <View style={[styles.actionIcon, { backgroundColor: action.color + '15' }]}>
+                    <Ionicons name={action.icon as any} size={24} color={action.color} />
+                  </View>
+                  <Text style={[styles.actionLabel, { color: theme.text }]}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {/* Regional Leaderboard - Healthy Competition */}
           <View style={styles.section}>
             <RegionalLeaderboard
@@ -205,12 +256,6 @@ export default function OrganizationDashboard() {
               theme={theme}
               maxVisible={5}
             />
-          </View>
-
-          {/* Urgent Actions */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Action Required</Text>
-            <ActionCardsGrid actions={REGIONAL_ACTIONS} theme={theme} />
           </View>
 
           {/* Pending Tasks */}
@@ -272,8 +317,8 @@ export default function OrganizationDashboard() {
             </View>
           </View>
         </ScrollView>
-      </DashboardWallpaperBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </DashboardWallpaperBackground>
   );
 }
 
@@ -316,10 +361,35 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  // Custom Header styles
+  customHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hamburgerButton: {
+    padding: 4,
+  },
+  headerLeft: {
+    gap: 2,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+  },
   headerButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginRight: 16,
     alignItems: 'center',
   },
   regionBadgeHeader: {
@@ -372,6 +442,31 @@ const styles = StyleSheet.create({
   seeAll: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Quick Actions Grid
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionCard: {
+    width: (SCREEN_WIDTH - 56) / 3,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   emptyState: {
     padding: 24,

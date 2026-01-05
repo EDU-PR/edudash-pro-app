@@ -2,15 +2,15 @@
  * Constants for Youth Executive Invite Screen
  */
 
-// Youth Executive Positions
+// Youth Executive Positions - IDs must match database member_type constraint
 export const EXECUTIVE_POSITIONS = [
-  { id: 'deputy_president', label: 'Deputy President', icon: 'person', color: '#8B5CF6' },
-  { id: 'secretary', label: 'Secretary', icon: 'document-text', color: '#3B82F6' },
-  { id: 'treasurer', label: 'Treasurer', icon: 'wallet', color: '#10B981' },
-  { id: 'organizer', label: 'Organizer', icon: 'calendar', color: '#F59E0B' },
-  { id: 'communications', label: 'Communications Officer', icon: 'megaphone', color: '#EF4444' },
-  { id: 'coordinator', label: 'Youth Coordinator', icon: 'people', color: '#06B6D4' },
-  { id: 'additional_member', label: 'Additional Member', icon: 'add-circle', color: '#6B7280' },
+  { id: 'youth_deputy', label: 'Deputy President', icon: 'person', color: '#8B5CF6' },
+  { id: 'youth_secretary', label: 'Secretary', icon: 'document-text', color: '#3B82F6' },
+  { id: 'youth_treasurer', label: 'Treasurer', icon: 'wallet', color: '#10B981' },
+  { id: 'youth_coordinator', label: 'Youth Coordinator', icon: 'people', color: '#06B6D4' },
+  { id: 'youth_facilitator', label: 'Youth Facilitator', icon: 'school', color: '#F59E0B' },
+  { id: 'youth_mentor', label: 'Youth Mentor', icon: 'heart', color: '#EF4444' },
+  { id: 'youth_member', label: 'Youth Member', icon: 'add-circle', color: '#6B7280' },
 ] as const;
 
 export type ExecutivePosition = typeof EXECUTIVE_POSITIONS[number];

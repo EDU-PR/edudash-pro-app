@@ -356,14 +356,16 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     
-    // Women's Wing executives
-    if (memberType === 'women_president' || memberType === 'women_deputy') {
-      console.log('[ROUTE DEBUG] Women wing executive detected - routing to women dashboard');
+    // Women's Wing - all members route to women's dashboard
+    if (memberType?.startsWith('women_')) {
+      console.log('[ROUTE DEBUG] Women wing member detected - routing to women dashboard');
       return { path: '/screens/membership/women-dashboard' };
     }
-    if (memberType === 'women_secretary' || memberType === 'women_treasurer') {
-      console.log('[ROUTE DEBUG] Women wing staff detected - routing to women dashboard');
-      return { path: '/screens/membership/women-dashboard' };
+    
+    // Veterans League - all members route to veterans dashboard
+    if (memberType?.startsWith('veterans_')) {
+      console.log('[ROUTE DEBUG] Veterans league member detected - routing to veterans dashboard');
+      return { path: '/screens/membership/veterans-dashboard' };
     }
     
     // Regional/Provincial executives and managers
@@ -382,6 +384,12 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     // Executive members
     if (memberType === 'executive') {
       console.log('[ROUTE DEBUG] Executive member detected - routing to CEO dashboard');
+      return { path: '/screens/membership/ceo-dashboard' };
+    }
+    
+    // Staff and admin
+    if (memberType === 'staff' || memberType === 'admin') {
+      console.log('[ROUTE DEBUG] Staff/Admin member detected - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
     }
 
