@@ -307,6 +307,132 @@ const TAB_ITEMS: TabItem[] = [
     route: '/screens/membership/settings', 
     roles: ['youth_president'] 
   },
+
+  // Regional Manager tabs
+  { 
+    id: 'regional-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/membership/dashboard', 
+    roles: ['regional_manager'] 
+  },
+  { 
+    id: 'regional-members', 
+    label: 'Members',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/membership/members-list', 
+    roles: ['regional_manager'] 
+  },
+  { 
+    id: 'regional-approvals', 
+    label: 'Approvals',
+    icon: 'checkmark-circle-outline', 
+    activeIcon: 'checkmark-circle', 
+    route: '/screens/membership/pending-approvals', 
+    roles: ['regional_manager'] 
+  },
+  { 
+    id: 'regional-events', 
+    label: 'Events',
+    icon: 'calendar-outline', 
+    activeIcon: 'calendar', 
+    route: '/screens/membership/events', 
+    roles: ['regional_manager'] 
+  },
+  { 
+    id: 'regional-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/membership/settings', 
+    roles: ['regional_manager'] 
+  },
+
+  // Women's League tabs
+  { 
+    id: 'women-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/membership/women-dashboard', 
+    roles: ['women_league'] 
+  },
+  { 
+    id: 'women-members', 
+    label: 'Members',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/membership/members-list', 
+    roles: ['women_league'] 
+  },
+  { 
+    id: 'women-events', 
+    label: 'Events',
+    icon: 'calendar-outline', 
+    activeIcon: 'calendar', 
+    route: '/screens/membership/events', 
+    roles: ['women_league'] 
+  },
+  { 
+    id: 'women-approvals', 
+    label: 'Approvals',
+    icon: 'checkmark-circle-outline', 
+    activeIcon: 'checkmark-circle', 
+    route: '/screens/membership/pending-approvals', 
+    roles: ['women_league'] 
+  },
+  { 
+    id: 'women-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/membership/settings', 
+    roles: ['women_league'] 
+  },
+
+  // Veterans League tabs
+  { 
+    id: 'veterans-dashboard', 
+    label: 'Home',
+    icon: 'home-outline', 
+    activeIcon: 'home', 
+    route: '/screens/membership/veterans-dashboard', 
+    roles: ['veterans_league'] 
+  },
+  { 
+    id: 'veterans-members', 
+    label: 'Members',
+    icon: 'people-outline', 
+    activeIcon: 'people', 
+    route: '/screens/membership/members-list', 
+    roles: ['veterans_league'] 
+  },
+  { 
+    id: 'veterans-events', 
+    label: 'Events',
+    icon: 'calendar-outline', 
+    activeIcon: 'calendar', 
+    route: '/screens/membership/events', 
+    roles: ['veterans_league'] 
+  },
+  { 
+    id: 'veterans-approvals', 
+    label: 'Approvals',
+    icon: 'checkmark-circle-outline', 
+    activeIcon: 'checkmark-circle', 
+    route: '/screens/membership/pending-approvals', 
+    roles: ['veterans_league'] 
+  },
+  { 
+    id: 'veterans-settings', 
+    label: 'Settings',
+    icon: 'settings-outline', 
+    activeIcon: 'settings', 
+    route: '/screens/membership/settings', 
+    roles: ['veterans_league'] 
+  },
 ];
 
 export function BottomTabBar() {
@@ -348,6 +474,17 @@ export function BottomTabBar() {
                         memberType === 'youth_secretary' || 
                         memberType === 'youth_treasurer';
   
+  // Check if user is Regional Manager
+  const isRegionalManager = memberType === 'regional_manager' || 
+                            memberType === 'provincial_manager' ||
+                            orgRole === 'regional_admin';
+  
+  // Check if user is Women's League member
+  const isWomensLeague = memberType?.startsWith('women_');
+  
+  // Check if user is Veterans League member
+  const isVeteransLeague = memberType?.startsWith('veterans_');
+  
   // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
     if (!item.roles) return false; // Require explicit role assignment
@@ -362,10 +499,28 @@ export function BottomTabBar() {
       return item.roles.includes('youth_president');
     }
     
+    // If user is Regional Manager, ONLY show regional manager tabs
+    if (isRegionalManager) {
+      return item.roles.includes('regional_manager');
+    }
+    
+    // If user is Women's League, ONLY show women's league tabs
+    if (isWomensLeague) {
+      return item.roles.includes('women_league');
+    }
+    
+    // If user is Veterans League, ONLY show veterans league tabs
+    if (isVeteransLeague) {
+      return item.roles.includes('veterans_league');
+    }
+    
     // Otherwise, filter by profile role (exclude special membership tabs)
     return item.roles.includes(userRole) && 
            !item.roles.includes('national_admin') && 
-           !item.roles.includes('youth_president');
+           !item.roles.includes('youth_president') &&
+           !item.roles.includes('regional_manager') &&
+           !item.roles.includes('women_league') &&
+           !item.roles.includes('veterans_league');
   });
 
   // Check if current route matches tab
