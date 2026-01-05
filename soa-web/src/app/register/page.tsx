@@ -332,9 +332,10 @@ function RegisterPageContent() {
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
       // 5. Create membership record with correct UUIDs
+      // Use upsert to handle race conditions where duplicate check passed but insert fails
       const { data: newMember, error: memberError } = await supabase
         .from('organization_members')
-        .insert({
+        .upsert({
         user_id: authData.user?.id,
         organization_id: SOA_ORGANIZATION_ID,
         region_id: selectedRegion.id,
@@ -356,12 +357,15 @@ function RegisterPageContent() {
           emergency_contact_relationship: formData.emergency_relationship || null,
           notes: null,
           joined_date: new Date().toISOString().split('T')[0],
-        })
-        .select('id')
+        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
+        .select('id, member_number')
         .single();
 
       if (memberError) throw memberError;
       if (!newMember?.id) throw new Error('Failed to create membership record');
+
+      // Use returned member_number (may be existing if upsert matched)
+      const finalMemberNumber = newMember.member_number || generatedMemberNumber;
 
       // 6. Create invoice (only if tier has a price)
       const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
@@ -393,7 +397,7 @@ function RegisterPageContent() {
         }
       }
 
-      setMemberNumber(generatedMemberNumber);
+      setMemberNumber(finalMemberNumber);
       setStep('complete');
     } catch (err: any) {
       console.error('Registration error:', err);

@@ -220,9 +220,10 @@ export default function JoinPage() {
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
       // 3. Create membership record with proper UUIDs
+      // Use upsert to handle case where member already exists (e.g., retry after error)
       const { data: newMember, error: memberError } = await supabase
         .from('organization_members')
-        .insert({
+        .upsert({
         user_id: authData.user?.id,
         organization_id: orgInfo?.organization_id,
         region_id: orgInfo?.region_id,
@@ -236,21 +237,38 @@ export default function JoinPage() {
         phone: formData.phone,
           joined_date: new Date().toISOString().split('T')[0],
         notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
-        })
-        .select('id')
+        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
+        .select('id, member_number')
         .single();
 
       if (memberError) throw memberError;
       if (!newMember?.id) throw new Error('Failed to create membership record');
 
+      // Use returned member_number (may be existing if upsert matched)
+      const finalMemberNumber = newMember.member_number || generatedMemberNumber;
+
       // 4. Increment the usage count on the invite code
       await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
 
-      setMemberNumber(generatedMemberNumber);
+      setMemberNumber(finalMemberNumber);
       setIsComplete(true);
     } catch (err: any) {
       console.error('Join error:', err);
-      setFormError(err.message || 'Failed to join. Please try again.');
+      // Handle specific error cases
+      const message = err?.message?.toLowerCase() || '';
+      const code = err?.code || '';
+      
+      if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
+        if (message.includes('email')) {
+          setFormError('This email is already registered. Please use a different email or contact support.');
+        } else {
+          setFormError('You are already a member. Please login to your existing account instead.');
+        }
+      } else if (message.includes('user already registered')) {
+        setFormError('An account with this email already exists. Please login instead.');
+      } else {
+        setFormError(err.message || 'Failed to join. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
