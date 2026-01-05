@@ -248,6 +248,12 @@ export default function OrganizationDashboard() {
             </View>
           </View>
 
+          {/* Action Required - Urgent Tasks */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Action Required</Text>
+            <ActionCardsGrid actions={REGIONAL_ACTIONS} theme={theme} />
+          </View>
+
           {/* Regional Leaderboard - Healthy Competition */}
           <View style={styles.section}>
             <RegionalLeaderboard
