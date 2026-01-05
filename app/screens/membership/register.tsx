@@ -73,17 +73,50 @@ export default function MemberRegistrationScreen() {
           const role = invite.requested_role || 'youth_member';
           setInviteRole(role);
           // Map requested_role to member_type
-          // Most roles map to themselves, some have different display names
+          // Comprehensive mapping for all SOA roles that can be invited
           const memberTypeMap: Record<string, string> = {
-            'youth_member': 'learner',
-            'youth_volunteer': 'volunteer',
-            'youth_coordinator': 'facilitator',
+            // Youth Wing - Standard members
+            'youth_member': 'youth_member',
+            'youth_volunteer': 'youth_member',
+            // Youth Wing - Support roles
+            'youth_coordinator': 'youth_coordinator',
+            'youth_facilitator': 'youth_facilitator',
+            'youth_mentor': 'youth_mentor',
+            // Youth Wing - Executive roles
+            'youth_deputy': 'youth_deputy',
+            'youth_secretary': 'youth_secretary',
+            'youth_treasurer': 'youth_treasurer',
+            'youth_president': 'youth_president',
+            // Women's Wing roles
+            'women_member': 'women_member',
+            'women_coordinator': 'women_coordinator',
+            'women_facilitator': 'women_facilitator',
+            'women_mentor': 'women_mentor',
+            'women_deputy': 'women_deputy',
+            'women_secretary': 'women_secretary',
+            'women_treasurer': 'women_treasurer',
+            'women_president': 'women_president',
+            // Veterans League roles
+            'veterans_member': 'veterans_member',
+            'veterans_coordinator': 'veterans_coordinator',
+            'veterans_president': 'veterans_president',
+            // Regional/Provincial management
             'regional_manager': 'regional_manager',
-            'provincial_manager': 'provincial_manager',
-            'national_coordinator': 'national_coordinator',
-            'executive': 'executive',
-            'president': 'president',
-            'ceo': 'ceo',
+            'provincial_manager': 'regional_manager',
+            'regional_coordinator': 'regional_manager',
+            'provincial_coordinator': 'regional_manager',
+            // National leadership
+            'national_coordinator': 'national_admin',
+            'national_admin': 'national_admin',
+            'executive': 'national_admin',
+            'president': 'national_admin',
+            'ceo': 'national_admin',
+            // General members (for public registration)
+            'learner': 'learner',
+            'mentor': 'mentor',
+            'facilitator': 'facilitator',
+            'volunteer': 'learner',
+            'member': 'learner',
           };
           setFormData(prev => ({ 
             ...prev, 
