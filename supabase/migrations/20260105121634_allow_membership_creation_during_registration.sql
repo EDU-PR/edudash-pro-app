@@ -1,28 +1,17 @@
 -- Allow membership creation during registration (before email confirmation)
--- This policy allows inserting a membership record when:
--- 1. The user_id exists in auth.users (user was just created via signUp)
--- 2. The status is 'pending_verification' (registration before email confirmation)
+-- This policy allows the anon role to insert a membership record when:
+-- 1. The status is 'pending_verification' (registration before email confirmation)
+-- 2. The foreign key constraint ensures user_id exists in auth.users
+--
+-- Note: We use a simple anon-only policy because:
+-- - The anon role cannot query auth.users directly in RLS policies
+-- - The foreign key constraint on user_id ensures data integrity
+-- - Authenticated users have their own policy for joining via invite codes
 
--- Create a helper function that runs with elevated privileges to check auth.users
--- (anon role cannot directly query auth.users in RLS policy checks)
-CREATE OR REPLACE FUNCTION public.user_exists_in_auth(check_user_id uuid)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = check_user_id);
-$$;
-
--- Grant execute to anon and authenticated roles
-GRANT EXECUTE ON FUNCTION public.user_exists_in_auth(uuid) TO anon;
-GRANT EXECUTE ON FUNCTION public.user_exists_in_auth(uuid) TO authenticated;
-
--- Create the policy using the helper function
-CREATE POLICY "Allow membership creation during registration"
+CREATE POLICY "Allow pending verification inserts"
 ON organization_members
 FOR INSERT
+TO anon
 WITH CHECK (
-  membership_status = 'pending_verification'
-  AND public.user_exists_in_auth(user_id)
+  (membership_status)::text = 'pending_verification'::text
 );
