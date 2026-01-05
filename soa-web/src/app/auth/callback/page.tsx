@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -100,5 +100,27 @@ export default function AuthCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function AuthCallbackLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-soa-dark to-black flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-center">
+        <div className="w-16 h-16 border-4 border-soa-gold border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        <h1 className="text-2xl font-bold text-white mb-2">Loading...</h1>
+        <p className="text-gray-300">Please wait...</p>
+      </div>
+    </div>
+  );
+}
+
+// Wrap in Suspense for useSearchParams
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<AuthCallbackLoading />}>
+      <AuthCallbackContent />
+    </Suspense>
   );
 }
