@@ -234,9 +234,10 @@ export default function JoinByCodeScreen() {
       const memberNumber = `SOA-${orgInfo.region_code}-${year}-${sequence}`;
       
       // Create organization member record
+      // Use upsert to handle case where member already exists
       const { data: memberData, error: memberError } = await supabase
         .from('organization_members')
-        .insert({
+        .upsert({
           organization_id: orgInfo.id,
           region_id: orgInfo.region_id,
           user_id: user.id,
@@ -249,7 +250,7 @@ export default function JoinByCodeScreen() {
           phone: formData.phone,
           role: 'member',
           join_date: new Date().toISOString(),
-        })
+        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
         .select()
         .single();
 
