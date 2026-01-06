@@ -1,5 +1,182 @@
-# Documentation ownership
-# Ensure any changes under docs/ are reviewed by the core maintainers
-# Note: OBSOLETE is archived; changes there are generally discouraged
+# ============================================================================
+# EduDash Pro CODEOWNERS
+# ============================================================================
+# This file defines code ownership for automatic PR review assignments.
+# 
+# IMPORTANT: Replace @dev-1 through @dev-10 with actual GitHub usernames
+# once your team members have accounts.
+#
+# Format: <pattern> <owner1> <owner2> ...
+# ============================================================================
 
-docs/ @king @maintainers
+# ============================================================================
+# LEAD OWNERSHIP (All PRs need lead approval)
+# ============================================================================
+# Lead reviews all PRs (can be bypassed for emergencies)
+* @king
+
+# ============================================================================
+# DOMAIN-SPECIFIC OWNERSHIP
+# ============================================================================
+
+# ------------------------------------
+# Dev 1: Auth & Core Infrastructure
+# ------------------------------------
+contexts/AuthContext.tsx            @dev-1 @king
+lib/sessionManager.ts               @dev-1 @king
+lib/rbac/                           @dev-1 @king
+lib/security/                       @dev-1 @king
+lib/encryption.ts                   @dev-1 @king
+hooks/useRouteGuard.ts              @dev-1 @king
+hooks/useAuth*.ts                   @dev-1 @king
+supabase/functions/auth-*/          @dev-1 @king
+app/auth/                           @dev-1 @king
+app/screens/auth/                   @dev-1 @king
+
+# ------------------------------------
+# Dev 2: AI Engine & Orchestration
+# ------------------------------------
+services/dash-ai/DashAIClient.ts        @dev-2 @king
+services/dash-ai/DashToolRegistry.ts    @dev-2 @king
+services/dash-ai/DashAIMemory.ts        @dev-2 @king
+services/AgentOrchestrator.ts           @dev-2 @king
+services/ReflectionEngine.ts            @dev-2 @king
+supabase/functions/ai-proxy/            @dev-2 @king
+supabase/functions/ai-gateway/          @dev-2 @king
+lib/ai/                                 @dev-2 @king
+
+# ------------------------------------
+# Dev 3: AI UI & Voice Interface
+# ------------------------------------
+components/dash-ai/                 @dev-3 @king
+components/voice/                   @dev-3 @king
+hooks/useDashAI.ts                  @dev-3 @king
+hooks/useVoice*.ts                  @dev-3 @king
+services/textToSpeech.ts            @dev-3 @king
+services/speechToText.ts            @dev-3 @king
+services/wakeWord/                  @dev-3 @king
+
+# ------------------------------------
+# Dev 4: Principal/School Administration
+# ------------------------------------
+app/screens/principal/              @dev-4 @king
+components/school/                  @dev-4 @king
+components/principal/               @dev-4 @king
+hooks/useSchool*.ts                 @dev-4 @king
+hooks/useTeachers.ts                @dev-4 @king
+hooks/useClasses.ts                 @dev-4 @king
+
+# ------------------------------------
+# Dev 5: Teacher Experience
+# ------------------------------------
+app/screens/teacher/                @dev-5 @king
+components/teacher/                 @dev-5 @king
+components/lessons/                 @dev-5 @king
+components/activities/              @dev-5 @king
+hooks/useAttendance.ts              @dev-5 @king
+hooks/useGrading.ts                 @dev-5 @king
+hooks/useLessons.ts                 @dev-5 @king
+
+# ------------------------------------
+# Dev 6: Parent Portal
+# ------------------------------------
+app/screens/parent/                 @dev-6 @king
+app/(parent)/                       @dev-6 @king
+components/parent/                  @dev-6 @king
+components/homework/                @dev-6 @king
+hooks/useParent*.ts                 @dev-6 @king
+hooks/useChildren.ts                @dev-6 @king
+
+# ------------------------------------
+# Dev 7: Membership & Organizations
+# ------------------------------------
+app/screens/membership/             @dev-7 @king
+components/membership/              @dev-7 @king
+hooks/useOrganization*.ts           @dev-7 @king
+hooks/useMember*.ts                 @dev-7 @king
+soa-web/                            @dev-7 @king
+
+# ------------------------------------
+# Dev 8: Payments & Subscriptions
+# ------------------------------------
+hooks/pop/                          @dev-8 @king
+lib/payfast/                        @dev-8 @king
+lib/revenuecat/                     @dev-8 @king
+lib/subscriptions.ts                @dev-8 @king
+supabase/functions/payfast-*/       @dev-8 @king
+supabase/functions/payments-*/      @dev-8 @king
+supabase/functions/revenuecat-*/    @dev-8 @king
+components/payments/                @dev-8 @king
+app/screens/*/payments/             @dev-8 @king
+app/screens/*/fees/                 @dev-8 @king
+
+# ------------------------------------
+# Dev 9: Communications & Calls
+# ------------------------------------
+components/messaging/               @dev-9 @king
+components/calls/                   @dev-9 @king
+hooks/useMessaging.ts               @dev-9 @king
+hooks/useChat*.ts                   @dev-9 @king
+hooks/useCall*.ts                   @dev-9 @king
+lib/notifications/                  @dev-9 @king
+contexts/NotificationContext.tsx    @dev-9 @king
+services/whatsapp.ts                @dev-9 @king
+supabase/functions/daily-*/         @dev-9 @king
+supabase/functions/send-push/       @dev-9 @king
+supabase/functions/push-*/          @dev-9 @king
+
+# ------------------------------------
+# Dev 10: Web Application (Next.js)
+# ------------------------------------
+web/                                @dev-10 @king
+
+# ============================================================================
+# SHARED/CRITICAL FILES (Require Lead Approval Only)
+# ============================================================================
+
+# Configuration files - Lead only
+app.config.js                       @king
+eas.json                            @king
+package.json                        @king
+tsconfig.json                       @king
+babel.config.js                     @king
+
+# Database migrations - Lead only (critical)
+migrations/                         @king
+supabase/migrations/                @king
+scripts/*.sql                       @king
+
+# Feature flags - Lead reviews all changes
+config/featureFlags.ts              @king
+
+# Shared types - Lead reviews (affects everyone)
+lib/database.types.ts               @king
+types/                              @king
+
+# Documentation - Lead and relevant domain owner
+docs/                               @king
+README.md                           @king
+WARP.md                             @king
+ROAD-MAP.md                         @king
+
+# GitHub workflows - Lead only
+.github/                            @king
+
+# ============================================================================
+# CROSS-DOMAIN FILES (Multiple Reviewers)
+# ============================================================================
+
+# UI Components (shared) - Need review from UI-focused devs
+components/ui/                      @dev-3 @dev-6 @king
+
+# Supabase client (affects everyone)
+lib/supabase.ts                     @dev-1 @king
+
+# Shared hooks
+hooks/useTheme.ts                   @dev-3 @king
+hooks/useNetworkStatus.ts           @dev-1 @king
+
+# App entry points
+App.js                              @king
+index.js                            @king
+app/_layout.tsx                     @king
