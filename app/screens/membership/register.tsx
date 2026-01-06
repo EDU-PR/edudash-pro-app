@@ -208,6 +208,9 @@ export default function MemberRegistrationScreen() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
+    // Track whether this is a new signup (vs existing user adding membership)
+    let isNewSignup = false;
+    
     try {
       const supabase = assertSupabase();
       
@@ -217,6 +220,7 @@ export default function MemberRegistrationScreen() {
       // If not logged in, create a new account with the provided credentials
       if (!user) {
         console.log('[Register] Creating new user account...');
+        isNewSignup = true;
         
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
@@ -385,7 +389,7 @@ export default function MemberRegistrationScreen() {
 
       // If user already exists (was signed in), we still need to create membership
       // But only if it wasn't already created above for new signups
-      if (!signUpData) {
+      if (!isNewSignup) {
         // Existing user - generate random member number
         const generateRandomMemberNumberForExisting = async (): Promise<string> => {
           let memberNum: string;
@@ -413,34 +417,39 @@ export default function MemberRegistrationScreen() {
         
         const existingMemberNumber = await generateRandomMemberNumberForExisting();
         
-        const { error: existingMemberError } = await supabase
-          .from('organization_members')
-          .insert({
-            organization_id: SOIL_OF_AFRICA_ORG_ID,
-            region_id: formData.region_id,
-            user_id: user.id,
-            member_number: existingMemberNumber,
-            member_type: formData.member_type || 'learner',
-            membership_tier: formData.membership_tier || 'standard',
-            membership_status: 'active',
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            email: formData.email,
-            phone: formData.phone,
-            id_number: formData.id_number,
-            role: 'member',
-            join_date: new Date().toISOString(),
-            invite_code_used: inviteCode || null,
-            joined_via: inviteCode ? 'invite_code' : 'direct_registration',
+        // Use RPC for existing users too (handles all auth states)
+        const { data: existingRpcResult, error: existingRpcError } = await supabase
+          .rpc('register_organization_member', {
+            p_organization_id: SOIL_OF_AFRICA_ORG_ID,
+            p_user_id: user.id,
+            p_region_id: formData.region_id || null,
+            p_member_number: existingMemberNumber,
+            p_member_type: formData.member_type || 'learner',
+            p_membership_tier: formData.membership_tier || 'standard',
+            p_membership_status: 'active',
+            p_first_name: formData.first_name,
+            p_last_name: formData.last_name,
+            p_email: formData.email,
+            p_phone: formData.phone || null,
+            p_id_number: formData.id_number || null,
+            p_role: 'member',
+            p_invite_code_used: inviteCode || null,
+            p_joined_via: inviteCode ? 'invite_code' : 'direct_registration',
           });
 
-        if (existingMemberError) {
-          console.error('[Register] Error creating member:', existingMemberError);
-          if (existingMemberError.code === '23505') {
-            Alert.alert('Already Registered', 'You are already a member of this organization.');
-          } else {
-            throw existingMemberError;
-          }
+        if (existingRpcError) {
+          console.error('[Register] Error creating member via RPC:', existingRpcError);
+          throw existingRpcError;
+        }
+        
+        if (!existingRpcResult?.success) {
+          console.error('[Register] RPC returned error:', existingRpcResult);
+          throw new Error(existingRpcResult?.error || 'Failed to register member');
+        }
+        
+        // Handle existing member case
+        if (existingRpcResult.action === 'existing') {
+          Alert.alert('Already Registered', 'You are already a member of this organization.');
           return;
         }
         
@@ -455,8 +464,8 @@ export default function MemberRegistrationScreen() {
             .eq('invite_code', inviteCode.toUpperCase())
             .eq('status', 'pending');
         }
-        
-        setGeneratedMemberNumber(existingMemberNumber);
+
+        setGeneratedMemberNumber(existingRpcResult.member_number || existingMemberNumber);
       }
 
       setCurrentStep('complete');
