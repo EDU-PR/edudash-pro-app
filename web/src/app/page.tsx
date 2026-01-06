@@ -168,6 +168,125 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Early Bird Aftercare Special */}
+      <section id="aftercare" style={{
+        background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #8b5cf6 100%)',
+        padding: '60px 0',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        {/* Decorative stars */}
+        <div style={{position: 'absolute', top: '20px', left: '10%', fontSize: '24px', opacity: 0.6}}>✨</div>
+        <div style={{position: 'absolute', top: '40px', right: '15%', fontSize: '20px', opacity: 0.5}}>⭐</div>
+        <div style={{position: 'absolute', bottom: '30px', left: '20%', fontSize: '18px', opacity: 0.4}}>✨</div>
+        <div style={{position: 'absolute', bottom: '50px', right: '10%', fontSize: '22px', opacity: 0.5}}>⭐</div>
+        
+        <div className="container" style={{maxWidth: '900px', textAlign: 'center'}}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'rgba(251, 191, 36, 0.2)',
+            border: '2px solid #fbbf24',
+            borderRadius: '50px',
+            padding: '8px 20px',
+            marginBottom: '24px'
+          }}>
+            <span style={{fontSize: '20px'}}>⚡</span>
+            <span style={{color: '#fbbf24', fontWeight: 800, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Early Bird Special</span>
+          </div>
+          
+          <h2 style={{
+            fontSize: 'clamp(32px, 5vw, 48px)',
+            fontWeight: 900,
+            color: '#fff',
+            marginBottom: '16px',
+            textShadow: '0 2px 20px rgba(0,0,0,0.3)'
+          }}>
+            <span style={{color: '#fbbf24'}}>50%</span> Registration OFF
+          </h2>
+          
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '24px',
+            flexWrap: 'wrap',
+            marginBottom: '24px'
+          }}>
+            <div style={{
+              background: 'rgba(255,255,255,0.15)',
+              borderRadius: '12px',
+              padding: '16px 24px',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <p style={{color: 'rgba(255,255,255,0.7)', fontSize: '14px', marginBottom: '4px', textDecoration: 'line-through'}}>WAS: R400.00</p>
+              <p style={{color: '#fff', fontSize: '32px', fontWeight: 900}}>NOW: R200.00</p>
+            </div>
+          </div>
+          
+          <div style={{
+            display: 'inline-block',
+            background: '#fbbf24',
+            color: '#1f2937',
+            padding: '10px 24px',
+            borderRadius: '50px',
+            fontWeight: 800,
+            fontSize: '14px',
+            marginBottom: '20px'
+          }}>
+            AFTERCARE PROGRAM • GRADE R TO GRADE 7
+          </div>
+          
+          <p style={{
+            color: 'rgba(255,255,255,0.9)',
+            fontSize: '18px',
+            marginBottom: '32px',
+            maxWidth: '600px',
+            margin: '0 auto 32px'
+          }}>
+            Register your child at <strong>EduDash Pro Community School</strong> for our comprehensive aftercare program with homework assistance, educational activities, and safe supervision.
+          </p>
+          
+          <div style={{display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '32px'}}>
+            <Link 
+              href="/aftercare" 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: '#fbbf24',
+                color: '#1f2937',
+                padding: '16px 32px',
+                borderRadius: '12px',
+                fontSize: '16px',
+                fontWeight: 800,
+                textDecoration: 'none',
+                boxShadow: '0 4px 20px rgba(251, 191, 36, 0.4)',
+                transition: 'all 0.2s'
+              }}
+            >
+              Register Now →
+            </Link>
+          </div>
+          
+          <div style={{display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', color: 'rgba(255,255,255,0.8)', fontSize: '14px'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>📧</span>
+              <a href="mailto:info@edudashpro.org.za" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>info@edudashpro.org.za</a>
+            </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>📞</span>
+              <a href="tel:+27674770975" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>+27 67 477 0975</a>
+            </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span style={{color: '#25D366'}}>💬</span>
+              <a href="https://wa.me/27815236000" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>+27 81 523 6000</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section id="features" className="lp-section alt">
         <div className="container">
