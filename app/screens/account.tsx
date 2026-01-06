@@ -30,6 +30,7 @@ import {
   EditProfileModal,
   ThemeSettingsModal,
   AccountActions,
+  OrganizationSwitcher,
 } from '@/components/account';
 
 export default function AccountScreen() {
@@ -53,6 +54,8 @@ export default function AccountScreen() {
   const [editLastName, setEditLastName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [showOrgSwitcher, setShowOrgSwitcher] = useState(false);
+  const [hasMultipleOrgs, setHasMultipleOrgs] = useState(false);
 
   const styles = useThemedStyles((theme) => ({
     container: { flex: 1, backgroundColor: theme.background },
@@ -181,6 +184,27 @@ export default function AccountScreen() {
     setProfileImage(img);
     setEditFirstName(fn || "");
     setEditLastName(ln || "");
+
+    // Check if user has multiple organizations
+    if (u?.id) {
+      try {
+        let orgCount = 0;
+        
+        // Count preschool membership (from profiles)
+        if (s) orgCount++;
+        
+        // Count organization memberships (from organization_members)
+        const { count } = await assertSupabase()
+          .from('organization_members')
+          .select('organization_id', { count: 'exact', head: true })
+          .eq('user_id', u.id)
+          .eq('status', 'active');
+        
+        orgCount += count || 0;
+        
+        setHasMultipleOrgs(orgCount > 1);
+      } catch { /* noop */ }
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -432,6 +456,8 @@ export default function AccountScreen() {
         themeMode={mode}
         onToggleBiometric={toggleBiometric}
         onOpenThemeSettings={() => { setShowSettingsMenu(false); setShowThemeSettings(true); }}
+        onOpenOrgSwitcher={() => { setShowSettingsMenu(false); setShowOrgSwitcher(true); }}
+        hasMultipleOrgs={hasMultipleOrgs}
         theme={theme}
         styles={styles}
       />
@@ -454,6 +480,15 @@ export default function AccountScreen() {
         onClose={() => setShowThemeSettings(false)}
         theme={theme}
         styles={styles}
+      />
+
+      <OrganizationSwitcher
+        visible={showOrgSwitcher}
+        onClose={() => setShowOrgSwitcher(false)}
+        onOrganizationChanged={() => {
+          setShowOrgSwitcher(false);
+          load(); // Refresh account data
+        }}
       />
     </SafeAreaView>
   );

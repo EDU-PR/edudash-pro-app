@@ -13,6 +13,8 @@ interface SettingsModalProps {
   themeMode: 'light' | 'dark' | 'system';
   onToggleBiometric: () => void;
   onOpenThemeSettings: () => void;
+  onOpenOrgSwitcher?: () => void;
+  hasMultipleOrgs?: boolean;
   theme: {
     text: string;
     textSecondary: string;
@@ -45,6 +47,8 @@ export function SettingsModal({
   themeMode,
   onToggleBiometric,
   onOpenThemeSettings,
+  onOpenOrgSwitcher,
+  hasMultipleOrgs,
   theme,
   styles,
 }: SettingsModalProps) {
@@ -123,6 +127,31 @@ export function SettingsModal({
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
+
+          {/* Organization Switcher - show if callback provided */}
+          {onOpenOrgSwitcher && (
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={onOpenOrgSwitcher}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="business" size={24} color={theme.primary} />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>
+                    {hasMultipleOrgs 
+                      ? t('settings.switch_organization', { defaultValue: 'Switch Organization' })
+                      : t('settings.my_organizations', { defaultValue: 'My Organizations' })}
+                  </Text>
+                  <Text style={styles.settingSubtitle}>
+                    {hasMultipleOrgs
+                      ? t('settings.switch_organization_desc', { defaultValue: 'Switch between schools & organizations' })
+                      : t('settings.view_memberships', { defaultValue: 'View your memberships' })}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
 
           {/* Notifications */}
           <TouchableOpacity
