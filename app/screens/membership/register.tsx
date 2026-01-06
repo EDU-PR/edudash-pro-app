@@ -292,41 +292,48 @@ export default function MemberRegistrationScreen() {
         
         const memberNumber = await generateRandomMemberNumber();
         
-        // Create organization member record (with pending status if email not confirmed)
-        // Use upsert to handle case where member already exists (retry after error)
+        // Create organization member record using RPC (handles both anon and authenticated users)
+        // This uses SECURITY DEFINER to bypass RLS when session is null (email not confirmed)
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
-        const { data: memberResult, error: memberError } = await supabase
-          .from('organization_members')
-          .upsert({
-            organization_id: SOIL_OF_AFRICA_ORG_ID,
-            region_id: formData.region_id,
-            user_id: user.id,
-            member_number: memberNumber,
-            member_type: formData.member_type || 'learner',
-            membership_tier: formData.membership_tier || 'standard',
-            membership_status: membershipStatus,
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            email: formData.email,
-            phone: formData.phone,
-            id_number: formData.id_number,
-            role: 'member',
-            join_date: new Date().toISOString(),
-            invite_code_used: inviteCode || null,
-            joined_via: inviteCode ? 'invite_code' : 'direct_registration',
-          }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
-          .select('id, member_number')
-          .single();
+        const { data: rpcResult, error: rpcError } = await supabase
+          .rpc('register_organization_member', {
+            p_organization_id: SOIL_OF_AFRICA_ORG_ID,
+            p_user_id: user.id,
+            p_region_id: formData.region_id || null,
+            p_member_number: memberNumber,
+            p_member_type: formData.member_type || 'learner',
+            p_membership_tier: formData.membership_tier || 'standard',
+            p_membership_status: membershipStatus,
+            p_first_name: formData.first_name,
+            p_last_name: formData.last_name,
+            p_email: formData.email,
+            p_phone: formData.phone || null,
+            p_id_number: formData.id_number || null,
+            p_role: 'member',
+            p_invite_code_used: inviteCode || null,
+            p_joined_via: inviteCode ? 'invite_code' : 'direct_registration',
+          });
 
-        if (memberError) {
-          console.error('[Register] Error creating member:', memberError);
-          if (memberError.code === '23505') {
-            Alert.alert('Already Registered', 'You are already a member of this organization.');
-          } else {
-            throw memberError;
-          }
+        if (rpcError) {
+          console.error('[Register] Error creating member via RPC:', rpcError);
+          throw rpcError;
+        }
+        
+        // Check RPC result
+        if (!rpcResult?.success) {
+          console.error('[Register] RPC returned error:', rpcResult);
+          throw new Error(rpcResult?.error || 'Failed to register member');
+        }
+        
+        console.log('[Register] Member registration result:', rpcResult);
+        
+        // Handle existing member case
+        if (rpcResult.action === 'existing') {
+          Alert.alert('Already Registered', 'You are already a member of this organization.');
           return;
         }
+        
+        const memberResult = { id: rpcResult.id, member_number: rpcResult.member_number };
         
         // IMPORTANT: Update the user's profile to link them to the organization
         // This ensures the routing system can find their organization_membership

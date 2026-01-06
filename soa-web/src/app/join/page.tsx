@@ -219,33 +219,37 @@ export default function JoinPage() {
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
-      // 3. Create membership record with proper UUIDs
-      // Use upsert to handle case where member already exists (e.g., retry after error)
-      const { data: newMember, error: memberError } = await supabase
-        .from('organization_members')
-        .upsert({
-        user_id: authData.user?.id,
-        organization_id: orgInfo?.organization_id,
-        region_id: orgInfo?.region_id,
-        member_number: generatedMemberNumber,
-        member_type: formData.member_type,
-        membership_tier: 'standard',
-        membership_status: 'pending',
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email.toLowerCase(),
-        phone: formData.phone,
-          joined_date: new Date().toISOString().split('T')[0],
-        notes: `Joined via invite code: ${inviteCode.toUpperCase()}`,
-        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
-        .select('id, member_number')
-        .single();
+      // 3. Create membership record using RPC (handles both anon and authenticated users)
+      // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('register_organization_member', {
+          p_organization_id: orgInfo?.organization_id,
+          p_user_id: authData.user?.id,
+          p_region_id: orgInfo?.region_id || null,
+          p_member_number: generatedMemberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: 'standard',
+          p_membership_status: 'pending',
+          p_first_name: formData.first_name,
+          p_last_name: formData.last_name,
+          p_email: formData.email.toLowerCase(),
+          p_phone: formData.phone || null,
+          p_id_number: null,
+          p_role: 'member',
+          p_invite_code_used: inviteCode.toUpperCase(),
+          p_joined_via: 'invite_code',
+        });
 
-      if (memberError) throw memberError;
-      if (!newMember?.id) throw new Error('Failed to create membership record');
+      if (rpcError) throw rpcError;
+      if (!rpcResult?.success) throw new Error(rpcResult?.error || 'Failed to create membership record');
+      
+      // Handle existing member case
+      if (rpcResult.action === 'existing') {
+        throw new Error('You are already a member. Please login to your existing account instead.');
+      }
 
-      // Use returned member_number (may be existing if upsert matched)
-      const finalMemberNumber = newMember.member_number || generatedMemberNumber;
+      // Use returned member_number
+      const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
 
       // 4. Increment the usage count on the invite code
       await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
