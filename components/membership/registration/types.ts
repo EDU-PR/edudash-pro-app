@@ -5,6 +5,9 @@
 import type { MemberType, MembershipTier } from '@/components/membership/types';
 
 export interface RegistrationData {
+  // Organization
+  organization_id: string;
+  organization_name: string;
   // Region
   region_id: string;
   region_name: string;
@@ -33,6 +36,8 @@ export interface RegistrationData {
 }
 
 export const initialRegistrationData: RegistrationData = {
+  organization_id: '',
+  organization_name: '',
   region_id: '',
   region_name: '',
   region_code: '',

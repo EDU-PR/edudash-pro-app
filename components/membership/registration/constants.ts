@@ -5,7 +5,7 @@
 import type { Ionicons } from '@expo/vector-icons';
 import type { MemberType, MembershipTier } from '@/components/membership/types';
 
-export type RegistrationStep = 'region' | 'personal' | 'membership' | 'payment' | 'complete';
+export type RegistrationStep = 'organization' | 'region' | 'personal' | 'membership' | 'payment' | 'complete';
 
 export interface StepConfig {
   key: RegistrationStep;
@@ -35,6 +35,7 @@ export interface MembershipTierConfig {
 }
 
 export const REGISTRATION_STEPS: StepConfig[] = [
+  { key: 'organization', title: 'Organization', icon: 'business-outline' },
   { key: 'region', title: 'Region', icon: 'location-outline' },
   { key: 'personal', title: 'Personal', icon: 'person-outline' },
   { key: 'membership', title: 'Membership', icon: 'ribbon-outline' },
