@@ -677,7 +677,16 @@ export default function MemberRegistrationScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Stack.Screen\n        options={{\n          title: currentStep === 'complete' \n            ? 'Registration Complete' \n            : formData.organization_name \n              ? `Join ${formData.organization_name}`\n              : 'Join Organization',\n          headerLeft: currentStep === 'complete' ? () => null : undefined,\n        }}\n      />
+      <Stack.Screen
+        options={{
+          title: currentStep === 'complete' 
+            ? 'Registration Complete' 
+            : formData.organization_name 
+              ? `Join ${formData.organization_name}`
+              : 'Join Organization',
+          headerLeft: currentStep === 'complete' ? () => null : undefined,
+        }}
+      />
 
       {currentStep !== 'complete' && (
         <>
