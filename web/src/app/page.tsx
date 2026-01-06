@@ -5,8 +5,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
-import { AnimatedPromoBanner } from "@/components/landing/AnimatedPromoBanner";
-import { PWAInstallButton } from "@/components/PWAInstallButton";
 import 'katex/dist/katex.min.css';
 
 export default function Home() {
@@ -14,6 +12,52 @@ export default function Home() {
   const { isPWA, isLoading: isPWALoading } = useIsPWA();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [earlyAccessEmail, setEarlyAccessEmail] = useState('');
+  const [earlyAccessSubmitting, setEarlyAccessSubmitting] = useState(false);
+  const [earlyAccessSubmitted, setEarlyAccessSubmitted] = useState(false);
+  const [earlyAccessError, setEarlyAccessError] = useState('');
+
+  const handleEarlyAccessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!earlyAccessEmail || !earlyAccessEmail.includes('@')) {
+      setEarlyAccessError('Please enter a valid email address');
+      return;
+    }
+    
+    setEarlyAccessSubmitting(true);
+    setEarlyAccessError('');
+    
+    try {
+      const supabase = createClient();
+      
+      // Save to early_access_signups table
+      const { error } = await supabase
+        .from('early_access_signups')
+        .insert({
+          email: earlyAccessEmail,
+          source: 'homepage',
+          platform: 'google_play',
+        });
+      
+      if (error && error.code !== '23505') { // Ignore duplicate email error
+        console.error('Early access signup error:', error);
+      }
+      
+      // Also send notification email to superadmin
+      await fetch('/api/early-access-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: earlyAccessEmail }),
+      }).catch(() => {}); // Don't fail if notification fails
+      
+      setEarlyAccessSubmitted(true);
+    } catch (err) {
+      console.error('Signup error:', err);
+      setEarlyAccessSubmitted(true); // Show success anyway for UX
+    } finally {
+      setEarlyAccessSubmitting(false);
+    }
+  };
 
   // Redirect installed PWA users directly to dashboard
   useEffect(() => {
@@ -85,7 +129,6 @@ export default function Home() {
             <Link href="/exam-prep" style={{background: 'none', border: 0, color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.2s'}}>📚 Study Hub</Link>
             <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Pricing</button>
             <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>FAQ</button>
-            <PWAInstallButton />
             <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '14px', padding: '8px 18px', borderRadius: '8px'}}>Sign In</Link>
           </nav>
         </div>
@@ -100,7 +143,6 @@ export default function Home() {
               <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Pricing</button>
               <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>FAQ</button>
               <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '16px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <PWAInstallButton />
                 <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '16px', padding: '12px', borderRadius: '8px', textAlign: 'center', display: 'block'}}>Sign In</Link>
               </div>
             </div>
@@ -158,12 +200,91 @@ export default function Home() {
           <p className="heroLead">
             Engage every student, empower every teacher, and connect every parent with <strong style={{color: 'var(--cyan)'}}>AI-enhanced tools</strong> built for South Africa.
           </p>
-          <AnimatedPromoBanner />
-          <div style={{marginBottom: '16px', display: 'inline-block', background: 'rgba(251, 191, 36, 0.15)', border: '2px solid #fbbf24', borderRadius: '12px', padding: '12px 24px'}}>
-            <p style={{margin: 0, fontSize: '18px', fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em'}}>🎉 7-Day Free Trial • No Credit Card Required</p>
+          
+          {/* Early Access Signup */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%)',
+            border: '2px solid rgba(0, 245, 255, 0.3)',
+            borderRadius: '20px',
+            padding: '32px',
+            maxWidth: '500px',
+            margin: '0 auto 32px',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <div style={{marginBottom: '16px'}}>
+              <span style={{fontSize: '32px'}}>📱</span>
+            </div>
+            <h3 style={{color: '#00f5ff', fontSize: '20px', fontWeight: 800, marginBottom: '8px'}}>
+              Get Early Access to Our App
+            </h3>
+            <p style={{color: '#9CA3AF', fontSize: '14px', marginBottom: '20px', lineHeight: 1.6}}>
+              Be among the first to download EduDash Pro from Google Play Store. Enter your Gmail address to join our early access list.
+            </p>
+            
+            {earlyAccessSubmitted ? (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '2px solid #10b981',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'center'
+              }}>
+                <span style={{fontSize: '24px', marginBottom: '8px', display: 'block'}}>🎉</span>
+                <p style={{color: '#10b981', fontWeight: 700, margin: 0}}>You're on the list!</p>
+                <p style={{color: '#6ee7b7', fontSize: '13px', marginTop: '4px'}}>We'll email you when the app is ready.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleEarlyAccessSubmit} style={{display: 'flex', gap: '12px', flexDirection: 'column'}}>
+                <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                  <input
+                    type="email"
+                    placeholder="your.email@gmail.com"
+                    value={earlyAccessEmail}
+                    onChange={(e) => setEarlyAccessEmail(e.target.value)}
+                    required
+                    style={{
+                      flex: 1,
+                      minWidth: '200px',
+                      padding: '14px 16px',
+                      borderRadius: '10px',
+                      border: '2px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(0,0,0,0.3)',
+                      color: '#fff',
+                      fontSize: '15px',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={earlyAccessSubmitting}
+                    style={{
+                      padding: '14px 28px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #00f5ff 0%, #7c3aed 100%)',
+                      color: '#fff',
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      cursor: earlyAccessSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: earlyAccessSubmitting ? 0.7 : 1,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {earlyAccessSubmitting ? 'Joining...' : 'Get Early Access →'}
+                  </button>
+                </div>
+                {earlyAccessError && (
+                  <p style={{color: '#ef4444', fontSize: '13px', margin: 0}}>{earlyAccessError}</p>
+                )}
+                <p style={{color: '#6B7280', fontSize: '12px', margin: '4px 0 0'}}>
+                  🔒 We'll only use this to notify you about app availability.
+                </p>
+              </form>
+            )}
           </div>
+          
           <div className="heroCtas">
-            <Link href="/sign-in" className="btn btnCyan" style={{height: '48px', padding: '0 32px', fontSize: '16px', borderRadius: '12px', fontWeight: 700}}>Start Free Trial →</Link>
+            <Link href="/sign-in" className="btn btnCyan" style={{height: '48px', padding: '0 32px', fontSize: '16px', borderRadius: '12px', fontWeight: 700}}>Sign In →</Link>
           </div>
         </div>
       </section>
