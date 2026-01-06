@@ -1,6 +1,8 @@
 /**
  * Registration Step Components - Barrel Export
  */
+export { OrganizationStep } from './OrganizationStep';
+export type { Organization } from './OrganizationStep';
 export { RegionStep } from './RegionStep';
 export { PersonalStep } from './PersonalStep';
 export { MembershipStep } from './MembershipStep';

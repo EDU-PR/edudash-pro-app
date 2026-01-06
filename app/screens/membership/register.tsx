@@ -23,6 +23,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import {
+  OrganizationStep,
   RegionStep,
   PersonalStep,
   MembershipStep,
@@ -33,26 +34,31 @@ import {
   type RegistrationStep as StepType,
   type RegistrationData,
   type RegionConfig,
+  type Organization,
 } from '@/components/membership/registration';
 
-// Soil Of Africa organization ID
-const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
+// Default organization ID (Soil Of Africa) - used as fallback if no org selected
+const DEFAULT_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 
 export default function MemberRegistrationScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ inviteCode?: string }>();
+  const params = useLocalSearchParams<{ inviteCode?: string; orgId?: string }>();
   
-  const [currentStep, setCurrentStep] = useState<StepType>('region');
+  const [currentStep, setCurrentStep] = useState<StepType>('organization');
   const [formData, setFormData] = useState<RegistrationData>(initialRegistrationData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedMemberNumber, setGeneratedMemberNumber] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteRole, setInviteRole] = useState<string | null>(null);
   const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
+  const [lockedOrganization, setLockedOrganization] = useState<Organization | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Handle invite code from URL params - fetch details including role
+  // Get the target organization ID (from form data or fallback)
+  const targetOrgId = formData.organization_id || DEFAULT_ORG_ID;
+
+  // Handle invite code from URL params - fetch details including role and organization
   useEffect(() => {
     async function fetchInviteDetails() {
       if (!params?.inviteCode) return;
@@ -64,7 +70,7 @@ export default function MemberRegistrationScreen() {
         const supabase = assertSupabase();
         const { data: invite } = await supabase
           .from('join_requests')
-          .select('requested_role, organizations(name)')
+          .select('requested_role, organization_id, organizations(id, name, slug, logo_url, description)')
           .eq('invite_code', params.inviteCode.toUpperCase())
           .eq('status', 'pending')
           .single();
@@ -72,6 +78,34 @@ export default function MemberRegistrationScreen() {
         if (invite) {
           const role = invite.requested_role || 'youth_member';
           setInviteRole(role);
+          
+          // Extract organization from invite code - this locks the org selection
+          const org = invite.organizations as any;
+          if (org?.id) {
+            const lockedOrg: Organization = {
+              id: org.id,
+              name: org.name || 'Unknown Organization',
+              slug: org.slug,
+              logo_url: org.logo_url,
+              description: org.description,
+            };
+            setLockedOrganization(lockedOrg);
+            setFormData(prev => ({
+              ...prev,
+              organization_id: org.id,
+              organization_name: org.name || 'Unknown Organization',
+            }));
+            setInviteOrgName(org.name);
+            // Skip organization step since it's locked
+            setCurrentStep('region');
+          } else if (invite.organization_id) {
+            // Fallback: use organization_id directly if organizations join failed
+            setFormData(prev => ({
+              ...prev,
+              organization_id: invite.organization_id,
+            }));
+            setCurrentStep('region');
+          }
           // Map requested_role to member_type
           // Comprehensive mapping for all SOA roles that can be invited
           const memberTypeMap: Record<string, string> = {
@@ -122,11 +156,6 @@ export default function MemberRegistrationScreen() {
             ...prev, 
             member_type: (memberTypeMap[role] || role) as any,  // Fallback to role itself if not in map
           }));
-          
-          const org = invite.organizations as any;
-          if (org?.name) {
-            setInviteOrgName(org.name);
-          }
         }
       } catch (e) {
         console.error('Error fetching invite details:', e);
@@ -143,6 +172,18 @@ export default function MemberRegistrationScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const selectOrganization = (org: Organization) => {
+    setFormData(prev => ({
+      ...prev,
+      organization_id: org.id,
+      organization_name: org.name,
+      // Clear region when org changes (regions are org-specific)
+      region_id: '',
+      region_name: '',
+      region_code: '',
+    }));
+  };
+
   const selectRegion = (region: RegionConfig) => {
     setFormData(prev => ({
       ...prev,
@@ -154,6 +195,12 @@ export default function MemberRegistrationScreen() {
 
   const validateStep = (): boolean => {
     switch (currentStep) {
+      case 'organization':
+        if (!formData.organization_id) {
+          Alert.alert('Required', 'Please select an organization to join');
+          return false;
+        }
+        return true;
       case 'region':
         if (!formData.region_id) {
           Alert.alert('Required', 'Please select your region');
@@ -334,7 +381,7 @@ export default function MemberRegistrationScreen() {
             const { count } = await supabase
               .from('organization_members')
               .select('id', { count: 'exact', head: true })
-              .eq('organization_id', SOIL_OF_AFRICA_ORG_ID)
+              .eq('organization_id', targetOrgId)
               .eq('member_number', memberNum);
             
             if (count === 0) {
@@ -353,7 +400,7 @@ export default function MemberRegistrationScreen() {
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
         
         console.log('[Register] Creating membership with RPC:', {
-          org_id: SOIL_OF_AFRICA_ORG_ID,
+          org_id: targetOrgId,
           user_id: user.id,
           user_email: user.email,
           member_number: memberNumber,
@@ -363,7 +410,7 @@ export default function MemberRegistrationScreen() {
         
         const { data: rpcResult, error: rpcError } = await supabase
           .rpc('register_organization_member', {
-            p_organization_id: SOIL_OF_AFRICA_ORG_ID,
+            p_organization_id: targetOrgId,
             p_user_id: user.id,
             p_region_id: formData.region_id || null,
             p_member_number: memberNumber,
@@ -421,7 +468,7 @@ export default function MemberRegistrationScreen() {
         const { error: profileUpdateError } = await supabase
           .from('profiles')
           .update({ 
-            organization_id: SOIL_OF_AFRICA_ORG_ID,
+            organization_id: targetOrgId,
             first_name: formData.first_name,
             last_name: formData.last_name,
           })
@@ -480,7 +527,7 @@ export default function MemberRegistrationScreen() {
             const { count } = await supabase
               .from('organization_members')
               .select('id', { count: 'exact', head: true })
-              .eq('organization_id', SOIL_OF_AFRICA_ORG_ID)
+              .eq('organization_id', targetOrgId)
               .eq('member_number', memberNum);
             
             if (count === 0) {
@@ -497,7 +544,7 @@ export default function MemberRegistrationScreen() {
         // Use RPC for existing users too (handles all auth states)
         const { data: existingRpcResult, error: existingRpcError } = await supabase
           .rpc('register_organization_member', {
-            p_organization_id: SOIL_OF_AFRICA_ORG_ID,
+            p_organization_id: targetOrgId,
             p_user_id: user.id,
             p_region_id: formData.region_id || null,
             p_member_number: existingMemberNumber,
@@ -572,12 +619,23 @@ export default function MemberRegistrationScreen() {
 
   const renderCurrentStep = () => {
     switch (currentStep) {
+      case 'organization':
+        return (
+          <OrganizationStep
+            selectedOrgId={formData.organization_id}
+            onSelectOrganization={selectOrganization}
+            theme={theme}
+            lockedOrganization={lockedOrganization}
+          />
+        );
       case 'region':
         return (
           <RegionStep
             data={formData}
             onSelectRegion={selectRegion}
             theme={theme}
+            organizationId={formData.organization_id}
+            organizationName={formData.organization_name}
           />
         );
       case 'personal':
@@ -595,7 +653,7 @@ export default function MemberRegistrationScreen() {
             onUpdate={updateField}
             theme={theme}
             inviteRole={inviteRole}
-            inviteOrgName={inviteOrgName}
+            inviteOrgName={inviteOrgName || formData.organization_name}
           />
         );
       case 'payment':
@@ -619,12 +677,7 @@ export default function MemberRegistrationScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Stack.Screen
-        options={{
-          title: currentStep === 'complete' ? 'Registration Complete' : 'Join Soil of Africa',
-          headerLeft: currentStep === 'complete' ? () => null : undefined,
-        }}
-      />
+      <Stack.Screen\n        options={{\n          title: currentStep === 'complete' \n            ? 'Registration Complete' \n            : formData.organization_name \n              ? `Join ${formData.organization_name}`\n              : 'Join Organization',\n          headerLeft: currentStep === 'complete' ? () => null : undefined,\n        }}\n      />
 
       {currentStep !== 'complete' && (
         <>

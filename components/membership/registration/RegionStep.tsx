@@ -1,7 +1,7 @@
 /**
  * Region Selection Step
- * First step of registration - selecting province
- * Now fetches real data from database
+ * Second step of registration - selecting province/region
+ * Now fetches real data from database based on selected organization
  */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
@@ -14,10 +14,14 @@ interface RegionStepProps {
   data: RegistrationData;
   onSelectRegion: (region: RegionConfig) => void;
   theme: any;
+  /** The organization ID to fetch regions for */
+  organizationId: string;
+  /** Organization name to display in UI */
+  organizationName?: string;
 }
 
-export function RegionStep({ data, onSelectRegion, theme }: RegionStepProps) {
-  const { regions, loading, error } = useOrganizationRegions({ soilOfAfrica: true });
+export function RegionStep({ data, onSelectRegion, theme, organizationId, organizationName }: RegionStepProps) {
+  const { regions, loading, error } = useOrganizationRegions({ organizationId });
 
   // Transform database regions to RegionConfig format
   const regionConfigs: RegionConfig[] = regions.map(r => ({
@@ -53,7 +57,10 @@ export function RegionStep({ data, onSelectRegion, theme }: RegionStepProps) {
     <View style={styles.stepContent}>
       <Text style={[styles.stepTitle, { color: theme.text }]}>Select Your Region</Text>
       <Text style={[styles.stepSubtitle, { color: theme.textSecondary }]}>
-        Choose the province where you'll be based
+        {organizationName 
+          ? `Choose your region within ${organizationName}`
+          : 'Choose the province where you\'ll be based'
+        }
       </Text>
       
       <View style={styles.regionGrid}>
