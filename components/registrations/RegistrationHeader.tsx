@@ -25,6 +25,8 @@ interface RegistrationHeaderProps {
   syncing: boolean;
   onSync: () => void;
   topInset: number;
+  /** Whether this school uses EduSite sync - if false, sync button is hidden */
+  usesEdusiteSync?: boolean;
 }
 
 export const RegistrationHeader: React.FC<RegistrationHeaderProps> = ({
@@ -34,6 +36,7 @@ export const RegistrationHeader: React.FC<RegistrationHeaderProps> = ({
   syncing,
   onSync,
   topInset,
+  usesEdusiteSync = true, // Default true for backward compatibility
 }) => {
   const { isDark } = useTheme();
 
@@ -54,20 +57,22 @@ export const RegistrationHeader: React.FC<RegistrationHeaderProps> = ({
           <Text style={styles.headerTitle}>Registration Requests</Text>
           <Text style={styles.headerSubtitle}>Review and approve parent applications</Text>
         </View>
-        <TouchableOpacity 
-          style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
-          onPress={onSync}
-          disabled={syncing}
-        >
-          {syncing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="sync" size={18} color="#fff" />
-              <Text style={styles.syncButtonText}>Sync</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {usesEdusiteSync && (
+          <TouchableOpacity 
+            style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+            onPress={onSync}
+            disabled={syncing}
+          >
+            {syncing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="sync" size={18} color="#fff" />
+                <Text style={styles.syncButtonText}>Sync</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
       
       {/* Stats Row */}

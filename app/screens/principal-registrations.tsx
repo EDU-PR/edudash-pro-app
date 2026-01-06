@@ -59,6 +59,7 @@ export default function PrincipalRegistrationsScreen() {
     handleReject,
     handleVerifyPayment,
     canApprove,
+    usesEdusiteSync,
     pendingCount,
     approvedCount,
     rejectedCount,
@@ -112,6 +113,7 @@ export default function PrincipalRegistrationsScreen() {
           syncing={false}
           onSync={() => {}}
           topInset={insets.top}
+          usesEdusiteSync={usesEdusiteSync}
         />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -135,6 +137,7 @@ export default function PrincipalRegistrationsScreen() {
           syncing={syncing}
           onSync={handleSyncWithEduSite}
           topInset={insets.top}
+          usesEdusiteSync={usesEdusiteSync}
         />
         <View style={styles.centerContainer}>
           <Ionicons name="warning" size={48} color="#EF4444" />
@@ -165,6 +168,7 @@ export default function PrincipalRegistrationsScreen() {
         syncing={syncing}
         onSync={handleSyncWithEduSite}
         topInset={insets.top}
+        usesEdusiteSync={usesEdusiteSync}
       />
 
       {/* Search & Filter */}

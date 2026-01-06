@@ -94,6 +94,8 @@ export interface UseRegistrationsReturn {
   handleVerifyPayment: (registration: Registration, verify: boolean) => void;
   // Helpers
   canApprove: (registration: Registration) => boolean;
+  // Feature flags
+  usesEdusiteSync: boolean;
   // Stats
   pendingCount: number;
   approvedCount: number;
@@ -103,6 +105,15 @@ export interface UseRegistrationsReturn {
 export function useRegistrations(): UseRegistrationsReturn {
   const { user, profile } = useAuth();
   const organizationId = profile?.preschool_id || profile?.organization_id;
+
+  // Schools that DON'T use EduSite sync (EduDash Pro platform schools)
+  const EDUDASH_COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+  const EDUDASH_MAIN_SCHOOL_ID = '00000000-0000-0000-0000-000000000003';
+  
+  // Check if this school uses EduSite sync
+  const usesEdusiteSync = organizationId && 
+    organizationId !== EDUDASH_COMMUNITY_SCHOOL_ID && 
+    organizationId !== EDUDASH_MAIN_SCHOOL_ID;
 
   // State
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -602,6 +613,8 @@ export function useRegistrations(): UseRegistrationsReturn {
     handleVerifyPayment,
     // Helpers
     canApprove,
+    // Feature flags
+    usesEdusiteSync,
     // Stats
     pendingCount,
     approvedCount,
