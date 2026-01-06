@@ -81,20 +81,20 @@ export default function YouthPresidentDashboard() {
       
       if (!orgId) return;
 
-      // Fetch youth wing members count
+      // Fetch youth wing members count - include all members for the wing president to manage
+      // This includes youth members, coordinators, and members assigned to the youth wing
       const { data: members, error: membersError } = await supabase
         .from('organization_members')
-        .select('id, created_at, birth_year, member_type')
+        .select('id, created_at, birth_year, member_type, wing')
         .eq('organization_id', orgId)
-        .in('member_type', ['youth', 'youth_member', 'youth_coordinator']);
+        .or('wing.eq.youth,member_type.ilike.youth%,member_type.eq.learner,member_type.eq.regional_manager');
 
-      // Fetch pending membership approvals for youth wing
+      // Fetch pending membership approvals for the organization
       const { data: pendingApprovals } = await supabase
         .from('organization_members')
         .select('id')
         .eq('organization_id', orgId)
-        .eq('membership_status', 'pending')
-        .in('member_type', ['youth', 'youth_member']);
+        .eq('membership_status', 'pending');
 
       // Fetch upcoming events
       const { data: events } = await supabase
@@ -142,12 +142,11 @@ export default function YouthPresidentDashboard() {
 
       setUpcomingEvents(events || []);
 
-      // Get recent members
+      // Get recent members (all types)
       const { data: recent } = await supabase
         .from('organization_members')
-        .select('id, first_name, last_name, created_at, region_id')
+        .select('id, first_name, last_name, created_at, region_id, member_type')
         .eq('organization_id', orgId)
-        .in('member_type', ['youth', 'youth_member'])
         .order('created_at', { ascending: false })
         .limit(5);
 

@@ -8,13 +8,33 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { OrganizationMember } from '@/components/membership/types';
 
-// Youth member types to filter by
-const YOUTH_MEMBER_TYPES = [
+// Member types visible in the youth/members dashboard
+// Include all member types that should be shown to the youth president
+const VISIBLE_MEMBER_TYPES = [
+  // Youth wing specific
   'youth_member',
   'youth_president',
   'youth_deputy',
   'youth_secretary',
   'youth_treasurer',
+  'youth_coordinator',
+  'youth_facilitator',
+  'youth_mentor',
+  // General members
+  'learner',
+  'member',
+  'volunteer',
+  'facilitator',
+  'mentor',
+  // Regional/administrative
+  'regional_manager',
+  'regional_coordinator',
+  'provincial_manager',
+  'provincial_coordinator',
+  'branch_manager',
+  // Staff
+  'staff',
+  'admin',
 ];
 
 type FilterType = 'all' | 'active' | 'pending' | 'suspended';
@@ -79,7 +99,7 @@ export function useYouthMembers(options: UseYouthMembersOptions = {}): UseYouthM
           updated_at
         `)
         .eq('organization_id', orgId)
-        .in('member_type', YOUTH_MEMBER_TYPES)
+        .in('member_type', VISIBLE_MEMBER_TYPES)
         .neq('membership_status', 'revoked')  // Always exclude revoked/removed members
         .order('created_at', { ascending: false });
 
