@@ -24,6 +24,7 @@ import {
   BookMarked,
   Megaphone,
   Calendar as CalendarIcon,
+  Clock, // For aftercare
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -72,7 +73,12 @@ export function PrincipalShell({
     return unreadCount > 0 ? unreadCount : 0;
   }, [unreadCount]);
 
-  const nav = [
+  // EduDash Pro Community School ID (aftercare program)
+  const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+  const isAftercareDashboard = preschoolId === COMMUNITY_SCHOOL_ID;
+
+  // Base navigation items
+  const baseNav = [
     { href: '/dashboard/principal', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/principal/students', label: 'Students', icon: Users },
     { href: '/dashboard/principal/teachers', label: 'Teachers', icon: School },
@@ -86,6 +92,20 @@ export function PrincipalShell({
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
     { href: '/dashboard/principal/settings', label: 'Settings', icon: Settings },
   ];
+
+  // Add Aftercare link for EduDash Pro Community School
+  const nav = isAftercareDashboard 
+    ? [
+        { href: '/dashboard/principal', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/admin/aftercare', label: 'Aftercare', icon: Clock }, // Primary for this school
+        { href: '/dashboard/principal/students', label: 'Students', icon: Users },
+        { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
+        { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },
+        { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
+        { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
+        { href: '/dashboard/principal/settings', label: 'Settings', icon: Settings },
+      ]
+    : baseNav;
 
   // Check if we should show back button (not on dashboard home)
   const showBackButton = pathname !== '/dashboard/principal';
