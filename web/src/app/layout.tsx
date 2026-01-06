@@ -3,7 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import "./globals.css";
 import { PWARegister } from "@/components/PWARegister";
-import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+// PWA Install prompts disabled - not actively developing PWA
+// import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdateChecker } from "@/components/PWAUpdateChecker";
 import { DeploymentNotificationProvider } from "@/components/DeploymentNotificationProvider";
 import { PWASplashScreen } from "@/components/PWASplashScreen";
@@ -77,7 +78,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <PWASplashScreen />
         <PWARegister />
-        <PWAInstallPrompt />
+        {/* PWAInstallPrompt disabled - not actively developing PWA */}
         <PWAUpdateChecker />
         <DeploymentNotificationProvider />
         <PushNotificationSubscribe />
