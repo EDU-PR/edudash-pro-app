@@ -299,8 +299,21 @@ export default function MemberRegistrationScreen() {
             return;
           }
           
+          // Validate the user ID is a proper UUID
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          if (!signUpData.user.id || !uuidRegex.test(signUpData.user.id)) {
+            console.error('[Register] Invalid user ID returned from signUp:', signUpData.user.id);
+            Alert.alert('Error', 'Invalid user ID returned. Please try again.');
+            setIsSubmitting(false);
+            return;
+          }
+          
           user = signUpData.user;
           console.log('[Register] User created successfully:', user.id);
+          
+          // Small delay to ensure user is fully committed to auth.users
+          // This helps prevent foreign key constraint violations
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
         
         // IMPORTANT: Create membership record BEFORE checking session
@@ -338,6 +351,16 @@ export default function MemberRegistrationScreen() {
         // Create organization member record using RPC (handles both anon and authenticated users)
         // This uses SECURITY DEFINER to bypass RLS when session is null (email not confirmed)
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
+        
+        console.log('[Register] Creating membership with RPC:', {
+          org_id: SOIL_OF_AFRICA_ORG_ID,
+          user_id: user.id,
+          user_email: user.email,
+          member_number: memberNumber,
+          member_type: formData.member_type,
+          has_session: !!signUpData.session,
+        });
+        
         const { data: rpcResult, error: rpcError } = await supabase
           .rpc('register_organization_member', {
             p_organization_id: SOIL_OF_AFRICA_ORG_ID,
@@ -365,6 +388,21 @@ export default function MemberRegistrationScreen() {
         // Check RPC result
         if (!rpcResult?.success) {
           console.error('[Register] RPC returned error:', rpcResult);
+          
+          // Handle specific error codes
+          if (rpcResult?.code === 'USER_NOT_FOUND' || rpcResult?.code === 'NULL_USER_ID') {
+            Alert.alert(
+              'Account Creation Issue',
+              'Your account is being set up. Please wait a moment and try again, or check your email for a confirmation link.',
+              [
+                { text: 'Try Again', onPress: () => setIsSubmitting(false) },
+                { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') }
+              ]
+            );
+            setIsSubmitting(false);
+            return;
+          }
+          
           throw new Error(rpcResult?.error || 'Failed to register member');
         }
         
@@ -483,6 +521,18 @@ export default function MemberRegistrationScreen() {
         
         if (!existingRpcResult?.success) {
           console.error('[Register] RPC returned error:', existingRpcResult);
+          
+          // Handle specific error codes
+          if (existingRpcResult?.code === 'USER_NOT_FOUND' || existingRpcResult?.code === 'NULL_USER_ID') {
+            Alert.alert(
+              'Account Issue',
+              'There was an issue with your account. Please try signing out and signing back in.',
+              [{ text: 'OK' }]
+            );
+            setIsSubmitting(false);
+            return;
+          }
+          
           throw new Error(existingRpcResult?.error || 'Failed to register member');
         }
         

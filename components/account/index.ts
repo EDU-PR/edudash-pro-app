@@ -13,3 +13,9 @@ export { ThemeSettingsModal } from './ThemeSettingsModal';
 export { AccountActions } from './AccountActions';
 export { ProfileSwitcher } from './ProfileSwitcher';
 export type { StoredAccount } from './ProfileSwitcher';
+export { 
+  OrganizationSwitcher, 
+  getActiveOrganization, 
+  setActiveOrganization 
+} from './OrganizationSwitcher';
+export type { UserOrganization, OrganizationSwitcherProps } from './OrganizationSwitcher';
