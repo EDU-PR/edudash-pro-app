@@ -61,6 +61,12 @@ interface Registration {
   created_at: string;
 }
 
+// Schools that use EduSitePro external sync
+// EduDash Pro Community School (00000000-0000-0000-0000-000000000001) does NOT use EduSite sync
+// Young Eagles and other schools may use it
+const EDUDASH_COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+const EDUDASH_MAIN_SCHOOL_ID = '00000000-0000-0000-0000-000000000003';
+
 export default function PrincipalRegistrationsPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -69,6 +75,11 @@ export default function PrincipalRegistrationsPage() {
   const { profile } = useUserProfile(userId);
   const preschoolId = profile?.preschoolId;
   const organizationId = profile?.organizationId;
+  
+  // Check if this school uses EduSite sync (exclude EduDash Pro schools)
+  const usesEdusiteSync = organizationId && 
+    organizationId !== EDUDASH_COMMUNITY_SCHOOL_ID && 
+    organizationId !== EDUDASH_MAIN_SCHOOL_ID;
   
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [filteredRegistrations, setFilteredRegistrations] = useState<Registration[]>([]);
@@ -382,28 +393,30 @@ export default function PrincipalRegistrationsPage() {
                 Review and approve registration requests from parents
               </p>
             </div>
-            <button
-              onClick={handleManualSync}
-              disabled={syncing}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                background: syncing ? '#374151' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: syncing ? 'not-allowed' : 'pointer',
-                opacity: syncing ? 0.6 : 1,
-                transition: 'all 0.2s'
-              }}
-            >
-              <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-              {syncing ? 'Syncing...' : 'Sync from EduSite'}
-            </button>
+            {usesEdusiteSync && (
+              <button
+                onClick={handleManualSync}
+                disabled={syncing}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  background: syncing ? '#374151' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: syncing ? 'not-allowed' : 'pointer',
+                  opacity: syncing ? 0.6 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+                {syncing ? 'Syncing...' : 'Sync from EduSite'}
+              </button>
+            )}
           </div>
         </div>
 
