@@ -61,6 +61,8 @@ export default function AftercarePage() {
   const [error, setError] = useState<string | null>(null);
   const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
   const [registrationsClosed, setRegistrationsClosed] = useState(false);
+  const [proofOfPayment, setProofOfPayment] = useState<File | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   // Fetch current registration count
   useEffect(() => {
@@ -100,9 +102,35 @@ export default function AftercarePage() {
     setError(null);
 
     const paymentRef = generatePaymentReference();
+    let proofOfPaymentUrl: string | null = null;
 
     try {
       const supabase = createClient();
+      
+      // Upload proof of payment if provided
+      if (proofOfPayment) {
+        setUploadingProof(true);
+        const fileExt = proofOfPayment.name.split('.').pop();
+        const fileName = `${paymentRef}-${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('aftercare-payments')
+          .upload(fileName, proofOfPayment, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          // Continue without proof - they can email it
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('aftercare-payments')
+            .getPublicUrl(fileName);
+          proofOfPaymentUrl = publicUrl;
+        }
+        setUploadingProof(false);
+      }
       
       // Create the registration record
       const { data, error: insertError } = await supabase
@@ -128,7 +156,8 @@ export default function AftercarePage() {
           registration_fee_original: 400.00,
           promotion_code: 'EARLYBIRD50',
           payment_reference: paymentRef,
-          status: 'pending_payment',
+          status: proofOfPaymentUrl ? 'paid' : 'pending_payment',
+          proof_of_payment_url: proofOfPaymentUrl,
         })
         .select()
         .single();
@@ -583,6 +612,69 @@ export default function AftercarePage() {
               </div>
             </div>
 
+            {/* Proof of Payment Upload */}
+            <div style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '2px solid rgba(16, 185, 129, 0.3)'}}>
+              <h2 style={{color: '#10b981', fontSize: '18px', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span>📄</span> Proof of Payment (Optional)
+              </h2>
+              <p style={{color: '#9CA3AF', fontSize: '13px', marginBottom: '16px', lineHeight: 1.5}}>
+                Already paid? Upload your proof of payment now for faster processing. You can also email it to <strong>admin@edudashpro.org.za</strong> after registration.
+              </p>
+              
+              {/* Banking Details Preview */}
+              <div style={{background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px'}}>
+                <p style={{color: '#6ee7b7', fontSize: '12px', marginBottom: '8px', fontWeight: 600}}>💳 Banking Details:</p>
+                <p style={{color: '#9CA3AF', fontSize: '12px', lineHeight: 1.6}}>
+                  <strong>Capitec Bank</strong> • Acc: <strong>1053747152</strong> • Branch: <strong>450105</strong><br/>
+                  Reference: <strong style={{color: '#fbbf24'}}>{paymentReference || 'Complete form above'}</strong>
+                </p>
+              </div>
+
+              <div style={{border: '2px dashed rgba(16, 185, 129, 0.4)', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s'}}
+                onClick={() => document.getElementById('proofUpload')?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#10b981'; }}
+                onDragLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                  const file = e.dataTransfer.files[0];
+                  if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+                    setProofOfPayment(file);
+                  }
+                }}
+              >
+                <input
+                  id="proofUpload"
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(e) => setProofOfPayment(e.target.files?.[0] || null)}
+                  style={{display: 'none'}}
+                />
+                {proofOfPayment ? (
+                  <div>
+                    <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>✅</span>
+                    <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>{proofOfPayment.name}</p>
+                    <p style={{color: '#6ee7b7', fontSize: '12px', marginTop: '4px'}}>
+                      {(proofOfPayment.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setProofOfPayment(null); }}
+                      style={{marginTop: '8px', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'}}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>📤</span>
+                    <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>Click or drag to upload proof of payment</p>
+                    <p style={{color: '#6b7280', fontSize: '12px', marginTop: '4px'}}>PNG, JPG or PDF (max 5MB)</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* How did you hear */}
             <div style={{background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.1)'}}>
               <label style={{display: 'block', color: '#9CA3AF', fontSize: '13px', marginBottom: '6px'}}>How did you hear about us?</label>
@@ -638,7 +730,7 @@ export default function AftercarePage() {
                 boxShadow: formData.acceptTerms ? '0 4px 20px rgba(124, 58, 237, 0.4)' : 'none'
               }}
             >
-              {isSubmitting ? 'Submitting...' : 'Complete Registration →'}
+              {isSubmitting ? (uploadingProof ? '📤 Uploading proof...' : 'Submitting...') : (proofOfPayment ? '✅ Register & Upload Proof →' : 'Complete Registration →')}
             </button>
 
             {error && (

@@ -20,6 +20,9 @@ import {
   ShieldCheck,
   AlertCircle,
   Filter,
+  FileCheck,
+  Image,
+  ExternalLink,
 } from 'lucide-react';
 
 interface AfterCareRegistration {
@@ -46,6 +49,7 @@ interface AfterCareRegistration {
   payment_reference?: string;
   status: 'pending_payment' | 'paid' | 'enrolled' | 'cancelled' | 'waitlisted';
   payment_date?: string;
+  proof_of_payment_url?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -311,6 +315,7 @@ export default function AfterCareAdminPage() {
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Child</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Parent</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Reference</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>POP</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Status</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Date</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: '#6b7280' }}>Actions</th>
@@ -342,6 +347,31 @@ export default function AfterCareAdminPage() {
                         <code style={{ background: '#f3f4f6', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', color: '#374151' }}>
                           {reg.payment_reference || 'N/A'}
                         </code>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        {reg.proof_of_payment_url ? (
+                          <a 
+                            href={reg.proof_of_payment_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '4px', 
+                              padding: '4px 8px', 
+                              background: '#d1fae5', 
+                              color: '#065f46', 
+                              borderRadius: '4px', 
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <FileCheck size={14} /> View
+                          </a>
+                        ) : (
+                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: '16px' }}>
                         <span style={{ 
@@ -458,6 +488,41 @@ export default function AfterCareAdminPage() {
                   {selectedRegistration.payment_date && <p><strong>Paid:</strong> {new Date(selectedRegistration.payment_date).toLocaleDateString()}</p>}
                 </div>
               </div>
+
+              {/* Proof of Payment */}
+              {selectedRegistration.proof_of_payment_url && (
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase' }}>📄 Proof of Payment</h3>
+                  <div style={{ background: '#f0fdf4', border: '2px solid #10b981', padding: '16px', borderRadius: '8px' }}>
+                    {selectedRegistration.proof_of_payment_url.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                      <div>
+                        <img 
+                          src={selectedRegistration.proof_of_payment_url} 
+                          alt="Proof of Payment" 
+                          style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', marginBottom: '12px' }}
+                        />
+                        <a 
+                          href={selectedRegistration.proof_of_payment_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#10b981', color: '#fff', borderRadius: '6px', textDecoration: 'none', fontSize: '14px', fontWeight: 500 }}
+                        >
+                          <ExternalLink size={16} /> Open Full Size
+                        </a>
+                      </div>
+                    ) : (
+                      <a 
+                        href={selectedRegistration.proof_of_payment_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: '#10b981', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 600 }}
+                      >
+                        <FileCheck size={18} /> View/Download Proof of Payment (PDF)
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>

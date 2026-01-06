@@ -26,9 +26,12 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { assertSupabase } from '@/lib/supabase';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { assertSupabase } from '../../../lib/supabase';
+// Update the import path below to match your actual ThemeContext location.
+// For example, if ThemeContext is in 'contexts/ThemeContext.tsx' at project root:
+import { useTheme } from '../../../contexts/ThemeContext';
+// Or adjust as needed based on your file structure.
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface Student {
   id: string;
