@@ -260,6 +260,29 @@ function RootLayoutContent() {
         const host = typeof parsed.hostname === 'string' ? String(parsed.hostname) : '';
         const qp = (parsed.queryParams || {}) as Record<string, unknown>;
 
+        // Reconstruct path from hostname (for custom scheme URLs like edudashpro://reset-password)
+        const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
+        const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
+
+        // Handle reset-password deep links (warm start)
+        if (normalized === '/reset-password' || normalized.includes('reset-password')) {
+          console.log('[_layout] Password reset deep link (warm start)');
+          router.replace('/reset-password');
+          return;
+        }
+
+        // Handle auth-callback deep links (warm start)
+        if (normalized === '/auth-callback' || normalized.includes('auth-callback')) {
+          const search = new URLSearchParams();
+          for (const [k, v] of Object.entries(qp)) {
+            if (v === undefined || v === null) continue;
+            search.set(k, String(v));
+          }
+          console.log('[_layout] Auth callback deep link (warm start)');
+          router.replace(`/auth-callback${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
+          return;
+        }
+
         const flow = String(qp.flow || '').toLowerCase();
         if (flow === 'payment-return' || flow === 'payment-cancel') {
           const paymentPath = flow === 'payment-return' ? 'return' : 'cancel';
@@ -275,8 +298,6 @@ function RootLayoutContent() {
         }
 
         // Handle direct custom-scheme links (edudashpro://screens/payments/return?...).
-        const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
-        const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
         if (normalized.startsWith('/screens/payments/return') || normalized.startsWith('/screens/payments/cancel')) {
           const search = new URLSearchParams();
           for (const [k, v] of Object.entries(qp)) {

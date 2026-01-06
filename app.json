@@ -95,6 +95,36 @@
             "BROWSABLE",
             "DEFAULT"
           ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.edudashpro.org.za",
+              "pathPrefix": "/auth-callback"
+            },
+            {
+              "scheme": "https",
+              "host": "edudashpro.org.za",
+              "pathPrefix": "/auth-callback"
+            },
+            {
+              "scheme": "https",
+              "host": "www.edudashpro.org.za",
+              "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "edudashpro.org.za",
+              "pathPrefix": "/reset-password"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },

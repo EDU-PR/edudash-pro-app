@@ -76,6 +76,19 @@ export default function Index() {
               }
               const target = `${path}${search.toString() ? `?${search.toString()}` : ''}`;
               console.log('[Index] Detected initial deep link, routing to:', target);
+              
+              // Special handling for auth-related deep links
+              if (path === '/reset-password' || path.includes('reset-password')) {
+                console.log('[Index] Password reset deep link detected');
+                router.replace('/reset-password');
+                return;
+              }
+              if (path === '/auth-callback' || path.includes('auth-callback')) {
+                console.log('[Index] Auth callback deep link detected');
+                router.replace(`/auth-callback${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
+                return;
+              }
+              
               router.replace(target as `/${string}`);
               return;
             }
