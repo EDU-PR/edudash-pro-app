@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
 // EduDash Pro Community School ID
 const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+const EARLY_BIRD_LIMIT = 20; // First 20 registrations get 50% off
 
 type Grade = 'R' | '1' | '2' | '3' | '4' | '5' | '6' | '7';
 
@@ -58,6 +59,33 @@ export default function AftercarePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
+  const [registrationsClosed, setRegistrationsClosed] = useState(false);
+
+  // Fetch current registration count
+  useEffect(() => {
+    const fetchSpots = async () => {
+      try {
+        const supabase = createClient();
+        const { count, error } = await supabase
+          .from('aftercare_registrations')
+          .select('*', { count: 'exact', head: true })
+          .eq('preschool_id', COMMUNITY_SCHOOL_ID);
+        
+        if (!error && count !== null) {
+          const remaining = Math.max(0, EARLY_BIRD_LIMIT - count);
+          setSpotsRemaining(remaining);
+          if (remaining === 0) {
+            setRegistrationsClosed(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching spots:', err);
+        setSpotsRemaining(EARLY_BIRD_LIMIT); // Default to full if error
+      }
+    };
+    fetchSpots();
+  }, []);
 
   // Generate payment reference for use in submission
   const generatePaymentReference = () => {
@@ -311,6 +339,44 @@ export default function AftercarePage() {
         <p style={{color: 'rgba(255,255,255,0.9)', fontSize: '18px', marginBottom: '16px'}}>
           EduDash Pro Community School • Grade R to Grade 7
         </p>
+        
+        {/* Spots Remaining Counter */}
+        {spotsRemaining !== null && (
+          <div style={{
+            background: spotsRemaining <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+            border: `2px solid ${spotsRemaining <= 5 ? '#ef4444' : '#10b981'}`,
+            borderRadius: '12px',
+            padding: '16px 24px',
+            display: 'inline-block',
+            marginBottom: '16px'
+          }}>
+            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'}}>
+              <span style={{fontSize: '24px'}}>{spotsRemaining <= 5 ? '🔥' : '🎯'}</span>
+              <div>
+                <p style={{color: '#fff', fontSize: '14px', margin: 0, opacity: 0.9}}>Early Bird Spots Remaining</p>
+                <p style={{
+                  color: spotsRemaining <= 5 ? '#fca5a5' : '#6ee7b7',
+                  fontSize: '32px',
+                  fontWeight: 900,
+                  margin: 0,
+                  lineHeight: 1
+                }}>
+                  {spotsRemaining} <span style={{fontSize: '16px', fontWeight: 600}}>of {EARLY_BIRD_LIMIT}</span>
+                </p>
+              </div>
+            </div>
+            {spotsRemaining <= 5 && spotsRemaining > 0 && (
+              <p style={{color: '#fca5a5', fontSize: '12px', margin: '8px 0 0', fontWeight: 600}}>
+                ⚠️ Almost sold out! Register now to secure 50% discount
+              </p>
+            )}
+            {spotsRemaining === 0 && (
+              <p style={{color: '#fca5a5', fontSize: '12px', margin: '8px 0 0', fontWeight: 600}}>
+                Early bird spots filled! Standard rate: R400
+              </p>
+            )}
+          </div>
+        )}
         
         <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', flexWrap: 'wrap'}}>
           <div style={{background: 'rgba(255,255,255,0.15)', borderRadius: '8px', padding: '12px 20px', backdropFilter: 'blur(10px)'}}>
