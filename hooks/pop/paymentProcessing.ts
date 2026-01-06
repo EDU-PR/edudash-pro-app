@@ -77,7 +77,7 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
     // First try to find a fee matching the payment month
     let { data: fees } = await supabase
       .from('student_fees')
-      .select('id, due_date, amount')
+      .select('id, due_date, amount, final_amount')
       .eq('student_id', data.student_id)
       .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
       .gte('due_date', monthStart)
@@ -89,7 +89,7 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
       logger.info('[updateFeeStatus] No fee found for payment month, looking for oldest pending fee');
       const { data: oldestFees } = await supabase
         .from('student_fees')
-        .select('id, due_date, amount')
+        .select('id, due_date, amount, final_amount')
         .eq('student_id', data.student_id)
         .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
         .order('due_date', { ascending: true })
@@ -99,6 +99,8 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
     
     if (fees?.length) {
       const feeId = fees[0].id;
+      // Use final_amount if available, otherwise fall back to amount or payment_amount
+      const feeAmount = fees[0].final_amount || fees[0].amount || data.payment_amount || 0;
       logger.info(`[updateFeeStatus] Marking fee ${feeId} as paid for student ${data.student_id}`);
       
       const { error: updateError } = await supabase
@@ -106,6 +108,8 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
         .update({ 
           status: 'paid', 
           paid_date: new Date().toISOString().split('T')[0],
+          amount_paid: feeAmount,
+          amount_outstanding: 0,
         })
         .eq('id', feeId);
       
