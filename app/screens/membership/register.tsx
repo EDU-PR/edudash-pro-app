@@ -238,31 +238,70 @@ export default function MemberRegistrationScreen() {
         
         if (signUpError) {
           console.error('[Register] Sign up error:', signUpError);
-          if (signUpError.message.includes('already registered')) {
-            Alert.alert(
-              'Account Exists',
-              'An account with this email already exists. Would you like to sign in instead?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                  text: 'Sign In', 
-                  onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(formData.email)}`)
-                }
-              ]
-            );
+          console.error('[Register] Error message:', signUpError.message);
+          console.error('[Register] Error code:', signUpError.status);
+          
+          // Check various "already exists" error patterns
+          const errorMsg = signUpError.message?.toLowerCase() || '';
+          const isAlreadyRegistered = 
+            errorMsg.includes('already registered') ||
+            errorMsg.includes('already been registered') ||
+            errorMsg.includes('user already exists') ||
+            errorMsg.includes('email already') ||
+            signUpError.status === 400;
+            
+          if (isAlreadyRegistered) {
+            // Try to sign in with the provided credentials
+            console.log('[Register] User already exists, attempting sign in...');
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              email: formData.email,
+              password: formData.password,
+            });
+            
+            if (signInError) {
+              console.error('[Register] Sign in failed:', signInError);
+              Alert.alert(
+                'Account Exists',
+                'An account with this email already exists but the password doesn\'t match. Please sign in with your existing password to add your Soil of Africa membership.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Sign In', 
+                    onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(formData.email)}&returnTo=/screens/membership/register`)
+                  }
+                ]
+              );
+              setIsSubmitting(false);
+              return;
+            }
+            
+            // Sign in successful! Continue with membership creation
+            if (signInData.user) {
+              console.log('[Register] Sign in successful, continuing with membership creation');
+              user = signInData.user;
+              isNewSignup = false; // This is an existing user adding membership
+              // Don't return - fall through to create membership
+            } else {
+              Alert.alert('Error', 'Sign in succeeded but no user returned. Please try again.');
+              setIsSubmitting(false);
+              return;
+            }
           } else {
-            Alert.alert('Sign Up Failed', signUpError.message);
+            Alert.alert('Sign Up Failed', signUpError.message || 'Unable to create account. Please try again.');
+            setIsSubmitting(false);
+            return;
           }
-          return;
+        } else {
+          // Sign up succeeded
+          if (!signUpData.user) {
+            Alert.alert('Error', 'Failed to create account. Please try again.');
+            setIsSubmitting(false);
+            return;
+          }
+          
+          user = signUpData.user;
+          console.log('[Register] User created successfully:', user.id);
         }
-        
-        if (!signUpData.user) {
-          Alert.alert('Error', 'Failed to create account. Please try again.');
-          return;
-        }
-        
-        user = signUpData.user;
-        console.log('[Register] User created successfully:', user.id);
         
         // IMPORTANT: Create membership record BEFORE checking session
         // This ensures the user is added to the org even if email confirmation is required
@@ -469,9 +508,13 @@ export default function MemberRegistrationScreen() {
       }
 
       setCurrentStep('complete');
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Register] Registration error:', error);
-      Alert.alert('Error', 'Registration failed. Please try again.');
+      console.error('[Register] Error details:', JSON.stringify(error, null, 2));
+      
+      // Show more specific error message if available
+      const errorMessage = error?.message || error?.error || 'Registration failed. Please try again.';
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);
     }
