@@ -293,10 +293,11 @@ export default function MemberRegistrationScreen() {
         const memberNumber = await generateRandomMemberNumber();
         
         // Create organization member record (with pending status if email not confirmed)
+        // Use upsert to handle case where member already exists (retry after error)
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
-        const { error: memberError } = await supabase
+        const { data: memberResult, error: memberError } = await supabase
           .from('organization_members')
-          .insert({
+          .upsert({
             organization_id: SOIL_OF_AFRICA_ORG_ID,
             region_id: formData.region_id,
             user_id: user.id,
@@ -313,7 +314,9 @@ export default function MemberRegistrationScreen() {
             join_date: new Date().toISOString(),
             invite_code_used: inviteCode || null,
             joined_via: inviteCode ? 'invite_code' : 'direct_registration',
-          });
+          }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
+          .select('id, member_number')
+          .single();
 
         if (memberError) {
           console.error('[Register] Error creating member:', memberError);
