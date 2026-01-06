@@ -7,6 +7,8 @@ import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
 import 'katex/dist/katex.min.css';
 
+const EARLY_BIRD_LIMIT = 20; // First 20 aftercare registrations get 50% off
+
 export default function Home() {
   const router = useRouter();
   const { isPWA, isLoading: isPWALoading } = useIsPWA();
@@ -16,6 +18,26 @@ export default function Home() {
   const [earlyAccessSubmitting, setEarlyAccessSubmitting] = useState(false);
   const [earlyAccessSubmitted, setEarlyAccessSubmitted] = useState(false);
   const [earlyAccessError, setEarlyAccessError] = useState('');
+  const [aftercareSpotsRemaining, setAftercareSpotsRemaining] = useState<number | null>(null);
+
+  // Fetch aftercare spots remaining
+  useEffect(() => {
+    const fetchSpots = async () => {
+      try {
+        const supabase = createClient();
+        const { count } = await supabase
+          .from('aftercare_registrations')
+          .select('*', { count: 'exact', head: true });
+        
+        if (count !== null) {
+          setAftercareSpotsRemaining(Math.max(0, EARLY_BIRD_LIMIT - count));
+        }
+      } catch (err) {
+        setAftercareSpotsRemaining(EARLY_BIRD_LIMIT);
+      }
+    };
+    fetchSpots();
+  }, []);
 
   const handleEarlyAccessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -326,6 +348,39 @@ export default function Home() {
           }}>
             <span style={{color: '#fbbf24'}}>50%</span> Registration OFF
           </h2>
+          
+          {/* Spots Remaining Counter */}
+          {aftercareSpotsRemaining !== null && (
+            <div style={{
+              background: aftercareSpotsRemaining <= 5 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)',
+              border: `2px solid ${aftercareSpotsRemaining <= 5 ? '#ef4444' : '#10b981'}`,
+              borderRadius: '12px',
+              padding: '16px 32px',
+              display: 'inline-block',
+              marginBottom: '24px'
+            }}>
+              <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'}}>
+                <span style={{fontSize: '28px'}}>{aftercareSpotsRemaining <= 5 ? '🔥' : '🎯'}</span>
+                <div>
+                  <p style={{color: '#fff', fontSize: '14px', margin: 0, opacity: 0.9}}>Early Bird Spots Left</p>
+                  <p style={{
+                    color: aftercareSpotsRemaining <= 5 ? '#fca5a5' : '#6ee7b7',
+                    fontSize: '36px',
+                    fontWeight: 900,
+                    margin: 0,
+                    lineHeight: 1
+                  }}>
+                    {aftercareSpotsRemaining} <span style={{fontSize: '18px', fontWeight: 600}}>/ {EARLY_BIRD_LIMIT}</span>
+                  </p>
+                </div>
+              </div>
+              {aftercareSpotsRemaining <= 5 && aftercareSpotsRemaining > 0 && (
+                <p style={{color: '#fca5a5', fontSize: '13px', margin: '8px 0 0', fontWeight: 600}}>
+                  ⚠️ Almost sold out! Don't miss the 50% discount
+                </p>
+              )}
+            </div>
+          )}
           
           <div style={{
             display: 'flex',
