@@ -233,36 +233,46 @@ export default function JoinByCodeScreen() {
       const sequence = String((count || 0) + 1).padStart(5, '0');
       const memberNumber = `SOA-${orgInfo.region_code}-${year}-${sequence}`;
       
-      // Create organization member record
-      // Use upsert to handle case where member already exists
-      const { data: memberData, error: memberError } = await supabase
-        .from('organization_members')
-        .upsert({
-          organization_id: orgInfo.id,
-          region_id: orgInfo.region_id,
-          user_id: user.id,
-          member_number: memberNumber,
-          member_type: formData.member_type,
-          membership_status: 'active',
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
-          phone: formData.phone,
-          role: 'member',
-          join_date: new Date().toISOString(),
-        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
-        .select()
-        .single();
+      // Create organization member record using RPC (handles both anon and authenticated users)
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('register_organization_member', {
+          p_organization_id: orgInfo.id,
+          p_user_id: user.id,
+          p_region_id: orgInfo.region_id || null,
+          p_member_number: memberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: 'standard',
+          p_membership_status: 'active',
+          p_first_name: formData.first_name,
+          p_last_name: formData.last_name,
+          p_email: formData.email,
+          p_phone: formData.phone || null,
+          p_id_number: null,
+          p_role: 'member',
+          p_invite_code_used: inviteCode.toUpperCase(),
+          p_joined_via: 'invite_code',
+        });
 
-      if (memberError) {
-        console.error('[JoinByCode] Error creating member:', memberError);
-        if (memberError.code === '23505') {
-          Alert.alert('Already a Member', 'You are already a member of this organization.');
-        } else {
-          throw memberError;
-        }
+      if (rpcError) {
+        console.error('[JoinByCode] Error creating member via RPC:', rpcError);
+        throw rpcError;
+      }
+      
+      // Check RPC result
+      if (!rpcResult?.success) {
+        console.error('[JoinByCode] RPC returned error:', rpcResult);
+        throw new Error(rpcResult?.error || 'Failed to register member');
+      }
+      
+      console.log('[JoinByCode] Member registration result:', rpcResult);
+      
+      // Handle existing member case
+      if (rpcResult.action === 'existing') {
+        Alert.alert('Already a Member', 'You are already a member of this organization.');
         return;
       }
+      
+      const memberData = { id: rpcResult.id, member_number: rpcResult.member_number };
 
       // Update invite code usage count
       await supabase

@@ -331,48 +331,45 @@ function RegisterPageContent() {
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
-      // 5. Create membership record with correct UUIDs
-      // Use upsert to handle race conditions where duplicate check passed but insert fails
-      const { data: newMember, error: memberError } = await supabase
-        .from('organization_members')
-        .upsert({
-        user_id: authData.user?.id,
-        organization_id: SOA_ORGANIZATION_ID,
-        region_id: selectedRegion.id,
-        member_number: generatedMemberNumber,
-        member_type: formData.member_type,
-        membership_tier: formData.membership_tier,
-        membership_status: 'pending',
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email.toLowerCase().trim(),
-        phone: formData.phone,
-        id_number: formData.id_number || null,
-        date_of_birth: formData.date_of_birth || null,
-        physical_address: formData.address,
-        city: formData.city,
-        province: selectedRegion.name,
-        emergency_contact_name: formData.emergency_name,
-        emergency_contact_phone: formData.emergency_phone,
-          emergency_contact_relationship: formData.emergency_relationship || null,
-          notes: null,
-          joined_date: new Date().toISOString().split('T')[0],
-        }, { onConflict: 'user_id,organization_id', ignoreDuplicates: false })
-        .select('id, member_number')
-        .single();
+      // 5. Create membership record using RPC (handles both anon and authenticated users)
+      // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('register_organization_member', {
+          p_organization_id: SOA_ORGANIZATION_ID,
+          p_user_id: authData.user?.id,
+          p_region_id: selectedRegion.id || null,
+          p_member_number: generatedMemberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: formData.membership_tier,
+          p_membership_status: 'pending',
+          p_first_name: formData.first_name,
+          p_last_name: formData.last_name,
+          p_email: formData.email.toLowerCase().trim(),
+          p_phone: formData.phone || null,
+          p_id_number: formData.id_number || null,
+          p_role: 'member',
+          p_invite_code_used: null,
+          p_joined_via: 'direct_registration',
+        });
 
-      if (memberError) throw memberError;
-      if (!newMember?.id) throw new Error('Failed to create membership record');
+      if (rpcError) throw rpcError;
+      if (!rpcResult?.success) throw new Error(rpcResult?.error || 'Failed to create membership record');
+      
+      // Handle existing member case
+      if (rpcResult.action === 'existing') {
+        throw new Error('You are already a member. Please login to your existing account instead.');
+      }
 
-      // Use returned member_number (may be existing if upsert matched)
-      const finalMemberNumber = newMember.member_number || generatedMemberNumber;
+      // Use returned member_number
+      const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
+      const newMemberId = rpcResult.id;
 
       // 6. Create invoice (only if tier has a price)
       const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
       if (selectedTier && selectedTier.price > 0) {
         const { error: invoiceError } = await supabase.from('member_invoices').insert({
           organization_id: SOA_ORGANIZATION_ID,
-          member_id: newMember.id, // Use organization_members.id, not user_id
+          member_id: newMemberId, // Use organization_members.id, not user_id
           invoice_number: `INV-${new Date().toISOString().slice(0, 7).replace('-', '')}-${Math.floor(Math.random() * 10000).toString().padStart(5, '0')}`,
           description: `${selectedTier.name} Membership - Annual`,
           line_items: [{
