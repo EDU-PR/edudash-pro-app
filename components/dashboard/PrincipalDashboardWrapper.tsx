@@ -7,9 +7,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
-// EduDash Pro Community School is a K-12 school (not a preschool)
+// EduDash Pro schools use K-12 dashboard (not preschool)
 const K12_SCHOOL_IDS = [
   '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
+  '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
 ];
 
 interface PrincipalDashboardWrapperProps {
