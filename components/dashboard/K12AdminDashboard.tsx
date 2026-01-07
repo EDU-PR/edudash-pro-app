@@ -63,6 +63,13 @@ export function K12AdminDashboard() {
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const userName = profile?.first_name || user?.user_metadata?.first_name || 'Admin';
   
+  // EduDash Pro schools share aftercare data (Community School and Main School)
+  const EDUDASH_PRO_SCHOOL_IDS = [
+    '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
+    '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
+  ];
+  const isEdudashProSchool = organizationId && EDUDASH_PRO_SCHOOL_IDS.includes(organizationId);
+  
   // Get greeting based on time of day
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -78,11 +85,15 @@ export function K12AdminDashboard() {
       const supabase = assertSupabase();
       
       // Fetch aftercare registrations stats
-      const { data: registrations, error } = await supabase
+      // EduDash Pro schools query both Community and Main school registrations
+      const query = supabase
         .from('aftercare_registrations')
         .select('id, status, child_grade, child_first_name, child_last_name, created_at')
-        .eq('preschool_id', organizationId)
         .order('created_at', { ascending: false });
+      
+      const { data: registrations, error } = isEdudashProSchool
+        ? await query.in('preschool_id', EDUDASH_PRO_SCHOOL_IDS)
+        : await query.eq('preschool_id', organizationId);
       
       if (error && error.code !== '42P01') {
         console.error('[K12Dashboard] Error fetching registrations:', error);
