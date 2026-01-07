@@ -35,18 +35,39 @@ export function QuickCallModal({
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
   // Fetch contacts when modal opens
+  // PRIVACY FIX: Parents should only see teachers/principals, not other parents
   const fetchContacts = useCallback(async () => {
     if (!currentUserId || !preschoolId) return;
     
     setLoading(true);
     try {
+      // Get current user's role first
+      const { data: currentUser } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', currentUserId)
+        .single();
+
+      // Determine allowed roles based on current user's role
+      let allowedRoles: string[];
+      if (currentUser?.role === 'parent') {
+        // Parents can ONLY call teachers and principals (NOT other parents)
+        allowedRoles = ['teacher', 'principal', 'principal_admin', 'admin'];
+      } else if (currentUser?.role === 'teacher') {
+        // Teachers can call principals, other teachers, and parents
+        allowedRoles = ['teacher', 'parent', 'principal', 'principal_admin', 'admin'];
+      } else {
+        // Principals/admins can call everyone
+        allowedRoles = ['teacher', 'parent', 'principal', 'principal_admin', 'admin'];
+      }
+      
       // Fetch profiles from the same preschool (excluding current user)
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, role')
         .eq('preschool_id', preschoolId)
         .neq('id', currentUserId)
-        .in('role', ['teacher', 'parent', 'principal'])
+        .in('role', allowedRoles)
         .order('first_name', { ascending: true });
       
       if (error) throw error;

@@ -82,7 +82,19 @@ export function AddParticipantModal({
       const orgId = profile.organization_id || profile.preschool_id;
 
       // Fetch users from same organization
+      // PRIVACY FIX: Parents should only see teachers/principals, not other parents
       // Include their online presence status
+      
+      // Determine allowed roles based on current user's role
+      let roleFilter = '';
+      if (profile.role === 'parent') {
+        // Parents can ONLY call teachers and principals (NOT other parents)
+        roleFilter = `role.in.(teacher,principal,principal_admin,admin)`;
+      } else {
+        // Teachers and principals can call everyone
+        roleFilter = `role.in.(teacher,principal,parent,principal_admin,admin)`;
+      }
+      
       const { data, error: fetchError } = await supabase
         .from('profiles')
         .select(`
@@ -95,6 +107,7 @@ export function AddParticipantModal({
           last_seen_at
         `)
         .or(`organization_id.eq.${orgId},preschool_id.eq.${orgId}`)
+        .or(roleFilter) // Apply role-based filtering
         .neq('id', currentUserId) // Exclude self
         .order('first_name', { ascending: true });
 

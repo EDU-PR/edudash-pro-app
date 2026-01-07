@@ -51,7 +51,21 @@ export const useUpdatePOPStatus = () => {
       return { ...data, reviewer_name: undefined };
     },
     onSuccess: () => {
+      // Invalidate POP queries
       queryClient.invalidateQueries({ queryKey: POP_QUERY_KEYS.all });
+      
+      // Also invalidate parent payments queries to trigger dashboard refresh
+      // This ensures the parent dashboard updates when POP status changes
+      queryClient.invalidateQueries({ 
+        queryKey: ['parent-payments'],
+        exact: false 
+      });
+      
+      // Invalidate student fees queries as well since fee status may have changed
+      queryClient.invalidateQueries({ 
+        queryKey: ['student-fees'],
+        exact: false 
+      });
     },
   });
 };

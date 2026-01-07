@@ -42,6 +42,21 @@ function LandingInner() {
         const tokenHash = searchParams.get("token_hash") || searchParams.get("token") || "";
         const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
 
+        // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
+        let redirectTo = searchParams.get("redirect_to") || "";
+        let preservedInviteCode = inviteCode;
+        if (redirectTo) {
+          try {
+            const redirectUrl = new URL(decodeURIComponent(redirectTo));
+            const redirectCode = redirectUrl.searchParams.get("code") || redirectUrl.searchParams.get("invitationCode");
+            if (redirectCode && !preservedInviteCode) {
+              preservedInviteCode = redirectCode;
+            }
+          } catch (e) {
+            // Invalid URL, ignore
+          }
+        }
+
         // EMAIL CONFIRMATION
         if ((flow === "email-confirm" || searchParams.get("type") === "email" || searchParams.get("type") === "signup") && tokenHash) {
           setMessage("Verifying your email...");
@@ -55,9 +70,10 @@ function LandingInner() {
             setMessage("Email verified! Opening the app...");
             setStatus("done");
             
-            // Deep link to the native app for sign-in
+            // Deep link to the native app for sign-in (preserve invite code if present)
             setTimeout(() => {
-              tryOpenApp("(auth)/sign-in?emailVerified=true");
+              const inviteParam = preservedInviteCode ? `&invitationCode=${encodeURIComponent(preservedInviteCode)}` : "";
+              tryOpenApp(`(auth)/sign-in?emailVerified=true${inviteParam}`);
             }, 1500);
             return;
           } catch (e: any) {
@@ -70,19 +86,20 @@ function LandingInner() {
           }
         }
 
-        // PARENT INVITE
-        if (flow === "invite-parent" && inviteCode) {
+        // PARENT INVITE (use preserved invite code if available)
+        const finalInviteCode = preservedInviteCode || inviteCode;
+        if (flow === "invite-parent" && finalInviteCode) {
           setMessage("Opening the app for parent registration...");
           setStatus("ready");
-          tryOpenApp(`/screens/parent-registration?invitationCode=${encodeURIComponent(inviteCode)}`);
+          tryOpenApp(`/screens/parent-registration?invitationCode=${encodeURIComponent(finalInviteCode)}`);
           return;
         }
 
-        // STUDENT/MEMBER INVITE
-        if ((flow === "invite-student" || flow === "invite-member") && inviteCode) {
+        // STUDENT/MEMBER INVITE (use preserved invite code if available)
+        if ((flow === "invite-student" || flow === "invite-member") && finalInviteCode) {
           setMessage("Opening the app to join by code...");
           setStatus("ready");
-          tryOpenApp(`/screens/student-join-by-code?code=${encodeURIComponent(inviteCode)}`);
+          tryOpenApp(`/screens/student-join-by-code?code=${encodeURIComponent(finalInviteCode)}`);
           return;
         }
 

@@ -238,6 +238,30 @@ export function useParentPayments() {
       .on(
         'postgres_changes',
         {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'pop_uploads',
+          filter: `student_id=eq.${selectedChildId}`,
+        },
+        (payload) => {
+          console.log('[Payments] POP uploaded via realtime:', payload.new);
+          // Add new POP to local state
+          setPOPUploads((prev) => {
+            // Check if already exists to avoid duplicates
+            if (prev.some(u => u.id === payload.new.id)) {
+              return prev;
+            }
+            return [{ ...payload.new } as POPUpload, ...prev];
+          });
+          // Reload fees using ref to get fresh function
+          if (loadFeesRef.current) {
+            loadFeesRef.current();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
           event: 'UPDATE',
           schema: 'public',
           table: 'pop_uploads',
@@ -284,9 +308,17 @@ export function useParentPayments() {
   }, [selectedChildId]); // Removed loadFees dependency - using ref instead
 
   const onRefresh = useCallback(async () => {
+    console.log('[ParentPayments] Manual refresh triggered');
     setRefreshing(true);
-    await loadChildren();
-    await loadFees();
+    try {
+      await loadChildren();
+      await loadFees();
+      console.log('[ParentPayments] Manual refresh completed successfully');
+    } catch (error) {
+      console.error('[ParentPayments] Manual refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadChildren, loadFees]);
 
   // Computed values

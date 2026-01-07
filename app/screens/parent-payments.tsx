@@ -96,7 +96,11 @@ export default function ParentPaymentsScreen() {
   };
 
   const handleUploadSuccess = () => {
+    console.log('[ParentPayments] Upload success - reloading all payment data');
+    // Force a complete refresh of all payment data
     reloadFees();
+    // Also trigger a full refresh including children data
+    onRefresh();
   };
 
   if (loading) {
@@ -141,6 +145,7 @@ export default function ParentPaymentsScreen() {
           outstandingBalance={outstandingBalance} 
           upcomingFeesCount={upcomingFees.length}
           pendingVerificationCount={pendingVerificationFees.length}
+          upcomingFees={upcomingFees}
           theme={theme} 
         />
 

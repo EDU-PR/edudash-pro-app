@@ -137,10 +137,10 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
 
   // Wrap entire function in timeout to prevent hanging
   const overallTimeout = setTimeout(() => {
-    console.error('🚦 [ROUTE] routeAfterLogin overall timeout (15s) - forcing fallback navigation');
+    console.error('🚦 [ROUTE] routeAfterLogin overall timeout (8s) - forcing fallback navigation');
     clearNavigationLock(userId);
     router.replace('/profiles-gate');
-  }, 15000); // 15 second overall timeout
+  }, 8000); // 8 second overall timeout (reduced from 15s)
 
   try {
     // EARLY CHECK: Prevent concurrent navigation attempts using module-level lock
@@ -164,7 +164,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       // Add timeout protection to prevent infinite hanging
       const fetchPromise = fetchEnhancedUserProfile(userId);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
       );
       
       try {

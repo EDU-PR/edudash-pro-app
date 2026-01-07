@@ -113,6 +113,20 @@ function JoinLiveLessonInner({ studentId, classId, preschoolId }: JoinLiveLesson
     setLastRefresh(Date.now());
   };
 
+  // Polling control - refresh only when needed (increased from excessive polling)
+  useEffect(() => {
+    // Poll every 60 seconds instead of constantly
+    const pollInterval = setInterval(() => {
+      // Only poll if not currently in a call
+      if (!isInCall && Date.now() - lastRefresh > 60000) {
+        console.log('[JoinLiveLesson] Background refresh');
+        fetchLiveLessons(false);
+      }
+    }, 60000); // 60 seconds
+    
+    return () => clearInterval(pollInterval);
+  }, [isInCall, lastRefresh, fetchLiveLessons]);
+
   // Initial fetch and realtime subscription
   useEffect(() => {
     fetchLiveLessons(true);

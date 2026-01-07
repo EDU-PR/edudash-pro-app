@@ -250,7 +250,14 @@ export function PaymentUploadModal({
       // Show celebration modal instead of basic Alert
       setShowSuccessModal(true);
       resetForm();
-      onSuccess();
+      
+      // Add delay to ensure database propagation before calling onSuccess
+      // This allows realtime subscriptions to pick up the new record
+      // Increased to 1000ms for more reliable propagation
+      setTimeout(() => {
+        console.log('[PaymentUploadModal] Triggering onSuccess callback after upload');
+        onSuccess();
+      }, 1000);
     } catch (error: any) {
       Alert.alert('Upload Failed', error.message || 'Failed to upload proof of payment');
     } finally {

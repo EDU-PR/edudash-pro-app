@@ -66,12 +66,34 @@ export default function LandingHandler() {
     const run = async () => {
       try {
         const flow = (query.flow || query.type || '').toLowerCase();
+        
+        // Extract invite code from query params (may come from redirect_to after 303 redirect)
+        const inviteCode = query.code || query.invitationCode || '';
+        
+        // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
+        let redirectTo = query.redirect_to || '';
+        if (redirectTo && typeof redirectTo === 'string') {
+          try {
+            const redirectUrl = new URL(decodeURIComponent(redirectTo));
+            const redirectCode = redirectUrl.searchParams.get('code') || redirectUrl.searchParams.get('invitationCode');
+            if (redirectCode && !inviteCode) {
+              // Preserve invite code from redirect_to
+              const updatedQuery = { ...query, code: redirectCode };
+              // Re-run with updated query (will be handled in next render)
+              Object.assign(query, updatedQuery);
+            }
+          } catch (e) {
+            // Invalid URL, ignore
+          }
+        }
+        
         // Default target for the "Open app" CTA (can be overridden by flows below)
-        setOpenAppPath(query.token_hash ? '(auth)/sign-in?emailVerified=true' : '/');
+        const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
+        setOpenAppPath(query.token_hash ? `(auth)/sign-in?emailVerified=true${inviteParam}` : '/');
 
         // EMAIL CONFIRMATION: verify via token_hash if provided
         const tokenHash = query.token_hash || query.token || '';
-        if ((flow === 'email-confirm' || query.type === 'email') && tokenHash) {
+        if ((flow === 'email-confirm' || query.type === 'email' || query.type === 'signup') && tokenHash) {
           setMessage(t('landing.verifying_email', { defaultValue: 'Verifying your email...' }));
           try {
             const { data, error } = await assertSupabase().auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
@@ -111,21 +133,23 @@ export default function LandingHandler() {
             setMessage(t('landing.email_verified', { defaultValue: 'Email verified! Redirecting to sign in...' }));
             setStatus('done');
             
-            // On native, route to sign-in
+            // On native, route to sign-in (preserve invite code if present)
             if (!isWeb) {
               // Sign out user first so they need to sign in with verified credentials
               await assertSupabase().auth.signOut();
               // Small delay to show success message
               setTimeout(() => {
-                router.replace('/(auth)/sign-in' as `/${string}`);
+                const inviteParam = inviteCode ? `?invitationCode=${encodeURIComponent(inviteCode)}` : '';
+                router.replace(`/(auth)/sign-in${inviteParam}` as `/${string}`);
               }, 1500);
               return;
             }
             
-            // On web/PWA, sign out and redirect to sign-in page
+            // On web/PWA, sign out and redirect to sign-in page (preserve invite code)
             await assertSupabase().auth.signOut();
             setTimeout(() => {
-              window.location.href = '/sign-in?verified=true';
+              const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
+              window.location.href = `/sign-in?verified=true${inviteParam}`;
             }, 1000);
             return;
           } catch (e: any) {
@@ -142,8 +166,7 @@ export default function LandingHandler() {
           }
         }
 
-        // PARENT INVITE: code param
-        const inviteCode = query.code || query.invitationCode || '';
+        // PARENT INVITE: code param (use extracted inviteCode from above)
         if (flow === 'invite-parent' && inviteCode) {
           // Inside native app: navigate directly to parent registration with code
           if (!isWeb) {
@@ -208,12 +231,12 @@ setMessage(t('invite.opening_app', { defaultValue: 'Opening the app...' }));
         tryOpenApp('/');
       } catch (e: any) {
         setStatus('error');
-setMessage(e?.message || t('common.unexpected_error', { defaultValue: 'Something went wrong.' }));
+        setMessage(e?.message || t('common.unexpected_error', { defaultValue: 'Something went wrong.' }));
       }
     };
     run();
      
-  }, [query.token_hash, query.type, query.flow, query.code, query.invitationCode]);
+  }, [query.token_hash, query.type, query.flow, query.code, query.invitationCode, query.redirect_to]);
 
   if (!isWeb) {
     // On native, we keep a tiny loader, navigation happens above

@@ -267,20 +267,20 @@ The same infrastructure supports any membership-based organization:
 ## Phase 1.5: State-of-the-Art Parent Features (Q1 2026)
 
 ### 1.5.1 Weekly AI-Generated Learning Reports 🆕
-**Priority**: High | **Status**: Planned
+**Priority**: High | **Status**: ✅ COMPLETED (Jan 2026)
 
 Personalized weekly insights delivered to parents about their child's learning journey.
 
-| Feature | Description |
-|---------|-------------|
-| AI Report Generation | Claude generates personalized weekly summaries |
-| Progress Highlights | Key achievements and milestones reached |
-| Areas of Focus | Subjects/skills needing attention |
-| Teacher Notes Integration | Include teacher observations |
-| Comparative Analytics | Progress vs curriculum expectations |
-| Actionable Tips | Home activities to support learning |
-| Multi-Language Support | Reports in parent's preferred language |
-| Delivery Options | Push notification + in-app + email digest |
+| Feature | Description | Status |
+|---------|-------------|--------|
+| AI Report Generation | Claude generates personalized weekly summaries | ✅ Done |
+| Progress Highlights | Key achievements and milestones reached | ✅ Done |
+| Areas of Focus | Subjects/skills needing attention | ✅ Done |
+| Teacher Notes Integration | Include teacher observations | ✅ Done |
+| Comparative Analytics | Progress vs curriculum expectations | ✅ Done |
+| Actionable Tips | Home activities to support learning | ✅ Done |
+| Multi-Language Support | Reports in parent's preferred language | ⏳ Planned |
+| Delivery Options | Push notification + in-app + email digest | ✅ In-app done |
 
 **Implementation**:
 ```typescript
@@ -301,32 +301,52 @@ interface WeeklyLearningReport {
 }
 ```
 
-**Database Changes**:
-```sql
-CREATE TABLE weekly_learning_reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  parent_id UUID NOT NULL REFERENCES profiles(id),
-  preschool_id UUID NOT NULL REFERENCES preschools(id),
-  week_start DATE NOT NULL,
-  week_end DATE NOT NULL,
-  report_data JSONB NOT NULL,
-  ai_model TEXT DEFAULT 'claude-3-5-sonnet',
-  generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  viewed_at TIMESTAMPTZ,
-  sent_via JSONB DEFAULT '[]'::jsonb, -- ['push', 'email', 'in_app']
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(student_id, week_start)
-);
+**Database**: ✅ COMPLETED
+- Migration: `supabase/migrations/20260107000000_weekly_learning_reports.sql`
+- Table: `weekly_learning_reports` with RLS policies
+- Indexes: Parent, student, week range optimized
 
-CREATE INDEX idx_weekly_reports_parent ON weekly_learning_reports(parent_id);
-CREATE INDEX idx_weekly_reports_student_week ON weekly_learning_reports(student_id, week_start);
+**Edge Functions**: ✅ COMPLETED
+- `generate-weekly-report` - AI-powered report generation using Claude 3.5 Sonnet
+- `weekly-report-cron` - Automated weekly execution
+
+**Screens Created**:
+- ✅ `app/screens/parent-weekly-report.tsx` - Parent report viewer
+- ✅ `components/reports/WeeklyReportDetail.tsx` - Detailed report display
+- ✅ `components/reports/ProgressChart.tsx` - Visual progress charts
+- ✅ `components/reports/HomeActivityCard.tsx` - Activity suggestions
+
+**Cron Job Setup**: ⏳ PENDING
+- Automated generation every Sunday at 6 PM
+- Documentation: `CRON_JOB_SETUP.md`
+- **Setup Steps**:
+  1. Deploy Edge Functions to Supabase dashboard
+  2. Set environment variables: `ANTHROPIC_API_KEY`, `CRON_SECRET`
+  3. Schedule cron job with `pg_cron` extension
+  4. Test with manual report generation
+  
+**Cron Configuration**:
+```sql
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Schedule weekly report generation (Every Sunday at 6 PM)
+SELECT cron.schedule(
+  'generate-weekly-reports',
+  '0 18 * * 0',
+  $$
+  SELECT net.http_post(
+    url := 'https://lvvvjywrmpcqrpvuptdi.supabase.co/functions/v1/weekly-report-cron',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer YOUR_CRON_SECRET'
+    )
+  ) AS request_id;
+  $$
+);
 ```
 
-**Screens Needed**:
-- `app/screens/parent-weekly-report.tsx`
-- `components/reports/WeeklyReportCard.tsx`
-- `components/reports/WeeklyReportDetail.tsx`
+**See Full Documentation**: `CRON_JOB_SETUP.md` for complete setup guide
 
 ### 1.5.2 Daily Activity Feed 🆕
 **Priority**: High | **Status**: Planned
@@ -725,6 +745,159 @@ Interactive challenges for hands-on learning.
 | Custom Domain | school.example.com |
 | Isolated Instance | Dedicated infrastructure |
 | Custom Features | Tenant-specific development |
+
+---
+
+## Development Environment Setup
+
+### Quick Start for New Developers 🚀
+
+**Automated Setup Script**: Run this one command to set up everything:
+```bash
+cd ~/Desktop/dashpro
+chmod +x setup-dev-environment.sh
+./setup-dev-environment.sh
+```
+
+This script automatically installs and configures:
+- ✅ **nvm** (Node Version Manager)
+- ✅ **Node.js 20** (LTS)
+- ✅ **npm** with project dependencies
+- ✅ **EAS CLI** for Expo builds and OTA updates
+- ✅ **Supabase CLI** for database management
+- ✅ **Helper aliases** for common tasks
+- ✅ **PATH configuration** (persistent across sessions)
+
+### Manual Setup Steps
+
+If you prefer manual setup or troubleshooting:
+
+#### 1. Install nvm
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+```
+
+#### 2. Add nvm to PATH
+Add to `~/.bashrc` or `~/.zshrc`:
+```bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+```
+
+#### 3. Install Node.js 20
+```bash
+source ~/.bashrc  # or ~/.zshrc
+nvm install 20
+nvm use 20
+nvm alias default 20
+```
+
+#### 4. Install Global Tools
+```bash
+npm install -g eas-cli expo-cli
+```
+
+#### 5. Install Supabase CLI
+```bash
+curl -L https://supabase.com/download/cli/install.sh | sh
+export PATH="/usr/local/bin:$PATH"
+```
+
+#### 6. Install Project Dependencies
+```bash
+cd ~/Desktop/dashpro
+npm install
+```
+
+#### 7. Login to Services
+```bash
+# EAS (Expo Application Services)
+eas login
+
+# Supabase (requires access token from dashboard)
+supabase login
+```
+
+### Helpful Aliases (Auto-configured by setup script)
+
+Add these to your shell config for productivity:
+```bash
+alias dashpro-start="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm start"
+alias dashpro-ota="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm run ota:playstore"
+alias dashpro-build="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm run build:android:aab"
+alias dashpro-test="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm test"
+alias dashpro-typecheck="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm run typecheck"
+alias dashpro-lint="cd ~/Desktop/dashpro && source ~/.nvm/nvm.sh && nvm use 20 && npm run lint"
+```
+
+### Common Commands
+
+| Task | Command |
+|------|---------|
+| Start dev server | `npm start` or `dashpro-start` |
+| Push OTA update | `npm run ota:playstore -- --message "Your message"` |
+| Build production AAB | `npm run build:android:aab` |
+| Run tests | `npm test` |
+| Type checking | `npm run typecheck` |
+| Linting | `npm run lint` |
+| Clear Metro cache | `npm run start:clear` |
+
+### Environment Variables
+
+Create `.env` file in project root:
+```bash
+# Supabase
+EXPO_PUBLIC_SUPABASE_URL=https://lvvvjywrmpcqrpvuptdi.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+
+# AI Services
+EXPO_PUBLIC_ANTHROPIC_API_KEY=your_claude_api_key
+EXPO_PUBLIC_OPENAI_API_KEY=your_openai_key
+EXPO_PUBLIC_GOOGLE_GEMINI_API_KEY=your_gemini_key
+
+# Daily.co (Video Calls)
+EXPO_PUBLIC_DAILY_API_KEY=your_daily_key
+
+# PayFast
+EXPO_PUBLIC_PAYFAST_MERCHANT_ID=your_merchant_id
+EXPO_PUBLIC_PAYFAST_MERCHANT_KEY=your_merchant_key
+EXPO_PUBLIC_PAYFAST_PASSPHRASE=your_passphrase
+```
+
+### Troubleshooting
+
+**Issue**: `npm` or `node` not found
+- **Fix**: Run `source ~/.bashrc` or open a new terminal
+
+**Issue**: `eas` command not found
+- **Fix**: `npm install -g eas-cli && hash -r`
+
+**Issue**: Permission denied for Supabase CLI
+- **Fix**: `sudo mv supabase /usr/local/bin` or add to PATH
+
+**Issue**: Metro bundler cache errors
+- **Fix**: `npm run start:clear`
+
+**Issue**: Android build failures
+- **Fix**: `cd android && ./gradlew clean && cd ..`
+
+### IDE Setup (VS Code Recommended)
+
+Recommended extensions:
+- ESLint
+- Prettier
+- React Native Tools
+- TypeScript and JavaScript Language Features
+- GitLens
+
+### Next Steps After Setup
+
+1. ✅ Verify installation: `node -v && npm -v && eas --version`
+2. ✅ Login to EAS: `eas login`
+3. ✅ Login to Supabase: `supabase login` (requires access token)
+4. ✅ Start development: `npm start`
+5. ✅ Read project guidelines: `CODEOWNERS` and repo rules
 
 ---
 

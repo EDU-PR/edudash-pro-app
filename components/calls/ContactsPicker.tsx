@@ -43,8 +43,9 @@ export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPi
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch contacts (users from same preschool/organization)
+  // PRIVACY FIX: Parents should ONLY see teachers and principals, NOT other parents
   const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ['call-contacts', user?.id, profile?.preschool_id],
+    queryKey: ['call-contacts', user?.id, profile?.preschool_id, profile?.role],
     queryFn: async (): Promise<Contact[]> => {
       if (!user?.id) return [];
       
@@ -60,8 +61,21 @@ export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPi
         query = query.eq('preschool_id', profile.preschool_id);
       }
       
-      const { data, error } = await query
-        .in('role', ['principal', 'teacher', 'parent'])
+      // CRITICAL: Filter roles based on current user's role
+      let allowedRoles: string[];
+      if (profile?.role === 'parent') {
+        // Parents can ONLY call teachers and principals (NOT other parents)
+        allowedRoles = ['principal', 'teacher', 'principal_admin', 'admin'];
+      } else if (profile?.role === 'teacher') {
+        // Teachers can call principals, other teachers, and parents
+        allowedRoles = ['principal', 'teacher', 'parent', 'principal_admin', 'admin'];
+      } else {
+        // Principals/admins can call everyone
+        allowedRoles = ['principal', 'teacher', 'parent', 'principal_admin', 'admin'];
+      }
+      
+      const { data, error} = await query
+        .in('role', allowedRoles)
         .order('first_name');
       
       if (error) {

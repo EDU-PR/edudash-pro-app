@@ -63,32 +63,21 @@ export function NewChatModal({
         let allContacts: Contact[] = [];
 
         if (currentUserRole === 'parent') {
-          // Parents see: teachers of their children's classes + other parents at same school
+          // PRIVACY FIX: Parents see ONLY teachers and principals, NOT other parents
           
-          // Get teachers
-          const { data: teachers } = await supabase
+          // Get teachers, principals, and admins only
+          const { data: schoolStaff } = await supabase
             .from('profiles')
             .select('id, first_name, last_name, email, phone, avatar_url, role')
             .eq('preschool_id', preschoolId)
-            .in('role', ['teacher', 'principal', 'admin'])
+            .in('role', ['teacher', 'principal', 'admin', 'principal_admin'])
             .neq('id', currentUserId);
 
-          if (teachers) {
-            allContacts = [...allContacts, ...teachers.map((t: Contact) => ({ ...t, preschool_name: undefined }))];
+          if (schoolStaff) {
+            allContacts = [...allContacts, ...schoolStaff.map((t: Contact) => ({ ...t, preschool_name: undefined }))];
           }
 
-          // Get other parents at same school (limited)
-          const { data: parents } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, email, phone, avatar_url, role')
-            .eq('preschool_id', preschoolId)
-            .eq('role', 'parent')
-            .neq('id', currentUserId)
-            .limit(50);
-
-          if (parents) {
-            allContacts = [...allContacts, ...parents.map((p: Contact) => ({ ...p, preschool_name: undefined }))];
-          }
+          // DO NOT fetch other parents - privacy violation removed
         } else if (currentUserRole === 'teacher' || currentUserRole === 'principal' || currentUserRole === 'admin') {
           // Teachers/principals see: all parents + all teachers at their school
           const { data: schoolUsers } = await supabase

@@ -144,11 +144,12 @@ function JoinLiveLessonPrebuiltInner({ classId, preschoolId }: JoinLiveLessonPre
         console.log('[JoinLiveLessonPrebuilt] Realtime subscription status:', status);
       });
 
-    // Polling fallback every 10 seconds
+    // Polling fallback every 60 seconds (reduced from 10 seconds to prevent excessive refreshing)
+    // Realtime subscription should handle most updates
     const pollInterval = setInterval(() => {
       console.log('[JoinLiveLessonPrebuilt] Polling for updates...');
       fetchLiveLessons(false);
-    }, 10000);
+    }, 60000); // 60 seconds instead of 10
 
     return () => {
       console.log('[JoinLiveLessonPrebuilt] Cleaning up realtime subscription');
