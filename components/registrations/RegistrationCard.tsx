@@ -230,9 +230,35 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
         <View style={[styles.popWarning, { backgroundColor: '#F59E0B20' }]}>
           <Ionicons name="warning" size={16} color="#F59E0B" />
           <Text style={styles.popWarningText}>
-            Proof of Payment required before approval
+            {!item.proof_of_payment_url 
+              ? 'Proof of Payment not uploaded yet' 
+              : 'Payment needs verification before approval'}
           </Text>
         </View>
+      )}
+      
+      {/* POP Preview Link */}
+      {item.proof_of_payment_url && item.status === 'pending' && (
+        <TouchableOpacity 
+          style={[styles.popLink, { backgroundColor: colors.primary + '15' }]}
+          onPress={() => {
+            // Open POP in browser/viewer
+            router.push({
+              pathname: '/screens/image-viewer',
+              params: { url: item.proof_of_payment_url, title: 'Proof of Payment' },
+            } as any);
+          }}
+        >
+          <Ionicons name="receipt-outline" size={16} color={colors.primary} />
+          <Text style={{ color: colors.primary, marginLeft: 8, fontWeight: '600' }}>
+            View Proof of Payment
+          </Text>
+          {item.registration_fee_amount && (
+            <Text style={{ color: colors.primary, marginLeft: 'auto', fontWeight: '700' }}>
+              R{item.registration_fee_amount.toFixed(2)}
+            </Text>
+          )}
+        </TouchableOpacity>
       )}
 
       {/* Action Buttons (for pending) */}

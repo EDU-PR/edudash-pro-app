@@ -131,6 +131,13 @@ export const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
+  popLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 12,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: 8,

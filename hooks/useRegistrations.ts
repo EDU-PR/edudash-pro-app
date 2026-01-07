@@ -175,6 +175,11 @@ export function useRegistrations(): UseRegistrationsReturn {
           reviewed_at,
           rejection_reason,
           created_at,
+          registration_fee_amount,
+          registration_fee_paid,
+          payment_method,
+          proof_of_payment_url,
+          payment_verified,
           parent:profiles!parent_id(first_name, last_name, email, phone)
         `)
         .eq('preschool_id', organizationId)
@@ -204,9 +209,12 @@ export function useRegistrations(): UseRegistrationsReturn {
         student_gender: item.child_gender,
         // Documents - in-app doesn't require documents
         documents_uploaded: true,
-        // Payment - in-app doesn't require payment upfront
-        registration_fee_paid: true,
-        payment_verified: true,
+        // Payment - use actual values from DB
+        registration_fee_amount: item.registration_fee_amount || 0,
+        registration_fee_paid: item.registration_fee_paid || false,
+        payment_verified: item.payment_verified || false,
+        payment_method: item.payment_method,
+        proof_of_payment_url: item.proof_of_payment_url,
         // Status
         status: item.status,
         reviewed_by: item.reviewed_by,
@@ -311,12 +319,18 @@ export function useRegistrations(): UseRegistrationsReturn {
     }
   };
 
-  // Check if registration can be approved (needs POP for EduSite, always true for in-app)
+  // Check if registration can be approved (needs POP and payment verification)
   const canApprove = (item: Registration): boolean => {
-    // In-app registrations don't require proof of payment upfront
-    if (item.source === 'in-app') return true;
     // EduSite registrations need proof of payment
-    return !!item.proof_of_payment_url;
+    if (item.source === 'edusite') {
+      return !!item.proof_of_payment_url && item.payment_verified === true;
+    }
+    // In-app registrations with registration fee need POP and verification
+    if (item.registration_fee_amount && item.registration_fee_amount > 0) {
+      return !!item.proof_of_payment_url && item.payment_verified === true;
+    }
+    // In-app registrations without fee can be approved directly
+    return true;
   };
 
   // Approve registration
@@ -368,6 +382,40 @@ export function useRegistrations(): UseRegistrationsReturn {
                   .single();
 
                 if (studentError) throw studentError;
+
+                // Auto-assign monthly fees for the new student
+                try {
+                  // Get tuition fee structure for this school
+                  const { data: feeStructure } = await supabase
+                    .from('fee_structures')
+                    .select('id, amount')
+                    .eq('preschool_id', regData.preschool_id)
+                    .eq('fee_type', 'tuition')
+                    .eq('is_active', true)
+                    .single();
+
+                  if (feeStructure) {
+                    // Create fee for current month and next month
+                    const now = new Date();
+                    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    
+                    const feesToInsert = [currentMonth, nextMonth].map(date => ({
+                      student_id: newStudent.id,
+                      fee_structure_id: feeStructure.id,
+                      amount: feeStructure.amount,
+                      final_amount: feeStructure.amount,
+                      due_date: date.toISOString().split('T')[0],
+                      status: 'pending',
+                      amount_outstanding: feeStructure.amount,
+                    }));
+
+                    await supabase.from('student_fees').insert(feesToInsert);
+                    console.log('✅ Auto-assigned monthly fees for new student');
+                  }
+                } catch (feeErr) {
+                  console.warn('Failed to auto-assign fees (non-critical):', feeErr);
+                }
 
                 // Update parent's preschool_id if not set
                 if (regData.parent_id) {
@@ -541,6 +589,8 @@ export function useRegistrations(): UseRegistrationsReturn {
 
   // Verify payment
   const handleVerifyPayment = async (registration: Registration, verify: boolean) => {
+    const isInApp = registration.source === 'in-app';
+    
     Alert.alert(
       verify ? 'Verify Payment' : 'Remove Payment Verification',
       `${verify ? 'Verify' : 'Remove verification for'} payment for ${registration.student_first_name}?`,
@@ -555,14 +605,19 @@ export function useRegistrations(): UseRegistrationsReturn {
               
               const updateData: any = {
                 payment_verified: verify,
+                payment_verified_by: verify ? user?.id : null,
+                payment_verified_at: verify ? new Date().toISOString() : null,
               };
               
               if (verify) {
                 updateData.registration_fee_paid = true;
               }
 
+              // Update the correct table based on source
+              const tableName = isInApp ? 'child_registration_requests' : 'registration_requests';
+              
               const { error } = await supabase
-                .from('registration_requests')
+                .from(tableName)
                 .update(updateData)
                 .eq('id', registration.id);
 
