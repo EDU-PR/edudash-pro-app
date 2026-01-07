@@ -110,24 +110,26 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
       if (profile?.preschool_id) {
         console.log('[Branding] User has preschool_id:', profile.preschool_id);
         
-        // Check if preschool belongs to an organization with branding
-        const { data: preschool } = await supabase
-          .from('preschools')
-          .select('id, name, organization_id, organizations(id, name, dashboard_settings)')
-          .eq('id', profile.preschool_id)
+        // Check if an organization has this preschool linked to it
+        // Note: The FK is organizations.preschool_id → preschools.id (reverse direction)
+        const { data: linkedOrg, error: linkedOrgError } = await supabase
+          .from('organizations')
+          .select('id, name, dashboard_settings')
+          .eq('preschool_id', profile.preschool_id)
           .maybeSingle();
 
-        if (preschool?.organizations) {
-          const org = preschool.organizations as any;
-          if (org.dashboard_settings) {
-            console.log('[Branding] Using preschool organization branding:', org.dashboard_settings);
-            setOrganizationId(org.id);
-            setOrganizationName(org.name);
-            setSettings(org.dashboard_settings as DashboardSettings);
-            logger.info('[Branding] Loaded preschool organization branding');
-            setIsLoading(false);
-            return;
-          }
+        if (linkedOrgError) {
+          console.log('[Branding] Error querying linked organization:', linkedOrgError.message);
+        }
+
+        if (linkedOrg?.dashboard_settings) {
+          console.log('[Branding] Using preschool organization branding:', linkedOrg.dashboard_settings);
+          setOrganizationId(linkedOrg.id);
+          setOrganizationName(linkedOrg.name);
+          setSettings(linkedOrg.dashboard_settings as DashboardSettings);
+          logger.info('[Branding] Loaded preschool organization branding');
+          setIsLoading(false);
+          return;
         }
       }
 
