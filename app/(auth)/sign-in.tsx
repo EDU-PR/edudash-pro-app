@@ -59,6 +59,20 @@ console.log('[SignIn] Component rendering, theme:', theme);
 
   useEffect(() => {
     console.log('[SignIn] Mounted');
+    
+    // CRITICAL: Clear any stale navigation locks on mount to prevent sign-in freeze
+    // This handles cases where locks weren't cleared during sign-out
+    const clearStaleLocks = async () => {
+      try {
+        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
+        clearAllNavigationLocks();
+        console.log('[SignIn] Cleared any stale navigation locks on mount');
+      } catch (err) {
+        console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', err);
+      }
+    };
+    clearStaleLocks();
+    
     return () => console.log('[SignIn] Unmounted');
   }, []);
 
@@ -113,8 +127,13 @@ console.log('[SignIn] Component rendering, theme:', theme);
         console.log('[SignIn] Attempting biometric sign-in...');
         setBiometricLoading(true);
         
-        // Attempt biometric authentication
-        const biometricData = await BiometricAuthService.attemptBiometricLogin();
+        // Attempt biometric authentication with timeout protection
+        const biometricPromise = BiometricAuthService.attemptBiometricLogin();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Biometric authentication timeout')), 10000)
+        );
+        
+        const biometricData = await Promise.race([biometricPromise, timeoutPromise]) as any;
         
         if (biometricData?.securityToken) {
           console.log('[SignIn] Biometric auth successful, restoring session...');

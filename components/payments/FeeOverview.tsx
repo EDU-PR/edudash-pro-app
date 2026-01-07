@@ -8,14 +8,31 @@ interface BalanceCardProps {
   outstandingBalance: number;
   upcomingFeesCount: number;
   pendingVerificationCount?: number;
+  upcomingFees?: StudentFee[];
   theme: any;
 }
 
-export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVerificationCount = 0, theme }: BalanceCardProps) {
+export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVerificationCount = 0, upcomingFees = [], theme }: BalanceCardProps) {
   const styles = createStyles(theme);
   
   // Count of fees that are truly pending (not awaiting verification)
   const trulyPendingCount = upcomingFeesCount - pendingVerificationCount;
+  
+  // Determine if any fee is overdue or due within 7 days (approaching)
+  const today = new Date();
+  const hasOverdueOrApproaching = upcomingFees.some(fee => {
+    if (fee.status === 'pending_verification') return false; // Don't count these
+    const dueDate = new Date(fee.due_date);
+    const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return fee.status === 'overdue' || daysUntilDue <= 7; // Overdue or due within 7 days
+  });
+  
+  // Balance is red only if overdue/approaching, otherwise green if balance exists
+  const balanceColor = outstandingBalance === 0 
+    ? styles.balanceAmountGreen 
+    : hasOverdueOrApproaching 
+      ? styles.balanceAmountRed 
+      : styles.balanceAmountGreen;
 
   return (
     <View style={styles.balanceCard}>
@@ -23,7 +40,7 @@ export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVeri
         <Text style={styles.balanceLabel}>Outstanding Balance</Text>
         <Ionicons name="wallet-outline" size={24} color={theme.primary} />
       </View>
-      <Text style={[styles.balanceAmount, outstandingBalance > 0 && styles.balanceAmountRed]}>
+      <Text style={[styles.balanceAmount, balanceColor]}>
         {formatCurrency(outstandingBalance)}
       </Text>
       {/* Show pending verification message if any fees are awaiting approval */}
@@ -35,15 +52,21 @@ export function BalanceCard({ outstandingBalance, upcomingFeesCount, pendingVeri
           </Text>
         </View>
       )}
-      {/* Show due soon only for truly pending fees */}
+      {/* Show due soon badge only if approaching due date (within 7 days) or overdue */}
       {trulyPendingCount > 0 && (
         <>
           <Text style={styles.balanceSubtext}>
             {trulyPendingCount} payment{trulyPendingCount !== 1 ? 's' : ''} due
           </Text>
-          <View style={styles.dueSoonBadge}>
-            <Text style={styles.dueSoonText}>Due Soon</Text>
-          </View>
+          {hasOverdueOrApproaching ? (
+            <View style={styles.dueSoonBadge}>
+              <Text style={styles.dueSoonText}>Due Soon</Text>
+            </View>
+          ) : (
+            <View style={[styles.dueSoonBadge, { backgroundColor: theme.success + '20' }]}>
+              <Text style={[styles.dueSoonText, { color: theme.success }]}>On Track</Text>
+            </View>
+          )}
         </>
       )}
       {/* Show all clear if no pending and no pending verification */}
@@ -157,18 +180,19 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 8,
   },
   balanceLabel: { fontSize: 14, color: theme.textSecondary },
-  balanceAmount: { fontSize: 32, fontWeight: '700', color: '#22c55e', marginBottom: 4 },
+  balanceAmount: { fontSize: 32, fontWeight: '700', color: theme.text, marginBottom: 4 },
   balanceAmountRed: { color: '#ef4444' },
+  balanceAmountGreen: { color: '#22c55e' },
   balanceSubtext: { fontSize: 12, color: theme.textSecondary },
   dueSoonBadge: {
     marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
-  dueSoonText: { fontSize: 12, color: '#22c55e', fontWeight: '600' },
+  dueSoonText: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
   pendingVerificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',

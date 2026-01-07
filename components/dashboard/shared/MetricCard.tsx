@@ -216,6 +216,12 @@ const createStyles = (theme: any, customCardWidth?: number) => {
   const defaultCardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
   const cardWidth = customCardWidth || defaultCardWidth;
 
+  // Fixed 3-column layout for small cards (Quick Actions)
+  // Calculate to ensure exactly 3 cards fit per row with proper spacing
+  const smallCardWidth = isTablet 
+    ? (width - 80) / 5 
+    : Math.floor((width - (cardPadding * 2) - (cardGap * 4)) / 3);
+
   return StyleSheet.create({
     metricCard: {
       backgroundColor: theme.cardBackground,
@@ -235,7 +241,7 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       width: isTablet ? (width - 60) / 2 : width - (cardPadding * 2),
     },
     metricCardSmall: {
-      width: isTablet ? (width - 80) / 5 : (width - (cardPadding * 2) - (cardGap * 2)) / 3,
+      width: smallCardWidth,
       padding: isSmallScreen ? 8 : 12,
       minHeight: isSmallScreen ? 80 : 100,
     },

@@ -148,6 +148,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[AuthContext] Starting sign-out process...');
       
+      // CRITICAL: Clear all navigation locks FIRST (synchronously) to prevent stale locks
+      // This must happen before any state changes or async operations
+      try {
+        // Import synchronously at module level would be better, but this works
+        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
+        clearAllNavigationLocks();
+        console.log('[AuthContext] All navigation locks cleared before sign-out');
+      } catch (lockErr) {
+        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
+      }
+      
       // CRITICAL FIX: Clear all auth state IMMEDIATELY - before any async work
       // This prevents the UI from hanging while waiting for backend cleanup
       console.log('[AuthContext] Clearing auth state immediately...');
@@ -175,15 +186,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: userRole,
           });
         });
-      }
-      
-      // CRITICAL: Clear all navigation locks before sign-out to prevent stale locks
-      try {
-        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
-        clearAllNavigationLocks();
-        console.log('[AuthContext] All navigation locks cleared before sign-out');
-      } catch (lockErr) {
-        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
       }
       
       // Call sessionManager sign out with short timeout (don't let it block)
