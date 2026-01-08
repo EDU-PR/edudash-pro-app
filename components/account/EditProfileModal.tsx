@@ -10,8 +10,12 @@ interface EditProfileModalProps {
   saving: boolean;
   firstName: string;
   lastName: string;
+  phone?: string;
+  address?: string;
   onFirstNameChange: (value: string) => void;
   onLastNameChange: (value: string) => void;
+  onPhoneChange?: (value: string) => void;
+  onAddressChange?: (value: string) => void;
   theme: {
     primary: string;
     error: string;
@@ -40,8 +44,12 @@ export function EditProfileModal({
   saving,
   firstName,
   lastName,
+  phone = '',
+  address = '',
   onFirstNameChange,
   onLastNameChange,
+  onPhoneChange,
+  onAddressChange,
   theme,
   styles,
 }: EditProfileModalProps) {
@@ -99,6 +107,42 @@ export function EditProfileModal({
                 autoCapitalize="words"
               />
             </View>
+          </View>
+
+          {/* Contact Information Section */}
+          <View style={styles.editSection}>
+            <Text style={styles.editSectionTitle}>{t('account.edit.contact_information', { defaultValue: 'Contact Information' })}</Text>
+
+            {onPhoneChange && (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.editFieldLabel}>{t('account.phone', { defaultValue: 'Phone Number' })}</Text>
+                <TextInput
+                  style={styles.editFieldInput}
+                  value={phone}
+                  onChangeText={onPhoneChange}
+                  placeholder={t('account.placeholders.phone', { defaultValue: 'Enter your phone number' })}
+                  placeholderTextColor={theme.textTertiary}
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                />
+              </View>
+            )}
+
+            {onAddressChange && (
+              <View style={styles.editFieldContainer}>
+                <Text style={styles.editFieldLabel}>{t('account.address', { defaultValue: 'Address' })}</Text>
+                <TextInput
+                  style={[styles.editFieldInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                  value={address}
+                  onChangeText={onAddressChange}
+                  placeholder={t('account.placeholders.address', { defaultValue: 'Enter your address' })}
+                  placeholderTextColor={theme.textTertiary}
+                  multiline
+                  numberOfLines={3}
+                  autoComplete="street-address"
+                />
+              </View>
+            )}
           </View>
         </ScrollView>
       </View>

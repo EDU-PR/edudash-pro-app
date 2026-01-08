@@ -557,6 +557,24 @@ console.log('[SignIn] Component rendering, theme:', theme);
       color: marketingTokens.colors.accent.cyan400,
       fontWeight: '600',
     },
+    magicLinkButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: 'rgba(14, 165, 233, 0.08)',
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'rgba(14, 165, 233, 0.2)',
+      marginTop: 4,
+    },
+    magicLinkText: {
+      fontSize: 14,
+      color: marketingTokens.colors.accent.cyan400,
+      fontWeight: '500',
+    },
     dividerContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -814,6 +832,18 @@ return (
                 <Text style={styles.forgotPasswordText}>{t('auth.forgot_password', { defaultValue: 'Forgot Password?' })}</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Magic Link Option */}
+            <TouchableOpacity
+              style={styles.magicLinkButton}
+              onPress={() => router.push('/(auth)/magic-link')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="mail-outline" size={18} color={marketingTokens.colors.accent.cyan400} />
+              <Text style={styles.magicLinkText}>
+                {t('auth.sign_in_with_email_link', { defaultValue: 'Sign in with Email Link (No Password)' })}
+              </Text>
+            </TouchableOpacity>
 
             <GradientButton
               label={loading ? t('auth.sign_in.signing_in', { defaultValue: 'Signing In...' }) : t('auth.sign_in.cta', { defaultValue: 'Sign In' })}

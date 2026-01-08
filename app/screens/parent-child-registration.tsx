@@ -37,7 +37,13 @@ export default function ParentChildRegistrationScreen() {
   const [registrationFee, setRegistrationFee] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'eft' | 'cash' | 'card' | ''>('');
   const [proofOfPayment, setProofOfPayment] = useState<string | null>(null);
-  const [uploadingPop, setUploadingPop] = useState(false);  const formatDate = (date: Date): string => {
+  const [uploadingPop, setUploadingPop] = useState(false);
+  
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState<number>(0);
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoApplied, setPromoApplied] = useState<{ code: string; name: string; discountValue: number } | null>(null);  const formatDate = (date: Date): string => {
     return date.toISOString().split('T')[0];
   };
 
@@ -109,7 +115,7 @@ export default function ParentChildRegistrationScreen() {
               type: 'preschool' as const,
               city: city,
               tenant_slug: p.tenant_slug,
-              registration_fee: feeMap.get(p.id) || 350 // Default R350
+              registration_fee: feeMap.get(p.id) || 0 // No default - school must set up fees
             };
           });
           
@@ -127,7 +133,7 @@ export default function ParentChildRegistrationScreen() {
             throw orgsError;
           }
           
-          setOrganizations((orgsData || []).map(o => ({ ...o, registration_fee: 350 })));
+          setOrganizations((orgsData || []).map(o => ({ ...o, registration_fee: 0 })));
         }
       } catch (error: any) {
         console.error('Failed to fetch organizations:', error);
@@ -145,9 +151,85 @@ export default function ParentChildRegistrationScreen() {
   useEffect(() => {
     if (selectedOrganizationId) {
       const org = organizations.find(o => o.id === selectedOrganizationId);
-      setRegistrationFee(org?.registration_fee || 350);
+      setRegistrationFee(org?.registration_fee || 0);
+      // Reset promo when org changes
+      setPromoCode('');
+      setPromoDiscount(0);
+      setPromoApplied(null);
     }
   }, [selectedOrganizationId, organizations]);
+  
+  // Calculate final amount after promo discount
+  const finalAmount = registrationFee > 0 
+    ? Math.max(0, registrationFee - promoDiscount) 
+    : 0;
+  
+  // Validate promo code
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim()) {
+      Alert.alert('Enter Code', 'Please enter a promo code to validate.');
+      return;
+    }
+    
+    setPromoValidating(true);
+    try {
+      const { data, error } = await assertSupabase()
+        .from('promotional_campaigns')
+        .select('id, code, name, discount_type, discount_value, applies_to_registration, is_active, start_date, end_date, max_uses, current_uses')
+        .eq('code', promoCode.trim().toUpperCase())
+        .eq('is_active', true)
+        .eq('applies_to_registration', true)
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      if (!data) {
+        Alert.alert('Invalid Code', 'This promo code is not valid or has expired.');
+        return;
+      }
+      
+      // Check dates
+      const now = new Date();
+      if (data.start_date && new Date(data.start_date) > now) {
+        Alert.alert('Not Yet Active', 'This promo code is not yet active.');
+        return;
+      }
+      if (data.end_date && new Date(data.end_date) < now) {
+        Alert.alert('Expired', 'This promo code has expired.');
+        return;
+      }
+      
+      // Check max uses
+      if (data.max_uses && data.current_uses >= data.max_uses) {
+        Alert.alert('Limit Reached', 'This promo code has reached its maximum uses.');
+        return;
+      }
+      
+      // Calculate discount
+      let discountAmount = 0;
+      if (data.discount_type === 'percentage') {
+        discountAmount = (registrationFee * data.discount_value) / 100;
+      } else if (data.discount_type === 'fixed') {
+        discountAmount = data.discount_value;
+      }
+      
+      setPromoDiscount(discountAmount);
+      setPromoApplied({ code: data.code, name: data.name, discountValue: data.discount_value });
+      Alert.alert('Success!', `${data.name} applied! You save R${discountAmount.toFixed(2)}.`);
+    } catch (err: any) {
+      console.error('Promo validation error:', err);
+      Alert.alert('Error', 'Failed to validate promo code. Please try again.');
+    } finally {
+      setPromoValidating(false);
+    }
+  };
+  
+  // Remove applied promo
+  const handleRemovePromo = () => {
+    setPromoCode('');
+    setPromoDiscount(0);
+    setPromoApplied(null);
+  };
   
   // Handle POP upload
   const handlePopUpload = async () => {
@@ -275,6 +357,9 @@ export default function ParentChildRegistrationScreen() {
         status: 'pending',
         // Registration fee payment data
         registration_fee_amount: registrationFee,
+        discount_amount: promoDiscount,
+        final_amount: finalAmount,
+        campaign_applied: promoApplied?.code || null,
         registration_fee_paid: registrationFee > 0 && !!proofOfPayment,
         payment_method: paymentMethod || null,
         proof_of_payment_url: proofOfPayment || null,
@@ -308,6 +393,35 @@ export default function ParentChildRegistrationScreen() {
       if (response.data && response.data.length > 0) {
         if (__DEV__) {
           console.log('[Child Registration] Insert successful:', response.data);
+        }
+        
+        // Update promo code counter if a promo was applied
+        if (promoApplied?.code) {
+          try {
+            // Get current uses and increment
+            const { data: promoData } = await assertSupabase()
+              .from('promotional_campaigns')
+              .select('id, current_uses')
+              .eq('code', promoApplied.code)
+              .single();
+            
+            if (promoData) {
+              await assertSupabase()
+                .from('promotional_campaigns')
+                .update({ 
+                  current_uses: (promoData.current_uses || 0) + 1,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', promoData.id);
+              
+              if (__DEV__) {
+                console.log('[Child Registration] Promo code counter updated:', promoApplied.code);
+              }
+            }
+          } catch (promoErr) {
+            console.warn('[Child Registration] Failed to update promo counter:', promoErr);
+            // Don't block success
+          }
         }
         
         // Send notification to principals about the new registration
@@ -448,6 +562,9 @@ export default function ParentChildRegistrationScreen() {
       setPaymentMethod('');
       setProofOfPayment(null);
       setRegistrationFee(0);
+      setPromoCode('');
+      setPromoDiscount(0);
+      setPromoApplied(null);
       setErrors({});
     } catch (e: any) {
       console.error('[Child Registration] Submission error:', e);
@@ -758,13 +875,63 @@ export default function ParentChildRegistrationScreen() {
               
               <View style={{ backgroundColor: theme.surface, borderRadius: 10, padding: 16, marginBottom: 16 }}>
                 <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Registration Fee Amount</Text>
-                <Text style={{ color: theme.text, fontSize: 28, fontWeight: '800', marginTop: 4 }}>
-                  R {registrationFee.toFixed(2)}
-                </Text>
+                {promoApplied ? (
+                  <>
+                    <Text style={{ color: theme.textSecondary, fontSize: 18, textDecorationLine: 'line-through', marginTop: 4 }}>
+                      R {registrationFee.toFixed(2)}
+                    </Text>
+                    <Text style={{ color: '#10b981', fontSize: 28, fontWeight: '800' }}>
+                      R {finalAmount.toFixed(2)}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, backgroundColor: '#10b981' + '20', padding: 8, borderRadius: 8 }}>
+                      <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+                      <Text style={{ color: '#10b981', fontSize: 14, fontWeight: '600', marginLeft: 6 }}>
+                        {promoApplied.code} applied - You save R{promoDiscount.toFixed(2)}!
+                      </Text>
+                      <TouchableOpacity onPress={handleRemovePromo} style={{ marginLeft: 'auto' }}>
+                        <Ionicons name="close-circle" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={{ color: theme.text, fontSize: 28, fontWeight: '800', marginTop: 4 }}>
+                      R {registrationFee.toFixed(2)}
+                    </Text>
+                  </>
+                )}
                 <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 4 }}>
                   One-time fee payable before registration approval
                 </Text>
               </View>
+              
+              {/* Promo Code Section */}
+              {!promoApplied && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.label}>Have a promo code?</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TextInput
+                      value={promoCode}
+                      onChangeText={(text) => setPromoCode(text.toUpperCase())}
+                      style={[styles.input, { flex: 1, marginTop: 0 }]}
+                      placeholder="Enter promo code (e.g. WELCOME2026)"
+                      placeholderTextColor={theme.textSecondary}
+                      autoCapitalize="characters"
+                    />
+                    <TouchableOpacity
+                      style={[styles.btn, { backgroundColor: theme.primary, paddingHorizontal: 16, marginTop: 0 }]}
+                      onPress={handleValidatePromo}
+                      disabled={promoValidating || !promoCode.trim()}
+                    >
+                      {promoValidating ? (
+                        <ActivityIndicator color={theme.onPrimary} size="small" />
+                      ) : (
+                        <Text style={[styles.btnText, { color: theme.onPrimary }]}>Apply</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
               
               <Text style={styles.label}>Payment Method *</Text>
               <View style={styles.genderRow}>
