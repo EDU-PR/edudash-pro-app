@@ -11,6 +11,15 @@ import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { supabase } from '@/lib/supabase';
 
+// Get proper redirect URL based on platform
+const getRedirectUrl = (path: string) => {
+  if (Platform.OS === 'web') {
+    return `${window.location.origin}/${path}`;
+  }
+  // For native apps, use the configured deep link domain
+  return `https://edudashpro.org.za/${path}`;
+};
+
 export default function ForgotPassword() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -31,7 +40,7 @@ export default function ForgotPassword() {
     
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${Platform.OS === 'web' ? window.location.origin : 'edudashpro'}://reset-password`,
+        redirectTo: getRedirectUrl('reset-password'),
       });
 
       if (error) {

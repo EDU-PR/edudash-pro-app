@@ -58,6 +58,8 @@ export default function PrincipalRegistrationsScreen() {
     handleApprove,
     handleReject,
     handleVerifyPayment,
+    sendPaymentReminder,
+    sendingReminder,
     canApprove,
     usesEdusiteSync,
     pendingCount,
@@ -74,6 +76,8 @@ export default function PrincipalRegistrationsScreen() {
       onReject={handleReject}
       onVerifyPayment={handleVerifyPayment}
       canApprove={canApprove}
+      onSendReminder={sendPaymentReminder}
+      isSendingReminder={sendingReminder === item.id}
     />
   );
 

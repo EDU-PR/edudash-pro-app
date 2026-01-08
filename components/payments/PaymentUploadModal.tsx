@@ -199,6 +199,9 @@ export function PaymentUploadModal({
       const finalPreschoolId = selectedChild?.preschool_id || preschoolId;
       const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount) : 0;
 
+      // Use student_code (which maps from student_id in database) for payment reference
+      const studentCode = selectedChild?.student_code || `STU-${selectedChildId.slice(0, 8).toUpperCase()}`;
+      
       const { data: insertedPOP, error: dbError } = await supabase
         .from('pop_uploads')
         .insert({
@@ -206,14 +209,14 @@ export function PaymentUploadModal({
           uploaded_by: userId,
           preschool_id: finalPreschoolId,
           upload_type: 'proof_of_payment',
-          title: `Payment - ${selectedChild?.student_code || 'Unknown'}${paymentReference ? ` (${paymentReference})` : ''}`,
+          title: `Payment - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`,
           file_path: uploadResult.filePath,
           file_name: uploadResult.fileName || selectedFile.name,
           file_size: uploadResult.fileSize || selectedFile.size || 0,
           file_type: uploadResult.fileType || selectedFile.type || 'unknown',
           payment_amount: paymentAmountNum, // Required by CHECK constraint
           payment_date: new Date().toISOString().split('T')[0], // Required by CHECK constraint (YYYY-MM-DD)
-          payment_reference: paymentReference || selectedChild?.student_code || null,
+          payment_reference: paymentReference || studentCode,
           status: 'pending',
         })
         .select()

@@ -42,6 +42,8 @@ export default function AccountScreen() {
   const [school, setSchool] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
   const [lastName, setLastName] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -52,6 +54,8 @@ export default function AccountScreen() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editAddress, setEditAddress] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showOrgSwitcher, setShowOrgSwitcher] = useState(false);
@@ -166,7 +170,7 @@ export default function AccountScreen() {
       try {
         const { data: p } = await assertSupabase()
           .from("profiles")
-          .select("role,preschool_id,first_name,last_name,avatar_url")
+          .select("role,preschool_id,first_name,last_name,avatar_url,phone,address")
           .eq("id", u.id)
           .maybeSingle();
         r = r || (p as Record<string, unknown>)?.role as string || null;
@@ -174,6 +178,13 @@ export default function AccountScreen() {
         fn = fn || (p as Record<string, unknown>)?.first_name as string || null;
         ln = ln || (p as Record<string, unknown>)?.last_name as string || null;
         img = img || (p as Record<string, unknown>)?.avatar_url as string || null;
+        // Set phone and address
+        const ph = (p as Record<string, unknown>)?.phone as string || null;
+        const addr = (p as Record<string, unknown>)?.address as string || null;
+        setPhone(ph);
+        setAddress(addr);
+        setEditPhone(ph || "");
+        setEditAddress(addr || "");
       } catch { /* noop */ }
     }
 
@@ -370,13 +381,20 @@ export default function AccountScreen() {
 
       const { error } = await assertSupabase()
         .from("profiles")
-        .update({ first_name: editFirstName.trim() || null, last_name: editLastName.trim() || null })
+        .update({ 
+          first_name: editFirstName.trim() || null, 
+          last_name: editLastName.trim() || null,
+          phone: editPhone.trim() || null,
+          address: editAddress.trim() || null,
+        })
         .eq("id", data.user.id);
 
       if (error) Alert.alert("Warning", "Profile updated locally but failed to sync.");
 
       setFirstName(editFirstName.trim() || null);
       setLastName(editLastName.trim() || null);
+      setPhone(editPhone.trim() || null);
+      setAddress(editAddress.trim() || null);
       setShowEditProfile(false);
       Alert.alert("Success", "Profile updated successfully!");
     } catch {
@@ -389,6 +407,8 @@ export default function AccountScreen() {
   const cancelProfileEdit = () => {
     setEditFirstName(firstName || "");
     setEditLastName(lastName || "");
+    setEditPhone(phone || "");
+    setEditAddress(address || "");
     setShowEditProfile(false);
   };
 
@@ -469,8 +489,12 @@ export default function AccountScreen() {
         saving={savingProfile}
         firstName={editFirstName}
         lastName={editLastName}
+        phone={editPhone}
+        address={editAddress}
         onFirstNameChange={setEditFirstName}
         onLastNameChange={setEditLastName}
+        onPhoneChange={setEditPhone}
+        onAddressChange={setEditAddress}
         theme={theme}
         styles={styles}
       />

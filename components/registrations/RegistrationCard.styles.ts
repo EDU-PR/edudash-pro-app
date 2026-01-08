@@ -117,6 +117,15 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
   },
+  reminderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+  },
   popWarning: {
     flexDirection: 'row',
     alignItems: 'center',

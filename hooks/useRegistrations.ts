@@ -100,6 +100,9 @@ export interface UseRegistrationsReturn {
   pendingCount: number;
   approvedCount: number;
   rejectedCount: number;
+  // Payment reminders
+  sendPaymentReminder: (registration: Registration) => void;
+  sendingReminder: string | null;
 }
 
 export function useRegistrations(): UseRegistrationsReturn {
@@ -125,6 +128,7 @@ export function useRegistrations(): UseRegistrationsReturn {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [error, setError] = useState<string | null>(null);
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   
   // Success modal state
   const [successModal, setSuccessModal] = useState<SuccessModalState>({
@@ -359,10 +363,38 @@ export function useRegistrations(): UseRegistrationsReturn {
 
                 if (regError) throw regError;
 
+                // Generate student_id code for new student
+                let studentIdCode: string;
+                try {
+                  // Get org name for prefix
+                  const { data: org } = await supabase
+                    .from('preschools')
+                    .select('name')
+                    .eq('id', regData.preschool_id)
+                    .single();
+
+                  // Use first 3 letters of org name as code (e.g., YOU for Young Eagles)
+                  const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
+                  const year = new Date().getFullYear().toString().slice(-2);
+
+                  // Count existing students to generate next number
+                  const { count } = await supabase
+                    .from('students')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('preschool_id', regData.preschool_id);
+
+                  const nextNum = ((count || 0) + 1).toString().padStart(4, '0');
+                  studentIdCode = `${orgCode}-${year}-${nextNum}`;
+                } catch (idErr) {
+                  console.warn('Failed to generate student_id, using fallback:', idErr);
+                  studentIdCode = `STU-${new Date().getFullYear().toString().slice(-2)}-${Date.now().toString().slice(-4)}`;
+                }
+
                 // Create student record in students table
                 const { data: newStudent, error: studentError } = await supabase
                   .from('students')
                   .insert({
+                    student_id: studentIdCode,
                     first_name: regData.child_first_name,
                     last_name: regData.child_last_name,
                     date_of_birth: regData.child_birth_date,
@@ -460,38 +492,146 @@ export function useRegistrations(): UseRegistrationsReturn {
                   icon: 'checkmark-circle',
                 });
               } else {
-                // Original EduSite flow
+                // EduSite flow - create student and link to parent (or create parent if needed)
+                const { data: regData, error: regFetchError } = await supabase
+                  .from('registration_requests')
+                  .select('*')
+                  .eq('id', registration.id)
+                  .single();
+
+                if (regFetchError) throw regFetchError;
+
+                // Check if parent already exists by email
+                let parentId: string | null = null;
+                const { data: existingParent } = await supabase
+                  .from('profiles')
+                  .select('id')
+                  .eq('email', regData.guardian_email)
+                  .maybeSingle();
+
+                if (existingParent) {
+                  parentId = existingParent.id;
+                  // Update parent's organization if not set
+                  await supabase
+                    .from('profiles')
+                    .update({ organization_id: regData.organization_id })
+                    .eq('id', parentId)
+                    .is('organization_id', null);
+                }
+
+                // Generate student_id code
+                let studentIdCode: string;
+                try {
+                  const { data: org } = await supabase
+                    .from('preschools')
+                    .select('name')
+                    .eq('id', regData.organization_id)
+                    .single();
+
+                  const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
+                  const year = new Date().getFullYear().toString().slice(-2);
+
+                  const { count } = await supabase
+                    .from('students')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('preschool_id', regData.organization_id);
+
+                  const nextNum = ((count || 0) + 1).toString().padStart(4, '0');
+                  studentIdCode = `${orgCode}-${year}-${nextNum}`;
+                } catch {
+                  studentIdCode = `STU-${new Date().getFullYear().toString().slice(-2)}-${Date.now().toString().slice(-4)}`;
+                }
+
+                // Create student record
+                const { data: newStudent, error: studentError } = await supabase
+                  .from('students')
+                  .insert({
+                    student_id: studentIdCode,
+                    first_name: regData.student_first_name,
+                    last_name: regData.student_last_name,
+                    date_of_birth: regData.student_dob,
+                    gender: regData.student_gender,
+                    parent_id: parentId,
+                    guardian_id: parentId,
+                    preschool_id: regData.organization_id,
+                    is_active: true,
+                    status: 'active',
+                    emergency_contact_name: regData.guardian_name,
+                    emergency_contact_phone: regData.guardian_phone,
+                  })
+                  .select('id')
+                  .single();
+
+                if (studentError) throw studentError;
+
+                // Auto-assign tuition fees
+                try {
+                  const { data: feeStructure } = await supabase
+                    .from('fee_structures')
+                    .select('id, amount')
+                    .eq('preschool_id', regData.organization_id)
+                    .eq('fee_type', 'tuition')
+                    .eq('is_active', true)
+                    .single();
+
+                  if (feeStructure) {
+                    const now = new Date();
+                    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    
+                    const feesToInsert = [currentMonth, nextMonth].map(date => ({
+                      student_id: newStudent.id,
+                      fee_structure_id: feeStructure.id,
+                      amount: feeStructure.amount,
+                      final_amount: feeStructure.amount,
+                      due_date: date.toISOString().split('T')[0],
+                      status: 'pending',
+                      amount_outstanding: feeStructure.amount,
+                    }));
+
+                    await supabase.from('student_fees').insert(feesToInsert);
+                  }
+                } catch (feeErr) {
+                  console.warn('Failed to auto-assign fees:', feeErr);
+                }
+
+                // Update registration with student/parent IDs
                 const { error: updateError } = await supabase
                   .from('registration_requests')
                   .update({
                     status: 'approved',
                     reviewed_by: user?.id,
                     reviewed_date: new Date().toISOString(),
+                    edudash_student_id: newStudent.id,
+                    edudash_parent_id: parentId,
                   })
                   .eq('id', registration.id);
 
                 if (updateError) throw updateError;
 
-                // Call sync function to create accounts and send email
-                const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
-                  body: { registration_id: registration.id },
-                });
-
-                if (syncError) {
-                  setSuccessModal({
-                    visible: true,
-                    title: 'Partial Success',
-                    message: 'Registration approved, but account creation may have failed. Please contact admin.',
-                    icon: 'warning',
-                  });
-                } else {
-                  setSuccessModal({
-                    visible: true,
-                    title: 'Success',
-                    message: '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
-                    icon: 'checkmark-circle',
-                  });
+                // Send notification if parent exists
+                if (parentId) {
+                  try {
+                    await supabase.functions.invoke('notifications-dispatcher', {
+                      body: {
+                        event_type: 'child_registration_approved',
+                        user_ids: [parentId],
+                        registration_id: registration.id,
+                        student_id: newStudent.id,
+                        child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+                      },
+                    });
+                  } catch (notifErr) {
+                    console.warn('Failed to send approval notification:', notifErr);
+                  }
                 }
+
+                setSuccessModal({
+                  visible: true,
+                  title: 'Success',
+                  message: `✅ Registration approved!\n\n👶 Student profile created (${studentIdCode})\n${parentId ? '👤 Linked to parent\n📱 Parent notified' : '⚠️ Parent account not found - they need to register'}`,
+                  icon: 'checkmark-circle',
+                });
               }
 
               fetchRegistrations();
@@ -636,6 +776,155 @@ export function useRegistrations(): UseRegistrationsReturn {
     );
   };
 
+  // Send payment reminder email
+  const sendPaymentReminder = async (registration: Registration) => {
+    Alert.alert(
+      'Send Payment Reminder',
+      `Send a payment reminder email to ${registration.guardian_name} (${registration.guardian_email})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Reminder',
+          onPress: async () => {
+            setSendingReminder(registration.id);
+            try {
+              const supabase = assertSupabase();
+              
+              // Get school name for the email
+              const { data: orgData } = await supabase
+                .from('organizations')
+                .select('name')
+                .eq('id', registration.organization_id)
+                .single();
+              
+              const schoolName = orgData?.name || 'Our School';
+              const feeAmount = registration.registration_fee_amount || 200;
+              const discountAmount = registration.discount_amount || 0;
+              const finalAmount = feeAmount - discountAmount;
+              
+              // Create email body
+              const emailBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
+    <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">💰 Registration Payment Reminder</h1>
+    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.95); font-size: 16px;">${schoolName}</p>
+  </div>
+  
+  <div style="max-width: 600px; margin: 0 auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="padding: 30px 20px;">
+      <p style="margin: 0 0 20px 0; font-size: 16px; color: #333;">Dear ${registration.guardian_name},</p>
+      
+      <p style="margin: 0 0 20px 0; font-size: 15px; color: #555; line-height: 1.6;">
+        This is a friendly reminder that we have not yet received proof of payment for <strong>${registration.student_first_name} ${registration.student_last_name}'s</strong> registration at ${schoolName}.
+      </p>
+
+      <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Payment Details</h3>
+        <table style="width: 100%; font-size: 14px; color: #555;">
+          <tr>
+            <td style="padding: 8px 0;">Student Name:</td>
+            <td style="padding: 8px 0; text-align: right; font-weight: 600;">${registration.student_first_name} ${registration.student_last_name}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0;">Registration Fee:</td>
+            <td style="padding: 8px 0; text-align: right;">R${feeAmount.toFixed(2)}</td>
+          </tr>
+          ${discountAmount > 0 ? `
+          <tr>
+            <td style="padding: 8px 0;">Discount:</td>
+            <td style="padding: 8px 0; text-align: right; color: #10B981;">-R${discountAmount.toFixed(2)}</td>
+          </tr>
+          ` : ''}
+          <tr style="border-top: 2px solid #ddd;">
+            <td style="padding: 12px 0; font-weight: 700; color: #333;">Amount Due:</td>
+            <td style="padding: 12px 0; text-align: right; font-weight: 700; color: #333; font-size: 18px;">R${finalAmount.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="margin: 20px 0; font-size: 15px; color: #555; line-height: 1.6;">
+        Please upload your proof of payment via the EduDash Pro app or respond to this email with the payment receipt attached.
+      </p>
+
+      <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 14px; color: #856404;">
+          <strong>⚠️ Important:</strong> Registration is only complete once payment has been received and verified.
+        </p>
+      </div>
+
+      <p style="margin: 20px 0 0 0; font-size: 15px; color: #555;">
+        If you have already made the payment, please disregard this message. For any questions, please contact us.
+      </p>
+
+      <p style="margin: 30px 0 0 0; font-size: 15px; color: #555;">
+        Warm regards,<br>
+        <strong>${schoolName}</strong>
+      </p>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #eee;">
+      <p style="margin: 0; font-size: 12px; color: #888;">
+        This email was sent via EduDash Pro
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+              `.trim();
+
+              // Send email via Edge Function
+              const { data, error } = await supabase.functions.invoke('send-email', {
+                body: {
+                  to: registration.guardian_email,
+                  subject: `Payment Reminder: ${registration.student_first_name}'s Registration at ${schoolName}`,
+                  body: emailBody,
+                  is_html: true,
+                  confirmed: true,
+                },
+              });
+
+              if (error) {
+                throw new Error(error.message || 'Failed to send email');
+              }
+
+              if (!data?.success) {
+                throw new Error(data?.error || 'Email sending failed');
+              }
+
+              // Log the reminder in the database
+              try {
+                await supabase
+                  .from('registration_requests')
+                  .update({
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', registration.id);
+              } catch {
+                // Non-fatal - logging failed but email was sent
+              }
+
+              Alert.alert(
+                'Reminder Sent ✓',
+                `Payment reminder email has been sent to ${registration.guardian_email}`
+              );
+            } catch (err: any) {
+              console.error('Error sending payment reminder:', err);
+              Alert.alert('Error', err.message || 'Failed to send payment reminder');
+            } finally {
+              setSendingReminder(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Stats
   const pendingCount = registrations.filter(r => r.status === 'pending').length;
   const approvedCount = registrations.filter(r => r.status === 'approved').length;
@@ -651,6 +940,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     syncing,
     processing,
     error,
+    sendingReminder,
     // Filters
     searchTerm,
     setSearchTerm,
@@ -666,6 +956,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     handleApprove,
     handleReject,
     handleVerifyPayment,
+    sendPaymentReminder,
     // Helpers
     canApprove,
     // Feature flags

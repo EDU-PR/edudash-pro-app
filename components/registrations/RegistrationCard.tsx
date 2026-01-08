@@ -26,6 +26,8 @@ interface RegistrationCardProps {
   onReject: (registration: Registration) => void;
   onVerifyPayment: (registration: Registration, verify: boolean) => void;
   canApprove: (registration: Registration) => boolean;
+  onSendReminder?: (registration: Registration) => void;
+  isSendingReminder?: boolean;
 }
 
 // Calculate age from DOB
@@ -84,6 +86,8 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   onReject,
   onVerifyPayment,
   canApprove,
+  onSendReminder,
+  isSendingReminder,
 }) => {
   const { theme } = useTheme();
   const colors = theme;
@@ -224,6 +228,28 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
       <Text style={[styles.dateText, { color: colors.textSecondary }]}>
         Applied: {formatDate(item.created_at)}
       </Text>
+
+      {/* Send Payment Reminder Button (for unpaid pending registrations) */}
+      {item.status === 'pending' && !item.registration_fee_paid && onSendReminder && (
+        <TouchableOpacity
+          style={[
+            styles.reminderButton,
+            { backgroundColor: '#F59E0B20', borderColor: '#F59E0B' },
+            isSendingReminder && { opacity: 0.6 },
+          ]}
+          onPress={() => onSendReminder(item)}
+          disabled={isSendingReminder || isProcessing}
+        >
+          {isSendingReminder ? (
+            <ActivityIndicator size="small" color="#F59E0B" />
+          ) : (
+            <Ionicons name="mail-outline" size={16} color="#F59E0B" />
+          )}
+          <Text style={{ color: '#F59E0B', marginLeft: 8, fontWeight: '600', fontSize: 13 }}>
+            {isSendingReminder ? 'Sending...' : 'Send Payment Reminder'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* POP Warning */}
       {item.status === 'pending' && !canApproveItem && (
