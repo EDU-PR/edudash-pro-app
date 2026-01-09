@@ -56,7 +56,7 @@ export const useNewEnhancedTeacherState = () => {
         router.push('/screens/start-live-lesson');
         break;
       case 'grade_assignments':
-        router.push('/screens/assign-homework');
+        router.push('/screens/assign-lesson');
         break;
       case 'view_classes':
         router.push('/screens/class-teacher-management');

@@ -81,9 +81,9 @@ export class DashNavigationHandler implements IDashNavigationHandler {
       roles: ['teacher', 'principal']
     },
     'homework': {
-      route: '/screens/assign-homework',
-      title: 'Assign Homework',
-      description: 'Create and assign homework',
+      route: '/screens/assign-lesson',
+      title: 'Assign Lesson',
+      description: 'Create and assign lessons to students',
       keywords: ['homework', 'assignments', 'tasks'],
       requiresAuth: true,
       roles: ['teacher']
