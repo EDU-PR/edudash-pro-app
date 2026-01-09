@@ -148,6 +148,30 @@ export default function AftercarePage() {
       // Get current user session to set parent_user_id if authenticated
       const { data: { session } } = await supabase.auth.getSession();
       
+      // Check for duplicate registration before submitting
+      const { data: existingRegistrations, error: checkError } = await supabase
+        .from('aftercare_registrations')
+        .select('id, status, created_at')
+        .eq('parent_email', formData.parentEmail)
+        .eq('child_first_name', formData.childFirstName.trim())
+        .eq('child_last_name', formData.childLastName.trim())
+        .eq('preschool_id', COMMUNITY_SCHOOL_ID)
+        .neq('status', 'cancelled');
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "no rows returned" which is fine
+        console.error('Error checking for duplicates:', checkError);
+      }
+      
+      if (existingRegistrations && existingRegistrations.length > 0) {
+        const activeRegistration = existingRegistrations.find(r => r.status !== 'cancelled');
+        if (activeRegistration) {
+          setError('A registration for this child already exists. Please contact the school if you need to update your registration.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      
       // Create the registration record FIRST (always pending_payment initially)
       const { data, error: insertError } = await supabase
         .from('aftercare_registrations')

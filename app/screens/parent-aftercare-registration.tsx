@@ -287,7 +287,36 @@ export default function ParentAftercareRegistrationScreen() {
         console.log('[Aftercare Registration] Submitting payload:', payload);
       }
 
-      const { data, error: insertError } = await assertSupabase()
+      // Check for duplicate registration before submitting
+      const supabase = assertSupabase();
+      const { data: existingRegistrations, error: checkError } = await supabase
+        .from('aftercare_registrations')
+        .select('id, status, created_at')
+        .eq('parent_email', formData.parentEmail.trim())
+        .eq('child_first_name', formData.childFirstName.trim())
+        .eq('child_last_name', formData.childLastName.trim())
+        .eq('preschool_id', COMMUNITY_SCHOOL_ID)
+        .neq('status', 'cancelled');
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "no rows returned" which is fine
+        console.error('[Aftercare Registration] Error checking for duplicates:', checkError);
+      }
+      
+      if (existingRegistrations && existingRegistrations.length > 0) {
+        const activeRegistration = existingRegistrations.find(r => r.status !== 'cancelled');
+        if (activeRegistration) {
+          Alert.alert(
+            'Duplicate Registration',
+            'A registration for this child already exists. Please contact the school if you need to update your registration.',
+            [{ text: 'OK' }]
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      const { data, error: insertError } = await supabase
         .from('aftercare_registrations')
         .insert(payload)
         .select()
