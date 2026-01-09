@@ -76,27 +76,65 @@ export default function ParentAftercareRegistrationScreen() {
   };
 
   // Fetch current registration count
-  useEffect(() => {
-    const fetchSpots = async () => {
-      try {
-        const { count, error } = await assertSupabase()
-          .from('aftercare_registrations')
-          .select('*', { count: 'exact', head: true })
-          .eq('preschool_id', COMMUNITY_SCHOOL_ID);
-        
-        if (!error && count !== null) {
-          const remaining = Math.max(0, EARLY_BIRD_LIMIT - count);
-          setSpotsRemaining(remaining);
-          if (remaining === 0) {
-            setRegistrationsClosed(true);
-          }
+  const fetchSpots = async () => {
+    try {
+      const { count, error } = await assertSupabase()
+        .from('aftercare_registrations')
+        .select('*', { count: 'exact', head: true })
+        .eq('preschool_id', COMMUNITY_SCHOOL_ID);
+      
+      if (!error && count !== null) {
+        const remaining = Math.max(0, EARLY_BIRD_LIMIT - count);
+        setSpotsRemaining(remaining);
+        if (remaining === 0) {
+          setRegistrationsClosed(true);
         }
-      } catch (err) {
-        console.error('Error fetching spots:', err);
-        setSpotsRemaining(EARLY_BIRD_LIMIT);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching spots:', err);
+      setSpotsRemaining(EARLY_BIRD_LIMIT);
+    }
+  };
+
+  // Fetch spots on mount and set up realtime subscription
+  useEffect(() => {
     fetchSpots();
+
+    // Set up realtime subscription to update counter when new registrations are added
+    const supabase = assertSupabase();
+    const channel = supabase
+      .channel('aftercare-registrations-count')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'aftercare_registrations',
+          filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
+        },
+        () => {
+          // Refresh count when a new registration is inserted
+          fetchSpots();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'aftercare_registrations',
+          filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
+        },
+        () => {
+          // Refresh count when a registration is deleted
+          fetchSpots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Generate payment reference
@@ -266,6 +304,9 @@ export default function ParentAftercareRegistrationScreen() {
         }
         throw insertError;
       }
+
+      // Refresh spots counter immediately after successful registration
+      await fetchSpots();
 
       // Send confirmation email via Edge Function
       try {

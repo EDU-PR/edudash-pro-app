@@ -21,22 +21,60 @@ export default function Home() {
   const [aftercareSpotsRemaining, setAftercareSpotsRemaining] = useState<number | null>(null);
 
   // Fetch aftercare spots remaining
-  useEffect(() => {
-    const fetchSpots = async () => {
-      try {
-        const supabase = createClient();
-        const { count } = await supabase
-          .from('aftercare_registrations')
-          .select('*', { count: 'exact', head: true });
-        
-        if (count !== null) {
-          setAftercareSpotsRemaining(Math.max(0, EARLY_BIRD_LIMIT - count));
-        }
-      } catch (err) {
-        setAftercareSpotsRemaining(EARLY_BIRD_LIMIT);
+  const fetchSpots = async () => {
+    try {
+      const supabase = createClient();
+      const { count } = await supabase
+        .from('aftercare_registrations')
+        .select('*', { count: 'exact', head: true });
+      
+      if (count !== null) {
+        setAftercareSpotsRemaining(Math.max(0, EARLY_BIRD_LIMIT - count));
       }
-    };
+    } catch (err) {
+      setAftercareSpotsRemaining(EARLY_BIRD_LIMIT);
+    }
+  };
+
+  useEffect(() => {
     fetchSpots();
+
+    // Set up realtime subscription to update counter when new registrations are added
+    const supabase = createClient();
+    const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+    const channel = supabase
+      .channel('aftercare-registrations-count-home')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'aftercare_registrations',
+          filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
+        },
+        () => {
+          // Refresh count when a new registration is inserted
+          fetchSpots();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'aftercare_registrations',
+          filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
+        },
+        () => {
+          // Refresh count when a registration is deleted
+          fetchSpots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleEarlyAccessSubmit = async (e: React.FormEvent) => {
