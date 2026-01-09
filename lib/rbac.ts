@@ -1095,6 +1095,12 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       resolvedOrgId,
       orgMemberOrgId: orgMember?.organization_id,
     });
+    
+    // #region agent log
+    if (typeof fetch !== 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'rbac.ts:1026',message:'Organization resolution result',data:{userId:profile.id,email:profile.email,role:userRole,isPrincipal,finalOrgId,source:orgIdSource,profileOrgId,resolvedOrgId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    }
+    // #endregion
 
     // Create base profile from database data
     const baseProfile: UserProfile = {
