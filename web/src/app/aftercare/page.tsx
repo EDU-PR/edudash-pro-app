@@ -107,11 +107,15 @@ export default function AftercarePage() {
     try {
       const supabase = createClient();
       
+      // Get current user session to set parent_user_id if authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      
       // Create the registration record FIRST (always pending_payment initially)
       const { data, error: insertError } = await supabase
         .from('aftercare_registrations')
         .insert({
           preschool_id: COMMUNITY_SCHOOL_ID,
+          parent_user_id: session?.user?.id || null, // Set parent_user_id if user is authenticated
           parent_first_name: formData.parentFirstName,
           parent_last_name: formData.parentLastName,
           parent_email: formData.parentEmail,
