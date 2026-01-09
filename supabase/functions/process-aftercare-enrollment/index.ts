@@ -69,10 +69,14 @@ serve(async (req) => {
       registration = data;
     }
 
-    // Only process if status is 'enrolled' or 'paid' (if auto-enroll)
-    if (registration.status !== 'enrolled' && registration.status !== 'paid') {
+    // Only process if status is 'enrolled' - accounts are created ONLY on enrollment
+    // 'paid' status means payment verified but not yet enrolled
+    if (registration.status !== 'enrolled') {
       return new Response(
-        JSON.stringify({ message: 'Registration status is not enrolled or paid, skipping account creation' }),
+        JSON.stringify({ 
+          message: 'Registration status is not enrolled, skipping account creation',
+          note: 'Accounts are only created when principal clicks "Enroll Student"'
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
