@@ -9,6 +9,8 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Text,
   TouchableOpacity,
   View,
@@ -268,11 +270,14 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
         <TouchableOpacity 
           style={[styles.popLink, { backgroundColor: colors.primary + '15' }]}
           onPress={() => {
-            // Open POP in browser/viewer
-            router.push({
-              pathname: '/screens/image-viewer',
-              params: { url: item.proof_of_payment_url, title: 'Proof of Payment' },
-            } as any);
+            // Open POP in browser/external viewer
+            if (!item.proof_of_payment_url) {
+              Alert.alert('Not Available', 'Proof of payment has not been uploaded yet.');
+              return;
+            }
+            Linking.openURL(item.proof_of_payment_url).catch(() => {
+              Alert.alert('Error', 'Could not open proof of payment document');
+            });
           }}
         >
           <Ionicons name="receipt-outline" size={16} color={colors.primary} />
