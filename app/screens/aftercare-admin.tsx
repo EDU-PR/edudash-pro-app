@@ -85,12 +85,24 @@ export default function AfterCareAdminScreen() {
     try {
       const supabase = assertSupabase();
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aftercare-admin.tsx:82',message:'fetchRegistrations entry',data:{organizationId,userId:profile?.id,profileRole:profile?.role,profileOrgId:profile?.organization_id,profilePreschoolId:profile?.preschool_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
       // Simplified: Each principal sees only their own school's registrations
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aftercare-admin.tsx:89',message:'Before aftercare query',data:{organizationId,targetPreschoolId:organizationId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       const { data, error } = await supabase
         .from('aftercare_registrations')
         .select('*')
         .eq('preschool_id', organizationId)
         .order('created_at', { ascending: false });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aftercare-admin.tsx:95',message:'After aftercare query',data:{hasError:!!error,errorCode:error?.code,errorMessage:error?.message,errorDetails:error?.details,dataCount:data?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       if (error && error.code !== '42P01') {
         console.error('[AfterCareAdmin] Error:', error);

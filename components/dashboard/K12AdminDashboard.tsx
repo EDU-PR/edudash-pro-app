@@ -78,6 +78,10 @@ export function K12AdminDashboard() {
     try {
       const supabase = assertSupabase();
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:76',message:'loadDashboardData entry',data:{organizationId,userId:user?.id,profileRole:profile?.role,profileOrgId:profile?.organization_id,profilePreschoolId:profile?.preschool_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
       // Fetch school name
       const { data: schoolData, error: schoolError } = await supabase
         .from('preschools')
@@ -93,6 +97,10 @@ export function K12AdminDashboard() {
         console.warn('[K12Dashboard] Could not fetch school name:', schoolError);
       }
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:98',message:'Before aftercare query',data:{organizationId,targetPreschoolId:organizationId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       // Fetch aftercare registrations stats
       // Simplified: Each principal sees only their own school's registrations
       const { data: registrations, error } = await supabase
@@ -100,6 +108,10 @@ export function K12AdminDashboard() {
         .select('id, status, child_grade, child_first_name, child_last_name, created_at')
         .eq('preschool_id', organizationId)
         .order('created_at', { ascending: false });
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:104',message:'After aftercare query',data:{hasError:!!error,errorCode:error?.code,errorMessage:error?.message,registrationsCount:registrations?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       if (error && error.code !== '42P01') {
         console.error('[K12Dashboard] Error fetching registrations:', error);
