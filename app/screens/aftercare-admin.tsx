@@ -142,6 +142,45 @@ export default function AfterCareAdminScreen() {
       
       if (error) throw error;
       
+      // If status changed to 'enrolled' or 'paid', trigger enrollment processing
+      if (newStatus === 'enrolled' || newStatus === 'paid') {
+        try {
+          const { data: enrollmentResult, error: enrollmentError } = await supabase.functions.invoke(
+            'process-aftercare-enrollment',
+            {
+              body: { registration_id: id },
+            }
+          );
+
+          if (enrollmentError) {
+            console.error('[AfterCareAdmin] Enrollment processing error:', enrollmentError);
+            // Don't fail the status update, just log the error
+          } else if (enrollmentResult?.success) {
+            const messages = [];
+            if (enrollmentResult.data?.parent_account_created) {
+              messages.push('Parent account created');
+            }
+            if (enrollmentResult.data?.student_created) {
+              messages.push('Student account created');
+            }
+            if (messages.length > 0) {
+              Alert.alert(
+                'Success',
+                `Status updated to ${statusConfig[newStatus].label}.\n\n${messages.join(' and ')}.`
+              );
+            } else {
+              Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+            }
+          }
+        } catch (enrollmentErr) {
+          console.error('[AfterCareAdmin] Enrollment processing exception:', enrollmentErr);
+          // Status update succeeded, so show success message anyway
+          Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+        }
+      } else {
+        Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+      }
+      
       // Update local state
       setRegistrations(prev => 
         prev.map(r => r.id === id ? { ...r, status: newStatus } : r)
@@ -151,7 +190,8 @@ export default function AfterCareAdminScreen() {
         setSelectedRegistration(prev => prev ? { ...prev, status: newStatus } : null);
       }
       
-      Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+      // Refresh to get latest data
+      await fetchRegistrations();
     } catch (err) {
       console.error('[AfterCareAdmin] Update error:', err);
       Alert.alert('Error', 'Failed to update status');
@@ -369,7 +409,7 @@ export default function AfterCareAdminScreen() {
                 </Text>
                 
                 {/* Proof of Payment */}
-                {selectedRegistration.proof_of_payment_url && (
+                {selectedRegistration.proof_of_payment_url ? (
                   <TouchableOpacity
                     style={styles.popButton}
                     onPress={() => Linking.openURL(selectedRegistration.proof_of_payment_url!)}
@@ -377,12 +417,65 @@ export default function AfterCareAdminScreen() {
                     <Ionicons name="document-attach" size={20} color="#fff" />
                     <Text style={styles.popButtonText}>View Proof of Payment</Text>
                   </TouchableOpacity>
+                ) : (
+                  <View style={styles.noPopContainer}>
+                    <Ionicons name="warning-outline" size={20} color="#F59E0B" />
+                    <Text style={styles.noPopText}>No proof of payment uploaded</Text>
+                  </View>
                 )}
               </View>
               
               {/* Status Actions */}
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Update Status</Text>
+                
+                {/* Mark as Paid button for pending registrations without POP */}
+                {selectedRegistration.status === 'pending_payment' && !selectedRegistration.proof_of_payment_url && (
+                  <TouchableOpacity
+                    style={[styles.statusButton, styles.markAsPaidButton]}
+                    onPress={() => {
+                      Alert.alert(
+                        'Mark as Paid',
+                        'This will mark the registration as paid without proof of payment. This action bypasses POP verification. Continue?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Mark as Paid',
+                            style: 'default',
+                            onPress: async () => {
+                              try {
+                                const supabase = assertSupabase();
+                                const { error } = await supabase
+                                  .from('aftercare_registrations')
+                                  .update({
+                                    status: 'paid',
+                                    updated_at: new Date().toISOString(),
+                                    notes: (selectedRegistration.notes || '') + '\n[Manual payment verification - no POP provided]',
+                                  })
+                                  .eq('id', selectedRegistration.id);
+                                
+                                if (error) throw error;
+                                
+                                // Refresh registrations
+                                await fetchRegistrations();
+                                setSelectedRegistration(null);
+                                Alert.alert('Success', 'Registration marked as paid');
+                              } catch (err) {
+                                console.error('[AfterCareAdmin] Mark as paid error:', err);
+                                Alert.alert('Error', 'Failed to mark as paid');
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    disabled={processing === selectedRegistration.id}
+                  >
+                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                    <Text style={[styles.statusButtonText, { color: '#10B981' }]}>Mark as Paid (No POP)</Text>
+                  </TouchableOpacity>
+                )}
+                
                 <View style={styles.statusActions}>
                   {(['pending_payment', 'paid', 'enrolled', 'cancelled'] as const).map(status => (
                     <TouchableOpacity
@@ -678,5 +771,24 @@ const createStyles = (theme: any) => StyleSheet.create({
   statusButtonText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  markAsPaidButton: {
+    borderColor: '#10B981',
+    backgroundColor: '#10B98110',
+    marginBottom: 12,
+  },
+  noPopContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#F59E0B10',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  noPopText: {
+    fontSize: 14,
+    color: '#F59E0B',
+    fontWeight: '500',
   },
 });

@@ -1,8 +1,6 @@
 ---
-name: warp-md
-description: This is a new rule
+alwaysApply: true
 ---
-
 # EduDash Pro - Project Rules & Guidelines
 
 ## Project Overview

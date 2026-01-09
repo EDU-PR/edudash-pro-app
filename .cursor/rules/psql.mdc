@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+# Overview
+
+Insert overview text here. The agent will only see this should they choose to apply the rule.
+
+Always use psql : psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.lvvvjywrmpcqrpvuptdi -d postgres -c
+hHFgMNhsfdUKUEkA - Until we fix the migrations 
