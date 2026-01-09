@@ -562,4 +562,3 @@ if (!data?.length) {
 
 **Remember**: Security, type safety, and multi-tenant isolation are non-negotiable. Always validate permissions and data access.
 
-
