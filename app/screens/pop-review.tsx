@@ -73,6 +73,9 @@ interface POPUpload {
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
 export default function POPReviewScreen() {
+  // #region agent log
+  console.log('[DEBUG_AGENT] POPReviewScreen-MOUNTED', JSON.stringify({timestamp:Date.now()}));
+  // #endregion
   const { theme } = useTheme();
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();

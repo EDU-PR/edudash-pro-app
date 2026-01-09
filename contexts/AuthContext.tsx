@@ -147,6 +147,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignOut = useCallback(async () => {
     try {
       console.log('[AuthContext] Starting sign-out process...');
+      // #region agent log
+      console.log('[DEBUG_AGENT] SignOut-START', JSON.stringify({location:'AuthContext.tsx:handleSignOut',userId:user?.id,hasSession:!!session,hasProfile:!!profile,timestamp:Date.now()}));
+      // #endregion
       
       // CRITICAL: Clear all navigation locks FIRST to prevent stale locks
       // This must happen before any state changes or async operations
@@ -218,6 +221,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       
       console.log('[AuthContext] Sign-out completed successfully');
+      // #region agent log
+      console.log('[DEBUG_AGENT] SignOut-COMPLETE', JSON.stringify({location:'AuthContext.tsx:handleSignOut',userId:user?.id,platform:Platform.OS,timestamp:Date.now()}));
+      // #endregion
       
       // Navigate to sign-in screen
       if (Platform.OS === 'web') {
@@ -455,6 +461,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Subscribe to auth changes
       const { data: listener } = assertSupabase().auth.onAuthStateChange(async (event, s) => {
         if (!mounted) return;
+        // #region agent log
+        console.log('[DEBUG_AGENT] AuthStateChange', JSON.stringify({event,userId:s?.user?.id,email:s?.user?.email,mounted,timestamp:Date.now()}));
+        // #endregion
         
         setSession(s ?? null);
         setUser(s?.user ?? null);
@@ -529,9 +538,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               // Route user after successful sign in
               try {
+                // #region agent log
+                console.log('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
+                // #endregion
                 await routeAfterLogin(s.user, enhancedProfile);
+                // #region agent log
+                console.log('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
+                // #endregion
               } catch (error) {
                 console.error('Post-login routing failed:', error);
+                // #region agent log
+                console.log('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
+                // #endregion
               }
             }
           }

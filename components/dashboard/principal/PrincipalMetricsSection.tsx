@@ -129,13 +129,21 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         router.push('/screens/class-teacher-management');
         break;
       case 'pending_payments':
-        router.push('/screens/pop-review');
+        try {
+          router.push('/screens/pop-review' as any);
+        } catch (error) {
+          console.error('[PrincipalMetricsSection] Failed to navigate to pop-review:', error);
+        }
         break;
       case 'fees_collected':
         router.push('/screens/financial-dashboard');
         break;
       case 'outstanding_balance':
-        router.push('/screens/pop-review');
+        try {
+          router.push('/screens/pop-review' as any);
+        } catch (error) {
+          console.error('[PrincipalMetricsSection] Failed to navigate to pop-review:', error);
+        }
         break;
       case 'monthly_registrations':
         router.push('/screens/principal-registrations');

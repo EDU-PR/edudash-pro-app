@@ -143,7 +143,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/aftercare-admin');
         break;
       case 'payments':
-        router.push('/screens/pop-review');
+        try {
+          router.push('/screens/pop-review' as any);
+        } catch (error) {
+          console.error('[PrincipalQuickActions] Failed to navigate to pop-review:', error);
+          Alert.alert('Navigation Error', 'Could not open payment reviews. Please try again.');
+        }
         break;
       case 'teacher-approval':
         router.push('/screens/teacher-approval');

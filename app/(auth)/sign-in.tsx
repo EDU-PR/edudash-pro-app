@@ -212,11 +212,17 @@ console.log('[SignIn] Component rendering, theme:', theme);
 
     setLoading(true);
     let signInSuccess = false;
+    // #region agent log
+    console.log('[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
+    // #endregion
     
     try {
       // Use centralized session manager to avoid throwing on network/storage quirks
       const res = await signInWithSession(email.trim(), password);
       if (res.error) {
+        // #region agent log
+        console.log('[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
+        // #endregion
         Alert.alert(t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }), res.error);
         setLoading(false);
         return;
@@ -224,6 +230,9 @@ console.log('[SignIn] Component rendering, theme:', theme);
 
       console.log('Sign in successful:', email.trim());
       signInSuccess = true;
+      // #region agent log
+      console.log('[DEBUG_AGENT] SignIn-SUCCESS', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
+      // #endregion
 
       // Save remember me preference and credentials (best-effort; do not block sign-in)
       try {
@@ -270,6 +279,9 @@ console.log('[SignIn] Component rendering, theme:', theme);
       
       const navigationTimeout = setTimeout(() => {
         console.warn('[SignIn] Navigation timeout (8s) - AuthContext may have failed to route, forcing fallback');
+        // #region agent log
+        console.log('[DEBUG_AGENT] SignIn-TIMEOUT', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
+        // #endregion
         setLoading(false);
         // Force navigation to profiles-gate as fallback (safer than tabs)
         try {

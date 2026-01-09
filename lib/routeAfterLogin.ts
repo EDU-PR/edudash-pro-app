@@ -22,6 +22,9 @@ const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
 
 function isNavigationLocked(userId: string): boolean {
   const lockTime = navigationLocks.get(userId);
+  // #region agent log
+  console.log('[DEBUG_AGENT] NavLock-CHECK', JSON.stringify({userId,hasLock:!!lockTime,lockAge:lockTime?Date.now()-lockTime:null,lockCount:navigationLocks.size,timestamp:Date.now()}));
+  // #endregion
   if (!lockTime) return false;
   // Auto-expire old locks
   if (Date.now() - lockTime > NAVIGATION_LOCK_TIMEOUT) {
@@ -50,6 +53,9 @@ function clearNavigationLock(userId: string): void {
  */
 export function clearAllNavigationLocks(): void {
   const count = navigationLocks.size;
+  // #region agent log
+  console.log('[DEBUG_AGENT] NavLock-CLEARALL', JSON.stringify({lockCount:count,locks:Array.from(navigationLocks.keys()),timestamp:Date.now()}));
+  // #endregion
   navigationLocks.clear();
   if (count > 0) {
     console.log('🚦 [ROUTE] Cleared all navigation locks:', count, 'locks removed');
@@ -129,6 +135,9 @@ export async function detectRoleAndSchool(user?: User | null): Promise<{ role: s
  */
 export async function routeAfterLogin(user?: User | null, profile?: EnhancedUserProfile | null): Promise<void> {
   const userId = user?.id;
+  // #region agent log
+  console.log('[DEBUG_AGENT] RouteAfterLogin-ENTRY', JSON.stringify({userId,hasProfile:!!profile,role:profile?.role,lockCount:navigationLocks.size,timestamp:Date.now()}));
+  // #endregion
   if (!userId) {
     console.error('No user ID provided for post-login routing');
     router.replace('/(auth)/sign-in');
@@ -138,6 +147,9 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
   // Wrap entire function in timeout to prevent hanging
   const overallTimeout = setTimeout(() => {
     console.error('🚦 [ROUTE] routeAfterLogin overall timeout (8s) - forcing fallback navigation');
+    // #region agent log
+    console.log('[DEBUG_AGENT] RouteAfterLogin-TIMEOUT', JSON.stringify({userId,timestamp:Date.now()}));
+    // #endregion
     clearNavigationLock(userId);
     router.replace('/profiles-gate');
   }, 8000); // 8 second overall timeout (reduced from 15s)
@@ -340,6 +352,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   
   console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
   console.log('[ROUTE DEBUG] Organization membership role:', memberRole);
+  console.log('[ROUTE DEBUG] Full organization_membership object:', JSON.stringify((profile as any)?.organization_membership, null, 2));
   
   // Define SOA-specific member types that ALWAYS use member_type routing
   // These are wing-specific roles that take priority over profile.role
@@ -366,8 +379,26 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // regardless of their profile.role (which might be 'admin' or 'parent')
   const hasSoaSpecificRole = memberType && soaSpecificMemberTypes.includes(memberType);
   
+  // #region agent log
+  console.log('[DEBUG_AGENT] RouteDecision-SOA_CHECK', JSON.stringify({
+    memberType,
+    hasSoaSpecificRole,
+    hasOrganization,
+    isInList: memberType ? soaSpecificMemberTypes.includes(memberType) : false,
+    orgId: profile.organization_id,
+    timestamp: Date.now()
+  }));
+  // #endregion
+  
   if (hasSoaSpecificRole && hasOrganization) {
     console.log('[ROUTE DEBUG] SOA-specific member_type detected:', memberType, '- using member_type routing');
+    // #region agent log
+    console.log('[DEBUG_AGENT] RouteDecision-SOA_ROUTING', JSON.stringify({
+      memberType,
+      orgId: profile.organization_id,
+      timestamp: Date.now()
+    }));
+    // #endregion
     
     // CEO / National Admin / President / Executive leadership
     if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president' ||
@@ -503,12 +534,29 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
 
   // Route based on role and tenant kind for organization members
   // Note: member_type routing is already handled above for SOA/skills-based orgs
+  // #region agent log
+  console.log('[DEBUG_AGENT] RouteDecision-FALLBACK_TO_ROLE', JSON.stringify({
+    role,
+    memberType,
+    hasOrganization,
+    orgId: profile.organization_id,
+    timestamp: Date.now()
+  }));
+  // #endregion
+  
   switch (role) {
     case 'super_admin':
       return { path: '/screens/super-admin-dashboard' };
     
     case 'admin':
       // Regular organization admins (member_type routing already handled above)
+      // WARNING: If we reach here, member_type routing failed - log for debugging
+      console.warn('[ROUTE DEBUG] Admin routing FALLBACK - member_type should have been used!', {
+        memberType,
+        hasOrganization,
+        orgId: profile.organization_id,
+        organization_membership: (profile as any)?.organization_membership,
+      });
       console.log('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard');
       return { path: '/screens/org-admin-dashboard' };
     
