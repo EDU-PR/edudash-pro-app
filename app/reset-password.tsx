@@ -24,8 +24,86 @@ export default function ResetPasswordRoute() {
       try {
         const supabase = assertSupabase();
         
-        // The PKCE flow should have already set up the session via Supabase's
-        // server-side redirect. Let's check if we have a valid session.
+        // Check for PKCE code parameter (from web redirect)
+        const code = params.code as string | undefined;
+        const token_hash = params.token_hash as string | undefined;
+        const token = params.token as string | undefined;
+        const type = params.type as string | undefined;
+        
+        console.log('[ResetPasswordRoute] Checking session with params:', { 
+          hasCode: !!code,
+          hasTokenHash: !!token_hash,
+          hasToken: !!token,
+          type 
+        });
+
+        // Handle PKCE code exchange if present
+        if (code) {
+          console.log('[ResetPasswordRoute] Processing PKCE code exchange...');
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          
+          if (exchangeError) {
+            console.error('[ResetPasswordRoute] Code exchange failed:', exchangeError);
+            setHasSession(false);
+            setChecking(false);
+            return;
+          }
+
+          if (data.session) {
+            console.log('[ResetPasswordRoute] PKCE code exchanged successfully');
+            setHasSession(true);
+            setChecking(false);
+            return;
+          }
+        }
+
+        // Handle token_hash (legacy flow)
+        if (token_hash && type === 'recovery') {
+          console.log('[ResetPasswordRoute] Processing token_hash verification...');
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash,
+            type: 'recovery',
+          });
+
+          if (verifyError) {
+            console.error('[ResetPasswordRoute] Token verification failed:', verifyError);
+            setHasSession(false);
+            setChecking(false);
+            return;
+          }
+
+          if (data.session) {
+            console.log('[ResetPasswordRoute] Token verified successfully');
+            setHasSession(true);
+            setChecking(false);
+            return;
+          }
+        }
+
+        // Handle PKCE token parameter
+        if (token && type === 'recovery') {
+          console.log('[ResetPasswordRoute] Processing PKCE token...');
+          const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: token,
+            type: 'recovery',
+          });
+
+          if (verifyError) {
+            console.error('[ResetPasswordRoute] PKCE token verification failed:', verifyError);
+            setHasSession(false);
+            setChecking(false);
+            return;
+          }
+
+          if (data.session) {
+            console.log('[ResetPasswordRoute] PKCE token verified successfully');
+            setHasSession(true);
+            setChecking(false);
+            return;
+          }
+        }
+        
+        // Fallback: Check for existing session (PKCE flow may have already set it)
         const { data: { session }, error } = await supabase.auth.getSession();
         
         console.log('[ResetPasswordRoute] Session check:', { 
@@ -52,7 +130,7 @@ export default function ResetPasswordRoute() {
 
     // Small delay to ensure Supabase has processed the redirect
     setTimeout(checkAndSetupSession, 500);
-  }, []);
+  }, [params]);
 
   // Show loading while checking session
   if (checking) {
