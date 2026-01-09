@@ -57,6 +57,7 @@ export function K12AdminDashboard() {
   const [stats, setStats] = useState<AftercareStat>({ total: 0, pendingPayment: 0, paid: 0, enrolled: 0 });
   const [gradeBreakdown, setGradeBreakdown] = useState<GradeCount[]>([]);
   const [recentRegistrations, setRecentRegistrations] = useState<any[]>([]);
+  const [schoolName, setSchoolName] = useState<string>('Loading...');
   
   const styles = useMemo(() => createStyles(theme, insets.top), [theme, insets.top]);
   
@@ -76,6 +77,21 @@ export function K12AdminDashboard() {
     
     try {
       const supabase = assertSupabase();
+      
+      // Fetch school name
+      const { data: schoolData, error: schoolError } = await supabase
+        .from('preschools')
+        .select('name, school_type')
+        .eq('id', organizationId)
+        .single();
+      
+      if (!schoolError && schoolData) {
+        setSchoolName(schoolData.name);
+      } else {
+        // Fallback to a generic name if fetch fails
+        setSchoolName('EduDash Pro School');
+        console.warn('[K12Dashboard] Could not fetch school name:', schoolError);
+      }
       
       // Fetch aftercare registrations stats
       // Simplified: Each principal sees only their own school's registrations
@@ -230,7 +246,7 @@ export function K12AdminDashboard() {
         <View style={styles.headerContent}>
           <Text style={styles.greeting}>{greeting},</Text>
           <Text style={styles.userName}>{userName} 👋</Text>
-          <Text style={styles.schoolName}>EduDash Pro Community School</Text>
+          <Text style={styles.schoolName}>{schoolName}</Text>
           <View style={styles.schoolTypeBadge}>
             <Text style={styles.schoolTypeText}>K-12 School • Grade R to Grade 12</Text>
           </View>
