@@ -148,15 +148,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[AuthContext] Starting sign-out process...');
       
-      // CRITICAL: Clear all navigation locks FIRST (synchronously) to prevent stale locks
+      // CRITICAL: Clear all navigation locks FIRST to prevent stale locks
       // This must happen before any state changes or async operations
+      // Try both async import and direct require as fallback
       try {
-        // Import synchronously at module level would be better, but this works
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[AuthContext] All navigation locks cleared before sign-out');
+        console.log('[AuthContext] All navigation locks cleared before sign-out (via import)');
       } catch (lockErr) {
-        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
+        console.warn('[AuthContext] Failed to clear navigation locks via import, trying require:', lockErr);
+        // Fallback: try direct require (works in some environments)
+        try {
+          const routeModule = require('@/lib/routeAfterLogin');
+          if (routeModule.clearAllNavigationLocks) {
+            routeModule.clearAllNavigationLocks();
+            console.log('[AuthContext] All navigation locks cleared before sign-out (via require)');
+          }
+        } catch (requireErr) {
+          console.warn('[AuthContext] Failed to clear navigation locks via require (non-fatal):', requireErr);
+        }
       }
       
       // CRITICAL FIX: Clear all auth state IMMEDIATELY - before any async work
