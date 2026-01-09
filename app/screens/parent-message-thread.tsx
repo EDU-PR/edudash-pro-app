@@ -32,6 +32,8 @@ import { useCallSafe } from '@/components/calls/CallProvider';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import { logger } from '@/lib/logger';
+import { useMessageActions } from '@/hooks/useMessageActions';
+import { useThreadOptions } from '@/hooks/useThreadOptions';
 
 // Shared messaging components
 import {
@@ -402,254 +404,45 @@ export default function ParentMessageThreadScreen() {
     setShowMessageActions(true);
   }, []);
 
-  // Message action handlers - only one reaction allowed per user per message
-  const handleReact = useCallback(async (emoji: string) => {
-    if (!selectedMessage?.id || !user?.id) {
-      setShowMessageActions(false);
-      setSelectedMessage(null);
-      return;
-    }
-    
-    try {
-      const client = require('@/lib/supabase').assertSupabase();
-      
-      // Delete any existing reaction from this user on this message first
-      await client
-        .from('message_reactions')
-        .delete()
-        .eq('message_id', selectedMessage.id)
-        .eq('user_id', user.id);
-      
-      // Add the new reaction
-      await client.from('message_reactions').insert({
-        message_id: selectedMessage.id,
-        user_id: user.id,
-        emoji: emoji,
-      });
-      
-      // Refresh messages to show updated reactions
-      refetch();
-    } catch (err) {
-      logger.error('ParentThread', 'Error reacting to message:', err);
-      toast.error('Failed to add reaction');
-    }
-    
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, [selectedMessage, user?.id, refetch]);
+  // Message action handlers - extracted to hook per WARP.md
+  const {
+    handleReact,
+    handleReactionPress,
+    handleReply,
+    handleCopy,
+    handleForward,
+    handleDelete,
+    handleEdit,
+  } = useMessageActions({
+    selectedMessage,
+    user,
+    refetch,
+    setSelectedMessage,
+    setShowMessageActions,
+    setReplyingTo,
+    setOptimisticMsgs,
+  });
 
-  // Handler for clicking on a reaction to delete it
-  const handleReactionPress = useCallback(async (messageId: string, emoji: string) => {
-    if (!user?.id) return;
-    
-    try {
-      const client = require('@/lib/supabase').assertSupabase();
-      
-      // Delete the user's reaction
-      await client
-        .from('message_reactions')
-        .delete()
-        .eq('message_id', messageId)
-        .eq('user_id', user.id)
-        .eq('emoji', emoji);
-      
-      // Refresh messages
-      refetch();
-      toast.success('Reaction removed');
-    } catch (err) {
-      logger.error('ParentThread', 'Error removing reaction:', err);
-      toast.error('Failed to remove reaction');
-    }
-  }, [user?.id, refetch]);
-
-  const handleReply = useCallback(() => {
-    if (selectedMessage) {
-      setReplyingTo(selectedMessage);
-    }
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, [selectedMessage]);
-
-  const handleCopy = useCallback(() => {
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, []);
-
-  const handleForward = useCallback(() => {
-    toast.info('Forwarding is not yet implemented', 'Forward');
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, []);
-
-  const handleDelete = useCallback(async () => {
-    if (!selectedMessage) return;
-    
-    Alert.alert(
-      'Delete Message',
-      'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const client = require('@/lib/supabase').assertSupabase();
-              const { error } = await client
-                .from('messages')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', selectedMessage.id);
-              
-              if (error) throw error;
-              
-              // Remove from local state immediately
-              setOptimisticMsgs(prev => prev.filter(m => m.id !== selectedMessage.id));
-              // Trigger refetch to update from server
-              refetch();
-            } catch (err) {
-              logger.error('ParentThread', 'Delete failed:', err);
-              toast.error('Failed to delete message');
-            }
-          }
-        }
-      ]
-    );
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, [selectedMessage, refetch]);
-
-  const handleEdit = useCallback(() => {
-    setShowMessageActions(false);
-    setSelectedMessage(null);
-  }, []);
-
-  // Thread options handlers
-  const handleClearChat = useCallback(async () => {
-    Alert.alert(
-      'Clear Chat',
-      'This will delete all messages in this conversation. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Clear', 
-          style: 'destructive', 
-          onPress: async () => {
-            try {
-              const { assertSupabase } = await import('@/lib/supabase');
-              const supabase = assertSupabase();
-              
-              // Delete all messages in this thread
-              const { error } = await supabase
-                .from('messages')
-                .delete()
-                .eq('thread_id', threadId);
-              
-              if (error) throw error;
-              
-              // Clear optimistic messages
-              setOptimisticMsgs([]);
-              
-              // Refetch to update UI
-              refetch();
-              
-              toast.success('Chat cleared', 'Success');
-            } catch (error) {
-              logger.error('ParentThread', 'ClearChat error:', error);
-              toast.error('Failed to clear chat', 'Error');
-            }
-          }
-        }
-      ]
-    );
-    setShowOptionsMenu(false);
-  }, [threadId, refetch]);
-
-  const handleMuteNotifications = useCallback(() => {
-    toast.info('Mute notifications feature coming soon', 'Notifications');
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleSearchInChat = useCallback(() => {
-    toast.info('Search in chat feature coming soon', 'Search');
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleExportChat = useCallback(() => {
-    Alert.alert(
-      'Export Chat',
-      'Export chat history including media?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Without Media', onPress: () => toast.info('Chat export started...', 'Exporting') },
-        { text: 'Include Media', onPress: () => toast.info('Chat export with media started...', 'Exporting') }
-      ]
-    );
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleMediaLinksAndDocs = useCallback(() => {
-    toast.info('View shared media feature coming soon', 'Media');
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleStarredMessages = useCallback(() => {
-    toast.info('View starred messages feature coming soon', 'Starred');
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleDisappearingMessages = useCallback(() => {
-    Alert.alert(
-      'Disappearing Messages',
-      'Set messages to disappear after:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Off', onPress: () => toast.info('Disappearing messages turned off') },
-        { text: '24 Hours', onPress: () => toast.info('Messages will disappear after 24 hours') },
-        { text: '7 Days', onPress: () => toast.info('Messages will disappear after 7 days') },
-        { text: '90 Days', onPress: () => toast.info('Messages will disappear after 90 days') }
-      ]
-    );
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleAddShortcut = useCallback(() => {
-    Alert.alert('Add Shortcut', 'Create home screen shortcut for this chat?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Add', onPress: () => toast.success('Shortcut added to home screen') }
-    ]);
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleReport = useCallback(() => {
-    Alert.alert(
-      'Report',
-      'Report this conversation for:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Spam', onPress: () => toast.success('Thank you for reporting', 'Reported') },
-        { text: 'Harassment', onPress: () => toast.success('Thank you for reporting', 'Reported') },
-        { text: 'Other', onPress: () => toast.success('Thank you for reporting', 'Reported') }
-      ]
-    );
-    setShowOptionsMenu(false);
-  }, []);
-
-  const handleBlockUser = useCallback(() => {
-    Alert.alert(
-      'Block User',
-      `Block ${displayName}? They won't be able to message you.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Block', style: 'destructive', onPress: () => toast.warn(`${displayName} has been blocked`, 'Blocked') }
-      ]
-    );
-    setShowOptionsMenu(false);
-  }, [displayName]);
-
-  const handleViewContact = useCallback(() => {
-    toast.info(`View details for ${displayName}`, 'Contact Info');
-    setShowOptionsMenu(false);
-  }, [displayName]);
+  // Thread options handlers - extracted to hook per WARP.md
+  const {
+    handleClearChat,
+    handleMuteNotifications,
+    handleSearchInChat,
+    handleExportChat,
+    handleMediaLinksAndDocs,
+    handleStarredMessages,
+    handleDisappearingMessages,
+    handleAddShortcut,
+    handleReport,
+    handleBlockUser,
+    handleViewContact,
+  } = useThreadOptions({
+    threadId,
+    refetch,
+    setShowOptionsMenu,
+    setOptimisticMsgs,
+    displayName,
+  });
 
   // CallProvider context for calls + presence (unified single source)
   const callContext = useCallSafe();

@@ -107,28 +107,67 @@ const getReadNotificationIds = async (userId: string): Promise<Set<string>> => {
   return new Set();
 };
 
-// Helper to mark a notification as read
+// Helper to mark a notification as read (syncs with server)
 const markNotificationRead = async (userId: string, notificationId: string): Promise<void> => {
   try {
+    // Update local storage
     const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
     const existing = await getReadNotificationIds(userId);
     existing.add(notificationId);
-    // Keep only last 500 entries to prevent infinite growth
     const arr = Array.from(existing).slice(-500);
     await AsyncStorage.setItem(key, JSON.stringify(arr));
+    
+    // Sync with server - update in_app_notifications table if it's an in-app notification
+    if (notificationId.startsWith('in-app-')) {
+      const actualId = notificationId.replace('in-app-', '');
+      try {
+        await assertSupabase()
+          .from('in_app_notifications')
+          .update({ read: true, read_at: new Date().toISOString() })
+          .eq('id', actualId)
+          .eq('user_id', userId);
+      } catch (serverError) {
+        console.warn('[markNotificationRead] Server sync failed (non-critical):', serverError);
+      }
+    }
   } catch (e) {
     console.error('[markNotificationRead] Error:', e);
   }
 };
 
-// Helper to mark all notifications as read
+// Helper to mark all notifications as read (syncs with server)
 const markAllNotificationsRead = async (userId: string, notificationIds: string[]): Promise<void> => {
   try {
+    // Update local storage
     const key = `${READ_NOTIFICATIONS_KEY}_${userId}`;
     const existing = await getReadNotificationIds(userId);
     notificationIds.forEach(id => existing.add(id));
     const arr = Array.from(existing).slice(-500);
     await AsyncStorage.setItem(key, JSON.stringify(arr));
+    
+    // Sync with server - update all in-app notifications for this user
+    try {
+      const inAppIds = notificationIds
+        .filter(id => id.startsWith('in-app-'))
+        .map(id => id.replace('in-app-', ''));
+      
+      if (inAppIds.length > 0) {
+        await assertSupabase()
+          .from('in_app_notifications')
+          .update({ read: true, read_at: new Date().toISOString() })
+          .in('id', inAppIds)
+          .eq('user_id', userId);
+      }
+      
+      // Also mark all unread in_app_notifications as read
+      await assertSupabase()
+        .from('in_app_notifications')
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('read', false);
+    } catch (serverError) {
+      console.warn('[markAllNotificationsRead] Server sync failed (non-critical):', serverError);
+    }
   } catch (e) {
     console.error('[markAllNotificationsRead] Error:', e);
   }

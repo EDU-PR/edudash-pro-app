@@ -49,7 +49,7 @@ export interface Registration {
   rejection_reason?: string;
   created_at: string;
   // Source tracking
-  source?: 'edusite' | 'in-app';
+  source?: 'edusite' | 'in-app' | 'aftercare';
   // Additional fields from child_registration_requests
   medical_info?: string;
   dietary_requirements?: string;
@@ -189,11 +189,31 @@ export function useRegistrations(): UseRegistrationsReturn {
         .eq('preschool_id', organizationId)
         .order('created_at', { ascending: false });
 
+      // Fetch from aftercare_registrations (web and native aftercare submissions)
+      // EduDash Pro schools query both Community and Main school registrations
+      const EDUDASH_PRO_SCHOOL_IDS = [
+        '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
+        '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
+      ];
+      const isEdudashProSchool = EDUDASH_PRO_SCHOOL_IDS.includes(organizationId);
+      
+      const aftercareQuery = supabase
+        .from('aftercare_registrations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      const { data: aftercareData, error: aftercareError } = isEdudashProSchool
+        ? await aftercareQuery.in('preschool_id', EDUDASH_PRO_SCHOOL_IDS)
+        : await aftercareQuery.eq('preschool_id', organizationId);
+
       if (edusiteError && edusiteError.code !== '42P01') {
         console.warn('⚠️ [Registrations] EduSite fetch error:', edusiteError);
       }
       if (inAppError && inAppError.code !== '42P01') {
         console.warn('⚠️ [Registrations] In-app fetch error:', inAppError);
+      }
+      if (aftercareError && aftercareError.code !== '42P01') {
+        console.warn('⚠️ [Registrations] Aftercare fetch error:', aftercareError);
       }
 
       // Transform in-app registrations to match Registration interface
@@ -241,13 +261,62 @@ export function useRegistrations(): UseRegistrationsReturn {
         source: 'edusite' as const,
       }));
 
+      // Transform aftercare registrations to match Registration interface
+      // Map aftercare statuses: pending_payment/waitlisted → pending, paid/enrolled → approved, cancelled → rejected
+      const mapAftercareStatus = (status: string): 'pending' | 'approved' | 'rejected' => {
+        if (status === 'paid' || status === 'enrolled') return 'approved';
+        if (status === 'cancelled') return 'rejected';
+        return 'pending'; // pending_payment, waitlisted
+      };
+
+      const transformedAftercare: Registration[] = (aftercareData || []).map((item: any) => ({
+        id: item.id,
+        organization_id: item.preschool_id,
+        // Guardian info
+        guardian_name: `${item.parent_first_name || ''} ${item.parent_last_name || ''}`.trim(),
+        guardian_email: item.parent_email || '',
+        guardian_phone: item.parent_phone || '',
+        // Student info
+        student_first_name: item.child_first_name,
+        student_last_name: item.child_last_name,
+        student_dob: item.child_date_of_birth || '',
+        student_gender: undefined, // Aftercare doesn't have gender field
+        // Documents
+        documents_uploaded: true,
+        // Payment info
+        payment_reference: item.payment_reference,
+        registration_fee_amount: item.registration_fee || 0,
+        registration_fee_paid: item.status === 'paid' || item.status === 'enrolled',
+        payment_verified: item.status === 'paid' || item.status === 'enrolled',
+        payment_method: undefined, // Aftercare doesn't store payment_method
+        proof_of_payment_url: item.proof_of_payment_url,
+        campaign_applied: item.promotion_code,
+        discount_amount: item.registration_fee_original && item.registration_fee 
+          ? item.registration_fee_original - item.registration_fee 
+          : 0,
+        // Status - map aftercare statuses to Registration statuses
+        status: mapAftercareStatus(item.status),
+        reviewed_by: undefined, // Aftercare doesn't track reviewer
+        reviewed_date: item.payment_date || item.updated_at,
+        rejection_reason: item.status === 'cancelled' ? 'Cancelled' : undefined,
+        created_at: item.created_at,
+        // Source tracking
+        source: 'aftercare' as const,
+        // Additional fields - map aftercare fields
+        medical_info: item.child_medical_conditions,
+        dietary_requirements: item.child_allergies, // Aftercare uses allergies field
+        special_needs: undefined,
+        emergency_contact_name: item.emergency_contact_name,
+        emergency_contact_phone: item.emergency_contact_phone,
+      }));
+
       // Combine and sort by created_at
-      const combined = [...transformedEdusite, ...transformedInApp].sort(
+      const combined = [...transformedEdusite, ...transformedInApp, ...transformedAftercare].sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
       console.log('✅ [Registrations] Found:', combined.length, 'total registrations', 
-        `(${transformedEdusite.length} EduSite, ${transformedInApp.length} in-app)`);
+        `(${transformedEdusite.length} EduSite, ${transformedInApp.length} in-app, ${transformedAftercare.length} aftercare)`);
       setRegistrations(combined);
     } catch (err: any) {
       console.error('❌ [Registrations] Error:', err);
@@ -325,6 +394,10 @@ export function useRegistrations(): UseRegistrationsReturn {
 
   // Check if registration can be approved (needs POP and payment verification)
   const canApprove = (item: Registration): boolean => {
+    // Aftercare registrations: can approve if paid or enrolled
+    if (item.source === 'aftercare') {
+      return item.status === 'approved' || (!!item.proof_of_payment_url && item.payment_verified === true);
+    }
     // EduSite registrations need proof of payment
     if (item.source === 'edusite') {
       return !!item.proof_of_payment_url && item.payment_verified === true;
