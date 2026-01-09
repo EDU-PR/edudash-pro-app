@@ -19,7 +19,7 @@ type Grade = 'R' | '1' | '2' | '3' | '4' | '5' | '6' | '7';
 
 export default function ParentAftercareRegistrationScreen() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   // Parent Details
   const [parentFirstName, setParentFirstName] = useState(profile?.first_name || '');
@@ -221,6 +221,7 @@ export default function ParentAftercareRegistrationScreen() {
       
       const payload = {
         preschool_id: COMMUNITY_SCHOOL_ID,
+        parent_user_id: user?.id || null, // Set parent_user_id if user is authenticated
         parent_first_name: parentFirstName.trim(),
         parent_last_name: parentLastName.trim(),
         parent_email: parentEmail.trim().toLowerCase(),
