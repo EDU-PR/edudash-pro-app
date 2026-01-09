@@ -191,47 +191,12 @@ export function useRegistrations(): UseRegistrationsReturn {
 
       // Fetch from aftercare_registrations (web and native aftercare submissions)
       // EduDash Pro schools query both Community and Main school registrations
-      const EDUDASH_PRO_SCHOOL_IDS = [
-        '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
-        '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
-      ];
-      const isEdudashProSchool = EDUDASH_PRO_SCHOOL_IDS.includes(organizationId);
-      
-      let aftercareData: any[] = [];
-      let aftercareError: any = null;
-      
-      if (isEdudashProSchool) {
-        // Make two separate queries and combine results to avoid RLS issues with .in()
-        const [communityResult, mainResult] = await Promise.all([
-          supabase
-            .from('aftercare_registrations')
-            .select('*')
-            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[0])
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('aftercare_registrations')
-            .select('*')
-            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[1])
-            .order('created_at', { ascending: false }),
-        ]);
-        
-        if (communityResult.error && communityResult.error.code !== '42P01') {
-          aftercareError = communityResult.error;
-        } else if (mainResult.error && mainResult.error.code !== '42P01') {
-          aftercareError = mainResult.error;
-        } else {
-          aftercareData = [...(communityResult.data || []), ...(mainResult.data || [])]
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        }
-      } else {
-        const result = await supabase
-          .from('aftercare_registrations')
-          .select('*')
-          .eq('preschool_id', organizationId)
-          .order('created_at', { ascending: false });
-        aftercareData = result.data || [];
-        aftercareError = result.error;
-      }
+      // Simplified: Each principal sees only their own school's registrations
+      const { data: aftercareData, error: aftercareError } = await supabase
+        .from('aftercare_registrations')
+        .select('*')
+        .eq('preschool_id', organizationId)
+        .order('created_at', { ascending: false });
 
       if (edusiteError && edusiteError.code !== '42P01') {
         console.warn('⚠️ [Registrations] EduSite fetch error:', edusiteError);

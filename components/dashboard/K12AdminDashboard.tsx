@@ -63,13 +63,6 @@ export function K12AdminDashboard() {
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const userName = profile?.first_name || user?.user_metadata?.first_name || 'Admin';
   
-  // EduDash Pro schools share aftercare data (Community School and Main School)
-  const EDUDASH_PRO_SCHOOL_IDS = [
-    '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
-    '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
-  ];
-  const isEdudashProSchool = organizationId && EDUDASH_PRO_SCHOOL_IDS.includes(organizationId);
-  
   // Get greeting based on time of day
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -85,42 +78,12 @@ export function K12AdminDashboard() {
       const supabase = assertSupabase();
       
       // Fetch aftercare registrations stats
-      // EduDash Pro schools query both Community and Main school registrations
-      let registrations: any[] = [];
-      let error: any = null;
-      
-      if (isEdudashProSchool) {
-        // Make two separate queries and combine results to avoid RLS issues with .in()
-        const [communityResult, mainResult] = await Promise.all([
-          supabase
-            .from('aftercare_registrations')
-            .select('id, status, child_grade, child_first_name, child_last_name, created_at')
-            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[0])
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('aftercare_registrations')
-            .select('id, status, child_grade, child_first_name, child_last_name, created_at')
-            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[1])
-            .order('created_at', { ascending: false }),
-        ]);
-        
-        if (communityResult.error && communityResult.error.code !== '42P01') {
-          error = communityResult.error;
-        } else if (mainResult.error && mainResult.error.code !== '42P01') {
-          error = mainResult.error;
-        } else {
-          registrations = [...(communityResult.data || []), ...(mainResult.data || [])]
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        }
-      } else {
-        const result = await supabase
-          .from('aftercare_registrations')
-          .select('id, status, child_grade, child_first_name, child_last_name, created_at')
-          .eq('preschool_id', organizationId)
-          .order('created_at', { ascending: false });
-        registrations = result.data || [];
-        error = result.error;
-      }
+      // Simplified: Each principal sees only their own school's registrations
+      const { data: registrations, error } = await supabase
+        .from('aftercare_registrations')
+        .select('id, status, child_grade, child_first_name, child_last_name, created_at')
+        .eq('preschool_id', organizationId)
+        .order('created_at', { ascending: false });
       
       if (error && error.code !== '42P01') {
         console.error('[K12Dashboard] Error fetching registrations:', error);

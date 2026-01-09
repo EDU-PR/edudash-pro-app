@@ -33,37 +33,20 @@ TO anon
 WITH CHECK (true); -- Allow all anonymous inserts (public registration form)
 
 -- Policy: Principals can view all registrations for their school
--- Split into two policies for clarity and better PostgREST evaluation
-
--- Policy 1: EduDash Pro principals can see aftercare registrations from both Main School and Community School
-DROP POLICY IF EXISTS "principals_select_aftercare_edudash" ON public.aftercare_registrations;
-CREATE POLICY "principals_select_aftercare_edudash"
-ON public.aftercare_registrations
-FOR SELECT
-TO authenticated
-USING (
-  -- Registration is from EduDash Pro schools
-  preschool_id IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003')
-  AND
-  -- User is a principal from EduDash Pro schools
-  EXISTS (
-    SELECT 1
-    FROM public.profiles
-    WHERE id = auth.uid()
-    AND role IN ('principal', 'principal_admin', 'super_admin')
-    AND COALESCE(organization_id, preschool_id) IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003')
-  )
-);
-
--- Policy 2: Other principals can see their own school's registrations
+-- Simplified: Each principal sees only their own school's registrations
 DROP POLICY IF EXISTS "principals_select_aftercare_own_school" ON public.aftercare_registrations;
 CREATE POLICY "principals_select_aftercare_own_school"
 ON public.aftercare_registrations
 FOR SELECT
 TO authenticated
 USING (
-  -- Registration is NOT from EduDash Pro schools
-  preschool_id NOT IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003')
+  -- User is a principal/admin
+  EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+    AND role IN ('principal', 'principal_admin', 'super_admin')
+  )
   AND
   -- Registration matches user's school
   preschool_id = (
