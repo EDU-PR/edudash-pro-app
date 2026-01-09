@@ -17,7 +17,55 @@ export default function ResetPasswordPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if user came from password reset email
+    // Detect if user is on mobile and redirect to native app
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+
+    if (isMobile) {
+      // Get all URL parameters to pass to native app
+      const searchParams = new URLSearchParams(window.location.search);
+      const token_hash = searchParams.get('token_hash');
+      const token = searchParams.get('token');
+      const code = searchParams.get('code');
+      const type = searchParams.get('type');
+      const access_token = searchParams.get('access_token');
+      const refresh_token = searchParams.get('refresh_token');
+
+      // Build deep link URL for native app
+      const params = new URLSearchParams();
+      if (token_hash) params.set('token_hash', token_hash);
+      if (token) params.set('token', token);
+      if (code) params.set('code', code);
+      if (type) params.set('type', type);
+      if (access_token) params.set('access_token', access_token);
+      if (refresh_token) params.set('refresh_token', refresh_token);
+
+      // Also check hash fragment
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+      const hashAccessToken = hashParams.get('access_token');
+      const hashRefreshToken = hashParams.get('refresh_token');
+      
+      if (hashAccessToken) params.set('access_token', hashAccessToken);
+      if (hashRefreshToken) params.set('refresh_token', hashRefreshToken);
+
+      const queryString = params.toString();
+      const appUrl = `edudashpro://reset-password${queryString ? `?${queryString}` : ''}`;
+      
+      console.log('[ResetPassword] Redirecting to native app:', appUrl);
+      
+      // Redirect to native app
+      window.location.href = appUrl;
+      
+      // Fallback: If app doesn't open, show error after timeout
+      setTimeout(() => {
+        setError('Unable to open the EduDash Pro app. Please make sure the app is installed and try again.');
+      }, 2000);
+      
+      return;
+    }
+
+    // Web user - check session and process normally
     const checkSession = async () => {
       const supabase = createClient();
       
