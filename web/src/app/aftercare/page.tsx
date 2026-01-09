@@ -58,6 +58,7 @@ export default function AftercarePage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
   const [registrationsClosed, setRegistrationsClosed] = useState(false);
@@ -102,37 +103,11 @@ export default function AftercarePage() {
     setError(null);
 
     const paymentRef = generatePaymentReference();
-    let proofOfPaymentUrl: string | null = null;
 
     try {
       const supabase = createClient();
       
-      // Upload proof of payment if provided
-      if (proofOfPayment) {
-        setUploadingProof(true);
-        const fileExt = proofOfPayment.name.split('.').pop();
-        const fileName = `${paymentRef}-${Date.now()}.${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('aftercare-payments')
-          .upload(fileName, proofOfPayment, {
-            cacheControl: '3600',
-            upsert: false
-          });
-        
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          // Continue without proof - they can email it
-        } else {
-          const { data: { publicUrl } } = supabase.storage
-            .from('aftercare-payments')
-            .getPublicUrl(fileName);
-          proofOfPaymentUrl = publicUrl;
-        }
-        setUploadingProof(false);
-      }
-      
-      // Create the registration record
+      // Create the registration record FIRST (always pending_payment initially)
       const { data, error: insertError } = await supabase
         .from('aftercare_registrations')
         .insert({
@@ -156,8 +131,8 @@ export default function AftercarePage() {
           registration_fee_original: 400.00,
           promotion_code: 'EARLYBIRD50',
           payment_reference: paymentRef,
-          status: proofOfPaymentUrl ? 'paid' : 'pending_payment',
-          proof_of_payment_url: proofOfPaymentUrl,
+          status: 'pending_payment', // Always start as pending - POP comes after payment
+          proof_of_payment_url: null, // No POP at registration time
         })
         .select()
         .single();
@@ -174,6 +149,9 @@ export default function AftercarePage() {
         }
         throw insertError;
       }
+
+      // Store registration ID for POP upload later
+      setRegistrationId(data.id);
 
       // Send confirmation email via Edge Function
       try {
@@ -192,11 +170,63 @@ export default function AftercarePage() {
       setSubmitted(true);
     } catch (err: any) {
       console.error('Registration error:', err);
-      // Even if database save fails, still show success for user experience
-      // The form data will be captured via analytics/logs
-      setSubmitted(true);
+      setError(err.message || 'Registration failed. Please try again or contact support.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Handle POP upload after registration
+  const handlePOPUpload = async () => {
+    if (!proofOfPayment || !registrationId) return;
+    
+    setUploadingProof(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const paymentRef = generatePaymentReference();
+      const fileExt = proofOfPayment.name.split('.').pop();
+      const fileName = `${paymentRef}-${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('aftercare-payments')
+        .upload(fileName, proofOfPayment, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        throw uploadError;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('aftercare-payments')
+        .getPublicUrl(fileName);
+      
+      // Update registration with POP URL
+      const { error: updateError } = await supabase
+        .from('aftercare_registrations')
+        .update({
+          proof_of_payment_url: publicUrl,
+          status: 'paid', // Update status to paid when POP is uploaded
+        })
+        .eq('id', registrationId);
+      
+      if (updateError) {
+        throw updateError;
+      }
+      
+      // Clear the file input
+      setProofOfPayment(null);
+      
+      // Show success message
+      alert('✅ Proof of payment uploaded successfully! We\'ll verify it within 24 hours.');
+    } catch (err: any) {
+      console.error('POP upload error:', err);
+      setError('Failed to upload proof of payment. Please email it to admin@edudashpro.org.za');
+    } finally {
+      setUploadingProof(false);
     }
   };
 
@@ -212,7 +242,7 @@ export default function AftercarePage() {
   const paymentReference = `AC-${formData.childFirstName.substring(0, 3).toUpperCase()}${formData.childLastName.substring(0, 3).toUpperCase()}-${formData.parentPhone.slice(-4)}`;
 
   if (submitted) {
-    const hasUploadedPOP = !!proofOfPayment;
+    const hasUploadedPOP = false; // POP is uploaded separately after registration
     
     return (
       <div style={{minHeight: '100vh', background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'}}>
@@ -392,45 +422,128 @@ export default function AftercarePage() {
             </div>
           </div>
 
-          {/* Banking Details - Only show if payment not uploaded */}
-          {!hasUploadedPOP && (
-            <div style={{background: '#ecfdf5', border: '2px solid #10b981', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left'}}>
-              <h3 style={{fontSize: '16px', fontWeight: 700, color: '#065f46', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <span>🏦</span> Banking Details for EFT Payment
-              </h3>
-              <p style={{color: '#047857', fontSize: '13px', marginBottom: '16px'}}>
-                Make payment of <strong>R200.00</strong> to complete your registration:
-              </p>
-              <div style={{display: 'grid', gap: '10px'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                  <span style={{color: '#6b7280', fontSize: '14px'}}>Bank:</span>
-                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>Capitec Bank</span>
-                </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                  <span style={{color: '#6b7280', fontSize: '14px'}}>Account Name:</span>
-                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>EduDash Pro Pty Ltd</span>
-                </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                  <span style={{color: '#6b7280', fontSize: '14px'}}>Account Number:</span>
-                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>1053747152</span>
-                </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                  <span style={{color: '#6b7280', fontSize: '14px'}}>Branch Code:</span>
-                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>450105</span>
-                </div>
-                <div style={{display: 'flex', justifyContent: 'space-between', background: '#d1fae5', padding: '12px', borderRadius: '8px', marginTop: '8px'}}>
-                  <span style={{color: '#065f46', fontSize: '14px', fontWeight: 600}}>Your Reference:</span>
-                  <span style={{color: '#065f46', fontWeight: 800, fontSize: '16px', letterSpacing: '1px', fontFamily: 'monospace'}}>{paymentReference}</span>
-                </div>
+          {/* Banking Details - Always show after registration */}
+          <div style={{background: '#ecfdf5', border: '2px solid #10b981', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left'}}>
+            <h3 style={{fontSize: '16px', fontWeight: 700, color: '#065f46', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>🏦</span> Step 1: Make Payment (R200.00)
+            </h3>
+            <p style={{color: '#047857', fontSize: '13px', marginBottom: '16px'}}>
+              Transfer <strong>R200.00</strong> to our bank account using the details below:
+            </p>
+            <div style={{display: 'grid', gap: '10px'}}>
+              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                <span style={{color: '#6b7280', fontSize: '14px'}}>Bank:</span>
+                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>Capitec Bank</span>
               </div>
-              <div style={{marginTop: '12px', padding: '12px', background: '#fef3c7', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <span style={{fontSize: '18px'}}>⚠️</span>
-                <p style={{color: '#92400e', fontSize: '13px', margin: 0}}>
-                  <strong>IMPORTANT:</strong> Use <strong>{paymentReference}</strong> as your payment reference so we can identify your payment quickly.
-                </p>
+              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                <span style={{color: '#6b7280', fontSize: '14px'}}>Account Name:</span>
+                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>EduDash Pro Pty Ltd</span>
+              </div>
+              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                <span style={{color: '#6b7280', fontSize: '14px'}}>Account Number:</span>
+                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>1053747152</span>
+              </div>
+              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                <span style={{color: '#6b7280', fontSize: '14px'}}>Branch Code:</span>
+                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>450105</span>
+              </div>
+              <div style={{display: 'flex', justifyContent: 'space-between', background: '#d1fae5', padding: '12px', borderRadius: '8px', marginTop: '8px'}}>
+                <span style={{color: '#065f46', fontSize: '14px', fontWeight: 600}}>Your Reference:</span>
+                <span style={{color: '#065f46', fontWeight: 800, fontSize: '16px', letterSpacing: '1px', fontFamily: 'monospace'}}>{paymentReference}</span>
               </div>
             </div>
-          )}
+            <div style={{marginTop: '12px', padding: '12px', background: '#fef3c7', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span style={{fontSize: '18px'}}>⚠️</span>
+              <p style={{color: '#92400e', fontSize: '13px', margin: 0}}>
+                <strong>IMPORTANT:</strong> Use <strong>{paymentReference}</strong> as your payment reference so we can identify your payment quickly.
+              </p>
+            </div>
+          </div>
+
+          {/* POP Upload Section - After payment instructions */}
+          <div style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)', border: '2px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left'}}>
+            <h3 style={{fontSize: '16px', fontWeight: 700, color: '#065f46', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>📄</span> Step 2: Upload Proof of Payment
+            </h3>
+            <p style={{color: '#047857', fontSize: '13px', marginBottom: '16px', lineHeight: 1.5}}>
+              After making payment, upload your proof of payment here for faster processing (usually approved within 24 hours instead of 2-3 days).
+            </p>
+            
+            <div style={{border: '2px dashed rgba(16, 185, 129, 0.4)', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s', background: 'rgba(0,0,0,0.1)'}}
+              onClick={() => document.getElementById('popUpload')?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#10b981'; }}
+              onDragLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+                  setProofOfPayment(file);
+                }
+              }}
+            >
+              <input
+                id="popUpload"
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => setProofOfPayment(e.target.files?.[0] || null)}
+                style={{display: 'none'}}
+              />
+              {proofOfPayment ? (
+                <div>
+                  <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>✅</span>
+                  <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>{proofOfPayment.name}</p>
+                  <p style={{color: '#6ee7b7', fontSize: '12px', marginTop: '4px'}}>
+                    {(proofOfPayment.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setProofOfPayment(null); }}
+                    style={{marginTop: '8px', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'}}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>📤</span>
+                  <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>Click or drag to upload proof of payment</p>
+                  <p style={{color: '#6b7280', fontSize: '12px', marginTop: '4px'}}>PNG, JPG or PDF (max 5MB)</p>
+                </div>
+              )}
+            </div>
+
+            {proofOfPayment && (
+              <button
+                type="button"
+                onClick={handlePOPUpload}
+                disabled={uploadingProof}
+                style={{
+                  width: '100%',
+                  marginTop: '16px',
+                  padding: '14px',
+                  background: uploadingProof ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  cursor: uploadingProof ? 'not-allowed' : 'pointer',
+                  boxShadow: uploadingProof ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                {uploadingProof ? '📤 Uploading...' : '✅ Upload Proof of Payment'}
+              </button>
+            )}
+
+            {error && (
+              <p style={{color: '#ef4444', fontSize: '13px', marginTop: '12px', textAlign: 'center'}}>{error}</p>
+            )}
+
+            <p style={{color: '#6b7280', fontSize: '12px', marginTop: '16px', textAlign: 'center', fontStyle: 'italic'}}>
+              Or email your proof to admin@edudashpro.org.za with reference: <strong>{paymentReference}</strong>
+            </p>
+          </div>
           
           {/* Amount Summary */}
           <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', marginBottom: '24px'}}>
@@ -630,15 +743,15 @@ export default function AftercarePage() {
             <div style={{display: 'grid', gap: '12px'}}>
               <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                 <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>1</div>
-                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Fill out the registration form below</p>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Fill out and submit the registration form below</p>
               </div>
               <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                 <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>2</div>
-                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Make EFT payment of R200 (Early Bird price)</p>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Make EFT payment of R200 using the banking details provided after registration</p>
               </div>
               <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                 <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>3</div>
-                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Upload proof of payment (or email it within 48 hours)</p>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Upload proof of payment on the success page (or email it within 48 hours)</p>
               </div>
               <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                 <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>4</div>
@@ -845,73 +958,6 @@ export default function AftercarePage() {
               </div>
             </div>
 
-            {/* Proof of Payment Upload */}
-            <div style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '2px solid rgba(16, 185, 129, 0.3)'}}>
-              <h2 style={{color: '#10b981', fontSize: '18px', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <span>📄</span> Proof of Payment
-              </h2>
-              <div style={{background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '8px', padding: '12px', marginBottom: '16px'}}>
-                <p style={{color: '#fbbf24', fontSize: '13px', margin: 0, lineHeight: 1.5, fontWeight: 600}}>
-                  ⚡ <strong>Upload now for instant processing!</strong> Or email it later to admin@edudashpro.org.za
-                </p>
-              </div>
-              <p style={{color: '#9CA3AF', fontSize: '13px', marginBottom: '16px', lineHeight: 1.5}}>
-                You can register first and pay later, but uploading proof of payment now will speed up your approval significantly (usually within 24 hours instead of 2-3 days).
-              </p>
-              
-              {/* Banking Details Preview */}
-              <div style={{background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px'}}>
-                <p style={{color: '#6ee7b7', fontSize: '12px', marginBottom: '8px', fontWeight: 600}}>💳 Banking Details:</p>
-                <p style={{color: '#9CA3AF', fontSize: '12px', lineHeight: 1.6}}>
-                  <strong>Capitec Bank</strong> • Acc: <strong>1053747152</strong> • Branch: <strong>450105</strong><br/>
-                  Reference: <strong style={{color: '#fbbf24'}}>{paymentReference || 'Complete form above'}</strong>
-                </p>
-              </div>
-
-              <div style={{border: '2px dashed rgba(16, 185, 129, 0.4)', borderRadius: '12px', padding: '24px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s'}}
-                onClick={() => document.getElementById('proofUpload')?.click()}
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#10b981'; }}
-                onDragLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)'; }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-                  const file = e.dataTransfer.files[0];
-                  if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
-                    setProofOfPayment(file);
-                  }
-                }}
-              >
-                <input
-                  id="proofUpload"
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(e) => setProofOfPayment(e.target.files?.[0] || null)}
-                  style={{display: 'none'}}
-                />
-                {proofOfPayment ? (
-                  <div>
-                    <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>✅</span>
-                    <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>{proofOfPayment.name}</p>
-                    <p style={{color: '#6ee7b7', fontSize: '12px', marginTop: '4px'}}>
-                      {(proofOfPayment.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setProofOfPayment(null); }}
-                      style={{marginTop: '8px', padding: '4px 12px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'}}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <span style={{fontSize: '32px', marginBottom: '8px', display: 'block'}}>📤</span>
-                    <p style={{color: '#10b981', fontWeight: 600, fontSize: '14px'}}>Click or drag to upload proof of payment</p>
-                    <p style={{color: '#6b7280', fontSize: '12px', marginTop: '4px'}}>PNG, JPG or PDF (max 5MB)</p>
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* How did you hear */}
             <div style={{background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.1)'}}>
@@ -968,7 +1014,7 @@ export default function AftercarePage() {
                 boxShadow: formData.acceptTerms ? '0 4px 20px rgba(124, 58, 237, 0.4)' : 'none'
               }}
             >
-              {isSubmitting ? (uploadingProof ? '📤 Uploading proof...' : 'Submitting...') : (proofOfPayment ? '✅ Register & Upload Proof →' : 'Complete Registration →')}
+              {isSubmitting ? 'Submitting...' : 'Complete Registration →'}
             </button>
 
             {error && (
