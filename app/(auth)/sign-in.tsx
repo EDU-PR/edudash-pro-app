@@ -247,14 +247,25 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // on SIGNED_IN events. Calling it twice creates a race condition that
       // can cause navigation to hang.
       
-      // Add a timeout to ensure we don't get stuck if AuthContext doesn't navigate
-      // Also clear any stale navigation locks before sign-in
+      // CRITICAL FIX: Clear any stale navigation locks BEFORE sign-in
+      // This must happen synchronously to prevent freeze from previous session locks
       try {
+        // Import synchronously if possible, otherwise await
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
         console.log('[SignIn] Cleared all navigation locks before sign-in');
       } catch (lockErr) {
         console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', lockErr);
+        // Even if import fails, try to clear locks via direct access if possible
+        try {
+          // Force clear any module-level locks
+          const routeModule = require('@/lib/routeAfterLogin');
+          if (routeModule.clearAllNavigationLocks) {
+            routeModule.clearAllNavigationLocks();
+          }
+        } catch {
+          // Ignore - non-critical
+        }
       }
       
       const navigationTimeout = setTimeout(() => {

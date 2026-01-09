@@ -91,6 +91,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       color: '#14B8A6',
     },
     {
+      id: 'seat-management',
+      title: t('dashboard.seat_management', { defaultValue: 'Seat Management' }),
+      icon: 'people-circle',
+      color: '#8B5CF6',
+    },
+    {
       id: 'settings',
       title: t('dashboard.school_settings', { defaultValue: 'School Settings' }),
       icon: 'settings',
@@ -119,13 +125,16 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/principal-announcement');
         break;
       case 'calendar':
-        router.push('/screens/calendar');
+        router.push('/screens/calendar-management');
         break;
       case 'teachers':
         router.push('/screens/teacher-management');
         break;
       case 'classes':
         router.push('/screens/class-teacher-management');
+        break;
+      case 'seat-management':
+        router.push('/screens/principal-seat-management');
         break;
       case 'settings':
         router.push('/screens/school-settings');

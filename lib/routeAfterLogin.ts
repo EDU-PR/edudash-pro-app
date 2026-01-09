@@ -143,6 +143,14 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
   }, 8000); // 8 second overall timeout (reduced from 15s)
 
   try {
+    // CRITICAL FIX: Clear any stale locks before checking
+    // Stale locks from previous sessions can cause sign-in freeze
+    const lockTime = navigationLocks.get(userId);
+    if (lockTime && Date.now() - lockTime > NAVIGATION_LOCK_TIMEOUT) {
+      console.log('🚦 [ROUTE] Clearing stale navigation lock for user:', userId);
+      navigationLocks.delete(userId);
+    }
+    
     // EARLY CHECK: Prevent concurrent navigation attempts using module-level lock
     // Check at the very start to avoid duplicate work (profile fetch, etc.)
     if (isNavigationLocked(userId)) {
@@ -177,6 +185,8 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       } catch (fetchError) {
         console.error('[ROUTE DEBUG] Profile fetch failed:', fetchError);
         enhancedProfile = null;
+        // CRITICAL FIX: Clear lock on profile fetch failure to prevent freeze
+        clearNavigationLock(userId);
       }
     }
 
@@ -189,6 +199,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       // Route to profiles-gate instead of sign-in to avoid redirect loop
       // User is authenticated but needs profile setup
       clearNavigationLock(userId);
+      clearTimeout(overallTimeout);
       router.replace('/profiles-gate');
       return;
     }
