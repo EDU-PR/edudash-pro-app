@@ -197,14 +197,41 @@ export function useRegistrations(): UseRegistrationsReturn {
       ];
       const isEdudashProSchool = EDUDASH_PRO_SCHOOL_IDS.includes(organizationId);
       
-      const aftercareQuery = supabase
-        .from('aftercare_registrations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let aftercareData: any[] = [];
+      let aftercareError: any = null;
       
-      const { data: aftercareData, error: aftercareError } = isEdudashProSchool
-        ? await aftercareQuery.in('preschool_id', EDUDASH_PRO_SCHOOL_IDS)
-        : await aftercareQuery.eq('preschool_id', organizationId);
+      if (isEdudashProSchool) {
+        // Make two separate queries and combine results to avoid RLS issues with .in()
+        const [communityResult, mainResult] = await Promise.all([
+          supabase
+            .from('aftercare_registrations')
+            .select('*')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[0])
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('aftercare_registrations')
+            .select('*')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[1])
+            .order('created_at', { ascending: false }),
+        ]);
+        
+        if (communityResult.error && communityResult.error.code !== '42P01') {
+          aftercareError = communityResult.error;
+        } else if (mainResult.error && mainResult.error.code !== '42P01') {
+          aftercareError = mainResult.error;
+        } else {
+          aftercareData = [...(communityResult.data || []), ...(mainResult.data || [])]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        }
+      } else {
+        const result = await supabase
+          .from('aftercare_registrations')
+          .select('*')
+          .eq('preschool_id', organizationId)
+          .order('created_at', { ascending: false });
+        aftercareData = result.data || [];
+        aftercareError = result.error;
+      }
 
       if (edusiteError && edusiteError.code !== '42P01') {
         console.warn('⚠️ [Registrations] EduSite fetch error:', edusiteError);

@@ -93,14 +93,43 @@ export default function AfterCareAdminScreen() {
       const supabase = assertSupabase();
       
       // EduDash Pro schools query both Community and Main school registrations
-      const query = supabase
-        .from('aftercare_registrations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let data: AfterCareRegistration[] = [];
+      let error: any = null;
       
-      const { data, error } = isEdudashProSchool
-        ? await query.in('preschool_id', EDUDASH_PRO_SCHOOL_IDS)
-        : await query.eq('preschool_id', organizationId);
+      if (isEdudashProSchool) {
+        // For EduDash Pro schools, make two separate queries and combine results
+        // This avoids RLS evaluation issues with .in() filters
+        const [communityResult, mainResult] = await Promise.all([
+          supabase
+            .from('aftercare_registrations')
+            .select('*')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[0])
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('aftercare_registrations')
+            .select('*')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[1])
+            .order('created_at', { ascending: false }),
+        ]);
+        
+        if (communityResult.error && communityResult.error.code !== '42P01') {
+          error = communityResult.error;
+        } else if (mainResult.error && mainResult.error.code !== '42P01') {
+          error = mainResult.error;
+        } else {
+          // Combine and sort by created_at
+          data = [...(communityResult.data || []), ...(mainResult.data || [])]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        }
+      } else {
+        const result = await supabase
+          .from('aftercare_registrations')
+          .select('*')
+          .eq('preschool_id', organizationId)
+          .order('created_at', { ascending: false });
+        data = result.data || [];
+        error = result.error;
+      }
       
       if (error && error.code !== '42P01') {
         console.error('[AfterCareAdmin] Error:', error);
