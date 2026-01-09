@@ -23,6 +23,8 @@ function AuthCallbackContent() {
       try {
         // Get all URL parameters
         const token_hash = searchParams.get('token_hash');
+        const token = searchParams.get('token'); // PKCE token parameter
+        const code = searchParams.get('code'); // PKCE code parameter
         const type = searchParams.get('type');
         const access_token = searchParams.get('access_token');
         const refresh_token = searchParams.get('refresh_token');
@@ -44,6 +46,8 @@ function AuthCallbackContent() {
         // Build the redirect URL with all parameters
         const params = new URLSearchParams();
         if (token_hash) params.set('token_hash', token_hash);
+        if (token) params.set('token', token); // PKCE token
+        if (code) params.set('code', code); // PKCE code
         if (type) params.set('type', type);
         if (access_token) params.set('access_token', access_token);
         if (refresh_token) params.set('refresh_token', refresh_token);
@@ -85,8 +89,30 @@ function AuthCallbackContent() {
           const { createClient } = await import('@/lib/supabase/client');
           const supabase = createClient();
 
-          if (token_hash && type) {
-            // Magic link or email verification
+          // Handle PKCE code exchange (for magic links with code parameter)
+          if (code) {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (exchangeError) {
+              setStatus('error');
+              setErrorMessage(exchangeError.message);
+              return;
+            }
+
+            if (!data.session) {
+              setStatus('error');
+              setErrorMessage('Authentication succeeded but no session was created.');
+              return;
+            }
+
+            // Redirect based on type
+            if (type === 'recovery') {
+              window.location.href = '/reset-password';
+            } else {
+              window.location.href = '/dashboard';
+            }
+          } else if (token_hash && type) {
+            // Magic link or email verification (legacy token_hash flow)
             const { error: verifyError } = await supabase.auth.verifyOtp({
               token_hash,
               type: type as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
@@ -104,6 +130,26 @@ function AuthCallbackContent() {
             } else {
               window.location.href = '/dashboard';
             }
+          } else if (token && type === 'magiclink') {
+            // PKCE token parameter (try verifyOtp)
+            const { data, error: verifyError } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: 'magiclink',
+            });
+
+            if (verifyError) {
+              setStatus('error');
+              setErrorMessage(verifyError.message || 'Magic link verification failed.');
+              return;
+            }
+
+            if (!data.session) {
+              setStatus('error');
+              setErrorMessage('Authentication succeeded but no session was created.');
+              return;
+            }
+
+            window.location.href = '/dashboard';
           } else if (hashAccessToken) {
             // OAuth callback
             const { error: sessionError } = await supabase.auth.setSession({
