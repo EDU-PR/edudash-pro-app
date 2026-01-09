@@ -52,7 +52,7 @@ export default function ClassDetailsScreen() {
             
             <TouchableOpacity 
               style={[styles.actionButton, { backgroundColor: theme.secondary }]}
-              onPress={() => router.push('/screens/assign-homework')}
+              onPress={() => router.push('/screens/assign-lesson')}
             >
               <Ionicons name="document-text" size={20} color={theme.onSecondary} />
               <Text style={[styles.actionText, { color: theme.onSecondary }]}>Assign Homework</Text>

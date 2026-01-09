@@ -81,7 +81,7 @@ export default function TeacherReportsScreen() {
                       <Text style={[styles.assignmentTitle, { color: palette.text }]}>{a.title}</Text>
                       <Text style={[styles.assignmentMeta, { color: palette.textSecondary }]}>Due: {a.dueDate} • {a.submitted}/{a.total} submitted • {a.status}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => router.push('/screens/assign-homework')}>
+                    <TouchableOpacity onPress={() => router.push('/screens/assign-lesson')}>
                       <Text style={[styles.link, { color: palette.primary }]}>Manage</Text>
                     </TouchableOpacity>
                   </View>

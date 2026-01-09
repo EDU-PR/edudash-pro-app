@@ -371,7 +371,7 @@ export const TeacherAssignments: React.FC<TeacherAssignmentsProps> = ({ recentAs
         {recentAssignments && recentAssignments.length > 0 ? (
           recentAssignments.map(renderAssignmentCard)
         ) : (
-          <EmptyAssignmentsState onCreateAssignment={() => router.push("/screens/assign-homework")} />
+          <EmptyAssignmentsState onCreateAssignment={() => router.push("/screens/assign-lesson")} />
         )}
       </View>
     </View>
