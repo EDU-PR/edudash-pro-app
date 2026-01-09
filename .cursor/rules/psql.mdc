@@ -7,3 +7,6 @@ Insert overview text here. The agent will only see this should they choose to ap
 
 Always use psql : psql -h aws-0-ap-southeast-1.pooler.supabase.com -p 6543 -U postgres.lvvvjywrmpcqrpvuptdi -d postgres -c
 hHFgMNhsfdUKUEkA - Until we fix the migrations 
+
+When ever there is a migration - always run it 
+When ever there is an Edge function - always deploy it

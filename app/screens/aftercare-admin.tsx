@@ -58,11 +58,18 @@ interface AfterCareRegistration {
 
 const statusConfig = {
   pending_payment: { label: 'Pending Payment', color: '#F59E0B', icon: 'time' },
-  paid: { label: 'Paid', color: '#10B981', icon: 'checkmark-circle' },
+  paid: { label: 'Payment Verified', color: '#10B981', icon: 'checkmark-circle' },
   enrolled: { label: 'Enrolled', color: '#3B82F6', icon: 'school' },
   cancelled: { label: 'Cancelled', color: '#EF4444', icon: 'close-circle' },
   waitlisted: { label: 'Waitlisted', color: '#8B5CF6', icon: 'hourglass' },
 };
+
+// Workflow explanation:
+// 1. pending_payment - Registration submitted, awaiting payment proof
+// 2. paid - Payment verified by principal (accounts NOT yet created)
+// 3. enrolled - Student enrolled, parent & student accounts CREATED
+// 4. cancelled - Registration cancelled
+// 5. waitlisted - On waiting list (capacity reached)
 
 export default function AfterCareAdminScreen() {
   const { theme } = useTheme();
@@ -142,8 +149,9 @@ export default function AfterCareAdminScreen() {
       
       if (error) throw error;
       
-      // If status changed to 'enrolled' or 'paid', trigger enrollment processing
-      if (newStatus === 'enrolled' || newStatus === 'paid') {
+      // Only trigger enrollment processing when status is 'enrolled'
+      // This is when parent and student accounts are created
+      if (newStatus === 'enrolled') {
         try {
           const { data: enrollmentResult, error: enrollmentError } = await supabase.functions.invoke(
             'process-aftercare-enrollment',
@@ -154,31 +162,40 @@ export default function AfterCareAdminScreen() {
 
           if (enrollmentError) {
             console.error('[AfterCareAdmin] Enrollment processing error:', enrollmentError);
-            // Don't fail the status update, just log the error
+            Alert.alert(
+              'Partial Success',
+              `Student enrolled but account creation may have failed.\n\nError: ${enrollmentError.message || 'Unknown error'}`
+            );
           } else if (enrollmentResult?.success) {
             const messages = [];
             if (enrollmentResult.data?.parent_account_created) {
-              messages.push('Parent account created');
+              messages.push('✓ Parent account created');
             }
             if (enrollmentResult.data?.student_created) {
-              messages.push('Student account created');
+              messages.push('✓ Student record created');
             }
-            if (messages.length > 0) {
-              Alert.alert(
-                'Success',
-                `Status updated to ${statusConfig[newStatus].label}.\n\n${messages.join(' and ')}.`
-              );
-            } else {
-              Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
-            }
+            Alert.alert(
+              '🎉 Student Enrolled!',
+              messages.length > 0 
+                ? `${messages.join('\n')}\n\nParent will receive login details via email.`
+                : 'Student has been enrolled successfully.'
+            );
+          } else {
+            Alert.alert('Success', 'Student enrolled successfully');
           }
         } catch (enrollmentErr) {
           console.error('[AfterCareAdmin] Enrollment processing exception:', enrollmentErr);
-          // Status update succeeded, so show success message anyway
-          Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+          Alert.alert('Success', 'Student enrolled (account creation pending)');
         }
+      } else if (newStatus === 'paid') {
+        Alert.alert(
+          'Payment Verified ✓',
+          'Payment has been verified. Click "Enroll Student" when ready to create their account.'
+        );
+      } else if (newStatus === 'cancelled') {
+        Alert.alert('Registration Cancelled', 'This registration has been cancelled.');
       } else {
-        Alert.alert('Success', `Status updated to ${statusConfig[newStatus].label}`);
+        Alert.alert('Status Updated', `Status changed to ${statusConfig[newStatus].label}`);
       }
       
       // Update local state
@@ -425,85 +442,194 @@ export default function AfterCareAdminScreen() {
                 )}
               </View>
               
-              {/* Status Actions */}
+              {/* Workflow Actions */}
               <View style={styles.modalSection}>
-                <Text style={styles.modalSectionTitle}>Update Status</Text>
+                <Text style={styles.modalSectionTitle}>Actions</Text>
                 
-                {/* Mark as Paid button for pending registrations without POP */}
-                {selectedRegistration.status === 'pending_payment' && !selectedRegistration.proof_of_payment_url && (
-                  <TouchableOpacity
-                    style={[styles.statusButton, styles.markAsPaidButton]}
-                    onPress={() => {
-                      Alert.alert(
-                        'Mark as Paid',
-                        'This will mark the registration as paid without proof of payment. This action bypasses POP verification. Continue?',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Mark as Paid',
-                            style: 'default',
-                            onPress: async () => {
-                              try {
-                                const supabase = assertSupabase();
-                                const { error } = await supabase
-                                  .from('aftercare_registrations')
-                                  .update({
-                                    status: 'paid',
-                                    updated_at: new Date().toISOString(),
-                                    notes: (selectedRegistration.notes || '') + '\n[Manual payment verification - no POP provided]',
-                                  })
-                                  .eq('id', selectedRegistration.id);
-                                
-                                if (error) throw error;
-                                
-                                // Refresh registrations
-                                await fetchRegistrations();
-                                setSelectedRegistration(null);
-                                Alert.alert('Success', 'Registration marked as paid');
-                              } catch (err) {
-                                console.error('[AfterCareAdmin] Mark as paid error:', err);
-                                Alert.alert('Error', 'Failed to mark as paid');
-                              }
-                            },
-                          },
-                        ]
-                      );
-                    }}
-                    disabled={processing === selectedRegistration.id}
-                  >
-                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                    <Text style={[styles.statusButtonText, { color: '#10B981' }]}>Mark as Paid (No POP)</Text>
-                  </TouchableOpacity>
-                )}
+                {/* Current Status Display */}
+                <View style={[styles.currentStatusBanner, { backgroundColor: statusConfig[selectedRegistration.status].color + '20' }]}>
+                  <Ionicons 
+                    name={statusConfig[selectedRegistration.status].icon as any} 
+                    size={20} 
+                    color={statusConfig[selectedRegistration.status].color} 
+                  />
+                  <Text style={[styles.currentStatusText, { color: statusConfig[selectedRegistration.status].color }]}>
+                    Current: {statusConfig[selectedRegistration.status].label}
+                  </Text>
+                </View>
                 
-                <View style={styles.statusActions}>
-                  {(['pending_payment', 'paid', 'enrolled', 'cancelled'] as const).map(status => (
+                {/* Workflow-based action buttons */}
+                <View style={styles.workflowActions}>
+                  
+                  {/* Step 1: For pending_payment - Verify Payment */}
+                  {selectedRegistration.status === 'pending_payment' && (
+                    <>
+                      {selectedRegistration.proof_of_payment_url ? (
+                        <TouchableOpacity
+                          style={[styles.workflowButton, styles.verifyPaymentButton]}
+                          onPress={() => {
+                            Alert.alert(
+                              'Verify Payment',
+                              'Have you reviewed the proof of payment and confirmed the registration fee was received?',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Verify Payment',
+                                  onPress: () => updateStatus(selectedRegistration.id, 'paid'),
+                                },
+                              ]
+                            );
+                          }}
+                          disabled={processing === selectedRegistration.id}
+                        >
+                          {processing === selectedRegistration.id ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark-done" size={20} color="#fff" />
+                              <Text style={styles.workflowButtonText}>Verify Payment</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.workflowButton, styles.markAsPaidButton]}
+                          onPress={() => {
+                            Alert.alert(
+                              'Mark as Paid (No POP)',
+                              'No proof of payment was uploaded. This will bypass POP verification.\n\nConfirm you have verified payment through other means (e.g., bank statement, cash receipt)?',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Confirm Payment',
+                                  onPress: () => updateStatus(selectedRegistration.id, 'paid'),
+                                },
+                              ]
+                            );
+                          }}
+                          disabled={processing === selectedRegistration.id}
+                        >
+                          {processing === selectedRegistration.id ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <>
+                              <Ionicons name="cash-outline" size={20} color="#fff" />
+                              <Text style={styles.workflowButtonText}>Mark as Paid (No POP)</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Step 2: For paid - Enroll Student (creates accounts) */}
+                  {selectedRegistration.status === 'paid' && (
                     <TouchableOpacity
-                      key={status}
-                      style={[
-                        styles.statusButton,
-                        selectedRegistration.status === status && styles.statusButtonActive,
-                        { borderColor: statusConfig[status].color }
-                      ]}
-                      onPress={() => updateStatus(selectedRegistration.id, status)}
+                      style={[styles.workflowButton, styles.enrollButton]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Enroll Student',
+                          `This will:\n\n• Create parent account for ${selectedRegistration.parent_first_name}\n• Create student record for ${selectedRegistration.child_first_name}\n• Send welcome email with login details\n\nProceed with enrollment?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Enroll Student',
+                              onPress: () => updateStatus(selectedRegistration.id, 'enrolled'),
+                            },
+                          ]
+                        );
+                      }}
                       disabled={processing === selectedRegistration.id}
                     >
                       {processing === selectedRegistration.id ? (
-                        <ActivityIndicator size="small" color={statusConfig[status].color} />
+                        <ActivityIndicator size="small" color="#fff" />
                       ) : (
                         <>
-                          <Ionicons 
-                            name={statusConfig[status].icon as any} 
-                            size={16} 
-                            color={statusConfig[status].color} 
-                          />
-                          <Text style={[styles.statusButtonText, { color: statusConfig[status].color }]}>
-                            {statusConfig[status].label}
-                          </Text>
+                          <Ionicons name="school" size={20} color="#fff" />
+                          <Text style={styles.workflowButtonText}>Enroll Student</Text>
                         </>
                       )}
                     </TouchableOpacity>
-                  ))}
+                  )}
+                  
+                  {/* Enrolled status - Show success state */}
+                  {selectedRegistration.status === 'enrolled' && (
+                    <View style={styles.enrolledBanner}>
+                      <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                      <View style={styles.enrolledTextContainer}>
+                        <Text style={styles.enrolledTitle}>Student Enrolled</Text>
+                        <Text style={styles.enrolledSubtitle}>
+                          Parent and student accounts have been created
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  
+                  {/* Cancel Registration - Available for pending/paid */}
+                  {(selectedRegistration.status === 'pending_payment' || selectedRegistration.status === 'paid') && (
+                    <TouchableOpacity
+                      style={[styles.workflowButton, styles.cancelButton]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Cancel Registration',
+                          'Are you sure you want to cancel this registration? This action can be reversed.',
+                          [
+                            { text: 'Keep', style: 'cancel' },
+                            {
+                              text: 'Cancel Registration',
+                              style: 'destructive',
+                              onPress: () => updateStatus(selectedRegistration.id, 'cancelled'),
+                            },
+                          ]
+                        );
+                      }}
+                      disabled={processing === selectedRegistration.id}
+                    >
+                      <Ionicons name="close-circle-outline" size={20} color="#EF4444" />
+                      <Text style={[styles.workflowButtonText, { color: '#EF4444' }]}>Cancel Registration</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {/* Reactivate - For cancelled registrations */}
+                  {selectedRegistration.status === 'cancelled' && (
+                    <TouchableOpacity
+                      style={[styles.workflowButton, styles.reactivateButton]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Reactivate Registration',
+                          'This will move the registration back to "Pending Payment" status.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Reactivate',
+                              onPress: () => updateStatus(selectedRegistration.id, 'pending_payment'),
+                            },
+                          ]
+                        );
+                      }}
+                      disabled={processing === selectedRegistration.id}
+                    >
+                      <Ionicons name="refresh-outline" size={20} color="#fff" />
+                      <Text style={styles.workflowButtonText}>Reactivate Registration</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                
+                {/* Workflow Guide */}
+                <View style={styles.workflowGuide}>
+                  <Text style={styles.workflowGuideTitle}>Registration Workflow</Text>
+                  <View style={styles.workflowStep}>
+                    <View style={[styles.workflowDot, selectedRegistration.status !== 'pending_payment' && styles.workflowDotComplete]} />
+                    <Text style={styles.workflowStepText}>1. Parent registers & uploads POP</Text>
+                  </View>
+                  <View style={styles.workflowStep}>
+                    <View style={[styles.workflowDot, (selectedRegistration.status === 'paid' || selectedRegistration.status === 'enrolled') && styles.workflowDotComplete]} />
+                    <Text style={styles.workflowStepText}>2. Principal verifies payment</Text>
+                  </View>
+                  <View style={styles.workflowStep}>
+                    <View style={[styles.workflowDot, selectedRegistration.status === 'enrolled' && styles.workflowDotComplete]} />
+                    <Text style={styles.workflowStepText}>3. Principal enrolls student (accounts created)</Text>
+                  </View>
                 </View>
               </View>
             </ScrollView>
@@ -790,5 +916,110 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: '#F59E0B',
     fontWeight: '500',
+  },
+  currentStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  currentStatusText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  workflowActions: {
+    gap: 12,
+  },
+  workflowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  workflowButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  verifyPaymentButton: {
+    backgroundColor: '#10B981',
+  },
+  markAsPaidButton: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
+    marginBottom: 0,
+  },
+  enrollButton: {
+    backgroundColor: '#3B82F6',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#EF4444',
+  },
+  reactivateButton: {
+    backgroundColor: '#6B7280',
+  },
+  enrolledBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    backgroundColor: '#10B98115',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#10B98130',
+  },
+  enrolledTextContainer: {
+    flex: 1,
+  },
+  enrolledTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  enrolledSubtitle: {
+    fontSize: 13,
+    color: '#10B98180',
+    marginTop: 2,
+  },
+  workflowGuide: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  workflowGuideTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  workflowStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  workflowDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.border,
+  },
+  workflowDotComplete: {
+    backgroundColor: '#10B981',
+  },
+  workflowStepText: {
+    fontSize: 13,
+    color: theme.textSecondary,
   },
 });

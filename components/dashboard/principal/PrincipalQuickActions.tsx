@@ -54,11 +54,35 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       badge: stats?.pendingRegistrations?.total ?? pendingRegistrationsCount,
     },
     {
+      id: 'aftercare',
+      title: t('dashboard.aftercare_registrations', { defaultValue: 'Aftercare Registrations' }),
+      icon: 'school',
+      color: '#8B5CF6',
+    },
+    {
       id: 'payments',
       title: t('dashboard.review_payments', { defaultValue: 'Review Payments' }),
       icon: 'receipt',
       color: '#10B981',
       badge: stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount,
+    },
+    {
+      id: 'teacher-approval',
+      title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }),
+      icon: 'checkmark-circle',
+      color: '#06B6D4',
+    },
+    {
+      id: 'activities',
+      title: t('dashboard.learning_activities', { defaultValue: 'Learning Activities' }),
+      icon: 'game-controller',
+      color: '#EC4899',
+    },
+    {
+      id: 'lessons',
+      title: t('dashboard.assign_lessons', { defaultValue: 'Assign Lessons' }),
+      icon: 'book',
+      color: '#F59E0B',
     },
     {
       id: 'reports',
@@ -115,8 +139,20 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       case 'registrations':
         router.push('/screens/principal-registrations');
         break;
+      case 'aftercare':
+        router.push('/screens/aftercare-admin');
+        break;
       case 'payments':
         router.push('/screens/pop-review');
+        break;
+      case 'teacher-approval':
+        router.push('/screens/teacher-approval');
+        break;
+      case 'activities':
+        router.push('/screens/aftercare-activities');
+        break;
+      case 'lessons':
+        router.push('/screens/assign-lesson');
         break;
       case 'reports':
         router.push('/screens/principal-reports');
