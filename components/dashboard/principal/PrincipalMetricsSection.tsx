@@ -79,7 +79,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
     },
   ];
 
-  // Financial Summary metrics matching PWA design  
+  // Financial Summary metrics - unique from School Overview
   const financialMetrics = [
     {
       id: 'fees_collected',
@@ -91,19 +91,19 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
       trend: (stats?.registrationFees?.total ?? 0) > 0 ? 'up' as const : 'stable' as const,
     },
     {
-      id: 'pending_payments',
-      title: t('dashboard.pending_payments', { defaultValue: 'Pending Payments' }),
-      value: stats?.pendingPayments?.total ?? 0,
-      icon: 'time',
+      id: 'outstanding_balance',
+      title: t('dashboard.outstanding_balance', { defaultValue: 'Outstanding Balance' }),
+      value: `R${((stats?.pendingPayments?.total ?? 0) * 200).toLocaleString()}`,
+      icon: 'wallet',
       color: '#F59E0B',
       valueColor: '#F59E0B',
       trend: (stats?.pendingPayments?.total ?? 0) > 3 ? 'attention' as const : 'stable' as const,
     },
     {
-      id: 'enrollments',
-      title: t('dashboard.active_enrollments', { defaultValue: 'Active Enrollments' }),
-      value: stats?.students?.total ?? studentsCount ?? 0,
-      icon: 'person-add',
+      id: 'monthly_registrations',
+      title: t('dashboard.monthly_registrations', { defaultValue: "This Month's Registrations" }),
+      value: stats?.pendingRegistrations?.total ?? 0,
+      icon: 'trending-up',
       color: '#6366F1',
       trend: 'stable' as const,
     },
@@ -133,6 +133,12 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         break;
       case 'fees_collected':
         router.push('/screens/financial-dashboard');
+        break;
+      case 'outstanding_balance':
+        router.push('/screens/pop-review');
+        break;
+      case 'monthly_registrations':
+        router.push('/screens/principal-registrations');
         break;
       case 'events':
         router.push('/screens/calendar');

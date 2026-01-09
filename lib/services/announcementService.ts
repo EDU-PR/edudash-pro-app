@@ -65,6 +65,33 @@ export class AnnouncementService {
       }
 
       console.log('✅ Announcement created successfully:', data);
+
+      // Send push notifications to target audience
+      try {
+        console.log('📲 Sending push notifications for announcement...');
+        const { error: notifyError } = await assertSupabase().functions.invoke('notifications-dispatcher', {
+          body: {
+            event_type: 'new_announcement',
+            preschool_id: organizationId,
+            announcement_id: data.id,
+            title: announcementData.title,
+            body: announcementData.message.substring(0, 100) + (announcementData.message.length > 100 ? '...' : ''),
+            target_audience: dbAnnouncement.target_audience,
+            priority: dbAnnouncement.priority,
+            send_immediately: true,
+          },
+        });
+        
+        if (notifyError) {
+          console.warn('⚠️ Failed to send push notifications (non-blocking):', notifyError);
+        } else {
+          console.log('✅ Push notifications dispatched for announcement');
+        }
+      } catch (notifyErr) {
+        // Non-blocking - announcement was created, push notification is best-effort
+        console.warn('⚠️ Push notification dispatch failed (non-blocking):', notifyErr);
+      }
+
       return { success: true, data };
     } catch (err) {
       console.error('💥 Unexpected error creating announcement:', err);

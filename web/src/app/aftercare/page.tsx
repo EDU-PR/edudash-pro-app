@@ -212,104 +212,308 @@ export default function AftercarePage() {
   const paymentReference = `AC-${formData.childFirstName.substring(0, 3).toUpperCase()}${formData.childLastName.substring(0, 3).toUpperCase()}-${formData.parentPhone.slice(-4)}`;
 
   if (submitted) {
+    const hasUploadedPOP = !!proofOfPayment;
+    
     return (
       <div style={{minHeight: '100vh', background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'}}>
-        <div style={{background: '#fff', borderRadius: '24px', padding: '48px', maxWidth: '600px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{background: '#fff', borderRadius: '24px', padding: '48px', maxWidth: '700px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'}}>
           <div style={{fontSize: '64px', marginBottom: '24px'}}>🎉</div>
-          <h1 style={{fontSize: '28px', fontWeight: 800, color: '#1f2937', marginBottom: '16px'}}>Registration Received!</h1>
-          <p style={{color: '#6b7280', fontSize: '16px', lineHeight: 1.6, marginBottom: '24px'}}>
+          <h1 style={{fontSize: '28px', fontWeight: 800, color: '#1f2937', marginBottom: '16px'}}>Registration Submitted!</h1>
+          <p style={{color: '#6b7280', fontSize: '16px', lineHeight: 1.6, marginBottom: '8px'}}>
             Thank you for registering <strong>{formData.childFirstName} {formData.childLastName}</strong> for our aftercare program at EduDash Pro Community School.
           </p>
+          <p style={{color: '#9ca3af', fontSize: '14px', marginBottom: '24px'}}>
+            Your registration reference: <strong style={{color: '#7c3aed'}}>{paymentReference}</strong>
+          </p>
+          
+          {/* Status Banner */}
+          <div style={{
+            background: hasUploadedPOP ? '#ecfdf5' : '#fef3c7',
+            border: `2px solid ${hasUploadedPOP ? '#10b981' : '#fbbf24'}`,
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            textAlign: 'left'
+          }}>
+            <span style={{fontSize: '28px'}}>{hasUploadedPOP ? '✅' : '⏳'}</span>
+            <div style={{flex: 1}}>
+              <p style={{color: hasUploadedPOP ? '#065f46' : '#92400e', fontSize: '14px', fontWeight: 700, margin: 0}}>
+                {hasUploadedPOP ? 'Payment Proof Received!' : 'Payment Pending'}
+              </p>
+              <p style={{color: hasUploadedPOP ? '#047857' : '#b45309', fontSize: '13px', margin: '4px 0 0'}}>
+                {hasUploadedPOP 
+                  ? 'We\'ll verify your payment within 24 hours and send confirmation.' 
+                  : 'Please make payment and upload proof below to complete registration.'}
+              </p>
+            </div>
+          </div>
           
           {/* Next Steps */}
-          <div style={{background: '#f3f4f6', borderRadius: '12px', padding: '20px', marginBottom: '24px', textAlign: 'left'}}>
-            <h3 style={{fontSize: '14px', fontWeight: 700, color: '#374151', marginBottom: '12px', textTransform: 'uppercase'}}>📋 Next Steps:</h3>
-            <ol style={{paddingLeft: '20px', color: '#6b7280', fontSize: '14px', lineHeight: 2}}>
-              <li>✅ Registration submitted - <strong>DONE!</strong></li>
-              <li>⏳ Make EFT payment of <strong>R200.00</strong> (Early Bird)</li>
-              <li>📧 Send proof of payment to <strong>admin@edudashpro.org.za</strong></li>
-              <li>✉️ Receive confirmation email within 24 hours</li>
-              <li>📱 Download the EduDash Pro app for updates</li>
-            </ol>
-          </div>
-
-          {/* Banking Details */}
-          <div style={{background: '#ecfdf5', border: '2px solid #10b981', borderRadius: '12px', padding: '20px', marginBottom: '24px', textAlign: 'left'}}>
-            <h3 style={{fontSize: '14px', fontWeight: 700, color: '#065f46', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-              🏦 Banking Details
+          <div style={{background: '#f3f4f6', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left'}}>
+            <h3 style={{fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>📋</span> What Happens Next?
             </h3>
-            <div style={{display: 'grid', gap: '8px'}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                <span style={{color: '#6b7280', fontSize: '14px'}}>Bank:</span>
-                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>Capitec Bank</span>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+              {/* Step 1 */}
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: hasUploadedPOP ? '#10b981' : '#7c3aed',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>
+                  {hasUploadedPOP ? '✓' : '1'}
+                </div>
+                <div>
+                  <p style={{fontSize: '14px', fontWeight: 600, color: '#374151', margin: '0 0 4px'}}>
+                    {hasUploadedPOP ? '✅ Payment Submitted' : 'Make Payment (R200.00)'}
+                  </p>
+                  <p style={{fontSize: '13px', color: '#6b7280', margin: 0, lineHeight: 1.5}}>
+                    {hasUploadedPOP 
+                      ? 'Your proof of payment has been received and is being verified.' 
+                      : 'Transfer R200.00 to our bank account using the details below.'}
+                  </p>
+                </div>
               </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                <span style={{color: '#6b7280', fontSize: '14px'}}>Account Name:</span>
-                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>EduDash Pro Pty Ltd</span>
+              
+              {/* Step 2 */}
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: hasUploadedPOP ? '#10b981' : '#e5e7eb',
+                  color: hasUploadedPOP ? '#fff' : '#6b7280',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>
+                  {hasUploadedPOP ? '✓' : '2'}
+                </div>
+                <div>
+                  <p style={{fontSize: '14px', fontWeight: 600, color: '#374151', margin: '0 0 4px'}}>
+                    {hasUploadedPOP ? '✅ Proof Uploaded' : 'Upload Proof of Payment'}
+                  </p>
+                  <p style={{fontSize: '13px', color: '#6b7280', margin: 0, lineHeight: 1.5}}>
+                    {hasUploadedPOP 
+                      ? 'Thank you! Your payment proof is being reviewed.' 
+                      : 'Email your proof of payment to admin@edudashpro.org.za with reference: ' + paymentReference}
+                  </p>
+                </div>
               </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                <span style={{color: '#6b7280', fontSize: '14px'}}>Account Number:</span>
-                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>1053747152</span>
+              
+              {/* Step 3 */}
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#e5e7eb',
+                  color: '#6b7280',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>3</div>
+                <div>
+                  <p style={{fontSize: '14px', fontWeight: 600, color: '#374151', margin: '0 0 4px'}}>
+                    We Verify Your Payment (24 hours)
+                  </p>
+                  <p style={{fontSize: '13px', color: '#6b7280', margin: 0, lineHeight: 1.5}}>
+                    Our team will verify your payment and approve your registration within 24 hours.
+                  </p>
+                </div>
               </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                <span style={{color: '#6b7280', fontSize: '14px'}}>Branch Code:</span>
-                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>450105</span>
+              
+              {/* Step 4 */}
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#e5e7eb',
+                  color: '#6b7280',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>4</div>
+                <div>
+                  <p style={{fontSize: '14px', fontWeight: 600, color: '#374151', margin: '0 0 4px'}}>
+                    Receive Welcome Email & Access
+                  </p>
+                  <p style={{fontSize: '13px', color: '#6b7280', margin: 0, lineHeight: 1.5}}>
+                    Once approved, you'll receive a welcome email with your login credentials and app access instructions.
+                  </p>
+                </div>
               </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
-                <span style={{color: '#6b7280', fontSize: '14px'}}>Account Type:</span>
-                <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>Business Account</span>
-              </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', background: '#d1fae5', padding: '10px', borderRadius: '8px', marginTop: '8px'}}>
-                <span style={{color: '#065f46', fontSize: '14px', fontWeight: 600}}>Reference:</span>
-                <span style={{color: '#065f46', fontWeight: 800, fontSize: '16px', letterSpacing: '1px'}}>{paymentReference}</span>
+              
+              {/* Step 5 */}
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#e5e7eb',
+                  color: '#6b7280',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>5</div>
+                <div>
+                  <p style={{fontSize: '14px', fontWeight: 600, color: '#374151', margin: '0 0 4px'}}>
+                    Start Using EduDash Pro!
+                  </p>
+                  <p style={{fontSize: '13px', color: '#6b7280', margin: 0, lineHeight: 1.5}}>
+                    Sign in to track your child's progress, communicate with teachers, and access learning resources.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Amount Due */}
-          <div style={{background: '#fef3c7', border: '2px solid #fbbf24', borderRadius: '12px', padding: '16px', marginBottom: '24px'}}>
-            <p style={{fontSize: '14px', color: '#92400e', marginBottom: '8px'}}>
-              <strong>Early Bird Registration Fee:</strong>
-            </p>
-            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'}}>
-              <span style={{color: '#92400e', fontSize: '16px', textDecoration: 'line-through', opacity: 0.7}}>R400.00</span>
-              <span style={{color: '#065f46', fontSize: '32px', fontWeight: 900}}>R200.00</span>
+          {/* Banking Details - Only show if payment not uploaded */}
+          {!hasUploadedPOP && (
+            <div style={{background: '#ecfdf5', border: '2px solid #10b981', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left'}}>
+              <h3 style={{fontSize: '16px', fontWeight: 700, color: '#065f46', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span>🏦</span> Banking Details for EFT Payment
+              </h3>
+              <p style={{color: '#047857', fontSize: '13px', marginBottom: '16px'}}>
+                Make payment of <strong>R200.00</strong> to complete your registration:
+              </p>
+              <div style={{display: 'grid', gap: '10px'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                  <span style={{color: '#6b7280', fontSize: '14px'}}>Bank:</span>
+                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>Capitec Bank</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                  <span style={{color: '#6b7280', fontSize: '14px'}}>Account Name:</span>
+                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>EduDash Pro Pty Ltd</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                  <span style={{color: '#6b7280', fontSize: '14px'}}>Account Number:</span>
+                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>1053747152</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #a7f3d0', paddingBottom: '8px'}}>
+                  <span style={{color: '#6b7280', fontSize: '14px'}}>Branch Code:</span>
+                  <span style={{color: '#065f46', fontWeight: 700, fontSize: '14px'}}>450105</span>
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', background: '#d1fae5', padding: '12px', borderRadius: '8px', marginTop: '8px'}}>
+                  <span style={{color: '#065f46', fontSize: '14px', fontWeight: 600}}>Your Reference:</span>
+                  <span style={{color: '#065f46', fontWeight: 800, fontSize: '16px', letterSpacing: '1px', fontFamily: 'monospace'}}>{paymentReference}</span>
+                </div>
+              </div>
+              <div style={{marginTop: '12px', padding: '12px', background: '#fef3c7', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span style={{fontSize: '18px'}}>⚠️</span>
+                <p style={{color: '#92400e', fontSize: '13px', margin: 0}}>
+                  <strong>IMPORTANT:</strong> Use <strong>{paymentReference}</strong> as your payment reference so we can identify your payment quickly.
+                </p>
+              </div>
             </div>
-            <p style={{fontSize: '12px', color: '#92400e', marginTop: '8px'}}>
-              ⚡ 50% Early Bird discount applied!
-            </p>
-          </div>
-
-          {/* Proof of Payment */}
-          <div style={{background: '#fdf4ff', border: '2px solid #c084fc', borderRadius: '12px', padding: '16px', marginBottom: '24px'}}>
-            <p style={{fontSize: '14px', color: '#7c3aed', fontWeight: 600, marginBottom: '8px'}}>
-              📤 Send Proof of Payment to:
-            </p>
-            <a href="mailto:admin@edudashpro.org.za?subject=Aftercare%20Payment%20-%20{paymentReference}" style={{color: '#7c3aed', fontWeight: 800, fontSize: '16px'}}>
-              admin@edudashpro.org.za
-            </a>
-            <p style={{fontSize: '12px', color: '#9333ea', marginTop: '8px'}}>
-              Include your payment reference: <strong>{paymentReference}</strong>
-            </p>
+          )}
+          
+          {/* Amount Summary */}
+          <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', marginBottom: '24px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+              <span style={{color: '#6b7280', fontSize: '14px'}}>Original Price:</span>
+              <span style={{color: '#9ca3af', fontSize: '16px', textDecoration: 'line-through'}}>R400.00</span>
+            </div>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+              <span style={{color: '#6b7280', fontSize: '14px'}}>Early Bird Discount (50%):</span>
+              <span style={{color: '#10b981', fontSize: '16px', fontWeight: 600}}>-R200.00</span>
+            </div>
+            <div style={{borderTop: '2px solid #e5e7eb', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <span style={{color: '#1f2937', fontSize: '16px', fontWeight: 700}}>Total Amount Due:</span>
+              <span style={{color: '#7c3aed', fontSize: '28px', fontWeight: 900}}>R200.00</span>
+            </div>
           </div>
 
           {/* Action Buttons */}
-          <div style={{display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap'}}>
-            <Link href="/" style={{padding: '12px 24px', background: '#7c3aed', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '14px'}}>
-              Back to Home
+          <div style={{display: 'grid', gridTemplateColumns: hasUploadedPOP ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '24px'}}>
+            {!hasUploadedPOP && (
+              <a 
+                href={`mailto:admin@edudashpro.org.za?subject=Aftercare Payment - ${paymentReference}&body=Hi!%0A%0AI have registered my child ${formData.childFirstName} ${formData.childLastName} for the aftercare program.%0A%0APayment Reference: ${paymentReference}%0AAmount: R200.00%0A%0APlease find my proof of payment attached.%0A%0AThank you!`}
+                style={{
+                  padding: '14px 20px', 
+                  background: '#7c3aed', 
+                  color: '#fff', 
+                  borderRadius: '10px', 
+                  textDecoration: 'none', 
+                  fontWeight: 700, 
+                  fontSize: '15px',
+                  textAlign: 'center',
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span>📧</span> Email Proof of Payment
+              </a>
+            )}
+            <a 
+              href={`https://wa.me/27674770975?text=Hi!%20I%20just%20registered%20${formData.childFirstName}%20${formData.childLastName}%20for%20aftercare.%0A%0AReference:%20${paymentReference}%0A${hasUploadedPOP ? 'I%20have%20uploaded%20my%20proof%20of%20payment.' : 'I%20need%20help%20with%20payment.'}`}
+              style={{
+                padding: '14px 20px', 
+                background: '#25D366', 
+                color: '#fff', 
+                borderRadius: '10px', 
+                textDecoration: 'none', 
+                fontWeight: 700, 
+                fontSize: '15px',
+                textAlign: 'center',
+                boxShadow: '0 4px 12px rgba(37, 211, 102, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>💬</span> {hasUploadedPOP ? 'Contact Us' : 'Get Help via WhatsApp'}
+            </a>
+          </div>
+          
+          {/* Home Button */}
+          <div style={{textAlign: 'center'}}>
+            <Link 
+              href="/" 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 24px', 
+                background: '#fff', 
+                color: '#7c3aed', 
+                borderRadius: '8px', 
+                textDecoration: 'none', 
+                fontWeight: 600, 
+                fontSize: '14px',
+                border: '1px solid #e5e7eb'
+              }}
+            >
+              ← Back to Home
             </Link>
-            <a 
-              href={`https://wa.me/27674770975?text=Hi!%20I%20just%20registered%20${formData.childFirstName}%20for%20aftercare.%20Reference:%20${paymentReference}`} 
-              style={{padding: '12px 24px', background: '#25D366', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '14px'}}
-            >
-              💬 WhatsApp Us
-            </a>
-            <a 
-              href={`mailto:admin@edudashpro.org.za?subject=Aftercare Registration - ${paymentReference}&body=Hi,%0A%0AI have registered my child ${formData.childFirstName} ${formData.childLastName} for the aftercare program.%0A%0APayment Reference: ${paymentReference}%0A%0APlease find my proof of payment attached.%0A%0AThank you!`}
-              style={{padding: '12px 24px', background: '#6366f1', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, fontSize: '14px'}}
-            >
-              ✉️ Email Proof of Payment
-            </a>
           </div>
 
           {/* Registration Summary */}
@@ -418,6 +622,35 @@ export default function AftercarePage() {
       {/* Registration Form */}
       <section style={{padding: '48px 20px'}}>
         <div style={{maxWidth: '700px', margin: '0 auto'}}>
+          {/* Process Overview */}
+          <div style={{background: 'rgba(99, 102, 241, 0.1)', border: '2px solid rgba(99, 102, 241, 0.3)', borderRadius: '16px', padding: '24px', marginBottom: '32px'}}>
+            <h3 style={{color: '#fff', fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <span>ℹ️</span> How Registration Works
+            </h3>
+            <div style={{display: 'grid', gap: '12px'}}>
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>1</div>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Fill out the registration form below</p>
+              </div>
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>2</div>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Make EFT payment of R200 (Early Bird price)</p>
+              </div>
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>3</div>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>Upload proof of payment (or email it within 48 hours)</p>
+              </div>
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>4</div>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>We verify payment and approve your registration (24 hours)</p>
+              </div>
+              <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                <div style={{width: '24px', height: '24px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, flexShrink: 0}}>✓</div>
+                <p style={{color: '#d1d5db', fontSize: '14px', margin: 0}}>You receive welcome email with login details to access EduDash Pro!</p>
+              </div>
+            </div>
+          </div>
+          
           <form onSubmit={handleSubmit}>
             {/* Parent Details */}
             <div style={{background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.1)'}}>
@@ -614,11 +847,16 @@ export default function AftercarePage() {
 
             {/* Proof of Payment Upload */}
             <div style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)', borderRadius: '16px', padding: '24px', marginBottom: '24px', border: '2px solid rgba(16, 185, 129, 0.3)'}}>
-              <h2 style={{color: '#10b981', fontSize: '18px', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <span>📄</span> Proof of Payment (Optional)
+              <h2 style={{color: '#10b981', fontSize: '18px', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span>📄</span> Proof of Payment
               </h2>
+              <div style={{background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', borderRadius: '8px', padding: '12px', marginBottom: '16px'}}>
+                <p style={{color: '#fbbf24', fontSize: '13px', margin: 0, lineHeight: 1.5, fontWeight: 600}}>
+                  ⚡ <strong>Upload now for instant processing!</strong> Or email it later to admin@edudashpro.org.za
+                </p>
+              </div>
               <p style={{color: '#9CA3AF', fontSize: '13px', marginBottom: '16px', lineHeight: 1.5}}>
-                Already paid? Upload your proof of payment now for faster processing. You can also email it to <strong>admin@edudashpro.org.za</strong> after registration.
+                You can register first and pay later, but uploading proof of payment now will speed up your approval significantly (usually within 24 hours instead of 2-3 days).
               </p>
               
               {/* Banking Details Preview */}

@@ -26,18 +26,39 @@ export default function AuthCallback() {
 
       console.log('[AuthCallback] Processing URL:', urlStr);
 
+      const supabase = await assertSupabase();
+
       // Case 1: OAuth callback (hash fragment with tokens)
-      if (urlStr.includes('#access_token')) {
+      if (urlStr.includes('#access_token') || urlStr.includes('access_token=')) {
         setMessage('Validating OAuth session...');
         
-        const hash = urlStr.slice(urlStr.indexOf('#') + 1);
-        const params = new URLSearchParams(hash);
+        // Try hash fragment first
+        let access_token: string | null = null;
+        let refresh_token: string | null = null;
         
-        const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token');
+        if (urlStr.includes('#')) {
+          const hash = urlStr.slice(urlStr.indexOf('#') + 1);
+          const params = new URLSearchParams(hash);
+          access_token = params.get('access_token');
+          refresh_token = params.get('refresh_token');
+        }
+        
+        // Also try query params
+        if (!access_token) {
+          try {
+            const url = new URL(urlStr);
+            access_token = url.searchParams.get('access_token');
+            refresh_token = url.searchParams.get('refresh_token');
+          } catch {
+            // URL parsing failed, try manual extraction
+            const match = urlStr.match(/access_token=([^&]+)/);
+            if (match) access_token = match[1];
+            const refreshMatch = urlStr.match(/refresh_token=([^&]+)/);
+            if (refreshMatch) refresh_token = refreshMatch[1];
+          }
+        }
 
         if (access_token) {
-          const supabase = await assertSupabase();
           const { error } = await supabase.auth.setSession({
             access_token,
             refresh_token: refresh_token || '',
@@ -57,39 +78,85 @@ export default function AuthCallback() {
         }
       }
 
-      // Case 2: Magic link / Email verification (query params)
-      if (urlStr.includes('token_hash=')) {
-        setMessage('Verifying email...');
+      // Case 2: Magic link / Email verification (query params with token_hash)
+      if (urlStr.includes('token_hash=') || urlStr.includes('token_hash%3D')) {
+        setMessage('Verifying magic link...');
         
-        const url = new URL(urlStr);
-        const token_hash = url.searchParams.get('token_hash');
-        const typeParam = url.searchParams.get('type');
+        let token_hash: string | null = null;
+        let typeParam: string | null = null;
+        
+        try {
+          // Handle both edudashpro:// scheme and https:// URLs
+          const url = new URL(urlStr.replace('edudashpro://', 'https://app.edudashpro.org.za/'));
+          token_hash = url.searchParams.get('token_hash');
+          typeParam = url.searchParams.get('type');
+        } catch {
+          // Manual extraction for malformed URLs
+          const hashMatch = urlStr.match(/token_hash=([^&]+)/);
+          if (hashMatch) token_hash = decodeURIComponent(hashMatch[1]);
+          const typeMatch = urlStr.match(/type=([^&]+)/);
+          if (typeMatch) typeParam = decodeURIComponent(typeMatch[1]);
+        }
+
+        console.log('[AuthCallback] Magic link params:', { token_hash: token_hash?.slice(0, 20) + '...', type: typeParam });
+
         // Valid OTP types for Supabase
         type OtpType = 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email';
         const validTypes: OtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'];
         const type: OtpType = validTypes.includes(typeParam as OtpType) ? (typeParam as OtpType) : 'magiclink';
 
         if (token_hash) {
-          const supabase = await assertSupabase();
-          const { error } = await supabase.auth.verifyOtp({
+          console.log('[AuthCallback] Verifying OTP with type:', type);
+          
+          const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
             type,
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error('[AuthCallback] OTP verification failed:', error);
+            throw error;
+          }
 
-          setMessage('Verification successful! Redirecting...');
-          console.log('[AuthCallback] Email verification successful');
+          console.log('[AuthCallback] OTP verified successfully, session:', data.session ? 'exists' : 'null');
           
+          // If verifyOtp returned a session, set it explicitly
+          if (data.session) {
+            console.log('[AuthCallback] Setting session from verifyOtp response');
+            const { error: setSessionError } = await supabase.auth.setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            });
+            
+            if (setSessionError) {
+              console.error('[AuthCallback] Failed to set session:', setSessionError);
+              throw setSessionError;
+            }
+            console.log('[AuthCallback] Session set successfully');
+          }
+          
+          // Wait a moment for the auth state change to propagate
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Double-check session is set
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          console.log('[AuthCallback] Current session after verify:', sessionData.session ? 'exists' : 'null');
+
+          if (!sessionData.session) {
+            throw new Error('Authentication succeeded but no session was created. Please try again.');
+          }
+
+          setMessage('Sign-in successful! Redirecting...');
+          console.log('[AuthCallback] Magic link verification successful, user:', sessionData.session.user.email);
+          
+          // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
             if (type === 'recovery') {
               router.replace('/(auth)/reset-password');
-            } else if (url.searchParams.get('verified') === 'true') {
-              router.replace('/(auth)/sign-in?verified=true');
             } else {
               router.replace('/profiles-gate');
             }
-          }, 500);
+          }, 800);
           
           return;
         }
@@ -97,16 +164,24 @@ export default function AuthCallback() {
 
       // Case 3: Error in callback
       if (urlStr.includes('error=')) {
-        const url = new URL(urlStr);
-        const error = url.searchParams.get('error');
-        const error_description = url.searchParams.get('error_description');
+        let error: string | null = null;
+        let error_description: string | null = null;
+        
+        try {
+          const url = new URL(urlStr.replace('edudashpro://', 'https://app.edudashpro.org.za/'));
+          error = url.searchParams.get('error');
+          error_description = url.searchParams.get('error_description');
+        } catch {
+          const errorMatch = urlStr.match(/error=([^&]+)/);
+          if (errorMatch) error = decodeURIComponent(errorMatch[1]);
+        }
         
         console.error('[AuthCallback] OAuth error:', error, error_description);
         throw new Error(error_description || error || 'Authentication failed');
       }
 
       // No recognized callback pattern
-      console.warn('[AuthCallback] Unrecognized callback pattern');
+      console.warn('[AuthCallback] Unrecognized callback pattern, URL:', urlStr);
       setMessage('Could not process authentication. Redirecting to sign-in...');
       setTimeout(() => {
         router.replace('/(auth)/sign-in');
