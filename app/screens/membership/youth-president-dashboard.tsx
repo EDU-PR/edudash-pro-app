@@ -67,6 +67,8 @@ export default function YouthPresidentDashboard() {
   const [stats, setStats] = useState<YouthStats | null>(null);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [pendingBudgetCount, setPendingBudgetCount] = useState(0);
+  const [pendingEventProposalsCount, setPendingEventProposalsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -105,6 +107,39 @@ export default function YouthPresidentDashboard() {
         .order('start_date', { ascending: true })
         .limit(5);
 
+      // Fetch upcoming programs (courses with future start dates)
+      const { data: upcomingProgramsData } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .gte('start_date', new Date().toISOString())
+        .is('deleted_at', null);
+
+      // Fetch actual regions count
+      const { count: regionsCount } = await supabase
+        .from('organization_regions')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('is_active', true);
+
+      // Fetch pending budget requests
+      const { data: pendingBudgets, count: pendingBudgetCount } = await supabase
+        .from('organization_budgets')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .in('status', ['pending', 'proposed', 'draft', 'frozen']);
+
+      // Fetch pending event proposals (events awaiting approval)
+      const { data: pendingEventsData, count: pendingEventProposalsCount } = await supabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .in('status', ['pending', 'proposed', 'draft']);
+
+      setPendingBudgetCount(pendingBudgetCount || 0);
+      setPendingEventProposalsCount(pendingEventProposalsCount || 0);
+
       // Calculate age breakdown
       const currentYear = new Date().getFullYear();
       const ageBreakdown = {
@@ -134,9 +169,9 @@ export default function YouthPresidentDashboard() {
         totalMembers: members?.length || 0,
         newThisMonth,
         activeEvents: events?.length || 0,
-        upcomingPrograms: 0,
+        upcomingPrograms: upcomingProgramsData?.length || 0,
         pendingApprovals: pendingApprovals?.length || 0,
-        totalRegions: 9, // Default for SA provinces
+        totalRegions: regionsCount || 0,
         ageBreakdown,
       });
 
@@ -412,38 +447,53 @@ export default function YouthPresidentDashboard() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Pending Approvals</Text>
-            {(stats?.pendingApprovals || 0) > 0 && (
+            {((stats?.pendingApprovals || 0) + pendingBudgetCount + pendingEventProposalsCount) > 0 && (
               <View style={[styles.urgentBadge, { backgroundColor: '#EF4444' }]}>
-                <Text style={styles.urgentText}>{stats?.pendingApprovals}</Text>
+                <Text style={styles.urgentText}>
+                  {(stats?.pendingApprovals || 0) + pendingBudgetCount + pendingEventProposalsCount}
+                </Text>
               </View>
             )}
           </View>
           
           <Card padding={0} margin={0}>
-            {[
-              { icon: 'person-add', color: '#3B82F6', title: 'Membership Applications', description: `${stats?.pendingApprovals || 0} youth members awaiting approval`, type: 'members' },
-              { icon: 'cash', color: '#F59E0B', title: 'Budget Requests', description: 'Program funding requests pending', type: 'budget' },
-              { icon: 'calendar', color: '#10B981', title: 'Event Proposals', description: 'New events awaiting approval', type: 'events' },
-            ].map((item, index) => (
-              <View key={index}>
-                <TouchableOpacity 
-                  style={styles.approvalItem}
-                  onPress={() => handleApprovalPress(item.type)}
-                >
-                  <View style={[styles.approvalIcon, { backgroundColor: item.color + '15' }]}>
-                    <Ionicons name={item.icon as any} size={20} color={item.color} />
+            {(() => {
+              const approvalItems = [
+                { icon: 'person-add', color: '#3B82F6', title: 'Membership Applications', description: `${stats?.pendingApprovals || 0} youth members awaiting approval`, type: 'members', count: stats?.pendingApprovals || 0 },
+                { icon: 'cash', color: '#F59E0B', title: 'Budget Requests', description: `${pendingBudgetCount} budget ${pendingBudgetCount === 1 ? 'request' : 'requests'} pending approval`, type: 'budget', count: pendingBudgetCount },
+                { icon: 'calendar', color: '#10B981', title: 'Event Proposals', description: `${pendingEventProposalsCount} event ${pendingEventProposalsCount === 1 ? 'proposal' : 'proposals'} awaiting approval`, type: 'events', count: pendingEventProposalsCount },
+              ].filter(item => item.count > 0);
+
+              if (approvalItems.length === 0) {
+                return (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="checkmark-circle-outline" size={40} color={theme.textSecondary} />
+                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No pending approvals</Text>
                   </View>
-                  <View style={styles.approvalInfo}>
-                    <Text style={[styles.approvalTitle, { color: theme.text }]}>{item.title}</Text>
-                    <Text style={[styles.approvalDescription, { color: theme.textSecondary }]}>
-                      {item.description}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
-                </TouchableOpacity>
-                {index < 2 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
-              </View>
-            ))}
+                );
+              }
+
+              return approvalItems.map((item, index) => (
+                <View key={index}>
+                  <TouchableOpacity 
+                    style={styles.approvalItem}
+                    onPress={() => handleApprovalPress(item.type)}
+                  >
+                    <View style={[styles.approvalIcon, { backgroundColor: item.color + '15' }]}>
+                      <Ionicons name={item.icon as any} size={20} color={item.color} />
+                    </View>
+                    <View style={styles.approvalInfo}>
+                      <Text style={[styles.approvalTitle, { color: theme.text }]}>{item.title}</Text>
+                      <Text style={[styles.approvalDescription, { color: theme.textSecondary }]}>
+                        {item.description}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  {index < approvalItems.length - 1 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+                </View>
+              ));
+            })()}
           </Card>
         </View>
 
