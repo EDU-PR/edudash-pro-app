@@ -86,14 +86,41 @@ export function K12AdminDashboard() {
       
       // Fetch aftercare registrations stats
       // EduDash Pro schools query both Community and Main school registrations
-      const query = supabase
-        .from('aftercare_registrations')
-        .select('id, status, child_grade, child_first_name, child_last_name, created_at')
-        .order('created_at', { ascending: false });
+      let registrations: any[] = [];
+      let error: any = null;
       
-      const { data: registrations, error } = isEdudashProSchool
-        ? await query.in('preschool_id', EDUDASH_PRO_SCHOOL_IDS)
-        : await query.eq('preschool_id', organizationId);
+      if (isEdudashProSchool) {
+        // Make two separate queries and combine results to avoid RLS issues with .in()
+        const [communityResult, mainResult] = await Promise.all([
+          supabase
+            .from('aftercare_registrations')
+            .select('id, status, child_grade, child_first_name, child_last_name, created_at')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[0])
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('aftercare_registrations')
+            .select('id, status, child_grade, child_first_name, child_last_name, created_at')
+            .eq('preschool_id', EDUDASH_PRO_SCHOOL_IDS[1])
+            .order('created_at', { ascending: false }),
+        ]);
+        
+        if (communityResult.error && communityResult.error.code !== '42P01') {
+          error = communityResult.error;
+        } else if (mainResult.error && mainResult.error.code !== '42P01') {
+          error = mainResult.error;
+        } else {
+          registrations = [...(communityResult.data || []), ...(mainResult.data || [])]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        }
+      } else {
+        const result = await supabase
+          .from('aftercare_registrations')
+          .select('id, status, child_grade, child_first_name, child_last_name, created_at')
+          .eq('preschool_id', organizationId)
+          .order('created_at', { ascending: false });
+        registrations = result.data || [];
+        error = result.error;
+      }
       
       if (error && error.code !== '42P01') {
         console.error('[K12Dashboard] Error fetching registrations:', error);
