@@ -334,6 +334,47 @@ export interface Student {
 /**
  * Enhanced user profile with complete RBAC information
  */
+/**
+ * Organization member data structure from database
+ */
+interface OrganizationMember {
+  organization_id: string;
+  organization_name?: string;
+  plan_tier?: PlanTier;
+  seat_status?: SeatStatus;
+  invited_by?: string;
+  created_at?: string;
+  member_type?: string; // Member type (e.g., 'ceo', 'national_admin', 'regional_manager', 'staff')
+}
+
+/**
+ * Organization data structure from database
+ */
+interface OrganizationData {
+  id: string;
+  name: string;
+  subscription_tier?: PlanTier;
+  plan_tier?: PlanTier;
+}
+
+/**
+ * Profile data structure from database query
+ */
+interface DatabaseProfile {
+  id: string;
+  email: string;
+  role: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  avatar_url?: string;
+  created_at?: string;
+  last_login_at?: string;
+  preschool_id?: string;
+  organization_id?: string;
+  tenant_slug?: string;
+}
+
 export interface EnhancedUserProfile extends UserProfile {
   // Organization membership
   organization_membership?: {
@@ -828,26 +869,29 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     
     // Process the real profile data
     // Resolve organization identifier (UUID id or tenant slug)
-    let orgMember = null as any;
-    let org: any = null;
+    let orgMember: OrganizationMember | null = null;
+    let org: OrganizationData | null = null;
 
-    const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+    const isUuid = (v: string): boolean =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+    
     // Consider multiple sources for organization identifier
-    const sessionMeta = (session?.user as any)?.user_metadata || {};
+    const sessionMeta = (session?.user as { user_metadata?: Record<string, unknown> })?.user_metadata || {};
+    const profileData = profile as DatabaseProfile;
     const orgIdentifierRaw: string | undefined =
-      (profile as any)?.preschool_id ||
-      (profile as any)?.organization_id ||
-      (profile as any)?.tenant_slug ||
-      sessionMeta.tenant_slug ||
-      sessionMeta.preschool_slug ||
-      sessionMeta.school_slug ||
-      (isUuid(String(sessionMeta.school_id || '')) ? undefined : sessionMeta.school_id);
+      profileData.preschool_id ||
+      profileData.organization_id ||
+      profileData.tenant_slug ||
+      (sessionMeta.tenant_slug as string | undefined) ||
+      (sessionMeta.preschool_slug as string | undefined) ||
+      (sessionMeta.school_slug as string | undefined) ||
+      (isUuid(String(sessionMeta.school_id || '')) ? undefined : (sessionMeta.school_id as string | undefined));
     let resolvedOrgId: string | null = null;
 
     debug('[Profile] Organization identifier sources:', {
-      preschool_id: (profile as any)?.preschool_id,
-      organization_id: (profile as any)?.organization_id,
-      tenant_slug: (profile as any)?.tenant_slug,
+      preschool_id: profileData.preschool_id,
+      organization_id: profileData.organization_id,
+      tenant_slug: profileData.tenant_slug,
       orgIdentifierRaw,
     });
 
@@ -917,54 +961,92 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
 
     debug('[Profile] Resolved organization ID:', resolvedOrgId);
 
+    /**
+     * Resolves organization ID with priority logic for principals.
+     * 
+     * For principals: Prioritizes profile.organization_id/preschool_id directly
+     * to ensure routing based on direct profile assignment, preventing
+     * organization_members table from overriding the profile.
+     * 
+     * For other roles: Uses existing fallback chain (resolvedOrgId -> orgMember -> profile).
+     * 
+     * @param profile - Database profile data
+     * @param resolvedOrgId - Organization ID resolved from lookup
+     * @param orgMember - Organization member data (if exists)
+     * @returns Object containing final organization ID and source information
+     */
+    const resolveOrganizationId = (
+      profileData: DatabaseProfile,
+      resolvedId: string | null,
+      memberData: OrganizationMember | null
+    ): { finalOrgId: string | undefined; source: string } => {
+      const userRole = normalizeRole(profileData.role);
+      const isPrincipal = userRole === 'principal_admin' || userRole === 'principal';
+      const profileOrgId = profileData.organization_id || profileData.preschool_id;
+
+      debug('[Profile] Organization resolution priority check:', {
+        userRole,
+        isPrincipal,
+        profileOrgId,
+        resolvedOrgId: resolvedId,
+        hasOrgMember: !!memberData,
+        orgMemberOrgId: memberData?.organization_id,
+      });
+
+      if (isPrincipal && profileOrgId) {
+        return {
+          finalOrgId: profileOrgId,
+          source: 'profiles table (principal priority)',
+        };
+      }
+
+      // Existing fallback chain for non-principals
+      const finalId = resolvedId || memberData?.organization_id || profileOrgId;
+      const source = resolvedId
+        ? 'resolvedOrgId (from lookup)'
+        : memberData?.organization_id
+        ? 'organization_members table'
+        : profileOrgId
+        ? 'profiles table (fallback)'
+        : 'none';
+
+      return { finalOrgId: finalId, source };
+    };
+
     // Determine user role for priority logic
     const userRole = normalizeRole(profile.role);
     const isPrincipal = userRole === 'principal_admin' || userRole === 'principal';
-    
-    // For principals, prioritize profile.organization_id/preschool_id directly
-    // This ensures principals are routed based on their direct profile assignment
-    // and prevents organization_members table from overriding the profile
-    const profileOrgId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
-    
-    debug('[Profile] Organization resolution priority check:', {
-      userRole,
-      isPrincipal,
-      profileOrgId,
-      resolvedOrgId,
-      hasOrgMember: !!orgMember,
-      orgMemberOrgId: orgMember?.organization_id,
-    });
+    const profileOrgId = profile.organization_id || profile.preschool_id;
 
     // If we have a resolved ID, attempt to get membership details
     // But for principals, we'll prioritize profileOrgId over resolvedOrgId
-    const orgIdToUse = isPrincipal && profileOrgId 
-      ? profileOrgId 
-      : resolvedOrgId;
-    
+    const orgIdToUse = isPrincipal && profileOrgId ? profileOrgId : resolvedOrgId;
+
     if (orgIdToUse) {
       // Only fetch org member if we're not prioritizing profile for principals
       if (!(isPrincipal && profileOrgId)) {
         try {
           debug('[Profile] Calling get_my_org_member RPC for org:', orgIdToUse);
           const { data: memberData, error: memberError } = await assertSupabase()
-            .rpc('get_my_org_member', { p_org_id: orgIdToUse as any });
-          
+            .rpc('get_my_org_member', { p_org_id: orgIdToUse });
+
           debug('[Profile] get_my_org_member result:', { memberData, memberError });
-          
+
           if (memberError) {
             debug('[Profile] get_my_org_member error:', memberError);
           }
-          
+
           // RPC returns array, take first result if exists
           const memberResult = Array.isArray(memberData) ? memberData[0] : memberData;
           if (memberResult) {
-            orgMember = memberResult as any;
-            debug('[Profile] orgMember set with member_type:', (memberResult as any)?.member_type);
+            orgMember = memberResult as OrganizationMember;
+            debug('[Profile] orgMember set with member_type:', memberResult.member_type);
           } else {
             debug('[Profile] No membership data returned from get_my_org_member');
           }
         } catch (e) {
           debug('get_my_org_member RPC failed', e);
+          warn('Failed to fetch organization member data', e);
         }
       } else {
         debug('[Profile] Skipping orgMember fetch for principal - using profile organization_id directly');
@@ -978,9 +1060,12 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
             .select('id, name, subscription_tier')
             .eq('id', orgIdToUse)
             .maybeSingle();
-          if (orgData) org = orgData;
+          if (orgData) {
+            org = orgData as OrganizationData;
+          }
         } catch (e) {
           debug('preschools by id lookup failed', e);
+          warn('Failed to fetch organization details', e);
         }
       }
     }
@@ -992,27 +1077,13 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       orgMember?.seat_status
     );
 
-    // Determine final organization_id with priority logic
-    // For principals: prioritize profile.organization_id/preschool_id over everything else
-    // For others: use existing fallback chain
-    let finalOrgId: string | undefined;
-    let orgIdSource: string;
-    
-    if (isPrincipal && profileOrgId) {
-      finalOrgId = profileOrgId;
-      orgIdSource = 'profiles table (principal priority)';
-    } else {
-      // Existing fallback chain for non-principals
-      finalOrgId = resolvedOrgId || orgMember?.organization_id || profileOrgId;
-      orgIdSource = resolvedOrgId 
-        ? 'resolvedOrgId (from lookup)'
-        : orgMember?.organization_id 
-        ? 'organization_members table'
-        : profileOrgId 
-        ? 'profiles table (fallback)'
-        : 'none';
-    }
-    
+    // Resolve final organization ID with priority logic
+    const { finalOrgId, source: orgIdSource } = resolveOrganizationId(
+      profile as DatabaseProfile,
+      resolvedOrgId,
+      orgMember as OrganizationMember | null
+    );
+
     log('[Profile] Final organization_id resolution:', {
       userId: profile.id,
       email: profile.email,
