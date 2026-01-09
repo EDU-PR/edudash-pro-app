@@ -33,6 +33,7 @@ TO anon
 WITH CHECK (true); -- Allow all anonymous inserts (public registration form)
 
 -- Policy: Principals can view all registrations for their school
+-- Special case: EduDash Pro principals can see aftercare registrations from both Main School and Community School
 DROP POLICY IF EXISTS "principals_select_aftercare" ON public.aftercare_registrations;
 CREATE POLICY "principals_select_aftercare"
 ON public.aftercare_registrations
@@ -45,6 +46,18 @@ USING (
     FROM public.profiles
     WHERE id = auth.uid()
     AND role IN ('principal', 'principal_admin', 'super_admin')
+  )
+  OR
+  -- Special case: EduDash Pro principals can see aftercare registrations from both Main School and Community School
+  (
+    preschool_id IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003')
+    AND EXISTS (
+      SELECT 1
+      FROM public.profiles
+      WHERE id = auth.uid()
+      AND role IN ('principal', 'principal_admin', 'super_admin')
+      AND COALESCE(organization_id, preschool_id) IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003')
+    )
   )
 );
 
