@@ -991,7 +991,17 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
         resolvedOrgId: resolvedId,
         hasOrgMember: !!memberData,
         orgMemberOrgId: memberData?.organization_id,
+        memberType: memberData?.member_type,
       });
+
+      // CRITICAL FIX: Prioritize profileOrgId if user has member_type (SOA member)
+      // This ensures SOA members (youth_president, ceo, etc.) use correct org ID for routing
+      if (memberData?.member_type && profileOrgId) {
+        return {
+          finalOrgId: profileOrgId,
+          source: 'profiles table (SOA member with member_type)',
+        };
+      }
 
       if (isPrincipal && profileOrgId) {
         return {
@@ -1000,9 +1010,14 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
         };
       }
 
-      // Existing fallback chain for non-principals
-      const finalId = resolvedId || memberData?.organization_id || profileOrgId;
-      const source = resolvedId
+      // For non-principals without member_type, use existing fallback chain
+      // But still prioritize profileOrgId if it exists and matches resolvedId
+      const finalId = (profileOrgId && (profileOrgId === resolvedId || !resolvedId)) 
+        ? profileOrgId 
+        : resolvedId || memberData?.organization_id || profileOrgId;
+      const source = (profileOrgId && finalId === profileOrgId)
+        ? 'profiles table (priority)'
+        : resolvedId
         ? 'resolvedOrgId (from lookup)'
         : memberData?.organization_id
         ? 'organization_members table'
@@ -1018,13 +1033,23 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     const isPrincipal = userRole === 'principal_admin' || userRole === 'principal';
     const profileOrgId = profile.organization_id || profile.preschool_id;
 
-    // If we have a resolved ID, attempt to get membership details
-    // But for principals, we'll prioritize profileOrgId over resolvedOrgId
-    const orgIdToUse = isPrincipal && profileOrgId ? profileOrgId : resolvedOrgId;
+    // CRITICAL FIX: Use profileOrgId if available, otherwise use resolvedOrgId
+    // This ensures we check the correct organization for member_type lookup
+    // (especially important for SOA members who have organization_id in profile)
+    const orgIdToUse = profileOrgId || resolvedOrgId;
+    
+    debug('[Profile] Organization ID selection:', {
+      profileOrgId,
+      resolvedOrgId,
+      orgIdToUse,
+      isPrincipal,
+      userRole,
+    });
 
     if (orgIdToUse) {
-      // Only fetch org member if we're not prioritizing profile for principals
-      if (!(isPrincipal && profileOrgId)) {
+      // Fetch org member data (for non-principals, or if we don't have profileOrgId for principals)
+      // For principals with profileOrgId, we can skip the RPC but still need member_type
+      if (!isPrincipal || !profileOrgId) {
         try {
           debug('[Profile] Calling get_my_org_member RPC for org:', orgIdToUse);
           const { data: memberData, error: memberError } = await assertSupabase()
@@ -1049,7 +1074,83 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
           warn('Failed to fetch organization member data', e);
         }
       } else {
-        debug('[Profile] Skipping orgMember fetch for principal - using profile organization_id directly');
+        debug('[Profile] Principal detected - will fetch member_type directly from organization_members');
+      }
+
+      // CRITICAL FIX: Always fetch member_type from organization_members table
+      // The get_my_org_member RPC doesn't return member_type, but we need it for routing
+      // (e.g., youth_president, ceo, etc.) - This is required for SOA organization routing
+      // IMPORTANT: We MUST fetch this even if orgMember exists, because RPC doesn't return member_type
+      // Use profile.organization_id first if available (most accurate for SOA members), otherwise use orgIdToUse
+      const targetOrgId = profileOrgId || orgIdToUse;
+      
+      // Check if member_type is missing or empty (need to fetch it)
+      const needsMemberTypeFetch = !orgMember?.member_type || 
+                                   orgMember.member_type === null || 
+                                   orgMember.member_type === undefined ||
+                                   orgMember.member_type === '';
+      
+      if (needsMemberTypeFetch && targetOrgId) {
+        try {
+          debug('[Profile] Fetching member_type from organization_members table for org:', targetOrgId, 'user:', userId);
+          const { data: memberTypeData, error: memberTypeError } = await assertSupabase()
+            .from('organization_members')
+            .select('member_type, seat_status, invited_by, created_at, organization_id')
+            .eq('organization_id', targetOrgId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (memberTypeError) {
+            debug('[Profile] organization_members query error:', memberTypeError);
+          }
+
+            if (memberTypeData) {
+              // Merge member_type into existing orgMember or create new one
+              if (!orgMember) {
+                orgMember = {
+                  organization_id: targetOrgId, // Use targetOrgId (prioritizes profileOrgId)
+                  seat_status: memberTypeData.seat_status || 'active',
+                  invited_by: memberTypeData.invited_by,
+                  created_at: memberTypeData.created_at,
+                  member_type: memberTypeData.member_type,
+                } as OrganizationMember;
+              } else {
+                orgMember.member_type = memberTypeData.member_type;
+                // Ensure organization_id is set correctly
+                if (!orgMember.organization_id || orgMember.organization_id !== targetOrgId) {
+                  orgMember.organization_id = targetOrgId;
+                }
+              }
+              debug('[Profile] member_type fetched from organization_members:', memberTypeData.member_type);
+              // #region agent log
+              console.log('[DEBUG_AGENT] MemberType-FETCHED', JSON.stringify({
+                userId,
+                orgId: targetOrgId,
+                profileOrgId,
+                member_type: memberTypeData.member_type,
+                seat_status: memberTypeData.seat_status,
+                timestamp: Date.now()
+              }));
+              // #endregion
+            } else {
+              debug('[Profile] No organization_members record found for user in org:', targetOrgId);
+              // #region agent log
+              console.log('[DEBUG_AGENT] MemberType-NOTFOUND', JSON.stringify({
+                userId,
+                orgId: targetOrgId,
+                profileOrgId,
+                orgIdToUse,
+                email: profile.email,
+                timestamp: Date.now()
+              }));
+              // #endregion
+            }
+        } catch (e) {
+          debug('organization_members query failed', e);
+          warn('Failed to fetch member_type from organization_members', e);
+        }
+      } else {
+        debug('[Profile] member_type already present in orgMember:', orgMember.member_type);
       }
 
       // If org details not loaded yet (e.g., organizations table), try preschools by id to get name
@@ -1077,7 +1178,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       orgMember?.seat_status
     );
 
-    // Resolve final organization ID with priority logic
+    // Resolve final organization ID with priority logic (now handles SOA members with member_type)
     const { finalOrgId, source: orgIdSource } = resolveOrganizationId(
       profile as DatabaseProfile,
       resolvedOrgId,
@@ -1131,6 +1232,18 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       created_at: orgMember?.created_at,
       member_type: orgMember?.member_type, // Member type (ceo, national_admin, regional_manager, etc.)
     });
+
+    // #region agent log
+    console.log('[DEBUG_AGENT] Profile-CREATED', JSON.stringify({
+      userId: profile.id,
+      email: profile.email,
+      organization_id: baseProfile.organization_id,
+      member_type: orgMember?.member_type,
+      hasOrgMember: !!orgMember,
+      orgMemberKeys: orgMember ? Object.keys(orgMember) : [],
+      timestamp: Date.now()
+    }));
+    // #endregion
     
     // Track profile fetch for analytics with security monitoring
     track('edudash.rbac.profile_fetched', {
