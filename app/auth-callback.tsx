@@ -78,33 +78,81 @@ export default function AuthCallback() {
         }
       }
 
-      // Case 2: Magic link / Email verification (query params with token_hash)
-      if (urlStr.includes('token_hash=') || urlStr.includes('token_hash%3D')) {
+      // Case 2: Magic link / Email verification (query params with token_hash or token for PKCE)
+      if (urlStr.includes('token_hash=') || urlStr.includes('token_hash%3D') || 
+          urlStr.includes('token=') || urlStr.includes('token%3D') ||
+          urlStr.includes('code=') || urlStr.includes('code%3D')) {
         setMessage('Verifying magic link...');
         
         let token_hash: string | null = null;
+        let token: string | null = null;
+        let code: string | null = null;
         let typeParam: string | null = null;
         
         try {
           // Handle both edudashpro:// scheme and https:// URLs
           const url = new URL(urlStr.replace('edudashpro://', 'https://app.edudashpro.org.za/'));
           token_hash = url.searchParams.get('token_hash');
+          token = url.searchParams.get('token');
+          code = url.searchParams.get('code');
           typeParam = url.searchParams.get('type');
         } catch {
           // Manual extraction for malformed URLs
           const hashMatch = urlStr.match(/token_hash=([^&]+)/);
           if (hashMatch) token_hash = decodeURIComponent(hashMatch[1]);
+          const tokenMatch = urlStr.match(/token=([^&]+)/);
+          if (tokenMatch) token = decodeURIComponent(tokenMatch[1]);
+          const codeMatch = urlStr.match(/code=([^&]+)/);
+          if (codeMatch) code = decodeURIComponent(codeMatch[1]);
           const typeMatch = urlStr.match(/type=([^&]+)/);
           if (typeMatch) typeParam = decodeURIComponent(typeMatch[1]);
         }
 
-        console.log('[AuthCallback] Magic link params:', { token_hash: token_hash?.slice(0, 20) + '...', type: typeParam });
+        console.log('[AuthCallback] Magic link params:', { 
+          token_hash: token_hash?.slice(0, 20) + '...', 
+          token: token?.slice(0, 20) + '...',
+          code: code ? 'present' : 'null',
+          type: typeParam 
+        });
 
         // Valid OTP types for Supabase
         type OtpType = 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email';
         const validTypes: OtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'];
         const type: OtpType = validTypes.includes(typeParam as OtpType) ? (typeParam as OtpType) : 'magiclink';
 
+        // Handle PKCE flow with code parameter
+        if (code) {
+          console.log('[AuthCallback] Processing PKCE code exchange...');
+          
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (error) {
+            console.error('[AuthCallback] Code exchange failed:', error);
+            throw error;
+          }
+
+          console.log('[AuthCallback] Code exchanged successfully, session:', data.session ? 'exists' : 'null');
+
+          if (!data.session) {
+            throw new Error('Authentication succeeded but no session was created. Please try again.');
+          }
+
+          setMessage('Sign-in successful! Redirecting...');
+          console.log('[AuthCallback] PKCE magic link successful, user:', data.session.user.email);
+          
+          // Give AuthContext time to process the SIGNED_IN event
+          setTimeout(() => {
+            if (type === 'recovery') {
+              router.replace('/(auth)/reset-password');
+            } else {
+              router.replace('/profiles-gate');
+            }
+          }, 800);
+          
+          return;
+        }
+
+        // Handle token_hash (legacy flow)
         if (token_hash) {
           console.log('[AuthCallback] Verifying OTP with type:', type);
           
@@ -159,6 +207,35 @@ export default function AuthCallback() {
           }, 800);
           
           return;
+        }
+
+        // Handle PKCE token parameter (if present but no code)
+        if (token && typeParam === 'magiclink') {
+          console.log('[AuthCallback] Processing PKCE token for magic link...');
+          // For PKCE tokens, we need to verify them differently
+          // Try using verifyOtp with the token
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: token,
+            type: 'magiclink',
+          });
+
+          if (error) {
+            console.error('[AuthCallback] PKCE token verification failed:', error);
+            // If verifyOtp fails, the token might need different handling
+            // Redirect to sign-in with error
+            throw new Error('Magic link verification failed. Please request a new link.');
+          }
+
+          if (data.session) {
+            console.log('[AuthCallback] PKCE token verified, session created');
+            setMessage('Sign-in successful! Redirecting...');
+            
+            setTimeout(() => {
+              router.replace('/profiles-gate');
+            }, 800);
+            
+            return;
+          }
         }
       }
 
