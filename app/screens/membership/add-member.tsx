@@ -350,6 +350,8 @@ export default function AddMemberScreen() {
       if (rpcError) {
         console.error('[AddMember] RPC error after retries:', rpcError);
         console.error('[AddMember] RPC error details:', JSON.stringify(rpcError, null, 2));
+        console.error('[AddMember] RPC error code:', rpcError.code);
+        console.error('[AddMember] RPC error message:', rpcError.message);
         console.error('[AddMember] Parameters sent:', {
           p_organization_id: organizationId,
           p_user_id: signUpData.user.id,
@@ -358,29 +360,48 @@ export default function AddMemberScreen() {
           p_membership_tier: formData.membership_tier,
           p_membership_status: formData.membership_status,
         });
-        throw new Error(`Registration failed: ${rpcError.message || rpcError.code || 'Unknown error'}`);
+        
+        // Show detailed error message to user
+        const errorMsg = rpcError.message || rpcError.details || rpcError.hint || `Registration failed: ${rpcError.code || 'Unknown error'}`;
+        setErrorMessage(`Registration error: ${errorMsg}`);
+        setRetryStatus(null);
+        setIsSubmitting(false);
+        return; // Don't throw - show error and let user retry
       }
       
       if (!rpcResult?.success) {
         console.error('[AddMember] RPC returned error after retries:', rpcResult);
         console.error('[AddMember] RPC error code:', rpcResult?.code);
+        console.error('[AddMember] RPC error message:', rpcResult?.error);
         
-        // Handle USER_NOT_FOUND with inline error message instead of blocking alert
+        // Handle specific error codes with helpful messages
         if (rpcResult?.code === 'USER_NOT_FOUND') {
-          setErrorMessage('Account is still being created. Please wait a moment and try again, or contact support if the issue persists.');
+          setErrorMessage('Account creation is taking longer than expected. The account may still be being set up. Please wait a few moments and try again, or contact support if the issue persists.');
           setRetryStatus(null);
           setIsSubmitting(false);
-          // Don't return - let user retry manually
-          // Show retry button in UI instead of blocking alert
+          return; // Don't throw - show error and let user retry manually
+        }
+        
+        if (rpcResult?.code === 'DUPLICATE_ERROR') {
+          setErrorMessage('A member with this email or member number already exists in the organization.');
+          setRetryStatus(null);
+          setIsSubmitting(false);
           return;
         }
         
-        // Other errors - show inline message
-        const errorMsg = rpcResult?.error || rpcResult?.message || 'Failed to register member';
+        if (rpcResult?.code === 'FK_VIOLATION') {
+          setErrorMessage('The user account is not fully set up yet. Please wait a moment and try again.');
+          setRetryStatus(null);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Other errors - show detailed message
+        const errorMsg = rpcResult?.error || rpcResult?.message || `Registration failed: ${rpcResult?.code || 'Unknown error'}`;
         setErrorMessage(errorMsg);
         setRetryStatus(null);
         setIsSubmitting(false);
-        throw new Error(errorMsg);
+        return; // Don't throw - show error and let user retry
       }
       
       // Clear any previous errors on success

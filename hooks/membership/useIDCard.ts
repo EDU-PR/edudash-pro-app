@@ -117,8 +117,7 @@ export function useIDCard(memberId?: string) {
           *,
           user_id,
           organization:organizations(id, name, logo_url),
-          region:organization_regions(id, organization_id, name, code, is_active, created_at),
-          profile:profiles!user_id(avatar_url)
+          region:organization_regions(id, organization_id, name, code, is_active, created_at)
         `);
 
       if (memberId) {
@@ -127,20 +126,100 @@ export function useIDCard(memberId?: string) {
         memberQuery = memberQuery.eq('user_id', user.id);
       }
 
-      const { data: memberData, error: memberError } = await memberQuery.single();
+      let { data: memberData, error: memberError } = await memberQuery.single();
 
       if (memberError) {
-        console.error('Error fetching member:', memberError);
-        setLoading(false);
-        return;
+        console.error('[useIDCard] Error fetching member:', memberError);
+        console.error('[useIDCard] Error details:', JSON.stringify(memberError, null, 2));
+        console.error('[useIDCard] Error code:', memberError.code);
+        console.error('[useIDCard] Error message:', memberError.message);
+        console.error('[useIDCard] Query params:', { memberId, userId: user.id });
+        
+        // If 400 error, try fetching without joins as fallback
+        if (memberError.code === 'PGRST116' || memberError.code === '22P02' || memberError.message?.includes('400') || memberError.message?.includes('Bad Request')) {
+          console.warn('[useIDCard] Retrying without joins due to 400 error...');
+          try {
+            const { data: simpleMemberData, error: simpleError } = await supabase
+              .from('organization_members')
+              .select('*')
+              .eq(memberId ? 'id' : 'user_id', memberId || user.id)
+              .single();
+            
+            if (simpleError || !simpleMemberData) {
+              console.error('[useIDCard] Simple query also failed:', simpleError);
+              setLoading(false);
+              return;
+            }
+            
+            // Use simple data without joins
+            memberData = simpleMemberData;
+            memberError = null; // Clear error since fallback succeeded
+          } catch (fallbackError) {
+            console.error('[useIDCard] Fallback query failed:', fallbackError);
+            setLoading(false);
+            return;
+          }
+        } else {
+          setLoading(false);
+          return;
+        }
       }
 
-      if (memberData) {
-        // Prefer photo_url from organization_members, fall back to profile avatar
-        const photoUrl = memberData.photo_url || 
-                        (memberData.profile && Array.isArray(memberData.profile) && memberData.profile[0]?.avatar_url) ||
-                        (memberData.profile && !Array.isArray(memberData.profile) && (memberData.profile as any)?.avatar_url) ||
-                        null;
+      if (memberData && !memberError) {
+        // Prefer photo_url from organization_members, fall back to profile avatar if needed
+        let photoUrl = memberData.photo_url || null;
+        
+        // Fetch organization and region data if not already included (from fallback query)
+        let organization = (memberData as any).organization;
+        let region = (memberData as any).region;
+        
+        // If organization not fetched (fallback query), fetch it separately
+        if (!organization && memberData.organization_id) {
+          try {
+            const { data: orgData } = await supabase
+              .from('organizations')
+              .select('id, name, logo_url')
+              .eq('id', memberData.organization_id)
+              .maybeSingle();
+            
+            organization = orgData || { id: memberData.organization_id, name: 'SOIL OF AFRICA', logo_url: null };
+          } catch (orgError) {
+            console.warn('[useIDCard] Error fetching organization:', orgError);
+            organization = { id: memberData.organization_id, name: 'SOIL OF AFRICA', logo_url: null };
+          }
+        }
+        
+        // If region not fetched (fallback query), fetch it separately
+        if (!region && memberData.region_id) {
+          try {
+            const { data: regionData } = await supabase
+              .from('organization_regions')
+              .select('id, organization_id, name, code, is_active, created_at')
+              .eq('id', memberData.region_id)
+              .maybeSingle();
+            
+            region = regionData || undefined;
+          } catch (regionError) {
+            console.warn('[useIDCard] Error fetching region:', regionError);
+            region = undefined;
+          }
+        }
+        
+        // If no photo_url, fetch from profiles table separately (avoid join to prevent RLS issues)
+        if (!photoUrl && memberData.user_id) {
+          try {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('avatar_url')
+              .eq('id', memberData.user_id)
+              .maybeSingle();
+            
+            photoUrl = profileData?.avatar_url || null;
+          } catch (profileError) {
+            console.warn('[useIDCard] Error fetching profile avatar:', profileError);
+            // Continue with null photoUrl - will use placeholder
+          }
+        }
         
         const transformedMember: OrganizationMember = {
           id: memberData.id,
@@ -161,8 +240,8 @@ export function useIDCard(memberId?: string) {
           created_at: memberData.created_at,
           updated_at: memberData.updated_at,
           user_id: memberData.user_id, // Include user_id for permission checks
-          organization: memberData.organization || { id: memberData.organization_id, name: 'SOIL OF AFRICA', logo_url: null },
-          region: memberData.region || undefined,
+          organization: organization || { id: memberData.organization_id, name: 'SOIL OF AFRICA', logo_url: null },
+          region: region || undefined,
         };
         
         setMember(transformedMember);
