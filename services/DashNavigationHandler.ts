@@ -80,6 +80,14 @@ export class DashNavigationHandler implements IDashNavigationHandler {
       requiresAuth: true,
       roles: ['teacher', 'principal']
     },
+    'preschool-lesson-generator': {
+      route: '/screens/preschool-lesson-generator',
+      title: 'Preschool Lesson Creator',
+      description: 'Create age-appropriate preschool lessons with insights & homework',
+      keywords: ['preschool', 'lesson', 'early childhood', 'toddler', 'kindergarten', 'young eagles'],
+      requiresAuth: true,
+      roles: ['teacher', 'principal']
+    },
     'homework': {
       route: '/screens/assign-lesson',
       title: 'Assign Lesson',
@@ -202,6 +210,16 @@ export class DashNavigationHandler implements IDashNavigationHandler {
       pattern: /lesson (?:generator|creator|builder)/i,
       screen: 'lesson-generator',
       description: 'Open lesson generator'
+    },
+    {
+      pattern: /preschool (?:lesson|activity|teaching)/i,
+      screen: 'preschool-lesson-generator',
+      description: 'Create preschool lesson'
+    },
+    {
+      pattern: /(?:toddler|early childhood|young eagles) (?:lesson|activity)/i,
+      screen: 'preschool-lesson-generator',
+      description: 'Create early childhood lesson'
     },
     
     // Homework & Assignments
