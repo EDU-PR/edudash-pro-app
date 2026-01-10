@@ -39,9 +39,39 @@ export default function InviteEntry() {
         return;
       }
 
+      // Check if this is an executive invite (EX- prefix)
+      if (code.toUpperCase().startsWith('EX-')) {
+        const targetPath = `/invite/executive?code=${encodeURIComponent(code)}`;
+        if (!isWeb) {
+          router.replace(targetPath as any);
+        } else {
+          tryOpenApp(targetPath);
+        }
+        return;
+      }
+
       // Attempt to detect invite type via RPC; fall back to parent if unknown
       let inviteType: 'parent' | 'student' | 'member' | 'unknown' = 'unknown';
       try {
+        // Also check join_requests for staff_invite (executive invites)
+        const { data: joinRequest } = await assertSupabase()
+          .from('join_requests')
+          .select('request_type, requested_role')
+          .eq('invite_code', code.toUpperCase())
+          .eq('status', 'pending')
+          .maybeSingle();
+        
+        if (joinRequest?.request_type === 'staff_invite') {
+          // Executive invite - route to executive invite handler
+          const targetPath = `/invite/executive?code=${encodeURIComponent(code)}`;
+          if (!isWeb) {
+            router.replace(targetPath as any);
+          } else {
+            tryOpenApp(targetPath);
+          }
+          return;
+        }
+
         const { data } = await assertSupabase().rpc('validate_invitation_code', { p_code: code, p_email: '' });
         if (data && typeof data.invitation_type === 'string') {
           const t = data.invitation_type.toLowerCase();

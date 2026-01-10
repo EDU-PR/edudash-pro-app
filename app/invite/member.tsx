@@ -108,12 +108,12 @@ export default function MemberInviteScreen() {
         })
         .eq('id', inviteDetails.id);
 
-      // Update user's profile with organization
+      // Update user's profile with organization (member_type is NOT in profiles table, only in organization_members)
       await supabase
         .from('profiles')
         .update({
           organization_id: inviteDetails.organization_id,
-          member_type: inviteDetails.requested_role || 'youth_member',
+          // member_type is stored in organization_members table, not profiles
         })
         .eq('id', user.id);
 
