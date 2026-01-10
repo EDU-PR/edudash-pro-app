@@ -74,7 +74,10 @@ export default function YouthProgramsScreen() {
       <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
         {searchQuery ? 'Try adjusting your search' : 'Create your first youth program'}
       </Text>
-      <TouchableOpacity style={[styles.createButton, { backgroundColor: '#10B981' }]}>
+      <TouchableOpacity 
+        style={[styles.createButton, { backgroundColor: '#10B981' }]}
+        onPress={() => router.push('/screens/membership/create-youth-program')}
+      >
         <Ionicons name="add" size={20} color="#fff" />
         <Text style={styles.createButtonText}>Create Program</Text>
       </TouchableOpacity>
@@ -103,7 +106,10 @@ export default function YouthProgramsScreen() {
             <Text style={[styles.headerTitle, { color: theme.text }]}>Youth Programs</Text>
             <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{stats.total} programs • {stats.totalParticipants} participants</Text>
           </View>
-          <TouchableOpacity style={[styles.addButton, { backgroundColor: '#10B981' }]}>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: '#10B981' }]}
+            onPress={() => router.push('/screens/membership/create-youth-program')}
+          >
             <Ionicons name="add" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
