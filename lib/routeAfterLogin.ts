@@ -418,8 +418,12 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       console.log('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
     }
-    if (memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
-      console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
+    if (memberType === 'youth_secretary') {
+      console.log('[ROUTE DEBUG] Youth secretary detected - routing to youth secretary dashboard');
+      return { path: '/screens/membership/youth-secretary-dashboard' };
+    }
+    if (memberType === 'youth_treasurer') {
+      console.log('[ROUTE DEBUG] Youth treasurer detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     
