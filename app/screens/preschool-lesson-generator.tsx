@@ -60,6 +60,9 @@ const PRESCHOOL_SUBJECTS = [
   { id: 'music', label: '🎵 Music & Movement', icon: 'musical-notes', description: 'Songs, rhythm, dance, instruments' },
   { id: 'storytime', label: '📚 Storytime & Language', icon: 'book', description: 'Story comprehension, vocabulary, speaking' },
   { id: 'sensory', label: '👐 Sensory Play', icon: 'hand-left', description: 'Texture exploration, sensory bins, tactile learning' },
+  { id: 'ai', label: '🤖 AI & Technology', icon: 'sparkles', description: 'Simple AI concepts, age-appropriate technology exploration' },
+  { id: 'robotics', label: '🤖 Robotics', icon: 'hardware-chip', description: 'Robot movements, basic programming concepts, sequencing' },
+  { id: 'computer_literacy', label: '💻 Computer Literacy', icon: 'laptop', description: 'Keyboard, mouse, basic apps, online safety' },
 ];
 
 const DURATION_OPTIONS = [
@@ -162,6 +165,7 @@ export default function PreschoolLessonGeneratorScreen() {
     const ageLabel = selectedAgeGroupInfo?.label || 'Preschool (3-4 years)';
     const ageRange = selectedAgeGroupInfo?.ageRange || '3-4';
     const topicStr = topic.trim() || 'age-appropriate activity';
+    const isSTEMSubject = selectedSubject === 'ai' || selectedSubject === 'robotics' || selectedSubject === 'computer_literacy';
     
     let prompt = `You are an expert early childhood educator creating a preschool lesson plan.
 
@@ -171,6 +175,7 @@ export default function PreschoolLessonGeneratorScreen() {
 - Age Group: ${ageLabel} (ages ${ageRange})
 - Duration: ${duration} minutes
 - Language: ${language === 'af' ? 'Afrikaans' : language === 'zu' ? 'Zulu' : language === 'st' ? 'Sesotho' : 'English'}
+${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Artificial Intelligence concepts' : selectedSubject === 'robotics' ? 'Robotics and basic programming' : 'Computer Literacy and digital skills'}` : ''}
 
 **IMPORTANT GUIDELINES FOR PRESCHOOL:**
 - Use simple, age-appropriate language
@@ -181,6 +186,30 @@ export default function PreschoolLessonGeneratorScreen() {
 - Consider attention spans (${selectedAgeGroup === 'toddlers' ? '2-5 minutes per activity' : selectedAgeGroup === 'preschool' ? '5-10 minutes per activity' : '10-15 minutes per activity'})
 - Use visual aids and concrete materials
 - Include social interaction opportunities
+${selectedSubject === 'ai' ? `
+**AI-SPECIFIC GUIDELINES:**
+- Introduce AI as "smart helpers" or "learning machines"
+- Use simple analogies (like teaching a robot to recognize shapes)
+- Focus on pattern recognition through games
+- Include activities like sorting, matching, and predicting
+- Emphasize that AI learns from examples (like children do)
+- Keep concepts concrete and visual` : ''}
+${selectedSubject === 'robotics' ? `
+**ROBOTICS-SPECIFIC GUIDELINES:**
+- Introduce robots as helpers and friends
+- Focus on movement sequences (forward, backward, turn left/right)
+- Use simple programming concepts through physical movement
+- Include activities like "programming" a friend to move
+- Emphasize sequencing and following instructions
+- Use building blocks or simple robot toys if available` : ''}
+${selectedSubject === 'computer_literacy' ? `
+**COMPUTER LITERACY-SPECIFIC GUIDELINES:**
+- Introduce basic computer parts (screen, keyboard, mouse)
+- Focus on mouse control through simple games
+- Teach keyboard basics (finding letters, numbers)
+- Include online safety basics (asking before clicking)
+- Use age-appropriate apps and games
+- Emphasize taking breaks and screen time limits` : ''}
 
 **FORMAT YOUR RESPONSE AS:**
 
@@ -329,6 +358,9 @@ Create a simple take-home activity for parents:
       track('edudash.ai.preschool_lesson.generate_started', { subject: selectedSubject, ageGroup: selectedAgeGroup });
 
       const prompt = buildPrompt();
+      const isSTEMSubject = selectedSubject === 'ai' || selectedSubject === 'robotics' || selectedSubject === 'computer_literacy';
+      const stemCategory = selectedSubject === 'ai' ? 'ai' : selectedSubject === 'robotics' ? 'robotics' : selectedSubject === 'computer_literacy' ? 'computer_literacy' : 'none';
+      
       const payload = {
         action: 'lesson_generation',
         prompt,
@@ -343,6 +375,8 @@ Create a simple take-home activity for parents:
         ageGroup: selectedAgeGroup,
         includeHomework,
         includeInsights,
+        stemCategory: stemCategory,
+        lessonType: isSTEMSubject ? (selectedSubject === 'ai' ? 'ai_enhanced' : selectedSubject === 'robotics' ? 'robotics' : 'computer_literacy') : 'standard',
       };
 
       const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: payload });

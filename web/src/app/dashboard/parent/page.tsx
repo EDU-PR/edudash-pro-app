@@ -18,7 +18,7 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 
 export default function ParentDashboard() {
@@ -302,6 +302,77 @@ export default function ParentDashboard() {
               classId={activeChild.classId}
             />
           </div>
+        )}
+
+        {/* Practice at Home Hub - STEM Activities */}
+        {hasAnyChild && activeChild && (
+          <CollapsibleSection 
+            title="Practice at Home" 
+            icon={Sparkles} 
+            isOpen={openSection === 'practice'}
+            onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
+          >
+            <div className="grid2" style={{ marginTop: 16 }}>
+              <div 
+                className="card card-interactive" 
+                onClick={() => router.push('/dashboard/parent/robotics')}
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <Cpu className="icon24" style={{ marginBottom: 8 }} />
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>Robotics Practice</h3>
+                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                  Explore robot movements, basic programming, and sensor activities
+                </p>
+              </div>
+              
+              <div 
+                className="card card-interactive" 
+                onClick={() => {
+                  setAIPrompt('Help me create age-appropriate AI learning activities for my child');
+                  setAIDisplay('AI Learning Activities');
+                  setShowAskAI(true);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <Brain className="icon24" style={{ marginBottom: 8 }} />
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>AI Activities</h3>
+                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                  Age-appropriate AI learning games and pattern recognition activities
+                </p>
+              </div>
+              
+              <div 
+                className="card card-interactive" 
+                onClick={() => {
+                  setAIPrompt('Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices');
+                  setAIDisplay('Computer Literacy Guide');
+                  setShowAskAI(true);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <Laptop className="icon24" style={{ marginBottom: 8 }} />
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>Computer Literacy</h3>
+                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                  Basic skills practice: typing, mouse control, app navigation, online safety
+                </p>
+              </div>
+            </div>
+          </CollapsibleSection>
         )}
 
         {/* Early Learning Activities - ONLY for preschoolers */}

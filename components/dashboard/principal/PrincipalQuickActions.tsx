@@ -126,6 +126,31 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       icon: 'settings',
       color: '#64748B',
     },
+    // ECD Planning Features
+    {
+      id: 'year-planner',
+      title: t('dashboard.year_planner', { defaultValue: 'Year Planner' }),
+      icon: 'calendar',
+      color: '#3B82F6',
+    },
+    {
+      id: 'curriculum-themes',
+      title: t('dashboard.curriculum_themes', { defaultValue: 'Curriculum Themes' }),
+      icon: 'book',
+      color: '#8B5CF6',
+    },
+    {
+      id: 'lesson-templates',
+      title: t('dashboard.lesson_templates', { defaultValue: 'Lesson Templates' }),
+      icon: 'document-text',
+      color: '#10B981',
+    },
+    {
+      id: 'weekly-plans',
+      title: t('dashboard.weekly_plans', { defaultValue: 'Weekly Plans' }),
+      icon: 'list',
+      color: '#F59E0B',
+    },
   ];
 
   const handleActionPress = (actionId: string) => {
@@ -179,6 +204,18 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'settings':
         router.push('/screens/school-settings');
+        break;
+      case 'year-planner':
+        router.push('/screens/principal-year-planner');
+        break;
+      case 'curriculum-themes':
+        router.push('/screens/principal-curriculum-themes');
+        break;
+      case 'lesson-templates':
+        router.push('/screens/principal-lesson-templates');
+        break;
+      case 'weekly-plans':
+        router.push('/screens/principal-weekly-plans');
         break;
       default:
         Alert.alert(

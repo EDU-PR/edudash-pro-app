@@ -125,6 +125,25 @@ serve(async (req) => {
         parentUserId = authData.user.id;
         parentAccountCreated = true;
 
+        // Send password reset email so parent can set their own password
+        // Since we created them with a temporary password, they need to reset it
+        try {
+          const { error: resetError } = await supabase.auth.admin.generateLink({
+            type: 'recovery',
+            email: registration.parent_email.toLowerCase(),
+            options: {
+              redirectTo: `${process.env.SUPABASE_URL?.replace('/rest/v1', '') || 'https://edudashpro.org.za'}/auth/callback?type=password-reset`,
+            },
+          });
+          if (resetError) {
+            console.warn('Failed to generate password reset link:', resetError);
+            // Don't throw - account creation should still succeed even if email fails
+          }
+        } catch (emailError) {
+          console.warn('Error generating password reset link:', emailError);
+          // Don't throw - account creation should still succeed
+        }
+
         // Create profile
         const { error: profileError } = await supabase
           .from('profiles')

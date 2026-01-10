@@ -326,12 +326,27 @@ function RegisterPageContent() {
 
       if (authError) throw authError;
 
-      // 4. Generate member number
+      // 4. Send password reset email so user can set their own password
+      // Since we created them with a temporary password, they need to reset it
+      try {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email.toLowerCase().trim(), {
+          redirectTo: `${window.location.origin}/auth/callback?type=password-reset`,
+        });
+        if (resetError) {
+          console.warn('Failed to send password reset email:', resetError);
+          // Don't throw - registration should still succeed even if email fails
+        }
+      } catch (emailError) {
+        console.warn('Error sending password reset email:', emailError);
+        // Don't throw - registration should still succeed
+      }
+
+      // 5. Generate member number
       const year = new Date().getFullYear().toString().slice(-2);
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
-      // 5. Create membership record using RPC (handles both anon and authenticated users)
+      // 6. Create membership record using RPC (handles both anon and authenticated users)
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
       const { data: rpcResult, error: rpcError } = await supabase
         .rpc('register_organization_member', {
@@ -364,7 +379,7 @@ function RegisterPageContent() {
       const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
       const newMemberId = rpcResult.id;
 
-      // 6. Create invoice (only if tier has a price)
+      // 7. Create invoice (only if tier has a price)
       const selectedTier = tiers.find((t) => t.id === formData.membership_tier);
       if (selectedTier && selectedTier.price > 0) {
         const { error: invoiceError } = await supabase.from('member_invoices').insert({

@@ -26,6 +26,10 @@ import {
   PlusCircle,
   Search,
   Phone,
+  Brain,
+  Cpu,
+  Laptop,
+  Sparkles,
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -219,6 +223,61 @@ export default function TeacherDashboard() {
           >
             <Phone className="icon20" />
             <span>Quick Call</span>
+          </button>
+        </div>
+      </div>
+
+      {/* STEM Integration Section */}
+      <div className="section">
+        <div className="sectionTitle">STEM Integration</div>
+        <div className="grid2">
+          <button 
+            className="qa" 
+            onClick={() => router.push('/dashboard/teacher/lessons/create?stem=ai')}
+            style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <Brain className="icon20" />
+            <span>Create AI-Enhanced Lesson</span>
+          </button>
+          <button 
+            className="qa" 
+            onClick={() => router.push('/dashboard/teacher/lessons/create?stem=robotics')}
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <Cpu className="icon20" />
+            <span>Add Robotics Activity</span>
+          </button>
+          <button 
+            className="qa" 
+            onClick={() => router.push('/dashboard/teacher/lessons/create?stem=computer_literacy')}
+            style={{
+              background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <Laptop className="icon20" />
+            <span>Computer Literacy Module</span>
+          </button>
+          <button 
+            className="qa" 
+            onClick={() => router.push('/dashboard/teacher/interactive-activities')}
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: 'none',
+              color: 'white',
+            }}
+          >
+            <Sparkles className="icon20" />
+            <span>Interactive Activities</span>
           </button>
         </div>
       </div>

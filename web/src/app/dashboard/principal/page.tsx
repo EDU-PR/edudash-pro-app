@@ -469,6 +469,52 @@ export default function PrincipalDashboard() {
         </div>
       </div>
 
+      {/* ECD Planning & Curriculum */}
+      <div className="section">
+        <div className="sectionTitle">ECD Planning & Curriculum</div>
+        <div className="grid2">
+          <button className="qa" onClick={() => router.push('/dashboard/principal/year-planner')}>
+            <Calendar className="icon20" />
+            <span>Year Planner</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/curriculum-themes')}>
+            <BookOpen className="icon20" />
+            <span>Curriculum Themes</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/lesson-templates')}>
+            <FileText className="icon20" />
+            <span>Lesson Templates</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/weekly-plans')}>
+            <Activity className="icon20" />
+            <span>Weekly Plans</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Curriculum Control & STEM Management */}
+      <div className="section">
+        <div className="sectionTitle">Curriculum & STEM Programs</div>
+        <div className="grid2">
+          <button className="qa" onClick={() => router.push('/dashboard/principal/curriculum')}>
+            <FileText className="icon20" />
+            <span>Curriculum Control</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/lesson-approvals')}>
+            <CheckCircle className="icon20" />
+            <span>Lesson Approvals</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/stem-programs')}>
+            <Sparkles className="icon20" />
+            <span>STEM Programs</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/analytics')}>
+            <TrendingUp className="icon20" />
+            <span>School Analytics</span>
+          </button>
+        </div>
+      </div>
+
       {/* Alerts & Notifications */}
       <div className="section">
         <div className="sectionTitle">Recent Alerts</div>
