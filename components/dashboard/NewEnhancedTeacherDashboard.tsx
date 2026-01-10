@@ -41,11 +41,15 @@ const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWi
 
 // Helper to get tier badge color
 const getTierColor = (tier: string, theme: any): string => {
-  switch (tier) {
-    case 'enterprise': return '#8B5CF6'; // Purple
+  switch (tier?.toLowerCase()) {
+    case 'enterprise':
+    case 'school_enterprise': return '#8B5CF6'; // Purple
     case 'premium':
+    case 'school_premium':
+    case 'school_pro':
     case 'group_10': return '#F59E0B'; // Amber/Gold
     case 'starter':
+    case 'school_starter':
     case 'group_5': return '#3B82F6'; // Blue
     case 'solo':
     case 'free':
@@ -55,11 +59,15 @@ const getTierColor = (tier: string, theme: any): string => {
 
 // Helper to format tier label for display
 const getTierLabel = (tier: string): string => {
-  switch (tier) {
-    case 'enterprise': return 'Enterprise';
-    case 'premium': return 'Premium';
+  switch (tier?.toLowerCase()) {
+    case 'enterprise':
+    case 'school_enterprise': return 'Enterprise';
+    case 'premium':
+    case 'school_premium':
+    case 'school_pro': return 'Premium';
     case 'group_10': return 'Group 10';
-    case 'starter': return 'Starter';
+    case 'starter':
+    case 'school_starter': return 'Starter';
     case 'group_5': return 'Group 5';
     case 'solo': return 'Solo';
     case 'free': 
