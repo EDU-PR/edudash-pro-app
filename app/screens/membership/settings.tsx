@@ -42,6 +42,11 @@ export default function MembershipSettingsScreen() {
   const { profile } = useAuth();
   const { settings: brandingSettings, refetch: refetchBranding } = useOrganizationBranding();
   
+  // Get member type to determine if user is youth president
+  const memberType = (profile as any)?.organization_membership?.member_type;
+  const isYouthPresident = memberType === 'youth_president';
+  const isNationalAdmin = profile?.role === 'national_admin' || memberType === 'president' || memberType === 'secretary_general';
+  
   const [refreshing, setRefreshing] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [organizationName, setOrganizationName] = useState<string>('');
@@ -111,8 +116,8 @@ export default function MembershipSettingsScreen() {
     },
     {
       id: 'regions',
-      title: 'Regions & Branches',
-      description: 'Manage regional structure',
+      title: isYouthPresident ? 'Youth Regional and Branches' : 'Regions & Branches',
+      description: isYouthPresident ? 'Manage youth regional structure' : 'Manage regional structure',
       icon: 'map-outline',
       iconColor: '#10B981',
       onPress: () => router.push('/screens/membership/regional-managers'),

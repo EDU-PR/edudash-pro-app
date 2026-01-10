@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { useAlert } from '@/components/ui/StyledAlert';
 import { createStyles } from './youth-executive-invite.styles';
 import { 
   EXECUTIVE_POSITIONS, 
@@ -37,6 +38,7 @@ try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 export default function YouthExecutiveInviteScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const alert = useAlert();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const organizationId = profile?.organization_id as string | null;
@@ -92,7 +94,7 @@ export default function YouthExecutiveInviteScreen() {
 
   const onCreateInvite = async () => {
     if (!organizationId || !user?.id || !selectedPosition) {
-      Alert.alert('Error', 'Please select a position to invite.');
+      alert.showError('Error', 'Please select a position to invite.');
       return;
     }
     
@@ -135,17 +137,18 @@ export default function YouthExecutiveInviteScreen() {
       setInviteEmail('');
       setInvitePhone('');
       
-      Alert.alert(
+      alert.show(
         'Invite Created',
         `${selectedPosition.label} invite code: ${inviteCode}\n\nShare this code with the person you want to appoint.`,
         [
           { text: 'Copy Code', onPress: () => copyToClipboard(inviteCode) },
           { text: 'Share', onPress: () => shareInvite(inviteCode, selectedPosition.label) },
-          { text: 'OK' },
-        ]
+          { text: 'Close', style: 'cancel' },
+        ],
+        { type: 'success' }
       );
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create invite');
+      alert.showError('Error', e?.message || 'Failed to create invite');
     } finally {
       setLoading(false);
     }
@@ -155,10 +158,10 @@ export default function YouthExecutiveInviteScreen() {
     try {
       if (Clipboard?.setStringAsync) {
         await Clipboard.setStringAsync(value);
-        Alert.alert('Copied', 'Invite code copied to clipboard');
+        alert.showSuccess('Copied', 'Invite code copied to clipboard');
       }
     } catch {
-      Alert.alert('Copy failed', 'Unable to copy');
+      alert.showError('Copy failed', 'Unable to copy');
     }
   };
 
@@ -168,7 +171,7 @@ export default function YouthExecutiveInviteScreen() {
       const message = `🌟 SOA Youth Wing Executive Invitation\n\nYou've been invited to join as: ${positionLabel}\n\nUse invite code: ${code}\n\nDownload the app and enter this code:\n${shareUrl}`;
       await Share.share({ message });
     } catch (e: any) {
-      Alert.alert('Share failed', e?.message || 'Unable to share');
+      alert.showError('Share failed', e?.message || 'Unable to share');
     }
   };
 
@@ -179,30 +182,23 @@ export default function YouthExecutiveInviteScreen() {
       );
       await Linking.openURL(`whatsapp://send?text=${message}`);
     } catch {
-      Alert.alert('WhatsApp Error', 'Unable to open WhatsApp');
+      alert.showError('WhatsApp Error', 'Unable to open WhatsApp');
     }
   };
 
   const revokeInvite = async (invite: ExecutiveInvite) => {
-    Alert.alert(
+    alert.showConfirm(
       'Revoke Invite',
       `Are you sure you want to revoke the ${invite.position_label} invite?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Revoke',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = assertSupabase();
-              await supabase.from('join_requests').update({ status: 'revoked' }).eq('id', invite.id);
-              await loadInvites();
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Failed to revoke invite');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          const supabase = assertSupabase();
+          await supabase.from('join_requests').update({ status: 'revoked' }).eq('id', invite.id);
+          await loadInvites();
+        } catch (e: any) {
+          alert.showError('Error', e?.message || 'Failed to revoke invite');
+        }
+      }
     );
   };
 
@@ -262,15 +258,16 @@ export default function YouthExecutiveInviteScreen() {
                         return;
                       } else if (hasPending && pendingInvite) {
                         // Show pending invite details - scroll to pending invites section
-                        Alert.alert(
+                        alert.show(
                           'Pending Invite',
                           `There is already a pending invite for ${position.label}.\n\nInvite Code: ${pendingInvite.invite_code}\n${pendingInvite.email ? `Email: ${pendingInvite.email}` : ''}\n${pendingInvite.phone ? `Phone: ${pendingInvite.phone}` : ''}\n\nStatus: ${pendingInvite.status}`,
                           [
                             { text: 'Copy Code', onPress: () => copyToClipboard(pendingInvite.invite_code) },
                             { text: 'Share', onPress: () => shareInvite(pendingInvite.invite_code, pendingInvite.position_label) },
                             { text: 'Revoke', style: 'destructive', onPress: () => revokeInvite(pendingInvite) },
-                            { text: 'OK' },
-                          ]
+                            { text: 'Close', style: 'cancel' },
+                          ],
+                          { type: 'info' }
                         );
                       } else {
                         // No invite yet - open invite modal

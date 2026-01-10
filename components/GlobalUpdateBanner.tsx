@@ -4,12 +4,12 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 // Import context directly to allow safe access
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,6 +42,7 @@ function useUpdatesSafe() {
 export function GlobalUpdateBanner() {
   const { isUpdateDownloaded, updateError, applyUpdate, dismissUpdate, dismissError } = useUpdatesSafe();
   const { t } = useTranslation();
+  const alert = useAlert();
   const colorScheme = useColorScheme();
   
   // Don't render if no update is available and no error
@@ -64,20 +65,16 @@ export function GlobalUpdateBanner() {
 
   // Handle restart confirmation
   const handleRestartPress = () => {
-    Alert.alert(
+    alert.showConfirm(
       t('Restart App'),
       t('The app will restart to apply the update. Any unsaved changes will be lost.'),
-      [
-        {
-          text: t('Cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('Restart Now'),
-          style: 'default',
-          onPress: applyUpdate,
-        },
-      ]
+      async () => {
+        try {
+          await applyUpdate();
+        } catch (error) {
+          console.error('[GlobalUpdateBanner] Restart failed:', error);
+        }
+      }
     );
   };
 

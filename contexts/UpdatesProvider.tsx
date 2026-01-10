@@ -168,18 +168,29 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       // Track before applying (since app will restart)
       trackOTAUpdateApply();
       
-      await Updates.reloadAsync();
+      logger.info('[Updates] Applying update and reloading app...');
+      console.log('[Updates] Calling Updates.reloadAsync()...');
+      
+      // Use setTimeout to ensure any pending state updates complete before reload
+      setTimeout(async () => {
+        try {
+          await Updates.reloadAsync();
+        } catch (reloadError) {
+          console.error('[Updates] reloadAsync failed:', reloadError);
+          logger.error('[Updates] reloadAsync failed:', reloadError);
+          // If reloadAsync fails, try to show error to user
+          updateState({ updateError: reloadError instanceof Error ? reloadError.message : 'Failed to restart app' });
+        }
+      }, 100);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to apply update';
+      console.error('[Updates] Apply update error:', errorMessage, error);
+      logger.error('[Updates] Apply update error:', errorMessage);
       updateState({ updateError: errorMessage });
       
       // Track error
       if (error instanceof Error) {
         trackOTAError('apply', error);
-      }
-      
-      if (__DEV__) {
-        logger.warn('Update apply failed:', errorMessage);
       }
     }
   };
