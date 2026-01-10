@@ -58,18 +58,28 @@ export const useMissedCallsCount = () => {
         const lastSeen = await getLastSeenCalls(user.id);
         
         // Build query for missed calls
+        // A call is missed if: status='missed' OR (status='ended' AND duration_seconds IS NULL) OR (status='ended' AND duration_seconds=0)
+        // PostgREST doesn't support complex OR with AND, so we fetch all and filter client-side
         let query = client
           .from('active_calls')
-          .select('id, status, duration_seconds, started_at', { count: 'exact', head: true })
+          .select('id, status, duration_seconds, started_at', { count: 'exact' })
           .eq('callee_id', user.id)
-          .or('status.eq.missed,and(status.eq.ended,duration_seconds.is.null),and(status.eq.ended,duration_seconds.eq.0)');
+          .in('status', ['missed', 'ended']);
         
         // Only count calls after last seen
         if (lastSeen) {
           query = query.gt('started_at', lastSeen);
         }
         
-        const { count, error } = await query;
+        const { data, count, error } = await query;
+        
+        // Filter client-side for missed calls
+        const missedCalls = (data || []).filter(call => 
+          call.status === 'missed' || 
+          (call.status === 'ended' && (call.duration_seconds === null || call.duration_seconds === 0))
+        );
+        
+        const missedCount = missedCalls.length;
         
         if (error) {
           // Table might not exist yet
@@ -81,7 +91,7 @@ export const useMissedCallsCount = () => {
           return 0;
         }
         
-        return count ?? 0;
+        return missedCount;
       } catch (error) {
         console.error('[useMissedCallsCount] Exception:', error);
         return 0;
@@ -133,9 +143,9 @@ export const useRecentMissedCalls = (limit: number = 5) => {
             caller:profiles!active_calls_caller_id_fkey(id, first_name, last_name)
           `)
           .eq('callee_id', user.id)
-          .or('status.eq.missed,and(status.eq.ended,duration_seconds.is.null),and(status.eq.ended,duration_seconds.eq.0)')
+          .in('status', ['missed', 'ended'])
           .order('started_at', { ascending: false })
-          .limit(limit);
+          .limit(limit * 2); // Fetch more to filter client-side
         
         if (error) {
           if (error.code === '42P01' || error.message?.includes('does not exist')) {
@@ -145,7 +155,13 @@ export const useRecentMissedCalls = (limit: number = 5) => {
           return [];
         }
         
-        return calls?.map(call => ({
+        // Filter client-side for missed calls
+        const missedCalls = (calls || []).filter(call => 
+          call.status === 'missed' || 
+          (call.status === 'ended' && (call.duration_seconds === null || call.duration_seconds === 0))
+        ).slice(0, limit);
+        
+        return missedCalls.map(call => ({
           id: call.id,
           callerName: call.caller 
             ? `${call.caller.first_name || ''} ${call.caller.last_name || ''}`.trim() || 'Unknown'
