@@ -40,6 +40,11 @@ export default function ClassTeacherManagementScreen() {
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
   const isStillLoading = authLoading || profileLoading;
 
+  // RBAC Check: Only principals and admins can access this screen
+  const allowedRoles = ['principal', 'admin', 'principal_admin', 'super_admin'];
+  const userRole = profile?.role;
+  const hasAccess = userRole && allowedRoles.includes(userRole);
+
   const {
     classes,
     teachers,
@@ -92,6 +97,38 @@ export default function ClassTeacherManagementScreen() {
           <Text style={styles.loadingText}>
             {t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}
           </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Access Control: Redirect teachers to their dashboard
+  if (!hasAccess) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <View style={styles.loadingContainer}>
+          <Ionicons name="lock-closed-outline" size={48} color={theme.error} />
+          <Text style={[styles.loadingText, { color: theme.error, marginTop: 16 }]}>
+            Access Denied
+          </Text>
+          <Text style={[styles.loadingText, { fontSize: 14, marginTop: 8 }]}>
+            Only principals and admins can manage classes and teachers
+          </Text>
+          <TouchableOpacity 
+            style={{
+              marginTop: 24,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              backgroundColor: theme.primary,
+              borderRadius: 8,
+            }}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
+              Go Back
+            </Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
