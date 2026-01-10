@@ -236,7 +236,9 @@ export default function YouthInviteCodeScreen() {
 
   // Generate registration URLs (web and mobile deep link)
   const generateRegistrationUrl = (code: string, memberType: string = 'youth_member'): { webUrl: string; mobileUrl: string } => {
-    const webBaseUrl = process.env.EXPO_PUBLIC_WEB_URL || 'https://www.soilofafrica.org';
+    // SOA Web Project URL - always use soilofafrica.org for SOA membership invites
+    // This is the dedicated Soil of Africa web portal (soa-web project), not edudashpro.vercel.app
+    const soaWebBaseUrl = 'https://www.soilofafrica.org';
     const appScheme = Constants.expoConfig?.scheme || 'edudashpro';
     
     // Always use /join route for web registration - it handles all member types and auto-fills the form
@@ -245,7 +247,7 @@ export default function YouthInviteCodeScreen() {
     // Mobile deep link: use join screen for all member types (it handles invite codes properly)
     const mobileRoute = '/screens/membership/join';
     
-    const webUrl = `${webBaseUrl}${webRoute}?code=${encodeURIComponent(code)}`;
+    const webUrl = `${soaWebBaseUrl}${webRoute}?code=${encodeURIComponent(code)}`;
     const mobileUrl = `${appScheme}://${mobileRoute}?code=${encodeURIComponent(code)}`;
     
     return { webUrl, mobileUrl };
