@@ -117,7 +117,8 @@ export function useIDCard(memberId?: string) {
           *,
           user_id,
           organization:organizations(id, name, logo_url),
-          region:organization_regions(id, organization_id, name, code, is_active, created_at)
+          region:organization_regions(id, organization_id, name, code, is_active, created_at),
+          profile:profiles!user_id(avatar_url)
         `);
 
       if (memberId) {
@@ -135,6 +136,12 @@ export function useIDCard(memberId?: string) {
       }
 
       if (memberData) {
+        // Prefer photo_url from organization_members, fall back to profile avatar
+        const photoUrl = memberData.photo_url || 
+                        (memberData.profile && Array.isArray(memberData.profile) && memberData.profile[0]?.avatar_url) ||
+                        (memberData.profile && !Array.isArray(memberData.profile) && (memberData.profile as any)?.avatar_url) ||
+                        null;
+        
         const transformedMember: OrganizationMember = {
           id: memberData.id,
           organization_id: memberData.organization_id,
