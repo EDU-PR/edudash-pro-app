@@ -6,6 +6,8 @@ alwaysApply: true
 ## Project Overview
 Multi-tenant educational platform built with React Native/Expo (mobile), Next.js (web), TypeScript, and Supabase backend. Features strict RBAC, AI integration (GPT-4, Gemini, Claude), video calling (Daily.co), and payment processing (PayFast).
 
+As the development continues in the background also create documentation about the app - and save it to EduDashPro.documentation in the docs/ folder - 
+
 ## Core Principles
 1. **Security First**: Always validate permissions and implement RBAC checks
 2. **Type Safety**: Use TypeScript strictly, avoid `any` types
