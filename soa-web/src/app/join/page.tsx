@@ -357,7 +357,7 @@ export default function JoinPage() {
           p_member_number: generatedMemberNumber,
           p_member_type: formData.member_type,
           p_membership_tier: 'standard',
-          p_membership_status: 'pending',
+          p_membership_status: 'pending_verification', // Must match RLS policy requirement
           p_first_name: formData.first_name,
           p_last_name: formData.last_name,
           p_email: formData.email.toLowerCase(),
