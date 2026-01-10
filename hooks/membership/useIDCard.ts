@@ -156,7 +156,7 @@ export function useIDCard(memberId?: string) {
           membership_status: memberData.membership_status || 'pending',
           joined_date: memberData.joined_date,
           expiry_date: memberData.expiry_date,
-          photo_url: memberData.photo_url,
+          photo_url: photoUrl,
           province: memberData.province,
           created_at: memberData.created_at,
           updated_at: memberData.updated_at,
