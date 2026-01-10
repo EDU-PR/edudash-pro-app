@@ -448,9 +448,16 @@ export default function StudentDetailScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity onPress={handleEditToggle}>
-            <Ionicons name="create" size={24} color={theme.primary} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            <TouchableOpacity onPress={handleEditToggle}>
+              <Ionicons name="create" size={24} color={theme.primary} />
+            </TouchableOpacity>
+            {userProfile.role === 'principal' && (
+              <TouchableOpacity onPress={handleRemoveStudent} disabled={saving}>
+                <Ionicons name="person-remove-outline" size={24} color={theme.error} />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
 
