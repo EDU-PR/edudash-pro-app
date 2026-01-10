@@ -88,6 +88,7 @@ export default function DocumentVaultScreen() {
   const [uploadType, setUploadType] = useState<DocumentType>('general');
   const [uploadAccessLevel, setUploadAccessLevel] = useState<AccessLevel>('admin_only');
   const [uploadEncrypt, setUploadEncrypt] = useState(false);
+  const [encryptionPassword, setEncryptionPassword] = useState('');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
 
@@ -185,6 +186,22 @@ export default function DocumentVaultScreen() {
     if (!selectedFile || !organizationId || !user?.id) return;
     if (!uploadName.trim()) {
       Alert.alert('Error', 'Please enter a document name');
+      return;
+    }
+    if (uploadEncrypt && !encryptionPassword.trim()) {
+      setErrorMessage({
+        title: 'Password Required',
+        message: 'Please enter a password to encrypt the document.',
+      });
+      setShowErrorModal(true);
+      return;
+    }
+    if (uploadEncrypt && encryptionPassword.length < 8) {
+      setErrorMessage({
+        title: 'Weak Password',
+        message: 'Encryption password must be at least 8 characters long.',
+      });
+      setShowErrorModal(true);
       return;
     }
 
@@ -335,6 +352,7 @@ export default function DocumentVaultScreen() {
     setUploadType('general');
     setUploadAccessLevel('admin_only');
     setUploadEncrypt(false);
+    setEncryptionPassword('');
   };
 
   const getDocTypeConfig = (type: DocumentType) => {
@@ -660,6 +678,25 @@ export default function DocumentVaultScreen() {
                   color={uploadEncrypt ? '#EF4444' : theme.textSecondary} 
                 />
               </TouchableOpacity>
+
+              {/* Encryption password field (shown when encryption is enabled) */}
+              {uploadEncrypt && (
+                <View style={styles.passwordContainer}>
+                  <Text style={[styles.inputLabel, { color: theme.text }]}>Encryption Password *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                    value={encryptionPassword}
+                    onChangeText={setEncryptionPassword}
+                    placeholder="Enter password (min. 8 characters)"
+                    placeholderTextColor={theme.textSecondary}
+                    secureTextEntry
+                    autoComplete="password"
+                  />
+                  <Text style={[styles.passwordHint, { color: theme.textSecondary }]}>
+                    This password will be required to decrypt and view the document
+                  </Text>
+                </View>
+              )}
             </ScrollView>
 
             {/* Upload button */}
@@ -807,6 +844,9 @@ const styles = StyleSheet.create({
   encryptInfo: { flex: 1, marginLeft: 12 },
   encryptLabel: { fontSize: 14, fontWeight: '600' },
   encryptDesc: { fontSize: 12, marginTop: 2 },
+  passwordContainer: { marginTop: -8, marginBottom: 16 },
+  inputLabel: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  passwordHint: { fontSize: 11, marginTop: 6, fontStyle: 'italic' },
   uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, gap: 8, marginTop: 8 },
   uploadButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   modalButtons: { flexDirection: 'row', gap: 12 },
