@@ -342,6 +342,56 @@ export default function StudentDetailScreen() {
     }
   };
 
+  const handleRemoveStudent = async () => {
+    if (!student) return;
+
+    Alert.alert(
+      'Remove Student',
+      `Are you sure you want to remove ${student.first_name} ${student.last_name} from the school? This will deactivate their account and remove them from their class.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSaving(true);
+
+              // Call the deactivate_student function
+              const { data, error } = await assertSupabase()
+                .rpc('deactivate_student', {
+                  student_uuid: student.id,
+                  reason: 'Removed by principal - left school',
+                });
+
+              if (error) {
+                console.error('Error deactivating student:', error);
+                Alert.alert('Error', 'Failed to remove student. Please try again.');
+                return;
+              }
+
+              Alert.alert(
+                'Success',
+                `${student.first_name} ${student.last_name} has been removed from the school.`,
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => router.back(),
+                  },
+                ]
+              );
+            } catch (error) {
+              console.error('Error removing student:', error);
+              Alert.alert('Error', 'Failed to remove student. Please try again.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     loadStudentData();
   }, [studentId, user]);
