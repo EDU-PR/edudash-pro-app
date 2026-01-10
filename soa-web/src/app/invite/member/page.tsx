@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import Link from 'next/link';
 
@@ -26,6 +26,7 @@ export default function MemberInvitePage() {
 
 function MemberInviteContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const code = searchParams.get('code') || '';
   
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop'>('desktop');
@@ -48,6 +49,16 @@ function MemberInviteContent() {
     
     validateInvite();
   }, []);
+
+  // Redirect ALL web users (desktop and mobile browsers) directly to join page for immediate registration
+  // Mobile users can still use the "Open in App" button if they prefer
+  useEffect(() => {
+    if (code && !loading) {
+      // For all web users, redirect to join page immediately so they can register on web
+      // The join page will auto-verify the code and show the registration form
+      router.replace(`/join?code=${encodeURIComponent(code)}`);
+    }
+  }, [code, loading, router]);
 
   // Auto-attempt to open app on mobile after validation
   useEffect(() => {
@@ -201,7 +212,7 @@ function MemberInviteContent() {
           </p>
         </div>
 
-        {/* Mobile: Open in App button */}
+        {/* Mobile: Open in App button or Register on Web */}
         {(platform === 'android' || platform === 'ios') && (
           <div className="space-y-3 mb-4">
             <button
@@ -211,9 +222,24 @@ function MemberInviteContent() {
               Open in App
             </button>
             
+            {/* Alternative: Register on Web */}
+            <Link
+              href={`/join?code=${encodeURIComponent(code)}`}
+              className="block w-full bg-white border-2 border-green-600 text-green-600 py-3 px-6 rounded-xl font-semibold text-center hover:bg-green-50 transition"
+            >
+              Register on Web Instead
+            </Link>
+            
             {attemptedOpen && (
               <p className="text-center text-gray-500 text-sm">
                 App didn&apos;t open?{' '}
+                <Link 
+                  href={`/join?code=${encodeURIComponent(code)}`}
+                  className="text-green-600 hover:underline font-medium"
+                >
+                  Register on web
+                </Link>
+                {' or '}
                 <a 
                   href={getStoreUrl()} 
                   className="text-green-600 hover:underline font-medium"
