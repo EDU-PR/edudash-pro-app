@@ -26,7 +26,7 @@ export default function PendingApprovalsScreen() {
   const { data: stats } = useApprovalStats();
   const processMutation = useProcessApproval();
 
-  const handleAction = (id: string, action: 'approve' | 'reject') => {
+  const handleAction = (item: ApprovalRequest, action: 'approve' | 'reject') => {
     Alert.alert(
       action === 'approve' ? 'Approve Request' : 'Reject Request',
       `Are you sure you want to ${action} this request?`,
@@ -35,7 +35,18 @@ export default function PendingApprovalsScreen() {
         {
           text: action === 'approve' ? 'Approve' : 'Reject',
           style: action === 'reject' ? 'destructive' : 'default',
-          onPress: () => processMutation.mutate({ id, action }),
+          onPress: () => {
+            try {
+              processMutation.mutate({ 
+                id: item.id, 
+                action,
+                sourceTable: item.sourceTable || 'join_requests',
+              });
+            } catch (error) {
+              console.error('[PendingApprovals] Error processing approval:', error);
+              Alert.alert('Error', 'Failed to process approval. Please try again.');
+            }
+          },
         },
       ]
     );
@@ -95,7 +106,7 @@ export default function PendingApprovalsScreen() {
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
-              onPress={() => handleAction(item.id, 'reject')}
+              onPress={() => handleAction(item, 'reject')}
               disabled={processMutation.isPending}
             >
               <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
@@ -103,7 +114,7 @@ export default function PendingApprovalsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.approveButton]}
-              onPress={() => handleAction(item.id, 'approve')}
+              onPress={() => handleAction(item, 'approve')}
               disabled={processMutation.isPending}
             >
               <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
