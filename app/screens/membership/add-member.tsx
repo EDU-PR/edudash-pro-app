@@ -20,10 +20,19 @@ import {
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { assertSupabase } from '@/lib/supabase/client';
+import { 
+  generateTemporaryPassword, 
+  generateMemberNumber, 
+  isValidEmail, 
+  isValidSAPhoneNumber 
+} from '@/lib/memberRegistrationUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -113,6 +122,7 @@ const initialData: AddMemberData = {
 export default function AddMemberScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   
   const [formData, setFormData] = useState<AddMemberData>(initialData);
@@ -121,6 +131,9 @@ export default function AddMemberScreen() {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showTierPicker, setShowTierPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  
+  // Get organization ID from current user's profile/context
+  const organizationId = profile?.organization_id;
 
   const updateField = <K extends keyof AddMemberData>(field: K, value: AddMemberData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -132,6 +145,10 @@ export default function AddMemberScreen() {
   const selectedStatus = STATUS_OPTIONS.find(s => s.value === formData.membership_status);
 
   const validateForm = (): boolean => {
+    if (!organizationId) {
+      Alert.alert('Error', 'Organization context missing. Please try logging in again.');
+      return false;
+    }
     if (!formData.region_id) {
       Alert.alert('Required', 'Please select a region');
       return false;
@@ -144,8 +161,16 @@ export default function AddMemberScreen() {
       Alert.alert('Required', 'Please enter email address');
       return false;
     }
+    if (!isValidEmail(formData.email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return false;
+    }
     if (!formData.phone) {
       Alert.alert('Required', 'Please enter phone number');
+      return false;
+    }
+    if (!isValidSAPhoneNumber(formData.phone)) {
+      Alert.alert('Invalid Phone', 'Please enter a valid South African phone number');
       return false;
     }
     return true;
@@ -153,28 +178,121 @@ export default function AddMemberScreen() {
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+    if (!organizationId || !user?.id) {
+      Alert.alert('Error', 'Missing user or organization context');
+      return;
+    }
     
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const supabase = assertSupabase();
       
-      // Generate member number
-      const year = new Date().getFullYear().toString().slice(-2);
-      const sequence = String(Math.floor(Math.random() * 9999) + 1).padStart(5, '0');
-      const memberNumber = `SOA-${selectedRegion?.code}-${year}-${sequence}`;
+      // 1. Generate temporary password and member number
+      const tempPassword = generateTemporaryPassword();
+      const memberNumber = generateMemberNumber(selectedRegion?.code || 'ZA');
       
+      console.log('[AddMember] Creating member:', { email: formData.email, memberNumber });
+      
+      // 2. Create Supabase Auth account
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: tempPassword,
+        options: {
+          data: {
+            first_name: formData.first_name.trim(),
+            last_name: formData.last_name.trim(),
+            phone: formData.phone.trim(),
+          },
+          emailRedirectTo: 'https://www.soilofafrica.org/auth/callback?flow=email-confirm',
+        },
+      });
+      
+      if (signUpError) {
+        console.error('[AddMember] Auth signup error:', signUpError);
+        throw new Error(signUpError.message);
+      }
+      
+      if (!signUpData.user) {
+        throw new Error('Failed to create user account - no user returned');
+      }
+      
+      console.log('[AddMember] Auth account created:', signUpData.user.id);
+      
+      // 3. Create organization member record via RPC
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'register_organization_member',
+        {
+          p_organization_id: organizationId,
+          p_user_id: signUpData.user.id,
+          p_region_id: formData.region_id,
+          p_member_number: memberNumber,
+          p_member_type: formData.member_type,
+          p_membership_tier: formData.membership_tier,
+          p_membership_status: formData.membership_status,
+          p_first_name: formData.first_name.trim(),
+          p_last_name: formData.last_name.trim(),
+          p_email: formData.email.trim().toLowerCase(),
+          p_phone: formData.phone.trim(),
+          p_id_number: formData.id_number.trim() || null,
+          p_role: 'member',
+          p_invite_code_used: null,
+          p_joined_via: 'admin_add',
+        }
+      );
+      
+      if (rpcError) {
+        console.error('[AddMember] RPC error:', rpcError);
+        throw new Error(`Registration failed: ${rpcError.message}`);
+      }
+      
+      if (!rpcResult?.success) {
+        console.error('[AddMember] RPC returned error:', rpcResult);
+        throw new Error(rpcResult?.error || 'Failed to register member');
+      }
+      
+      console.log('[AddMember] Member registered successfully:', rpcResult);
+      
+      // 4. Show success with temporary password
       Alert.alert(
         'Member Added Successfully',
-        `${formData.first_name} ${formData.last_name} has been registered.\n\nMember Number: ${memberNumber}`,
+        `${formData.first_name} ${formData.last_name} has been registered.\n\n` +
+        `Member Number: ${memberNumber}\n` +
+        `Temporary Password: ${tempPassword}\n\n` +
+        `A confirmation email has been sent to ${formData.email}.\n\n` +
+        `⚠️ IMPORTANT: Please securely share the temporary password with the new member. ` +
+        `They should change it after their first login.`,
         [
+          { 
+            text: 'Copy Password', 
+            onPress: async () => {
+              // Copy to clipboard if available
+              try {
+                await Clipboard.setStringAsync(tempPassword);
+                Alert.alert('Copied', 'Temporary password copied to clipboard');
+              } catch (error) {
+                console.error('[AddMember] Failed to copy password:', error);
+              }
+            }
+          },
           { text: 'Add Another', onPress: () => setFormData(initialData) },
-          { text: 'View Member', onPress: () => router.back() },
+          { text: 'Done', onPress: () => router.back() },
         ]
       );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add member. Please try again.');
+    } catch (error: any) {
+      console.error('[AddMember] Registration error:', error);
+      
+      let errorMessage = 'Failed to add member. Please try again.';
+      
+      if (error.message?.includes('already registered')) {
+        errorMessage = 'This email is already registered. Please use a different email.';
+      } else if (error.message?.includes('rate limit')) {
+        errorMessage = 'Too many registration attempts. Please wait a moment and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);
     }
