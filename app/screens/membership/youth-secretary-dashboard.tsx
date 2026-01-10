@@ -58,6 +58,23 @@ export default function YouthSecretaryDashboard() {
   const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
+
+  // Route guard: Ensure only youth_secretary can access this dashboard
+  React.useEffect(() => {
+    const memberType = (profile as any)?.organization_membership?.member_type;
+    if (profile && memberType !== 'youth_secretary') {
+      console.log('[YouthSecretaryDashboard] Access denied - member_type:', memberType, '- redirecting to correct dashboard');
+      // Redirect to appropriate dashboard based on member_type
+      if (memberType === 'youth_president' || memberType === 'youth_deputy' || memberType === 'youth_treasurer') {
+        router.replace('/screens/membership/youth-president-dashboard');
+      } else if (memberType?.startsWith('youth_')) {
+        router.replace('/screens/membership/youth-president-dashboard');
+      } else {
+        // Fallback to parent dashboard if not a youth member
+        router.replace('/screens/parent-dashboard');
+      }
+    }
+  }, [profile]);
   
   const [stats, setStats] = useState<SecretaryStats | null>(null);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
