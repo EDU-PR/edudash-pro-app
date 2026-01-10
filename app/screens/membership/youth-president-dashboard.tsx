@@ -61,6 +61,15 @@ export default function YouthPresidentDashboard() {
   const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
+
+  // Route guard: Ensure youth_secretary is redirected to their own dashboard
+  React.useEffect(() => {
+    const memberType = (profile as any)?.organization_membership?.member_type;
+    if (profile && memberType === 'youth_secretary') {
+      console.log('[YouthPresidentDashboard] Access denied - youth_secretary detected - redirecting to secretary dashboard');
+      router.replace('/screens/membership/youth-secretary-dashboard');
+    }
+  }, [profile]);
   
   const [stats, setStats] = useState<YouthStats | null>(null);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
