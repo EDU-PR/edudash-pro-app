@@ -28,11 +28,11 @@ export interface ApprovalRequest {
 }
 
 export function usePendingApprovals(tab: 'pending' | 'history' = 'pending') {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const organizationId = profile?.organization_id;
 
   return useQuery({
-    queryKey: ['approvals', tab, organizationId],
+    queryKey: ['approvals', tab, organizationId, user?.id],
     queryFn: async (): Promise<ApprovalRequest[]> => {
       if (!organizationId) return [];
       
@@ -40,8 +40,9 @@ export function usePendingApprovals(tab: 'pending' | 'history' = 'pending') {
       const requests: ApprovalRequest[] = [];
 
       // 1. Fetch membership approvals from join_requests
+      // CRITICAL: Exclude requests from the current user (president shouldn't see their own requests)
       const membershipStatuses = tab === 'pending' ? ['pending'] : ['approved', 'rejected'];
-      const { data: membershipRequests, error: membershipError } = await supabase
+      let membershipQuery = supabase
         .from('join_requests')
         .select(`
           id,
@@ -58,7 +59,14 @@ export function usePendingApprovals(tab: 'pending' | 'history' = 'pending') {
           expires_at
         `)
         .eq('organization_id', organizationId)
-        .in('status', membershipStatuses)
+        .in('status', membershipStatuses);
+      
+      // Exclude current user's own requests
+      if (user?.id) {
+        membershipQuery = membershipQuery.neq('requester_id', user.id);
+      }
+      
+      const { data: membershipRequests, error: membershipError } = await membershipQuery
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -306,9 +314,9 @@ export function useProcessApproval() {
             await supabase.from('organization_members').upsert({
               user_id: request.requester_id,
               organization_id: request.organization_id,
-              role: request.requested_role || 'member',
-              status: 'active',
-              joined_at: new Date().toISOString(),
+              member_type: request.requested_role || 'youth_member', // Use member_type, not role
+              membership_status: 'active',
+              joined_via: 'approval',
             }, {
               onConflict: 'user_id,organization_id',
             });

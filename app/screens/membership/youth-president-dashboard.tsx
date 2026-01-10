@@ -60,7 +60,7 @@ const YOUTH_EXECUTIVE_ACTIONS = [
 
 export default function YouthPresidentDashboard() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
   
@@ -178,10 +178,18 @@ export default function YouthPresidentDashboard() {
       setUpcomingEvents(events || []);
 
       // Get recent members (all types)
-      const { data: recent } = await supabase
+      // CRITICAL: Exclude the current user (president) from the list
+      let recentQuery = supabase
         .from('organization_members')
         .select('id, first_name, last_name, created_at, region_id, member_type')
-        .eq('organization_id', orgId)
+        .eq('organization_id', orgId);
+      
+      // Exclude current user (president shouldn't see themselves in recent members)
+      if (user?.id) {
+        recentQuery = recentQuery.neq('user_id', user.id);
+      }
+      
+      const { data: recent } = await recentQuery
         .order('created_at', { ascending: false })
         .limit(5);
 
