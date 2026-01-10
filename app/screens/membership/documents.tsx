@@ -26,6 +26,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { Card } from '@/components/ui/Card';
+import { SuccessModal } from '@/components/ui/SuccessModal';
 import { assertSupabase } from '@/lib/supabase';
 import OrganizationDocumentService, {
   type DocumentFolder,
@@ -78,6 +79,10 @@ export default function DocumentVaultScreen() {
   // Modal state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
+  const [errorMessage, setErrorMessage] = useState({ title: '', message: '' });
   const [uploadName, setUploadName] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
   const [uploadType, setUploadType] = useState<DocumentType>('general');
@@ -112,13 +117,21 @@ export default function DocumentVaultScreen() {
     if (!organizationId) return;
     setLoading(true);
     try {
+      console.log('[DocVault] Loading data for folder:', currentFolderId);
       const [foldersResult, docsResult] = await Promise.all([
         OrganizationDocumentService.getFolders(organizationId, currentFolderId),
         OrganizationDocumentService.getDocuments(organizationId, { folderId: currentFolderId }),
       ]);
       
+      console.log('[DocVault] Folders loaded:', foldersResult.data?.length || 0);
+      console.log('[DocVault] Documents loaded:', docsResult.data?.length || 0);
+      
       if (foldersResult.success) setFolders(foldersResult.data || []);
-      if (docsResult.success) setDocuments(docsResult.data || []);
+      if (docsResult.success) {
+        setDocuments(docsResult.data || []);
+      } else {
+        console.error('[DocVault] Documents load error:', docsResult.error);
+      }
     } catch (error) {
       console.error('[DocVault] Load error:', error);
     } finally {
@@ -194,15 +207,28 @@ export default function DocumentVaultScreen() {
       );
 
       if (result.success) {
-        Alert.alert('Success', 'Document uploaded successfully');
         setShowUploadModal(false);
         resetUploadForm();
-        loadData();
+        setSuccessMessage({
+          title: 'Success!',
+          message: 'Your document has been uploaded successfully and is now available in the vault.',
+        });
+        setShowSuccessModal(true);
+        // Reload documents to show the new one
+        await loadData();
       } else {
-        Alert.alert('Error', result.error || 'Failed to upload document');
+        setErrorMessage({
+          title: 'Upload Failed',
+          message: result.error || 'Failed to upload document. Please try again.',
+        });
+        setShowErrorModal(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      setErrorMessage({
+        title: 'Error',
+        message: 'An unexpected error occurred while uploading. Please try again.',
+      });
+      setShowErrorModal(true);
     } finally {
       setUploading(false);
     }
@@ -223,15 +249,27 @@ export default function DocumentVaultScreen() {
       );
 
       if (result.success) {
-        Alert.alert('Success', 'Folder created');
         setShowNewFolderModal(false);
         setNewFolderName('');
-        loadData();
+        setSuccessMessage({
+          title: 'Folder Created',
+          message: 'Your new folder has been created successfully.',
+        });
+        setShowSuccessModal(true);
+        await loadData();
       } else {
-        Alert.alert('Error', result.error || 'Failed to create folder');
+        setErrorMessage({
+          title: 'Creation Failed',
+          message: result.error || 'Failed to create folder. Please try again.',
+        });
+        setShowErrorModal(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      setErrorMessage({
+        title: 'Error',
+        message: 'An unexpected error occurred while creating the folder.',
+      });
+      setShowErrorModal(true);
     }
   };
 
@@ -242,10 +280,18 @@ export default function DocumentVaultScreen() {
       if (result.success && result.url) {
         await Linking.openURL(result.url);
       } else {
-        Alert.alert('Error', result.error || 'Cannot open document');
+        setErrorMessage({
+          title: 'Cannot Open',
+          message: result.error || 'Unable to open this document.',
+        });
+        setShowErrorModal(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to open document');
+      setErrorMessage({
+        title: 'Error',
+        message: 'Failed to open document. Please try again.',
+      });
+      setShowErrorModal(true);
     }
   };
 
@@ -263,9 +309,18 @@ export default function DocumentVaultScreen() {
             if (!user?.id) return;
             const result = await OrganizationDocumentService.deleteDocument(doc.id, user.id);
             if (result.success) {
-              loadData();
+              setSuccessMessage({
+                title: 'Document Deleted',
+                message: 'The document has been removed from the vault.',
+              });
+              setShowSuccessModal(true);
+              await loadData();
             } else {
-              Alert.alert('Error', result.error || 'Failed to delete');
+              setErrorMessage({
+                title: 'Delete Failed',
+                message: result.error || 'Failed to delete document.',
+              });
+              setShowErrorModal(true);
             }
           },
         },
@@ -656,6 +711,25 @@ export default function DocumentVaultScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Success Modal */}
+      <SuccessModal
+        visible={showSuccessModal}
+        title={successMessage.title}
+        message={successMessage.message}
+        onClose={() => setShowSuccessModal(false)}
+        icon="checkmark-circle"
+      />
+
+      {/* Error Modal */}
+      <SuccessModal
+        visible={showErrorModal}
+        title={errorMessage.title}
+        message={errorMessage.message}
+        onClose={() => setShowErrorModal(false)}
+        icon="close-circle"
+        type="error"
+      />
     </SafeAreaView>
   );
 }
