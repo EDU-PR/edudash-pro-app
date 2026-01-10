@@ -42,10 +42,10 @@ CREATE INDEX IF NOT EXISTS idx_events_status
 ON public.events(status) 
 WHERE status IS NOT NULL;
 
--- Add index on organization_id and status for membership queries
-CREATE INDEX IF NOT EXISTS idx_events_organization_status 
-ON public.events(organization_id, status) 
-WHERE organization_id IS NOT NULL AND status IS NOT NULL;
+-- Add index on preschool_id and status for better query performance
+CREATE INDEX IF NOT EXISTS idx_events_preschool_status_filtered 
+ON public.events(preschool_id, status) 
+WHERE preschool_id IS NOT NULL AND status IS NOT NULL;
 
 -- Comment on the constraint
 COMMENT ON CONSTRAINT events_status_check ON public.events IS 
