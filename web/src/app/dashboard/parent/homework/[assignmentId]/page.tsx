@@ -19,6 +19,7 @@ import {
   Loader2,
   X,
   Paperclip,
+  BookOpen,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -483,6 +484,50 @@ export default function ParentHomeworkDetailPage() {
                   </div>
                 )}
               </div>
+
+              {/* Practice Mode & Related Lessons */}
+              {!submission && (
+                <div className="card" style={{ padding: 24, background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', border: '1px solid #0ea5e9' }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <BookOpen size={20} /> Practice Before Submitting
+                  </h3>
+                  <p style={{ color: 'var(--muted)', marginBottom: 16, fontSize: 14 }}>
+                    Review related lessons and practice activities before submitting your homework.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      className="btn"
+                      onClick={() => router.push(`/dashboard/parent/lessons?studentId=${activeChild.id}`)}
+                      style={{ 
+                        background: 'white', 
+                        border: '1px solid #0ea5e9',
+                        color: '#0ea5e9',
+                        justifyContent: 'flex-start'
+                      }}
+                    >
+                      <BookOpen size={16} />
+                      View Assigned Lessons
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => {
+                        // Open AI helper with homework context
+                        const prompt = `Help my child with this homework: ${assignment.title}. ${assignment.description || ''}`;
+                        window.open(`/dashboard/parent?aiPrompt=${encodeURIComponent(prompt)}`, '_blank');
+                      }}
+                      style={{ 
+                        background: 'white', 
+                        border: '1px solid #8b5cf6',
+                        color: '#8b5cf6',
+                        justifyContent: 'flex-start'
+                      }}
+                    >
+                      <Sparkles size={16} />
+                      Get AI Homework Help
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="card" style={{ padding: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

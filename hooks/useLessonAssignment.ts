@@ -43,12 +43,15 @@ export interface LessonAssignment {
 }
 
 export interface AssignLessonParams {
-  lesson_id: string;
+  lesson_id?: string;
+  interactive_activity_id?: string;
   student_id?: string;
   class_id?: string;
   due_date?: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   notes?: string;
+  lesson_type?: 'standard' | 'interactive' | 'ai_enhanced' | 'robotics' | 'computer_literacy';
+  stem_category?: 'ai' | 'robotics' | 'computer_literacy' | 'none';
 }
 
 export interface LessonCompletion {
@@ -181,23 +184,33 @@ export function useLessonAssignment(options?: {
       return false;
     }
     
+    if (!params.lesson_id && !params.interactive_activity_id) {
+      console.error('[useLessonAssignment] Either lesson_id or interactive_activity_id is required');
+      return false;
+    }
+    
     setIsAssigning(true);
     try {
       const supabase = assertSupabase();
       
+      const assignmentData: any = {
+        lesson_id: params.lesson_id || null,
+        interactive_activity_id: params.interactive_activity_id || null,
+        student_id: params.student_id || null,
+        class_id: params.class_id || null,
+        preschool_id: organizationId,
+        assigned_by: profile.id,
+        due_date: params.due_date || null,
+        priority: params.priority || 'normal',
+        notes: params.notes || null,
+        status: 'assigned',
+        lesson_type: params.lesson_type || (params.interactive_activity_id ? 'interactive' : 'standard'),
+        stem_category: params.stem_category || 'none',
+      };
+      
       const { error } = await supabase
         .from('lesson_assignments')
-        .insert({
-          lesson_id: params.lesson_id,
-          student_id: params.student_id || null,
-          class_id: params.class_id || null,
-          preschool_id: organizationId,
-          assigned_by: profile.id,
-          due_date: params.due_date || null,
-          priority: params.priority || 'normal',
-          notes: params.notes || null,
-          status: 'assigned',
-        });
+        .insert(assignmentData);
       
       if (error) throw error;
       

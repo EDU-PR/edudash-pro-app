@@ -214,12 +214,27 @@ export default function JoinPage() {
 
       if (authError) throw authError;
 
-      // 2. Generate member number
+      // 2. Send password reset email so user can set their own password
+      // Since we created them with a temporary password, they need to reset it
+      try {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
+          redirectTo: `${window.location.origin}/auth/callback?type=password-reset`,
+        });
+        if (resetError) {
+          console.warn('Failed to send password reset email:', resetError);
+          // Don't throw - registration should still succeed even if email fails
+        }
+      } catch (emailError) {
+        console.warn('Error sending password reset email:', emailError);
+        // Don't throw - registration should still succeed
+      }
+
+      // 3. Generate member number
       const year = new Date().getFullYear().toString().slice(-2);
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
-      // 3. Create membership record using RPC (handles both anon and authenticated users)
+      // 4. Create membership record using RPC (handles both anon and authenticated users)
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
       const { data: rpcResult, error: rpcError } = await supabase
         .rpc('register_organization_member', {
@@ -251,7 +266,7 @@ export default function JoinPage() {
       // Use returned member_number
       const finalMemberNumber = rpcResult.member_number || generatedMemberNumber;
 
-      // 4. Increment the usage count on the invite code
+      // 5. Increment the usage count on the invite code
       await supabase.rpc('increment_invite_code_usage', { code_id: orgInfo?.id });
 
       setMemberNumber(finalMemberNumber);
