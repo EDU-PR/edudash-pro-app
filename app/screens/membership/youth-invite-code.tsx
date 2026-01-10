@@ -239,10 +239,11 @@ export default function YouthInviteCodeScreen() {
     const webBaseUrl = process.env.EXPO_PUBLIC_WEB_URL || 'https://www.soilofafrica.org';
     const appScheme = Constants.expoConfig?.scheme || 'edudashpro';
     
-    // Determine registration route based on member type
-    const isLearner = memberType === 'learner';
-    const webRoute = isLearner ? '/join' : '/invite/member';
-    const mobileRoute = isLearner ? '/screens/membership/join' : '/screens/student-join-by-code';
+    // Always use /join route for web registration - it handles all member types and auto-fills the form
+    // This provides a better user experience by immediately showing the registration form
+    const webRoute = '/join';
+    // Mobile deep link: use join screen for all member types (it handles invite codes properly)
+    const mobileRoute = '/screens/membership/join';
     
     const webUrl = `${webBaseUrl}${webRoute}?code=${encodeURIComponent(code)}`;
     const mobileUrl = `${appScheme}://${mobileRoute}?code=${encodeURIComponent(code)}`;
