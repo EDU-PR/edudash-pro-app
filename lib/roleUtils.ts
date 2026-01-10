@@ -13,10 +13,11 @@ export function isSuperAdmin(role?: string | null): boolean {
   const normalizedRole = String(role).trim().toLowerCase();
   
   // Check for all possible super admin role variants
+  // NOTE: 'admin' is NOT included here because it's used for organization admins
+  // Only platform-level super admin roles should pass this check
   return normalizedRole === 'super_admin' || 
          normalizedRole === 'superadmin' ||
          normalizedRole === 'super-admin' ||
-         normalizedRole === 'admin' ||
          normalizedRole === 'platform_admin';
 }
 
