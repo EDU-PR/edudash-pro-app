@@ -135,6 +135,7 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
         .from('member_id_cards')
         .select('*')
         .eq('member_id', memberId)
+        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();

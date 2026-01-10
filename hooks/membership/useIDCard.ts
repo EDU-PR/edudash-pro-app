@@ -167,7 +167,7 @@ export function useIDCard(memberId?: string) {
           .eq('status', 'active')
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (cardData && !cardError) {
           setCard({

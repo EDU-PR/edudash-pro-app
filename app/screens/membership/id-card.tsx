@@ -15,6 +15,8 @@ import {
   Alert,
   Share,
   ActivityIndicator,
+  Modal,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +47,8 @@ export default function MemberIDCardScreen() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   // Check if current user can upload photo (must be executive and own card)
   const canUploadPhoto = member && isExecutiveMemberType(member.member_type) && 
@@ -132,12 +136,12 @@ export default function MemberIDCardScreen() {
               }
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
+                allowsEditing: false, // Don't edit immediately - show preview first
                 quality: 0.9,
               });
               if (!result.canceled && result.assets[0]) {
-                await uploadPhoto(result.assets[0].uri);
+                setSelectedImageUri(result.assets[0].uri);
+                setShowImagePreview(true);
               }
             } catch (error) {
               Alert.alert('Error', 'Failed to take photo');
@@ -155,12 +159,12 @@ export default function MemberIDCardScreen() {
               }
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
+                allowsEditing: false, // Don't edit immediately - show preview first
                 quality: 0.9,
               });
               if (!result.canceled && result.assets[0]) {
-                await uploadPhoto(result.assets[0].uri);
+                setSelectedImageUri(result.assets[0].uri);
+                setShowImagePreview(true);
               }
             } catch (error) {
               Alert.alert('Error', 'Failed to select image');
@@ -172,14 +176,59 @@ export default function MemberIDCardScreen() {
     );
   };
 
+  const handleCropImage = async () => {
+    if (!selectedImageUri) return;
+    
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Photo library permission is required to crop the image.');
+        return;
+      }
+
+      // Open image picker with editing enabled for cropping
+      // User can select the same image or a different one
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1], // Square aspect ratio for ID card
+        quality: 0.9,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // Update preview with cropped image
+        setSelectedImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Crop image error:', error);
+      Alert.alert('Error', 'Failed to crop image');
+    }
+  };
+
+  const handleSetImage = async () => {
+    if (!selectedImageUri) return;
+    
+    setShowImagePreview(false);
+    await uploadPhoto(selectedImageUri);
+    setSelectedImageUri(null);
+  };
+
+  const handleCancelImageSelection = () => {
+    setShowImagePreview(false);
+    setSelectedImageUri(null);
+  };
+
   const uploadPhoto = async (uri: string) => {
     if (!member || !user) return;
 
     setUploadingPhoto(true);
     try {
+      // Validate image first
       const validation = await MemberPhotoService.validateImage(uri);
       if (!validation.valid) {
         Alert.alert('Invalid Image', validation.error || 'Please select a valid image');
+        setUploadingPhoto(false);
         return;
       }
 
@@ -201,8 +250,9 @@ export default function MemberIDCardScreen() {
       } else {
         Alert.alert('Upload Failed', result.error || 'Failed to upload photo');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload photo');
+    } catch (error: any) {
+      console.error('Upload photo error:', error);
+      Alert.alert('Error', error?.message || 'Failed to upload photo');
     } finally {
       setUploadingPhoto(false);
     }
@@ -412,6 +462,63 @@ export default function MemberIDCardScreen() {
         </TouchableOpacity>
       </View>
       </DashboardWallpaperBackground>
+
+      {/* Image Preview Modal with Crop and Set buttons */}
+      <Modal
+        visible={showImagePreview}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelImageSelection}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Preview Photo</Text>
+              <TouchableOpacity
+                onPress={handleCancelImageSelection}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedImageUri && (
+              <View style={styles.imagePreviewContainer}>
+                <Image
+                  source={{ uri: selectedImageUri }}
+                  style={styles.imagePreview}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cropButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={handleCropImage}
+              >
+                <Ionicons name="crop-outline" size={20} color={theme.primary} />
+                <Text style={[styles.modalButtonText, { color: theme.primary }]}>Crop</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.setButton, { backgroundColor: theme.primary }]}
+                onPress={handleSetImage}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                    <Text style={[styles.modalButtonText, { color: '#fff' }]}>Set Photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -576,6 +683,70 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 15,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  imagePreviewContainer: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+  },
+  modalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  cropButton: {
+    // Styled via backgroundColor and borderColor props
+  },
+  setButton: {
+    // Styled via backgroundColor prop
+  },
+  modalButtonText: {
+    fontSize: 16,
     fontWeight: '600',
   },
 });

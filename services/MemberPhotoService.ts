@@ -137,18 +137,32 @@ export class MemberPhotoService {
    */
   static async validateImage(uri: string): Promise<{ valid: boolean; error?: string }> {
     try {
-      const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) {
-        return { valid: false, error: 'Image file not found' };
+      // Try to get file info - this works for file:// URIs
+      // For content:// URIs (Android), we'll skip size check and let ImageManipulator handle it
+      try {
+        const info = await FileSystem.getInfoAsync(uri);
+        if (!info.exists) {
+          return { valid: false, error: 'Image file not found' };
+        }
+
+        // Check file size (max 5MB) - only if size is available
+        if (info.size && info.size > 5 * 1024 * 1024) {
+          return { valid: false, error: 'Image must be less than 5MB' };
+        }
+      } catch (fileSystemError) {
+        // FileSystem.getInfoAsync might fail for content:// URIs
+        // That's okay - we'll let ImageManipulator handle validation
+        console.log('[MemberPhotoService] FileSystem check skipped (content URI):', uri);
       }
 
-      // Check file size (max 5MB)
-      if (info.size && info.size > 5 * 1024 * 1024) {
-        return { valid: false, error: 'Image must be less than 5MB' };
+      // Basic URI validation
+      if (!uri || (!uri.startsWith('file://') && !uri.startsWith('content://') && !uri.startsWith('http'))) {
+        return { valid: false, error: 'Invalid image URI' };
       }
 
       return { valid: true };
     } catch (error) {
+      console.error('[MemberPhotoService] Validation error:', error);
       return { valid: false, error: 'Failed to validate image' };
     }
   }
