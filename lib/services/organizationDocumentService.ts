@@ -357,11 +357,10 @@ export class OrganizationDocumentService {
         .from('organization_documents')
         .select(`
           *,
-          folder:organization_document_folders(id, name, icon, color),
-          uploader:profiles!uploaded_by(id, full_name)
+          folder:organization_document_folders(id, name, icon, color)
         `)
         .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
 
       if (!options?.includeDeleted) {
         query = query.eq('is_deleted', false);
