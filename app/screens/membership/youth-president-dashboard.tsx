@@ -27,8 +27,6 @@ import { assertSupabase } from '@/lib/supabase';
 import {
   DashboardBackground,
   DashboardWallpaperBackground,
-  DashboardWallpaperSettings,
-  type DashboardSettings,
 } from '@/components/membership/dashboard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -72,8 +70,8 @@ export default function YouthPresidentDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [showWallpaperSettings, setShowWallpaperSettings] = useState(false);
-  const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings>({});
+  // Youth president uses organization branding from OrganizationBrandingContext
+  // No need for local dashboard settings state
 
   // Fetch youth wing statistics
   const fetchYouthStats = useCallback(async () => {
@@ -279,7 +277,7 @@ export default function YouthPresidentDashboard() {
         </View>
       </View>
 
-      <DashboardBackground settings={dashboardSettings}>
+      <DashboardBackground>
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
           showsVerticalScrollIndicator={false}
@@ -287,14 +285,7 @@ export default function YouthPresidentDashboard() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
           }
         >
-          {/* Custom Greeting */}
-          {dashboardSettings.custom_greeting && (
-            <View style={[styles.greetingContainer, { backgroundColor: theme.card + 'E6' }]}>
-              <Text style={[styles.greetingText, { color: theme.text }]}>
-                {dashboardSettings.custom_greeting}
-              </Text>
-            </View>
-          )}
+          {/* Custom Greeting - Loaded from OrganizationBrandingContext */}
 
           {/* Executive Summary Card */}
         <Card padding={20} margin={0} style={{ ...styles.summaryCard, borderLeftColor: '#10B981' }}>
@@ -552,16 +543,8 @@ export default function YouthPresidentDashboard() {
         </ScrollView>
       </DashboardBackground>
 
-      {/* Wallpaper Settings Modal */}
-      <DashboardWallpaperSettings
-        organizationId={profile?.organization_id || ''}
-        currentSettings={dashboardSettings}
-        theme={theme}
-        onSettingsUpdate={(settings) => setDashboardSettings(settings)}
-        visible={showWallpaperSettings}
-        onClose={() => setShowWallpaperSettings(false)}
-        showTriggerButton={false}
-      />
+      {/* Note: Youth President uses organization branding from OrganizationBrandingContext */}
+      {/* Wallpaper settings are managed at the organization level by CEO/National Admin */}
     </SafeAreaView>
     </DashboardWallpaperBackground>
   );

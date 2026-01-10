@@ -1,10 +1,11 @@
 /**
  * Hook for fetching youth programs
- * Uses React Query pattern with mock data (ready for real API)
+ * Uses React Query with Supabase courses table
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { assertSupabase } from '@/lib/supabase';
 
 export interface YouthProgram {
   id: string;
@@ -22,14 +23,6 @@ export interface YouthProgram {
 
 type FilterType = 'all' | 'active' | 'draft' | 'completed';
 
-// Mock data - replace with Supabase query when table exists
-const MOCK_PROGRAMS: YouthProgram[] = [
-  { id: '1', name: 'Youth Leadership Summit 2025', description: 'Annual leadership development program', status: 'active', start_date: '2025-02-01', end_date: '2025-02-28', budget: 150000, participants_count: 245, created_by: 'youth_president', created_at: '2025-01-15T10:00:00Z', category: 'Leadership' },
-  { id: '2', name: 'Digital Skills Bootcamp', description: 'Intensive training for digital literacy', status: 'active', start_date: '2025-01-20', end_date: '2025-03-15', budget: 80000, participants_count: 120, created_by: 'youth_president', created_at: '2025-01-10T08:30:00Z', category: 'Education' },
-  { id: '3', name: 'Community Outreach Initiative', description: 'Youth-led community service program', status: 'draft', start_date: '2025-04-01', budget: 45000, participants_count: 0, created_by: 'youth_president', created_at: '2025-01-20T14:00:00Z', category: 'Community' },
-  { id: '4', name: 'Sports Tournament 2024', description: 'Inter-regional youth sports competition', status: 'completed', start_date: '2024-11-01', end_date: '2024-12-15', budget: 200000, participants_count: 500, created_by: 'youth_president', created_at: '2024-10-01T09:00:00Z', category: 'Sports' },
-];
-
 interface UseYouthProgramsOptions {
   statusFilter?: FilterType;
   searchQuery?: string;
@@ -39,13 +32,103 @@ export function useYouthPrograms(options: UseYouthProgramsOptions = {}) {
   const { statusFilter = 'all', searchQuery = '' } = options;
   const { profile } = useAuth();
   const orgId = profile?.organization_id;
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['youth-programs', orgId, statusFilter],
+    queryKey: ['youth-programs', orgId, statusFilter, searchQuery],
     queryFn: async () => {
-      // TODO: Replace with actual Supabase query
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return MOCK_PROGRAMS;
+      if (!orgId) {
+        throw new Error('Organization not found');
+      }
+
+      const supabase = assertSupabase();
+      
+      // Build query for courses (used as programs)
+      let query = supabase
+        .from('courses')
+        .select(`
+          id,
+          title,
+          description,
+          course_code,
+          start_date,
+          end_date,
+          is_active,
+          max_students,
+          instructor_id,
+          organization_id,
+          metadata,
+          created_at,
+          updated_at,
+          profiles:instructor_id (
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .eq('organization_id', orgId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      // Apply status filter
+      if (statusFilter === 'active') {
+        query = query.eq('is_active', true);
+      } else if (statusFilter === 'draft') {
+        query = query.eq('is_active', false);
+      } else if (statusFilter === 'completed') {
+        // Completed programs have end_date in the past
+        query = query.lt('end_date', new Date().toISOString().split('T')[0]);
+      }
+
+      // Apply search
+      if (searchQuery.trim()) {
+        query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,course_code.ilike.%${searchQuery}%`);
+      }
+
+      const { data: courses, error: fetchError } = await query;
+
+      if (fetchError) throw fetchError;
+
+      // Map courses to YouthProgram format
+      const programs: YouthProgram[] = (courses || []).map((course: any) => {
+        // Determine status based on dates and is_active
+        let status: 'draft' | 'active' | 'completed' | 'cancelled' = 'draft';
+        if (course.is_active) {
+          if (course.end_date && new Date(course.end_date) < new Date()) {
+            status = 'completed';
+          } else {
+            status = 'active';
+          }
+        } else {
+          status = 'draft';
+        }
+
+        // Extract budget and category from metadata
+        const metadata = course.metadata || {};
+        const budget = metadata.budget || null;
+        const category = metadata.category || 'General';
+
+        // Get participants count (would need a separate query or join)
+        // For now, use max_students as a proxy or 0
+        const participants_count = metadata.participants_count || 0;
+
+        return {
+          id: course.id,
+          name: course.title,
+          description: course.description || '',
+          status,
+          start_date: course.start_date || course.created_at.split('T')[0],
+          end_date: course.end_date || undefined,
+          budget,
+          participants_count,
+          created_by: course.instructor_id,
+          created_at: course.created_at,
+          category,
+        };
+      });
+
+      return programs;
     },
     enabled: !!orgId,
     staleTime: 60000,
