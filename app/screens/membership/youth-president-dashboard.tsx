@@ -274,6 +274,12 @@ export default function YouthPresidentDashboard() {
               </View>
             )}
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => router.push('/screens/settings')}
+          >
+            <Ionicons name="settings-outline" size={24} color={theme.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
