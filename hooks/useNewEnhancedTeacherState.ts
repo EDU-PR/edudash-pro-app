@@ -44,13 +44,17 @@ export const useNewEnhancedTeacherState = () => {
     }
   };
 
+  // Check if user is from a preschool
+  const isPreschool = Boolean(profile?.preschool_id);
+
   // Handle quick action navigation with analytics tracking
   const handleQuickAction = (action: string) => {
     track('teacher.dashboard.quick_action', { action, layout: 'enhanced' });
     
     switch (action) {
       case 'create_lesson':
-        router.push('/screens/ai-lesson-generator');
+        // Route preschool teachers to the specialized preschool lesson generator
+        router.push(isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator');
         break;
       case 'start_live_lesson':
         router.push('/screens/start-live-lesson');

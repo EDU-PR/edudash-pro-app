@@ -16,6 +16,7 @@ interface BuildAIToolsParams {
   canCreateAssignments: boolean;
   canGradeAssignments: boolean;
   t: (key: string, options?: any) => string;
+  isPreschool?: boolean;
 }
 
 export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
@@ -27,15 +28,16 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
     canCreateAssignments,
     canGradeAssignments,
     t,
+    isPreschool = false,
   } = params;
 
   return [
     {
       id: "lesson-generator",
-      title: "AI Lesson Generator",
-      subtitle: "Create engaging lessons with AI",
+      title: isPreschool ? "Preschool Lesson Creator" : "AI Lesson Generator",
+      subtitle: isPreschool ? "Create age-appropriate lessons with insights & homework" : "Create engaging lessons with AI",
       icon: "bulb",
-      color: "#4F46E5",
+      color: isPreschool ? "#FF6B6B" : "#4F46E5",
       onPress: () => {
         if (!hasActiveSeat && (!aiLessonEnabled || !canCreateAssignments)) {
           Alert.alert(
@@ -50,8 +52,9 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
           Alert.alert("AI Feature Disabled", "AI Lesson Generator is not enabled in this build.");
           return;
         }
-        track("edudash.ai.lesson_generator_opened");
-        router.push("/screens/ai-lesson-generator");
+        track("edudash.ai.lesson_generator_opened", { isPreschool });
+        // Route preschool teachers to the specialized preschool lesson generator
+        router.push(isPreschool ? "/screens/preschool-lesson-generator" : "/screens/ai-lesson-generator");
       },
     },
     {
