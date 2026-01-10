@@ -2,7 +2,7 @@
  * Create Youth Program Screen
  * Allows Youth President and delegated office bearers to create programs
  */
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useQueryClient } from '@tanstack/react-query';
-import React from 'react';
 
 const PROGRAM_CATEGORIES = [
   'Leadership',
@@ -52,7 +51,7 @@ export default function CreateYouthProgramScreen() {
     memberType === 'youth_secretary' ||
     memberType === 'youth_treasurer';
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!canCreatePrograms && profile) {
       Alert.alert(
         'Access Restricted',
