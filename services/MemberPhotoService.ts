@@ -5,6 +5,8 @@
 import { assertSupabase } from '@/lib/supabase';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
+import { base64ToUint8Array } from '@/lib/utils/base64';
 
 export interface MemberPhotoUploadResult {
   success: boolean;
@@ -54,19 +56,30 @@ export class MemberPhotoService {
       const timestamp = Date.now();
       const filename = `member_photos/${memberId}_${timestamp}.jpg`;
 
-      // Step 4: Read file and convert to uploadable format using fetch (more reliable)
-      const response = await fetch(processedImage.uri);
-      if (!response.ok) {
-        throw new Error(`Failed to read processed image: ${response.status}`);
+      // Step 4: Read file and convert to uploadable format
+      // React Native doesn't support blob.arrayBuffer(), so we use base64 approach
+      let uploadData: Uint8Array;
+      
+      if (Platform.OS === 'web') {
+        // Web: use fetch and arrayBuffer
+        const response = await fetch(processedImage.uri);
+        if (!response.ok) {
+          throw new Error(`Failed to read processed image: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        uploadData = new Uint8Array(arrayBuffer);
+      } else {
+        // Native: read as base64 and convert to Uint8Array
+        const base64 = await FileSystem.readAsStringAsync(processedImage.uri, {
+          encoding: 'base64',
+        });
+        uploadData = base64ToUint8Array(base64);
       }
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
 
       // Step 5: Upload to Supabase Storage (React Native compatible)
       const { error: uploadError } = await supabase.storage
         .from(this.BUCKET_NAME)
-        .upload(filename, uint8Array, {
+        .upload(filename, uploadData, {
           contentType: 'image/jpeg',
           upsert: true, // Allow overwriting if same member uploads again
         });
