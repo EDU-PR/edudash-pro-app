@@ -56,17 +56,28 @@ BEGIN
   END;
   
   -- Verify the user exists in auth.users (with retry logic for timing issues)
-  -- Wait longer if user was just created (Supabase Auth can take up to 2-3 seconds)
-  FOR i IN 1..5 LOOP
+  -- Wait longer if user was just created (Supabase Auth can take up to 3-5 seconds for replication)
+  -- Check both auth.users and profiles table (profile trigger might create profile before auth.users is visible)
+  FOR i IN 1..10 LOOP
+    -- Check auth.users first
     SELECT EXISTS(
       SELECT 1 FROM auth.users WHERE id = p_user_id
     ) INTO v_user_exists;
+    
+    -- Also check profiles table (profile trigger creates profile on user creation)
+    -- This helps with timing issues where profile exists but auth.users is not yet visible
+    IF NOT v_user_exists THEN
+      SELECT EXISTS(
+        SELECT 1 FROM profiles WHERE id = p_user_id
+      ) INTO v_user_exists;
+    END IF;
     
     IF v_user_exists THEN
       EXIT;
     END IF;
     
-    -- Progressive wait: 0.5s, 1s, 1.5s, 2s, 2.5s
+    -- Progressive wait: 0.5s, 1s, 1.5s, 2s, 2.5s, 3s, 3.5s, 4s, 4.5s, 5s
+    -- Total max wait: ~27.5 seconds
     PERFORM pg_sleep(0.5 * i);
   END LOOP;
   
@@ -74,8 +85,9 @@ BEGIN
     RETURN jsonb_build_object(
       'success', false,
       'code', 'USER_NOT_FOUND',
-      'error', 'User does not exist in auth system. Account may still be being created. Please wait a moment and try again. If this persists, contact support.',
-      'retries_exhausted', true
+      'error', 'User does not exist in auth system after extended retry period. Account creation may be delayed. Please wait a few moments and try again, or contact support if this persists.',
+      'retries_exhausted', true,
+      'max_wait_seconds', 27.5
     );
   END IF;
   
