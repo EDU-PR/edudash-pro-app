@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { generateTemporaryPassword } from '@/lib/memberRegistrationUtils';
 
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
@@ -39,6 +40,7 @@ interface YouthInviteCode {
   description: string;
   created_at: string;
   requested_role?: string;
+  temp_password?: string;
 }
 
 // All Youth Wing roles that can be assigned via invite by Youth President
@@ -117,6 +119,7 @@ export default function YouthInviteCodeScreen() {
         description: r.message || 'Youth Invite', // Fixed: was notes
         created_at: r.created_at,
         requested_role: r.requested_role || 'youth_member',
+        temp_password: r.temp_password || undefined, // Include temporary password if available
       }));
       setCodes(mapped);
     } catch (e: any) {
@@ -152,6 +155,8 @@ export default function YouthInviteCodeScreen() {
         : null;
 
       const inviteCode = generateInviteCode();
+      // Generate temporary password for this invite
+      const tempPassword = generateTemporaryPassword();
       
       const { data, error } = await supabase
         .from('join_requests')
@@ -165,6 +170,7 @@ export default function YouthInviteCodeScreen() {
           message: description, // Use 'message' column instead of 'notes'
           status: 'pending',
           requested_role: selectedRole, // Use selected role from form
+          temp_password: tempPassword, // Store temporary password
         })
         .select()
         .single();
@@ -172,7 +178,30 @@ export default function YouthInviteCodeScreen() {
       if (error) throw error;
 
       await loadCodes();
-      Alert.alert('Invite Created', `Code: ${inviteCode}\n\nShare this code with potential youth members!`);
+      
+      // Show success with temporary password
+      Alert.alert(
+        'Invite Created Successfully! 🎉',
+        `Invite Code: ${inviteCode}\n\nTemporary Password: ${tempPassword}\n\n` +
+        `Share both the code and password with potential members.\n\n` +
+        `⚠️ IMPORTANT: Members will use this password to login after joining. They should change it after first login.`,
+        [
+          {
+            text: 'Copy Password',
+            onPress: async () => {
+              try {
+                if (Clipboard?.setStringAsync) {
+                  await Clipboard.setStringAsync(tempPassword);
+                  Alert.alert('Copied', 'Temporary password copied to clipboard');
+                }
+              } catch (error) {
+                console.error('[YouthInviteCode] Failed to copy password:', error);
+              }
+            }
+          },
+          { text: 'OK' }
+        ]
+      );
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to create invite');
     } finally {
@@ -193,14 +222,17 @@ export default function YouthInviteCodeScreen() {
     }
   };
 
-  const buildShareMessage = (code: string) => {
-    const shareUrl = `https://www.soilofafrica.org/invite/member?code=${encodeURIComponent(code)}`;
-    return `🌱 Join the SOA Youth Wing!\n\nUse invite code: ${code}\n\nDownload the app and enter this code to join:\n${shareUrl}`;
+  const buildShareMessage = (item: YouthInviteCode) => {
+    const shareUrl = `https://www.soilofafrica.org/invite/member?code=${encodeURIComponent(item.code)}`;
+    const passwordText = item.temp_password 
+      ? `\n\nTemporary Password: ${item.temp_password}\n(You'll use this to login after joining)`
+      : '';
+    return `🌱 Join the SOA Youth Wing!\n\nInvite Code: ${item.code}${passwordText}\n\nDownload the app and enter this code to join:\n${shareUrl}`;
   };
 
   const shareInvite = async (item: YouthInviteCode) => {
     try {
-      const message = buildShareMessage(item.code);
+      const message = buildShareMessage(item);
       await Share.share({ message });
     } catch (e: any) {
       Alert.alert('Share failed', e?.message || 'Unable to open share dialog');
@@ -209,7 +241,7 @@ export default function YouthInviteCodeScreen() {
 
   const shareWhatsApp = async (item: YouthInviteCode) => {
     try {
-      const message = encodeURIComponent(buildShareMessage(item.code));
+      const message = encodeURIComponent(buildShareMessage(item));
       const url = `whatsapp://send?text=${message}`;
       await Linking.openURL(url);
     } catch (e: any) {
@@ -428,6 +460,20 @@ export default function YouthInviteCodeScreen() {
                       </View>
                       
                       <Text style={[styles.description, { color: theme.textSecondary }]}>{item.description}</Text>
+                      
+                      {/* Show temporary password if available */}
+                      {item.temp_password && (
+                        <View style={[styles.passwordBox, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
+                          <View style={styles.row}>
+                            <Ionicons name="lock-closed" size={16} color={theme.primary} />
+                            <Text style={[styles.passwordLabel, { color: theme.primary }]}>Temp Password:</Text>
+                          </View>
+                          <Text style={[styles.passwordValue, { color: theme.text }]}>{item.temp_password}</Text>
+                          <Text style={[styles.passwordHint, { color: theme.textSecondary }]}>
+                            Share this with invitees for initial login
+                          </Text>
+                        </View>
+                      )}
                       
                       <View style={styles.statsRow}>
                         <View style={styles.stat}>
@@ -690,6 +736,29 @@ const createStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontSize: 14,
+  },
+  passwordBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  passwordLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  passwordValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginTop: 6,
+    fontFamily: 'monospace',
+  },
+  passwordHint: {
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   roleSelector: {
     gap: 10,

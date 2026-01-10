@@ -96,7 +96,7 @@ export interface AdFrequencyState {
 export interface AdGatingContext {
   /** Is the platform Android? */
   isAndroid: boolean;
-  /** Is the user in parent role? */
+  /** Is the user eligible for ads? (parent role OR membership/organization user) */
   isParentRole: boolean;
   /** Is the user on free tier? */
   isFreeTier: boolean;

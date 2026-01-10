@@ -135,7 +135,7 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
         },
         last_seen_at: new Date().toISOString(),
       }, {
-        onConflict: 'device_id'
+        onConflict: 'user_id,device_installation_id' // Match unique index push_devices_user_device_unique
       });
 
     if (deviceError) {

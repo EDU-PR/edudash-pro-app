@@ -136,6 +136,48 @@ export const AD_PLACEMENTS: Record<string, AdPlacement> = {
     description: 'Native ads in middle of long lists',
     enabled: true,
   },
+
+  // Banner ad for membership dashboards (Soil of Africa, Youth President, etc.)
+  banner_membership_dashboard: {
+    key: 'banner_membership_dashboard',
+    type: 'banner',
+    screen: 'membership_dashboard',
+    position: 'dashboard_bottom',
+    adUnitEnvVar: 'EXPO_PUBLIC_ADMOB_ADUNIT_BANNER_MEMBERSHIP_DASHBOARD',
+    frequencyPolicy: {
+      minInterval: 0, // Banner ads are persistent
+      dailyLimit: 1000, // Effectively unlimited for banners
+      minSessionsBeforeFirst: 1, // Show after first session
+    },
+    keywords: [
+      'membership', 'youth programs', 'community', 'leadership', 'networking',
+      'organizations', 'social groups', 'events', 'community building'
+    ],
+    contentRating: 'general',
+    description: 'Bottom banner on membership dashboards (Youth President, Secretary, etc.)',
+    enabled: true,
+  },
+
+  // Interstitial ad for membership dashboard entry
+  interstitial_membership_dashboard_enter: {
+    key: 'interstitial_membership_dashboard_enter',
+    type: 'interstitial',
+    screen: 'membership_dashboard',
+    position: 'navigation_break',
+    adUnitEnvVar: 'EXPO_PUBLIC_ADMOB_ADUNIT_INTERSTITIAL_MEMBERSHIP_DASHBOARD',
+    frequencyPolicy: {
+      minInterval: 300, // 5 minutes minimum between interstitials
+      dailyLimit: 3, // Max 3 interstitials per day
+      minSessionsBeforeFirst: 2, // Never on first session
+    },
+    keywords: [
+      'membership', 'youth programs', 'community', 'leadership', 'networking',
+      'organizations', 'social groups', 'events', 'community building'
+    ],
+    contentRating: 'general',
+    description: 'Interstitial shown when entering membership dashboard',
+    enabled: true,
+  },
 };
 
 /**
@@ -184,6 +226,8 @@ export const PLACEMENT_KEYS = {
   NATIVE_PARENT_LIST: 'native_parent_list_middle',
   INTERSTITIAL_PARENT_NAV: 'interstitial_parent_navigation',
   REWARDED_PARENT_PERKS: 'rewarded_parent_perks',
+  BANNER_MEMBERSHIP_DASHBOARD: 'banner_membership_dashboard',
+  INTERSTITIAL_MEMBERSHIP_DASHBOARD_ENTER: 'interstitial_membership_dashboard_enter',
 } as const;
 
 export type PlacementKey = keyof typeof PLACEMENT_KEYS;

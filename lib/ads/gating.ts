@@ -63,6 +63,33 @@ export function isParentRole(userProfile: any): boolean {
 }
 
 /**
+ * Check if user is a membership/organization user (Soil of Africa, etc.)
+ */
+export function isMembershipUser(userProfile: any): boolean {
+  if (!userProfile) return false;
+  
+  // Check if user has organization_membership with member_type
+  const hasOrgMembership = userProfile.organization_membership?.member_type ||
+                           userProfile.organization_membership?.organization_id;
+  
+  // Check if user has member_type directly
+  const hasMemberType = userProfile.member_type;
+  
+  // Check if user's role indicates membership (not parent, teacher, student, etc.)
+  const isMembershipRole = userProfile.role && 
+    !['parent', 'teacher', 'student', 'principal', 'super_admin'].includes(userProfile.role);
+  
+  return !!(hasOrgMembership || hasMemberType || isMembershipRole);
+}
+
+/**
+ * Check if user is eligible for ads (parent OR membership user)
+ */
+export function isAdsEligibleUser(userProfile: any): boolean {
+  return isParentRole(userProfile) || isMembershipUser(userProfile);
+}
+
+/**
  * Check if user is on free subscription tier
  */
 export function isFreeTier(subscriptionTier?: string): boolean {
@@ -169,7 +196,7 @@ export async function buildGatingContext(
 
   return {
     isAndroid: isAndroid(),
-    isParentRole: isParentRole(userProfile),
+    isParentRole: isAdsEligibleUser(userProfile), // Now includes both parent and membership users
     isFreeTier: isFreeTier(subscriptionTier),
     adsEnabled: areAdsEnabledInEnv(),
     isOnline: networkState.isOnline,

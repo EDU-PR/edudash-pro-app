@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { MemberType, MEMBER_TYPE_LABELS } from '@/components/membership/types';
+import { getDashboardRoute } from '@/lib/memberRegistrationUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -41,6 +42,9 @@ interface OrganizationInfo {
   logo_url?: string;
   default_tier: string;
   allowed_types: MemberType[];
+  invite_type?: 'region_code' | 'join_request';
+  temp_password?: string;
+  requested_role?: string;
 }
 
 interface JoinFormData {
@@ -88,8 +92,89 @@ export default function JoinByCodeScreen() {
     
     try {
       const supabase = assertSupabase();
+      const codeUpper = inviteCode.toUpperCase();
       
-      // Query the region_invite_codes table - use maybeSingle to avoid 406 error
+      // First try join_requests table (youth wing invites with temp passwords)
+      const { data: joinRequestData, error: joinRequestError } = await supabase
+        .from('join_requests')
+        .select(`
+          id,
+          invite_code,
+          organization_id,
+          temp_password,
+          requested_role,
+          status,
+          expires_at,
+          organizations (
+            id,
+            name,
+            logo_url
+          )
+        `)
+        .eq('invite_code', codeUpper)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (!joinRequestError && joinRequestData) {
+        // Check if code has expired
+        if (joinRequestData.expires_at && new Date(joinRequestData.expires_at) < new Date()) {
+          setCodeError('This invite code has expired.');
+          setIsVerifying(false);
+          return;
+        }
+
+        const org = joinRequestData.organizations as any;
+
+        // Get organization region info
+        const { data: orgRegionData } = await supabase
+          .from('organization_regions')
+          .select('id, name, code, province_code')
+          .eq('organization_id', joinRequestData.organization_id)
+          .limit(1)
+          .maybeSingle();
+
+        const { count: memberCount } = await supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', joinRequestData.organization_id);
+
+        const orgInfo: OrganizationInfo = {
+          id: joinRequestData.organization_id,
+          name: org?.name || 'Soil of Africa',
+          region: orgRegionData?.name || 'Main Region',
+          region_id: orgRegionData?.id || '',
+          region_code: orgRegionData?.province_code || orgRegionData?.code || 'ZA',
+          manager_name: 'Organization Manager',
+          member_count: memberCount || 0,
+          logo_url: org?.logo_url,
+          default_tier: 'standard',
+          allowed_types: ['learner', 'facilitator', 'mentor'] as MemberType[],
+          invite_type: 'join_request',
+          temp_password: joinRequestData.temp_password || undefined,
+          requested_role: joinRequestData.requested_role || 'youth_member',
+        };
+
+        setOrgInfo(orgInfo);
+        
+        // Animate the form in
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]).start();
+        
+        setIsVerifying(false);
+        return;
+      }
+      
+      // Fallback: Query the region_invite_codes table
       const { data: codeData, error: codeError } = await supabase
         .from('region_invite_codes')
         .select(`
@@ -103,6 +188,7 @@ export default function JoinByCodeScreen() {
           current_uses,
           expires_at,
           is_active,
+          temp_password,
           organizations (
             id,
             name,
@@ -115,24 +201,27 @@ export default function JoinByCodeScreen() {
             province_code
           )
         `)
-        .eq('code', inviteCode.toUpperCase())
+        .eq('code', codeUpper)
         .eq('is_active', true)
         .maybeSingle();
 
       if (codeError || !codeData) {
         setCodeError('Invalid invite code. Please check and try again.');
+        setIsVerifying(false);
         return;
       }
 
       // Check if code has expired
       if (codeData.expires_at && new Date(codeData.expires_at) < new Date()) {
         setCodeError('This invite code has expired.');
+        setIsVerifying(false);
         return;
       }
 
       // Check if code has reached max uses
       if (codeData.max_uses && codeData.current_uses >= codeData.max_uses) {
         setCodeError('This invite code has reached its maximum usage limit.');
+        setIsVerifying(false);
         return;
       }
 
@@ -166,6 +255,8 @@ export default function JoinByCodeScreen() {
         logo_url: org?.logo_url,
         default_tier: codeData.default_tier || 'standard',
         allowed_types: (codeData.allowed_member_types || ['learner']) as MemberType[],
+        invite_type: 'region_code',
+        temp_password: codeData.temp_password || undefined,
       };
 
       setOrgInfo(orgInfo);
@@ -213,11 +304,66 @@ export default function JoinByCodeScreen() {
     
     try {
       const supabase = assertSupabase();
-      const { data: { user } } = await supabase.auth.getUser();
+      let { data: { user } } = await supabase.auth.getUser();
       
+      // If user is not authenticated and invite has temp password, auto-create account
+      if (!user && orgInfo.temp_password) {
+        console.log('[JoinByCode] Creating account with temporary password for invite code');
+        
+        // Create auth account with temporary password
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email.trim().toLowerCase(),
+          password: orgInfo.temp_password,
+          options: {
+            data: {
+              first_name: formData.first_name.trim(),
+              last_name: formData.last_name.trim(),
+              phone: formData.phone.trim(),
+            },
+            emailRedirectTo: 'https://www.soilofafrica.org/auth/callback?flow=email-confirm',
+          },
+        });
+        
+        if (signUpError) {
+          console.error('[JoinByCode] Auth signup error:', signUpError);
+          
+          // If user already exists, prompt them to sign in
+          if (signUpError.message.includes('already registered') || signUpError.message.includes('already exists')) {
+            Alert.alert(
+              'Account Exists',
+              'An account with this email already exists. Please sign in and try joining again.',
+              [
+                { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
+                { text: 'Cancel', style: 'cancel' }
+              ]
+            );
+            setIsSubmitting(false);
+            return;
+          }
+          
+          throw signUpError;
+        }
+        
+        if (!signUpData.user) {
+          throw new Error('Failed to create user account - no user returned');
+        }
+        
+        user = signUpData.user;
+        console.log('[JoinByCode] Account created successfully:', user.id);
+      }
+      
+      // If still no user, require authentication
       if (!user) {
-        Alert.alert('Sign In Required', 'Please sign in or create an account to join.');
-        router.push('/(auth)/sign-in');
+        Alert.alert(
+          'Sign In Required', 
+          'Please sign in or create an account to join.\n\nIf this invite code includes a temporary password, it will be shown after account creation.',
+          [
+            { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
+            { text: 'Sign Up', onPress: () => router.push('/(auth)/sign-up') },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        setIsSubmitting(false);
         return;
       }
 
@@ -274,19 +420,54 @@ export default function JoinByCodeScreen() {
       
       const memberData = { id: rpcResult.id, member_number: rpcResult.member_number };
 
-      // Update invite code usage count
-      await supabase
-        .from('region_invite_codes')
-        .update({ current_uses: (orgInfo as any).current_uses + 1 })
-        .eq('code', inviteCode.toUpperCase());
+      // Update invite code usage count based on invite type
+      if (orgInfo.invite_type === 'join_request') {
+        // Update join_requests status to approved (or mark as used)
+        await supabase
+          .from('join_requests')
+          .update({ status: 'approved', requester_id: user.id })
+          .eq('invite_code', inviteCode.toUpperCase());
+      } else {
+        // Update region_invite_codes usage count
+        await supabase
+          .from('region_invite_codes')
+          .update({ current_uses: (orgInfo as any).current_uses + 1 })
+          .eq('code', inviteCode.toUpperCase());
+      }
+      
+      // Show success message with temporary password if applicable
+      let successMessage = `You've successfully joined ${orgInfo.region || orgInfo.name}!\n\nYour Member Number: ${memberNumber}`;
+      
+      if (orgInfo.temp_password) {
+        successMessage += `\n\n🔑 Temporary Password: ${orgInfo.temp_password}\n\n⚠️ IMPORTANT: Please save this password! You'll need it to login. Change it after your first login for security.`;
+      }
       
       Alert.alert(
         'Welcome to Soil of Africa! 🎉',
-        `You've successfully joined ${orgInfo.region} region.\n\nYour Member Number: ${memberNumber}`,
+        successMessage,
         [
+          ...(orgInfo.temp_password ? [{
+            text: 'Copy Password',
+            onPress: async () => {
+              try {
+                const Clipboard = require('expo-clipboard');
+                if (Clipboard?.setStringAsync) {
+                  await Clipboard.setStringAsync(orgInfo.temp_password!);
+                  Alert.alert('Copied', 'Temporary password copied to clipboard');
+                }
+              } catch (error) {
+                console.error('[JoinByCode] Failed to copy password:', error);
+              }
+            }
+          }] : []),
           { 
-            text: 'View ID Card', 
-            onPress: () => router.replace('/screens/membership/id-card')
+            text: 'Continue', 
+            onPress: () => {
+              // Route to appropriate dashboard based on member type
+              const memberType = orgInfo.requested_role || formData.member_type;
+              const dashboardRoute = getDashboardRoute(memberType, 'member');
+              router.replace(dashboardRoute);
+            }
           },
         ]
       );
@@ -530,6 +711,21 @@ export default function JoinByCodeScreen() {
                   </View>
                 </View>
               </View>
+
+              {/* Temporary Password Notice */}
+              {orgInfo.temp_password && (
+                <View style={[styles.passwordNotice, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+                  <Ionicons name="lock-closed" size={20} color={theme.primary} />
+                  <View style={styles.passwordNoticeContent}>
+                    <Text style={[styles.passwordNoticeTitle, { color: theme.primary }]}>
+                      Temporary Password Included
+                    </Text>
+                    <Text style={[styles.passwordNoticeText, { color: theme.textSecondary }]}>
+                      After joining, you'll receive a temporary password to login. Please save it and change it after your first login.
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* Terms */}
               <View style={[styles.termsBox, { backgroundColor: theme.surface }]}>
@@ -806,6 +1002,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
+  // Password Notice
+  passwordNotice: {
+    flexDirection: 'row',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginBottom: 16,
+    gap: 12,
+  },
+  passwordNoticeContent: {
+    flex: 1,
+  },
+  passwordNoticeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  passwordNoticeText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
   // Terms
   termsBox: {
     padding: 14,

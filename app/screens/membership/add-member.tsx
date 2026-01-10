@@ -59,9 +59,9 @@ const MEMBER_TYPES: { value: MemberType; label: string }[] = [
 
 // Membership tiers
 const MEMBERSHIP_TIERS: { value: MembershipTier; label: string; price: number }[] = [
-  { value: 'standard', label: 'Standard', price: 600 },
-  { value: 'premium', label: 'Premium', price: 1200 },
-  { value: 'vip', label: 'VIP', price: 2500 },
+  { value: 'standard', label: 'Standard', price: 20 },
+  { value: 'premium', label: 'Premium', price: 350 },
+  { value: 'vip', label: 'VIP', price: 600 },
 ];
 
 // Status options
@@ -95,7 +95,8 @@ interface AddMemberData {
   waive_payment: boolean;
 }
 
-const initialData: AddMemberData = {
+// Initial data will be set dynamically based on user's wing
+const getInitialData = (defaultMemberType: MemberType = 'learner'): AddMemberData => ({
   region_id: '',
   first_name: '',
   last_name: '',
@@ -108,7 +109,7 @@ const initialData: AddMemberData = {
   city: '',
   province: '',
   postal_code: '',
-  member_type: 'learner',
+  member_type: defaultMemberType,
   membership_tier: 'standard',
   membership_status: 'active',
   emergency_contact_name: '',
@@ -117,7 +118,7 @@ const initialData: AddMemberData = {
   send_welcome_email: true,
   generate_id_card: true,
   waive_payment: false,
-};
+});
 
 export default function AddMemberScreen() {
   const { t } = useTranslation();
@@ -125,22 +126,57 @@ export default function AddMemberScreen() {
   const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   
-  const [formData, setFormData] = useState<AddMemberData>(initialData);
+  // Get organization ID from current user's profile/context
+  const organizationId = profile?.organization_id;
+  
+  // Determine which wing the current user belongs to (youth, women, veterans, or main)
+  const currentUserMemberType = (profile as any)?.organization_membership?.member_type;
+  const isYouthWing = currentUserMemberType?.startsWith('youth_');
+  const isWomensWing = currentUserMemberType?.startsWith('women_');
+  const isVeteransWing = currentUserMemberType?.startsWith('veterans_');
+  
+  // Filter member types based on current user's wing
+  const availableMemberTypes = isYouthWing
+    ? [
+        { value: 'youth_member' as MemberType, label: 'Youth Member' },
+        { value: 'youth_facilitator' as MemberType, label: 'Youth Facilitator' },
+        { value: 'youth_mentor' as MemberType, label: 'Youth Mentor' },
+        { value: 'youth_coordinator' as MemberType, label: 'Youth Coordinator' },
+      ]
+    : isWomensWing
+    ? [
+        { value: 'women_member' as MemberType, label: "Women's Member" },
+        { value: 'women_facilitator' as MemberType, label: "Women's Facilitator" },
+        { value: 'women_mentor' as MemberType, label: "Women's Mentor" },
+      ]
+    : isVeteransWing
+    ? [
+        { value: 'veterans_member' as MemberType, label: "Veterans Member" },
+        { value: 'veterans_coordinator' as MemberType, label: "Veterans Coordinator" },
+      ]
+    : MEMBER_TYPES; // Default to generic types for main wing
+  
+  // Set initial member type based on available types
+  const defaultMemberType = availableMemberTypes[0]?.value || 'learner';
+  const [formData, setFormData] = useState<AddMemberData>(getInitialData(defaultMemberType));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [retryStatus, setRetryStatus] = useState<{ retry: number; maxRetries: number } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showRegionPicker, setShowRegionPicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showTierPicker, setShowTierPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
-  
-  // Get organization ID from current user's profile/context
-  const organizationId = profile?.organization_id;
 
   const updateField = <K extends keyof AddMemberData>(field: K, value: AddMemberData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error message when user makes changes
+    if (errorMessage) {
+      setErrorMessage(null);
+    }
   };
 
   const selectedRegion = REGIONS.find(r => r.id === formData.region_id);
-  const selectedType = MEMBER_TYPES.find(t => t.value === formData.member_type);
+  const selectedType = availableMemberTypes.find(t => t.value === formData.member_type);
   const selectedTier = MEMBERSHIP_TIERS.find(t => t.value === formData.membership_tier);
   const selectedStatus = STATUS_OPTIONS.find(s => s.value === formData.membership_status);
 
@@ -219,41 +255,144 @@ export default function AddMemberScreen() {
       
       console.log('[AddMember] Auth account created:', signUpData.user.id);
       
-      // 3. Create organization member record via RPC
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'register_organization_member',
-        {
+      // 2.5. Wait briefly for user to be committed to auth.users (timing issue fix)
+      // Supabase Auth signUp can have a small delay before user is visible in auth.users
+      setRetryStatus({ retry: 0, maxRetries: 5 });
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds (increased from 1s)
+      
+      // 3. Look up actual region_id from organization_regions if we have a region code
+      // The REGIONS array uses codes like 'GP', 'WC', etc., which match province_code in the database
+      let actualRegionId: string | null = null;
+      if (selectedRegion?.code && organizationId) {
+        try {
+          const { data: regionData, error: regionError } = await supabase
+            .from('organization_regions')
+            .select('id')
+            .eq('organization_id', organizationId)
+            .eq('province_code', selectedRegion.code)
+            .maybeSingle();
+          
+          if (regionError) {
+            console.error('[AddMember] Error looking up region:', regionError);
+          } else if (regionData?.id) {
+            actualRegionId = regionData.id;
+            console.log('[AddMember] Found region UUID:', actualRegionId, 'for code:', selectedRegion.code);
+          } else {
+            console.warn('[AddMember] No region found for code:', selectedRegion.code);
+          }
+        } catch (error) {
+          console.error('[AddMember] Exception looking up region:', error);
+        }
+      }
+      
+      // If formData.region_id looks like a UUID, use it directly, otherwise use the looked-up value
+      const regionIdToUse = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(formData.region_id)
+        ? formData.region_id
+        : actualRegionId;
+      
+      // 4. Create organization member record via RPC with retry for timing issues
+      let rpcResult: any = null;
+      let rpcError: any = null;
+      let retries = 0;
+      const maxRetries = 5; // Increased from 3 to 5
+      const retryDelays = [2000, 3000, 5000, 8000, 10000]; // Exponential backoff: 2s, 3s, 5s, 8s, 10s
+      
+      // 4. Create organization member record via RPC with retry for timing issues
+      setRetryStatus({ retry: 0, maxRetries });
+      setErrorMessage('Creating organization member...');
+      
+      while (retries < maxRetries) {
+        setRetryStatus({ retry: retries, maxRetries });
+        setErrorMessage(retries > 0 ? `Retrying registration... (Attempt ${retries + 1}/${maxRetries})` : 'Creating organization member...');
+        
+        const { data, error } = await supabase.rpc(
+          'register_organization_member',
+          {
+            p_organization_id: organizationId,
+            p_user_id: signUpData.user.id,
+            p_region_id: regionIdToUse || null, // Pass null if no valid region found
+            p_member_number: memberNumber,
+            p_member_type: formData.member_type || (isYouthWing ? 'youth_member' : 'learner'),
+            p_membership_tier: formData.membership_tier || 'standard',
+            p_membership_status: formData.membership_status || 'active',
+            p_first_name: formData.first_name.trim(),
+            p_last_name: formData.last_name.trim(),
+            p_email: formData.email.trim().toLowerCase(),
+            p_phone: formData.phone.trim() || null,
+            p_id_number: formData.id_number.trim() || null,
+            p_role: 'member',
+            p_invite_code_used: null,
+            p_joined_via: 'admin_add',
+          }
+        );
+        
+        rpcResult = data;
+        rpcError = error;
+        
+        // If RPC error or user not found, retry after a delay
+        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`[AddMember] Retry attempt ${retries}/${maxRetries} after delay...`);
+            const delay = retryDelays[retries - 1] || 10000; // Use exponential backoff delays
+            setErrorMessage(`Account creation in progress... Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        } else {
+          // Success or non-retryable error
+          setRetryStatus(null);
+          setErrorMessage(null);
+          break;
+        }
+      }
+      
+      if (rpcError) {
+        console.error('[AddMember] RPC error after retries:', rpcError);
+        console.error('[AddMember] RPC error details:', JSON.stringify(rpcError, null, 2));
+        console.error('[AddMember] Parameters sent:', {
           p_organization_id: organizationId,
           p_user_id: signUpData.user.id,
-          p_region_id: formData.region_id,
-          p_member_number: memberNumber,
+          p_region_id: regionIdToUse,
           p_member_type: formData.member_type,
           p_membership_tier: formData.membership_tier,
           p_membership_status: formData.membership_status,
-          p_first_name: formData.first_name.trim(),
-          p_last_name: formData.last_name.trim(),
-          p_email: formData.email.trim().toLowerCase(),
-          p_phone: formData.phone.trim(),
-          p_id_number: formData.id_number.trim() || null,
-          p_role: 'member',
-          p_invite_code_used: null,
-          p_joined_via: 'admin_add',
-        }
-      );
-      
-      if (rpcError) {
-        console.error('[AddMember] RPC error:', rpcError);
-        throw new Error(`Registration failed: ${rpcError.message}`);
+        });
+        throw new Error(`Registration failed: ${rpcError.message || rpcError.code || 'Unknown error'}`);
       }
       
       if (!rpcResult?.success) {
-        console.error('[AddMember] RPC returned error:', rpcResult);
-        throw new Error(rpcResult?.error || 'Failed to register member');
+        console.error('[AddMember] RPC returned error after retries:', rpcResult);
+        console.error('[AddMember] RPC error code:', rpcResult?.code);
+        
+        // Handle USER_NOT_FOUND with inline error message instead of blocking alert
+        if (rpcResult?.code === 'USER_NOT_FOUND') {
+          setErrorMessage('Account is still being created. Please wait a moment and try again, or contact support if the issue persists.');
+          setRetryStatus(null);
+          setIsSubmitting(false);
+          // Don't return - let user retry manually
+          // Show retry button in UI instead of blocking alert
+          return;
+        }
+        
+        // Other errors - show inline message
+        const errorMsg = rpcResult?.error || rpcResult?.message || 'Failed to register member';
+        setErrorMessage(errorMsg);
+        setRetryStatus(null);
+        setIsSubmitting(false);
+        throw new Error(errorMsg);
       }
+      
+      // Clear any previous errors on success
+      setErrorMessage(null);
+      setRetryStatus(null);
+      
+      // Wing is now automatically set by RPC function based on member_type
+      console.log('[AddMember] Member registered with wing:', rpcResult?.wing || 'main');
       
       console.log('[AddMember] Member registered successfully:', rpcResult);
       
-      // 4. Show success with temporary password
+      // 5. Show success with temporary password
       Alert.alert(
         'Member Added Successfully',
         `${formData.first_name} ${formData.last_name} has been registered.\n\n` +
@@ -275,24 +414,25 @@ export default function AddMemberScreen() {
               }
             }
           },
-          { text: 'Add Another', onPress: () => setFormData(initialData) },
+          { text: 'Add Another', onPress: () => setFormData(getInitialData(defaultMemberType)) },
           { text: 'Done', onPress: () => router.back() },
         ]
       );
     } catch (error: any) {
       console.error('[AddMember] Registration error:', error);
       
-      let errorMessage = 'Failed to add member. Please try again.';
+      let errorMsg = 'Failed to add member. Please try again.';
       
       if (error.message?.includes('already registered')) {
-        errorMessage = 'This email is already registered. Please use a different email.';
+        errorMsg = 'This email is already registered. Please use a different email.';
       } else if (error.message?.includes('rate limit')) {
-        errorMessage = 'Too many registration attempts. Please wait a moment and try again.';
+        errorMsg = 'Too many registration attempts. Please wait a moment and try again.';
       } else if (error.message) {
-        errorMessage = error.message;
+        errorMsg = error.message;
       }
       
-      Alert.alert('Error', errorMessage);
+      setErrorMessage(errorMsg);
+      setRetryStatus(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -358,9 +498,9 @@ export default function AddMemberScreen() {
         options={{
           title: 'Add New Member',
           headerRight: () => (
-            <TouchableOpacity onPress={() => setFormData(initialData)}>
-              <Text style={[styles.resetText, { color: theme.primary }]}>Reset</Text>
-            </TouchableOpacity>
+          <TouchableOpacity onPress={() => setFormData(getInitialData(defaultMemberType))}>
+            <Text style={[styles.resetText, { color: theme.primary }]}>Reset</Text>
+          </TouchableOpacity>
           ),
         }}
       />
@@ -376,6 +516,35 @@ export default function AddMemberScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Error Message Display */}
+          {errorMessage && (
+            <View style={[styles.errorContainer, { backgroundColor: '#FEE2E2', borderColor: '#EF4444' }]}>
+              <View style={styles.errorContent}>
+                <Ionicons name="alert-circle" size={20} color="#EF4444" />
+                <View style={styles.errorTextContainer}>
+                  <Text style={[styles.errorTitle, { color: '#991B1B' }]}>Registration Error</Text>
+                  <Text style={[styles.errorMessage, { color: '#DC2626' }]}>{errorMessage}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setErrorMessage(null)}>
+                  <Ionicons name="close" size={20} color="#991B1B" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          
+          {/* Retry Status Display */}
+          {retryStatus && !errorMessage && (
+            <View style={[styles.retryContainer, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]}>
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text style={[styles.retryText, { color: '#1E40AF' }]}>
+                {retryStatus.retry > 0 
+                  ? `Retrying... (Attempt ${retryStatus.retry + 1}/${retryStatus.maxRetries})`
+                  : `Creating account... (Attempt ${retryStatus.retry + 1}/${retryStatus.maxRetries})`
+                }
+              </Text>
+            </View>
+          )}
+          
           {/* Region Selection */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Region *</Text>
@@ -526,7 +695,9 @@ export default function AddMemberScreen() {
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Membership Details</Text>
             
             <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Member Type *</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
+                Member Type * {isYouthWing ? '(Youth Wing)' : isWomensWing ? "(Women's Wing)" : isVeteransWing ? "(Veterans Wing)" : ''}
+              </Text>
               <TouchableOpacity
                 style={[styles.selectButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 onPress={() => setShowTypePicker(true)}
@@ -534,7 +705,7 @@ export default function AddMemberScreen() {
                 <View style={styles.selectContent}>
                   <Ionicons name="ribbon-outline" size={20} color={theme.textSecondary} />
                   <Text style={[styles.selectText, { color: theme.text }]}>
-                    {selectedType?.label}
+                    {selectedType?.label || availableMemberTypes[0]?.label || 'Select Type'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-down" size={20} color={theme.textSecondary} />
@@ -683,10 +854,15 @@ export default function AddMemberScreen() {
         <TouchableOpacity 
           style={[styles.submitButton, { backgroundColor: theme.primary }]}
           onPress={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !!retryStatus}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#fff" />
+          {isSubmitting || retryStatus ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.submitText}>
+                {retryStatus ? `Creating... (${retryStatus.retry + 1}/${retryStatus.maxRetries})` : 'Creating Member...'}
+              </Text>
+            </View>
           ) : (
             <>
               <Ionicons name="person-add" size={20} color="#fff" />
@@ -709,8 +885,8 @@ export default function AddMemberScreen() {
       {renderPicker(
         showTypePicker,
         () => setShowTypePicker(false),
-        'Select Member Type',
-        MEMBER_TYPES.map(t => ({ value: t.value, label: t.label })),
+        `Select Member Type${isYouthWing ? ' (Youth Wing)' : isWomensWing ? " (Women's Wing)" : isVeteransWing ? " (Veterans Wing)" : ''}`,
+        availableMemberTypes.map(t => ({ value: t.value, label: t.label })),
         formData.member_type,
         (v) => updateField('member_type', v as MemberType)
       )}
@@ -904,5 +1080,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  errorContainer: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  errorContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  errorTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  errorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  errorMessage: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  retryContainer: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  retryText: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
 });
