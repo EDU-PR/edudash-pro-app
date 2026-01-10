@@ -299,24 +299,32 @@ export class OrganizationDocumentService {
           mime_type: mimeType,
           storage_path: storagePath,
           is_encrypted: input.encrypt || false,
-          encryption_key_id: encryptionKeyId,
+          encryption_key_id: encryptionKeyId || null,
           access_level: input.access_level || 'admin_only',
           requires_approval: input.requires_approval || false,
           tags: input.tags || [],
           uploaded_by: userId,
+          version: 1, // Explicitly set version
         })
         .select()
         .single();
 
       if (error) {
         console.error('[DocVault] Insert error:', error);
+        console.error('[DocVault] Error details:', JSON.stringify(error, null, 2));
         // Try to clean up uploaded file
-        await assertSupabase().storage.from(this.BUCKET_NAME).remove([storagePath]);
-        return { success: false, error: error.message };
+        try {
+          await assertSupabase().storage.from(this.BUCKET_NAME).remove([storagePath]);
+        } catch (cleanupError) {
+          console.error('[DocVault] Cleanup error:', cleanupError);
+        }
+        return { success: false, error: error.message || 'Failed to create document record' };
       }
 
-      // Log the upload
-      await this.logAccess(data.id, 'upload', { fileName, mimeType });
+      // Log the upload (non-blocking - don't fail if logging fails)
+      this.logAccess(data.id, 'upload', { fileName, mimeType }).catch((logError) => {
+        console.error('[DocVault] Log access error (non-critical):', logError);
+      });
 
       return { success: true, data };
     } catch (err) {
