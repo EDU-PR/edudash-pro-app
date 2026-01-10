@@ -22,22 +22,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { MemberIDCardFront, MemberIDCardBack } from '@/components/membership/MemberIDCard';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
-import { CARD_TEMPLATES, CardTemplate } from '@/components/membership/types';
+import { CARD_TEMPLATES, CardTemplate, isExecutiveMemberType } from '@/components/membership/types';
 import { generateCardPrintHTML } from '@/components/membership/id-card';
 import { useIDCard } from '@/hooks/membership';
+import { MemberPhotoService } from '@/services/MemberPhotoService';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function MemberIDCardScreen() {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { memberId } = useLocalSearchParams<{ memberId?: string }>();
   
-  const { loading, member, card, selectedTemplate, setSelectedTemplate } = useIDCard(memberId);
+  const { loading, member, card, selectedTemplate, setSelectedTemplate, refetch } = useIDCard(memberId);
   
   const [isFlipped, setIsFlipped] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Check if current user can upload photo (must be executive and own card)
+  const canUploadPhoto = member && isExecutiveMemberType(member.member_type) && 
+    (!memberId || member.user_id === user?.id);
   
   const flipAnimation = useRef(new Animated.Value(0)).current;
 
@@ -100,6 +111,100 @@ export default function MemberIDCardScreen() {
       });
     } catch (error) {
       // User cancelled
+    }
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!member || !user) return;
+
+    Alert.alert(
+      'Upload ID Card Photo',
+      'Choose an option to upload your photo for the ID card',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Camera permission is required to take a photo.');
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.9,
+              });
+              if (!result.canceled && result.assets[0]) {
+                await uploadPhoto(result.assets[0].uri);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to take photo');
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permission Required', 'Photo library permission is required.');
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.9,
+              });
+              if (!result.canceled && result.assets[0]) {
+                await uploadPhoto(result.assets[0].uri);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to select image');
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const uploadPhoto = async (uri: string) => {
+    if (!member || !user) return;
+
+    setUploadingPhoto(true);
+    try {
+      const validation = await MemberPhotoService.validateImage(uri);
+      if (!validation.valid) {
+        Alert.alert('Invalid Image', validation.error || 'Please select a valid image');
+        return;
+      }
+
+      const result = await MemberPhotoService.uploadMemberPhoto(
+        user.id,
+        member.id,
+        uri
+      );
+
+      if (result.success && result.publicUrl) {
+        // Invalidate queries to refresh member data
+        queryClient.invalidateQueries({ queryKey: ['youth-members'] });
+        queryClient.invalidateQueries({ queryKey: ['id-card'] });
+        
+        // Refetch member data
+        await refetch();
+        
+        Alert.alert('Success', 'ID card photo updated successfully!');
+      } else {
+        Alert.alert('Upload Failed', result.error || 'Failed to upload photo');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -187,6 +292,26 @@ export default function MemberIDCardScreen() {
           <Text style={[styles.flipHint, { color: theme.textSecondary }]}>
             <Ionicons name="sync-outline" size={14} /> Tap card to flip
           </Text>
+
+          {/* Upload Photo Button - Only for executives */}
+          {canUploadPhoto && (
+            <TouchableOpacity
+              style={[styles.uploadPhotoButton, { backgroundColor: theme.primary }]}
+              onPress={handleUploadPhoto}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="camera-outline" size={18} color="#fff" />
+                  <Text style={styles.uploadPhotoText}>
+                    {member.photo_url ? 'Update Photo' : 'Upload Photo'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Template Selector */}
@@ -348,6 +473,21 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 13,
     textAlign: 'center',
+  },
+  uploadPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  uploadPhotoText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   section: {
     width: '100%',

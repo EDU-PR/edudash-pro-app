@@ -115,6 +115,7 @@ export function useIDCard(memberId?: string) {
         .from('organization_members')
         .select(`
           *,
+          user_id,
           organization:organizations(id, name, logo_url),
           region:organization_regions(id, organization_id, name, code, is_active, created_at)
         `);
@@ -152,6 +153,7 @@ export function useIDCard(memberId?: string) {
           province: memberData.province,
           created_at: memberData.created_at,
           updated_at: memberData.updated_at,
+          user_id: memberData.user_id, // Include user_id for permission checks
           organization: memberData.organization || { id: memberData.organization_id, name: 'SOIL OF AFRICA', logo_url: null },
           region: memberData.region || undefined,
         };
