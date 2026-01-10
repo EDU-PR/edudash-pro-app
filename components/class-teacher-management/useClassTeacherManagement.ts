@@ -41,7 +41,7 @@ export function useClassTeacherManagement({
       setLoading(true);
       const schoolId = orgId;
 
-      // Load classes with teacher info
+      // Load classes with teacher info (use profiles table, not users)
       const { data: classesData, error: classesError } = await assertSupabase()
         .from('classes')
         .select(`
@@ -52,11 +52,10 @@ export function useClassTeacherManagement({
           room_number,
           teacher_id,
           active,
-          users:teacher_id (
+          profiles:teacher_id (
             id,
             first_name,
             last_name,
-            name,
             email
           )
         `)
@@ -68,9 +67,9 @@ export function useClassTeacherManagement({
 
       // Process classes
       const processedClasses: ClassInfo[] = (classesData || []).map((cls: any) => {
-        const teacher = cls.users;
+        const teacher = cls.profiles;
         const teacherName = teacher
-          ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.name || teacher.email
+          ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.email
           : undefined;
         return {
           id: cls.id,
