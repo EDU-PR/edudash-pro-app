@@ -41,6 +41,19 @@ export default function YouthExecutiveInviteScreen() {
   const alert = useAlert();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Route guard: Only youth_president can invite executives
+  useEffect(() => {
+    const memberType = (profile as any)?.organization_membership?.member_type;
+    if (profile && memberType !== 'youth_president') {
+      console.log('[YouthExecutiveInvite] Access denied - member_type:', memberType, '- redirecting');
+      Alert.alert(
+        'Access Restricted',
+        'Only Youth President can invite executive members.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    }
+  }, [profile]);
+
   const organizationId = profile?.organization_id as string | null;
 
   const [invites, setInvites] = useState<ExecutiveInvite[]>([]);

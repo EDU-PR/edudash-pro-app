@@ -3,12 +3,13 @@
  * Review and process approval requests
  * WARP.md compliant: <500 lines, separate styles, React Query
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePendingApprovals, useApprovalStats, useProcessApproval, APPROVAL_TYPE_CONFIG, ApprovalRequest } from '@/hooks/membership/usePendingApprovals';
 import { styles } from './pending-approvals.styles';
 
@@ -19,8 +20,22 @@ const TABS = [
 
 export default function PendingApprovalsScreen() {
   const { colors } = useTheme();
+  const { profile } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+
+  // Route guard: Only youth_president can access approvals
+  useEffect(() => {
+    const memberType = (profile as any)?.organization_membership?.member_type;
+    if (profile && memberType !== 'youth_president') {
+      console.log('[PendingApprovals] Access denied - member_type:', memberType, '- redirecting');
+      Alert.alert(
+        'Access Restricted',
+        'Only Youth President can access approvals.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    }
+  }, [profile]);
   
   const { data: requests = [], isLoading, refetch } = usePendingApprovals(activeTab);
   const { data: stats } = useApprovalStats();

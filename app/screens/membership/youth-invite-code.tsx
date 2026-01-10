@@ -63,6 +63,19 @@ export default function YouthInviteCodeScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Route guard: Only youth_president can invite members
+  useEffect(() => {
+    const memberType = (profile as any)?.organization_membership?.member_type;
+    if (profile && memberType !== 'youth_president') {
+      console.log('[YouthInviteCode] Access denied - member_type:', memberType, '- redirecting');
+      Alert.alert(
+        'Access Restricted',
+        'Only Youth President can invite members.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    }
+  }, [profile]);
+
   const organizationId = profile?.organization_id as string | null;
 
   const [codes, setCodes] = useState<YouthInviteCode[]>([]);
