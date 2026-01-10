@@ -155,7 +155,11 @@ export function StartLessonModal(props: StartLessonModalProps) {
           </View>
 
           {/* Body */}
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.body} 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          >
             {error && (
               <View style={[styles.errorBox, { backgroundColor: colors.errorBg, borderColor: colors.error }]}>
                 <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>

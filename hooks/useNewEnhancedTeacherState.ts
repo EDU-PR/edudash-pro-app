@@ -62,8 +62,8 @@ export const useNewEnhancedTeacherState = () => {
       case 'grade_assignments':
         router.push('/screens/assign-lesson');
         break;
-      case 'view_classes':
-        router.push('/screens/class-teacher-management');
+      case 'my_class':
+        router.push('/screens/my-class');
         break;
       case 'parent_communication':
         router.push('/screens/teacher-message-list');
@@ -135,10 +135,10 @@ export const useNewEnhancedTeacherState = () => {
       onPress: () => handleQuickAction('grade_assignments')
     },
     {
-      title: t('teacher.view_classes'),
-      icon: 'people',
+      title: t('teacher.my_class', { defaultValue: 'My Class' }),
+      icon: 'school',
       color: theme.secondary,
-      onPress: () => handleQuickAction('view_classes')
+      onPress: () => handleQuickAction('my_class')
     },
     {
       title: t('teacher.parent_communication'),

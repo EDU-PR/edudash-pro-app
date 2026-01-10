@@ -147,12 +147,13 @@ function LayoutContent() {
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       
       {/* Main content area - leave space for bottom nav */}
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, { paddingBottom: 0 }]}>
         <Stack
           screenOptions={{
             headerShown: false,
             presentation: 'card',
             animationTypeForReplace: 'push',
+            contentStyle: { backgroundColor: 'transparent' },
           }}
         >
           {/* Let Expo Router auto-discover screens */}

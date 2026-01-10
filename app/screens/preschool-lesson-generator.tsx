@@ -825,7 +825,7 @@ Create a simple take-home activity for parents:
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16 },
+  content: { padding: 16, paddingBottom: 120 },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#FF6B6B' },
   tabText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   tabTextActive: { color: '#FFF' },
-  contentScroll: { maxHeight: 300, backgroundColor: '#F9FAFB', borderRadius: 8, padding: 12 },
+  contentScroll: { backgroundColor: '#F9FAFB', borderRadius: 8, padding: 12 },
   generatedText: { fontSize: 14, lineHeight: 22 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionButton: {
