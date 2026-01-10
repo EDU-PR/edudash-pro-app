@@ -26,13 +26,13 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
-import { assertSupabase } from '@/lib/supabase/client';
+import { assertSupabase } from '../../../lib/supabase/client';
 import { 
   generateTemporaryPassword, 
   generateMemberNumber, 
   isValidEmail, 
   isValidSAPhoneNumber 
-} from '@/lib/memberRegistrationUtils';
+} from '../../../lib/memberRegistrationUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
