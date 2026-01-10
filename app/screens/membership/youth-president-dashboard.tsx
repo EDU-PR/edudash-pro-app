@@ -142,12 +142,13 @@ export default function YouthPresidentDashboard() {
       // Fetch pending event proposals (events awaiting approval)
       // Note: Status filter requires CHECK constraint on events.status column
       // Migration: 20260110_fix_events_status_constraint.sql
+      // Note: events table uses preschool_id, not organization_id
       let pendingEventProposalsCount = 0;
       try {
         const { count, error } = await supabase
           .from('events')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', orgId)
+          .eq('preschool_id', orgId)
           .in('status', ['pending', 'proposed', 'draft']);
         
         if (error) {
