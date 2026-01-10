@@ -230,37 +230,7 @@ export default function AddMemberScreen() {
       
       console.log('[AddMember] Creating member:', { email: formData.email, memberNumber });
       
-      // 2. Create Supabase Auth account
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: formData.email.trim().toLowerCase(),
-        password: tempPassword,
-        options: {
-          data: {
-            first_name: formData.first_name.trim(),
-            last_name: formData.last_name.trim(),
-            phone: formData.phone.trim(),
-          },
-          emailRedirectTo: 'https://www.soilofafrica.org/auth/callback?flow=email-confirm',
-        },
-      });
-      
-      if (signUpError) {
-        console.error('[AddMember] Auth signup error:', signUpError);
-        throw new Error(signUpError.message);
-      }
-      
-      if (!signUpData.user) {
-        throw new Error('Failed to create user account - no user returned');
-      }
-      
-      console.log('[AddMember] Auth account created:', signUpData.user.id);
-      
-      // 2.5. Wait briefly for user to be committed to auth.users (timing issue fix)
-      // Supabase Auth signUp can have a small delay before user is visible in auth.users
-      setRetryStatus({ retry: 0, maxRetries: 5 });
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds (increased from 1s)
-      
-      // 3. Look up actual region_id from organization_regions if we have a region code
+      // 2. Look up actual region_id from organization_regions if we have a region code
       // The REGIONS array uses codes like 'GP', 'WC', etc., which match province_code in the database
       let actualRegionId: string | null = null;
       if (selectedRegion?.code && organizationId) {
@@ -290,115 +260,136 @@ export default function AddMemberScreen() {
         ? formData.region_id
         : actualRegionId;
       
-      // 4. Create organization member record via RPC with retry for timing issues
-      let rpcResult: any = null;
-      let rpcError: any = null;
-      let retries = 0;
-      const maxRetries = 5; // Increased from 3 to 5
-      const retryDelays = [2000, 3000, 5000, 8000, 10000]; // Exponential backoff: 2s, 3s, 5s, 8s, 10s
+      // 3. Use Edge Function to create user with admin API (bypasses email confirmation)
+      // This is more reliable than client-side auth.signUp() + RPC because:
+      // - Uses admin API with email_confirm: true (no email confirmation delay)
+      // - User is immediately available in auth.users
+      // - Single call handles both user creation and member registration
+      setRetryStatus({ retry: 0, maxRetries: 3 });
+      setErrorMessage('Creating member account...');
       
-      // 4. Create organization member record via RPC with retry for timing issues
-      setRetryStatus({ retry: 0, maxRetries });
-      setErrorMessage('Creating organization member...');
+      let edgeFunctionResult: any = null;
+      let edgeFunctionError: any = null;
+      let retries = 0;
+      const maxRetries = 3; // Edge Function is more reliable, fewer retries needed
+      const retryDelays = [2000, 3000, 5000]; // 2s, 3s, 5s
       
       while (retries < maxRetries) {
         setRetryStatus({ retry: retries, maxRetries });
-        setErrorMessage(retries > 0 ? `Retrying registration... (Attempt ${retries + 1}/${maxRetries})` : 'Creating organization member...');
+        setErrorMessage(retries > 0 ? `Retrying registration... (Attempt ${retries + 1}/${maxRetries})` : 'Creating member account...');
         
-        const { data, error } = await supabase.rpc(
-          'register_organization_member',
-          {
-            p_organization_id: organizationId,
-            p_user_id: signUpData.user.id,
-            p_region_id: regionIdToUse || null, // Pass null if no valid region found
-            p_member_number: memberNumber,
-            p_member_type: formData.member_type || (isYouthWing ? 'youth_member' : 'learner'),
-            p_membership_tier: formData.membership_tier || 'standard',
-            p_membership_status: formData.membership_status || 'active',
-            p_first_name: formData.first_name.trim(),
-            p_last_name: formData.last_name.trim(),
-            p_email: formData.email.trim().toLowerCase(),
-            p_phone: formData.phone.trim() || null,
-            p_id_number: formData.id_number.trim() || null,
-            p_role: 'member',
-            p_invite_code_used: null,
-            p_joined_via: 'admin_add',
+        try {
+          const { data, error } = await (supabase as any).functions.invoke('create-organization-member', {
+            body: {
+              email: formData.email.trim().toLowerCase(),
+              password: tempPassword,
+              first_name: formData.first_name.trim(),
+              last_name: formData.last_name.trim(),
+              phone: formData.phone.trim() || null,
+              id_number: formData.id_number.trim() || null,
+              organization_id: organizationId,
+              region_id: regionIdToUse || null,
+              member_number: memberNumber,
+              member_type: formData.member_type || (isYouthWing ? 'youth_member' : 'learner'),
+              membership_tier: formData.membership_tier || 'standard',
+              membership_status: formData.membership_status || 'active',
+            },
+          });
+          
+          if (error) {
+            edgeFunctionError = {
+              message: error.message || 'Network error',
+              code: error.code || 'NETWORK_ERROR',
+            };
+            
+            // Network errors can be retried
+            retries++;
+            if (retries < maxRetries) {
+              console.log(`[AddMember] Edge Function error, retrying... (${retries}/${maxRetries})`);
+              const delay = retryDelays[retries - 1] || 5000;
+              setErrorMessage(`Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+            break;
           }
-        );
-        
-        rpcResult = data;
-        rpcError = error;
-        
-        // If RPC error or user not found, retry after a delay
-        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          
+          edgeFunctionResult = data;
+          
+          if (!edgeFunctionResult?.success) {
+            edgeFunctionError = edgeFunctionResult;
+            
+            // If not USER_NOT_FOUND or NETWORK_ERROR, don't retry (validation/perm error)
+            if (edgeFunctionResult.code !== 'USER_NOT_FOUND' && edgeFunctionResult.code !== 'NETWORK_ERROR' && edgeFunctionResult.code !== 'RPC_ERROR') {
+              break;
+            }
+            
+            // Retry for USER_NOT_FOUND or RPC_ERROR (timing issues)
+            retries++;
+            if (retries < maxRetries) {
+              console.log(`[AddMember] Edge Function returned error, retrying... (${retries}/${maxRetries}):`, edgeFunctionResult);
+              const delay = retryDelays[retries - 1] || 5000;
+              setErrorMessage(`Account creation in progress... Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+            break;
+          } else {
+            // Success
+            setRetryStatus(null);
+            setErrorMessage(null);
+            break;
+          }
+        } catch (fetchError: any) {
+          console.error('[AddMember] Edge Function invoke error:', fetchError);
+          edgeFunctionError = {
+            message: fetchError.message || 'Network error',
+            code: 'NETWORK_ERROR',
+          };
+          
+          // Network errors can be retried
           retries++;
           if (retries < maxRetries) {
-            console.log(`[AddMember] Retry attempt ${retries}/${maxRetries} after delay...`);
-            const delay = retryDelays[retries - 1] || 10000; // Use exponential backoff delays
-            setErrorMessage(`Account creation in progress... Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+            console.log(`[AddMember] Edge Function exception, retrying... (${retries}/${maxRetries})`);
+            const delay = retryDelays[retries - 1] || 5000;
+            setErrorMessage(`Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
-        } else {
-          // Success or non-retryable error
-          setRetryStatus(null);
-          setErrorMessage(null);
           break;
         }
       }
       
-      if (rpcError) {
-        console.error('[AddMember] RPC error after retries:', rpcError);
-        console.error('[AddMember] RPC error details:', JSON.stringify(rpcError, null, 2));
-        console.error('[AddMember] RPC error code:', rpcError.code);
-        console.error('[AddMember] RPC error message:', rpcError.message);
-        console.error('[AddMember] Parameters sent:', {
-          p_organization_id: organizationId,
-          p_user_id: signUpData.user.id,
-          p_region_id: regionIdToUse,
-          p_member_type: formData.member_type,
-          p_membership_tier: formData.membership_tier,
-          p_membership_status: formData.membership_status,
-        });
+      if (edgeFunctionError || !edgeFunctionResult?.success) {
+        console.error('[AddMember] Edge Function error after retries:', edgeFunctionError || edgeFunctionResult);
+        console.error('[AddMember] Error code:', edgeFunctionError?.code || edgeFunctionResult?.code);
+        console.error('[AddMember] Error message:', edgeFunctionError?.message || edgeFunctionResult?.error);
         
-        // Show detailed error message to user
-        const errorMsg = rpcError.message || rpcError.details || rpcError.hint || `Registration failed: ${rpcError.code || 'Unknown error'}`;
-        setErrorMessage(`Registration error: ${errorMsg}`);
-        setRetryStatus(null);
-        setIsSubmitting(false);
-        return; // Don't throw - show error and let user retry
-      }
-      
-      if (!rpcResult?.success) {
-        console.error('[AddMember] RPC returned error after retries:', rpcResult);
-        console.error('[AddMember] RPC error code:', rpcResult?.code);
-        console.error('[AddMember] RPC error message:', rpcResult?.error);
-        
-        // Handle specific error codes with helpful messages
-        if (rpcResult?.code === 'USER_NOT_FOUND') {
-          setErrorMessage('Account creation is taking longer than expected. The account may still be being set up. Please wait a few moments and try again, or contact support if the issue persists.');
-          setRetryStatus(null);
-          setIsSubmitting(false);
-          return; // Don't throw - show error and let user retry manually
-        }
-        
-        if (rpcResult?.code === 'DUPLICATE_ERROR') {
-          setErrorMessage('A member with this email or member number already exists in the organization.');
+        // Handle specific error codes
+        if (edgeFunctionError?.code === 'AUTH_ERROR' || edgeFunctionError?.message?.includes('Unauthorized')) {
+          setErrorMessage('Authentication failed. Please log in again.');
           setRetryStatus(null);
           setIsSubmitting(false);
           return;
         }
         
-        if (rpcResult?.code === 'FK_VIOLATION') {
-          setErrorMessage('The user account is not fully set up yet. Please wait a moment and try again.');
+        if (edgeFunctionError?.code === 'Unauthorized' || edgeFunctionResult?.code === 'Unauthorized' || edgeFunctionError?.message?.includes('permission')) {
+          setErrorMessage('You do not have permission to create members. Only organization executives can create members.');
+          setRetryStatus(null);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        if (edgeFunctionResult?.code === 'DUPLICATE_ERROR' || edgeFunctionError?.message?.includes('already exists')) {
+          setErrorMessage('A member with this email already exists in the organization.');
           setRetryStatus(null);
           setIsSubmitting(false);
           return;
         }
         
         // Other errors - show detailed message
-        const errorMsg = rpcResult?.error || rpcResult?.message || `Registration failed: ${rpcResult?.code || 'Unknown error'}`;
-        setErrorMessage(errorMsg);
+        const errorMsg = edgeFunctionError?.message || edgeFunctionResult?.error || `Registration failed: ${edgeFunctionError?.code || edgeFunctionResult?.code || 'Unknown error'}`;
+        setErrorMessage(`Registration error: ${errorMsg}`);
         setRetryStatus(null);
         setIsSubmitting(false);
         return; // Don't throw - show error and let user retry
@@ -408,18 +399,20 @@ export default function AddMemberScreen() {
       setErrorMessage(null);
       setRetryStatus(null);
       
-      // Wing is now automatically set by RPC function based on member_type
-      console.log('[AddMember] Member registered with wing:', rpcResult?.wing || 'main');
+      console.log('[AddMember] Member created successfully via Edge Function:', edgeFunctionResult);
       
-      console.log('[AddMember] Member registered successfully:', rpcResult);
+      // Use result from Edge Function (which includes user_id and member info)
+      const createdUserId = edgeFunctionResult.user_id;
+      const createdMemberId = edgeFunctionResult.member_id;
+      const createdMemberNumber = edgeFunctionResult.member_number || memberNumber;
+      const createdWing = edgeFunctionResult.wing || 'main';
       
-      // 5. Show success with temporary password
+      // 6. Show success with temporary password
       Alert.alert(
         'Member Added Successfully',
         `${formData.first_name} ${formData.last_name} has been registered.\n\n` +
-        `Member Number: ${memberNumber}\n` +
+        `Member Number: ${createdMemberNumber}\n` +
         `Temporary Password: ${tempPassword}\n\n` +
-        `A confirmation email has been sent to ${formData.email}.\n\n` +
         `⚠️ IMPORTANT: Please securely share the temporary password with the new member. ` +
         `They should change it after their first login.`,
         [
