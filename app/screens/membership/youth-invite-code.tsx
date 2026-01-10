@@ -2,7 +2,7 @@
  * Youth President Invite Code Generator
  * Generate and share invite codes for recruiting youth members
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -15,15 +15,20 @@ import {
   Share, 
   Linking,
   ActivityIndicator,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { generateTemporaryPassword } from '@/lib/memberRegistrationUtils';
+import { MEMBER_TYPE_LABELS } from '@/components/membership/types';
+import Constants from 'expo-constants';
 
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
@@ -43,7 +48,8 @@ interface YouthInviteCode {
   temp_password?: string;
 }
 
-// All Youth Wing roles that can be assigned via invite by Youth President
+// All roles that can be assigned via invite by Youth President/Secretary
+// Includes both Youth Wing roles and Learners (main structure)
 const YOUTH_ROLES = [
   // Leadership & Executive
   { id: 'youth_deputy', label: 'Youth Deputy President', description: 'Second in command of youth wing', isExecutive: true },
@@ -58,6 +64,8 @@ const YOUTH_ROLES = [
   { id: 'youth_mentor', label: 'Youth Mentor', description: 'Mentors and guides younger members' },
   // Standard Members  
   { id: 'youth_member', label: 'Youth Member', description: 'Standard youth wing member' },
+  // Learners (Main Structure) - Can be invited by Youth President/Secretary
+  { id: 'learner', label: 'Learner', description: 'Student/learner joining SOA programs', wing: 'main' },
 ] as const;
 
 export default function YouthInviteCodeScreen() {
@@ -65,14 +73,15 @@ export default function YouthInviteCodeScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  // Route guard: Only youth_president can invite members
+  // Route guard: Only youth_president and youth_secretary can invite members
   useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
-    if (profile && memberType !== 'youth_president') {
+    const allowedTypes = ['youth_president', 'youth_secretary'];
+    if (profile && !allowedTypes.includes(memberType)) {
       console.log('[YouthInviteCode] Access denied - member_type:', memberType, '- redirecting');
       Alert.alert(
         'Access Restricted',
-        'Only Youth President can invite members.',
+        'Only Youth President and Youth Secretary can invite members.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     }
@@ -90,6 +99,9 @@ export default function YouthInviteCodeScreen() {
   const [expiryDays, setExpiryDays] = useState('30');
   const [description, setDescription] = useState('Youth Wing Invite');
   const [selectedRole, setSelectedRole] = useState<string>('youth_member');
+  const [selectedCode, setSelectedCode] = useState<YouthInviteCode | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const qrSvgRef = useRef<any>(null);
 
   const loadCodes = useCallback(async () => {
     if (!organizationId) return;
@@ -222,12 +234,34 @@ export default function YouthInviteCodeScreen() {
     }
   };
 
+  // Generate registration URLs (web and mobile deep link)
+  const generateRegistrationUrl = (code: string, memberType: string = 'youth_member'): { webUrl: string; mobileUrl: string } => {
+    const webBaseUrl = process.env.EXPO_PUBLIC_WEB_URL || 'https://www.soilofafrica.org';
+    const appScheme = Constants.expoConfig?.scheme || 'edudashpro';
+    
+    // Determine registration route based on member type
+    const isLearner = memberType === 'learner';
+    const webRoute = isLearner ? '/join' : '/invite/member';
+    const mobileRoute = isLearner ? '/screens/membership/join' : '/screens/student-join-by-code';
+    
+    const webUrl = `${webBaseUrl}${webRoute}?code=${encodeURIComponent(code)}`;
+    const mobileUrl = `${appScheme}://${mobileRoute}?code=${encodeURIComponent(code)}`;
+    
+    return { webUrl, mobileUrl };
+  };
+
   const buildShareMessage = (item: YouthInviteCode) => {
-    const shareUrl = `https://www.soilofafrica.org/invite/member?code=${encodeURIComponent(item.code)}`;
+    const { webUrl } = generateRegistrationUrl(item.code, item.requested_role || 'youth_member');
     const passwordText = item.temp_password 
       ? `\n\nTemporary Password: ${item.temp_password}\n(You'll use this to login after joining)`
       : '';
-    return `🌱 Join the SOA Youth Wing!\n\nInvite Code: ${item.code}${passwordText}\n\nDownload the app and enter this code to join:\n${shareUrl}`;
+    const memberTypeLabel = item.requested_role === 'learner' ? 'SOA' : 'SOA Youth Wing';
+    return `🌱 Join ${memberTypeLabel}!\n\nInvite Code: ${item.code}${passwordText}\n\nScan the QR code or visit:\n${webUrl}`;
+  };
+  
+  const showQRCode = (item: YouthInviteCode) => {
+    setSelectedCode(item);
+    setShowQRModal(true);
   };
 
   const shareInvite = async (item: YouthInviteCode) => {
@@ -325,10 +359,17 @@ export default function YouthInviteCodeScreen() {
                     </View>
                   </View>
                   <Text style={styles.featuredCode}>{latest.code}</Text>
+                  <Text style={[styles.featuredDescription, { color: theme.textSecondary }]}>
+                    Role: {latest.requested_role === 'learner' ? 'Learner' : MEMBER_TYPE_LABELS[latest.requested_role || 'youth_member'] || 'Member'}
+                  </Text>
                   <View style={styles.row}>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.surface }]} onPress={() => copyToClipboard(latest.code)}>
                       <Ionicons name="copy" size={18} color={theme.text} />
                       <Text style={[styles.actionBtnText, { color: theme.text }]}>Copy</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#10B981' }]} onPress={() => showQRCode(latest)}>
+                      <Ionicons name="qr-code" size={18} color="#fff" />
+                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>QR Code</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => shareInvite(latest)}>
                       <Ionicons name="share-social" size={18} color={theme.onPrimary || '#000'} />
@@ -492,12 +533,19 @@ export default function YouthInviteCodeScreen() {
 
                       <View style={styles.row}>
                         <TouchableOpacity style={styles.smallBtn} onPress={() => copyToClipboard(item.code)}>
+                          <Ionicons name="copy-outline" size={14} color={theme.text} />
                           <Text style={styles.smallBtnText}>Copy</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity style={styles.smallBtn} onPress={() => showQRCode(item)}>
+                          <Ionicons name="qr-code-outline" size={14} color={theme.text} />
+                          <Text style={styles.smallBtnText}>QR Code</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity style={styles.smallBtn} onPress={() => shareInvite(item)}>
+                          <Ionicons name="share-social-outline" size={14} color={theme.text} />
                           <Text style={styles.smallBtnText}>Share</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.smallBtn, styles.whatsappBtn]} onPress={() => shareWhatsApp(item)}>
+                          <Ionicons name="logo-whatsapp" size={14} color="#fff" />
                           <Text style={styles.smallBtnTextDark}>WhatsApp</Text>
                         </TouchableOpacity>
                         {!expired && (
@@ -518,6 +566,81 @@ export default function YouthInviteCodeScreen() {
             </>
           )}
         </ScrollView>
+        
+        {/* QR Code Modal */}
+        <Modal
+          visible={showQRModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowQRModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Registration QR Code</Text>
+                <TouchableOpacity onPress={() => setShowQRModal(false)} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedCode && (
+                <>
+                  <View style={styles.qrCodeContainer}>
+                    <QRCode
+                      value={generateRegistrationUrl(selectedCode.code, selectedCode.requested_role || 'youth_member').webUrl}
+                      size={240}
+                      backgroundColor="#FFFFFF"
+                      color="#000000"
+                      quietZone={10}
+                      ref={qrSvgRef}
+                    />
+                  </View>
+                  
+                  <View style={styles.qrCodeInfo}>
+                    <Text style={[styles.qrCodeLabel, { color: theme.text }]}>Invite Code</Text>
+                    <Text style={[styles.qrCodeValue, { color: theme.primary }]}>{selectedCode.code}</Text>
+                    <Text style={[styles.qrCodeDescription, { color: theme.textSecondary }]}>
+                      Scan this QR code to open the registration form. The form will be pre-filled with organization details.
+                    </Text>
+                    
+                    {selectedCode.temp_password && (
+                      <View style={[styles.passwordBox, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
+                        <View style={styles.row}>
+                          <Ionicons name="lock-closed" size={16} color={theme.primary} />
+                          <Text style={[styles.passwordLabel, { color: theme.primary }]}>Temp Password:</Text>
+                        </View>
+                        <Text style={[styles.passwordValue, { color: theme.text }]}>{selectedCode.temp_password}</Text>
+                        <Text style={[styles.passwordHint, { color: theme.textSecondary }]}>
+                          Share this password with invitees for initial login
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity 
+                      style={[styles.modalBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                      onPress={() => {
+                        const { webUrl } = generateRegistrationUrl(selectedCode.code, selectedCode.requested_role || 'youth_member');
+                        copyToClipboard(webUrl);
+                      }}
+                    >
+                      <Ionicons name="copy-outline" size={18} color={theme.text} />
+                      <Text style={[styles.modalBtnText, { color: theme.text }]}>Copy Link</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalBtn, { backgroundColor: theme.primary }]}
+                      onPress={() => shareInvite(selectedCode)}
+                    >
+                      <Ionicons name="share-social-outline" size={18} color={theme.onPrimary || '#000'} />
+                      <Text style={[styles.modalBtnText, { color: theme.onPrimary || '#000' }]}>Share</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </DashboardWallpaperBackground>
   );
@@ -590,6 +713,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 4,
     textAlign: 'center',
     marginVertical: 16,
+  },
+  featuredDescription: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   sectionTitle: { 
     color: theme?.text || '#fff', 
@@ -702,10 +831,13 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   smallBtn: { 
     flex: 1, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     backgroundColor: theme?.surface || '#1f2937', 
     padding: 10, 
     borderRadius: 8, 
-    alignItems: 'center', 
     borderColor: theme?.border || '#374151', 
     borderWidth: 1 
   },
@@ -781,5 +913,84 @@ const createStyles = (theme: any) => StyleSheet.create({
   roleDescription: {
     fontSize: 12,
     marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  qrCodeContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: theme?.border || '#E5E7EB',
+  },
+  qrCodeInfo: {
+    marginBottom: 20,
+  },
+  qrCodeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  qrCodeValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  qrCodeDescription: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  modalBtnText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
