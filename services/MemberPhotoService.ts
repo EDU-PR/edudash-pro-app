@@ -50,29 +50,25 @@ export class MemberPhotoService {
         }
       );
 
-      // Step 3: Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(processedImage.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Step 4: Generate unique filename
+      // Step 3: Generate unique filename
       const timestamp = Date.now();
-      const filename = `member_${userId}_${timestamp}.jpg`;
+      const filename = `member_photos/${memberId}_${timestamp}.jpg`;
 
-      // Step 5: Convert base64 to array buffer for React Native
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Step 4: Read file and convert to uploadable format using fetch (more reliable)
+      const response = await fetch(processedImage.uri);
+      if (!response.ok) {
+        throw new Error(`Failed to read processed image: ${response.status}`);
       }
-      const byteArray = new Uint8Array(byteNumbers);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
 
-      // Step 6: Upload to Supabase Storage (React Native compatible)
+      // Step 5: Upload to Supabase Storage (React Native compatible)
       const { error: uploadError } = await supabase.storage
         .from(this.BUCKET_NAME)
-        .upload(filename, byteArray, {
+        .upload(filename, uint8Array, {
           contentType: 'image/jpeg',
-          upsert: false,
+          upsert: true, // Allow overwriting if same member uploads again
         });
 
       if (uploadError) {
