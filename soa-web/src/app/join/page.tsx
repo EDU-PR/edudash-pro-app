@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Header, Footer } from '@/components';
@@ -62,6 +63,7 @@ interface FormData {
 }
 
 export default function JoinPage() {
+  const searchParams = useSearchParams();
   const [inviteCode, setInviteCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,13 +81,27 @@ export default function JoinPage() {
     member_type: 'learner',
   });
 
+  // Auto-fill invite code from URL params and verify
+  useEffect(() => {
+    const codeParam = searchParams?.get('code');
+    if (codeParam && codeParam.length >= 5 && !orgInfo && !isVerifying) {
+      setInviteCode(codeParam);
+      // Auto-verify the code after a short delay to ensure state is set
+      setTimeout(() => {
+        verifyCode(codeParam);
+      }, 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams?.get('code')]);
+
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value as any }));
     setFormError('');
   };
 
-  const verifyCode = async () => {
-    if (inviteCode.length < 5) {
+  const verifyCode = async (codeToVerify?: string) => {
+    const code = codeToVerify || inviteCode;
+    if (!code || code.length < 5) {
       setCodeError('Please enter a valid invite code');
       return;
     }
@@ -95,8 +111,86 @@ export default function JoinPage() {
 
     try {
       const supabase = getSupabase();
+      const codeUpper = code.toUpperCase();
       
-      // Query the region_invite_codes table - use maybeSingle to avoid 406 error
+      // Update inviteCode state if provided as parameter
+      if (codeToVerify && codeToVerify !== inviteCode) {
+        setInviteCode(codeToVerify);
+      }
+
+      // First try join_requests table (youth wing invites with temp passwords)
+      const { data: joinRequestData, error: joinRequestError } = await supabase
+        .from('join_requests')
+        .select(`
+          id,
+          invite_code,
+          organization_id,
+          temp_password,
+          requested_role,
+          status,
+          expires_at,
+          organizations (
+            id,
+            name,
+            logo_url
+          )
+        `)
+        .eq('invite_code', codeUpper)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (!joinRequestError && joinRequestData) {
+        // Check if code has expired
+        if (joinRequestData.expires_at && new Date(joinRequestData.expires_at) < new Date()) {
+          setCodeError('This invite code has expired.');
+          setIsVerifying(false);
+          return;
+        }
+
+        const org = joinRequestData.organizations as any;
+
+        // Get organization region info
+        const { data: orgRegionData } = await supabase
+          .from('organization_regions')
+          .select('id, name, code, province_code')
+          .eq('organization_id', joinRequestData.organization_id)
+          .limit(1)
+          .maybeSingle();
+
+        const { count: memberCount } = await supabase
+          .from('organization_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', joinRequestData.organization_id);
+
+        const requestedRole = joinRequestData.requested_role || 'learner';
+        const roleMap: Record<string, MemberType> = {
+          'learner': 'learner',
+          'youth_member': 'volunteer',
+          'facilitator': 'facilitator',
+          'mentor': 'mentor',
+        };
+        const mappedType = roleMap[requestedRole] || 'learner';
+
+        setOrgInfo({
+          id: joinRequestData.id,
+          code: joinRequestData.invite_code,
+          organization_id: joinRequestData.organization_id,
+          organization_name: org?.name || 'Soil of Africa',
+          region_id: orgRegionData?.id || '',
+          region_name: orgRegionData?.name || 'Main Region',
+          region_code: orgRegionData?.province_code || orgRegionData?.code || 'XX',
+          allowed_member_types: [mappedType],
+          member_count: memberCount || 0,
+        });
+
+        // Pre-fill member_type
+        setFormData(prev => ({ ...prev, member_type: mappedType }));
+
+        setIsVerifying(false);
+        return;
+      }
+      
+      // Fallback: Query the region_invite_codes table
       const { data: inviteData, error: inviteError } = await supabase
         .from('region_invite_codes')
         .select(`
@@ -116,7 +210,7 @@ export default function JoinPage() {
             code
           )
         `)
-        .eq('code', inviteCode.toUpperCase())
+        .eq('code', codeUpper)
         .eq('is_active', true)
         .maybeSingle();
 
@@ -135,6 +229,9 @@ export default function JoinPage() {
       const org = inviteData.organizations as any;
       const region = inviteData.organization_regions as any;
 
+      const allowedTypes = inviteData.allowed_member_types || ['learner'];
+      const defaultType = allowedTypes.includes('learner') ? 'learner' : (allowedTypes[0] as MemberType);
+
       setOrgInfo({
         id: inviteData.id,
         code: inviteData.code,
@@ -143,9 +240,12 @@ export default function JoinPage() {
         region_id: inviteData.region_id,
         region_name: region?.name || 'Unknown Region',
         region_code: region?.code || 'XX',
-        allowed_member_types: inviteData.allowed_member_types || ['learner', 'facilitator', 'mentor'],
+        allowed_member_types: allowedTypes,
         member_count: memberCount || 0,
       });
+
+      // Pre-fill member_type
+      setFormData(prev => ({ ...prev, member_type: defaultType }));
     } catch (error: any) {
       console.error('Code verification error:', error);
       if (error.message?.includes('Supabase URL')) {
@@ -507,7 +607,7 @@ export default function JoinPage() {
 
                   <button
                     type="button"
-                    onClick={verifyCode}
+                    onClick={() => verifyCode()}
                     disabled={isVerifying || inviteCode.length < 5}
                     className="w-full mt-6 inline-flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-soa-primary to-soa-secondary text-white rounded-xl font-semibold hover:opacity-90 transition disabled:opacity-50"
                   >

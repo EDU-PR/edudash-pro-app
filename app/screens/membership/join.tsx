@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,6 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { MemberType, MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { getDashboardRoute } from '@/lib/memberRegistrationUtils';
+import { useEffect } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -59,6 +60,7 @@ export default function JoinByCodeScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ code?: string }>();
   
   const [inviteCode, setInviteCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -77,12 +79,26 @@ export default function JoinByCodeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
+  // Auto-verify invite code from URL params
+  useEffect(() => {
+    if (params?.code && !orgInfo && !isVerifying) {
+      const code = typeof params.code === 'string' ? params.code : params.code[0];
+      if (code && code.length >= 5) {
+        setInviteCode(code);
+        // Auto-verify the code (pass code directly to avoid state timing issues)
+        verifyCode(code);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.code]);
+
   const updateField = (field: keyof JoinFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const verifyCode = async () => {
-    if (inviteCode.length < 5) {
+  const verifyCode = async (codeToVerify?: string) => {
+    const code = codeToVerify || inviteCode;
+    if (!code || code.length < 5) {
       setCodeError('Please enter a valid invite code');
       return;
     }
@@ -92,7 +108,12 @@ export default function JoinByCodeScreen() {
     
     try {
       const supabase = assertSupabase();
-      const codeUpper = inviteCode.toUpperCase();
+      const codeUpper = code.toUpperCase();
+      
+      // Update inviteCode state if provided as parameter
+      if (codeToVerify && codeToVerify !== inviteCode) {
+        setInviteCode(codeToVerify);
+      }
       
       // First try join_requests table (youth wing invites with temp passwords)
       const { data: joinRequestData, error: joinRequestError } = await supabase
@@ -156,6 +177,20 @@ export default function JoinByCodeScreen() {
 
         setOrgInfo(orgInfo);
         
+        // Pre-fill member_type based on requested_role
+        if (joinRequestData.requested_role) {
+          const roleMap: Record<string, MemberType> = {
+            'learner': 'learner',
+            'youth_member': 'youth_member',
+            'facilitator': 'facilitator',
+            'mentor': 'mentor',
+            'youth_president': 'youth_president',
+            'youth_secretary': 'youth_secretary',
+          };
+          const mappedType = roleMap[joinRequestData.requested_role] || 'learner';
+          setFormData(prev => ({ ...prev, member_type: mappedType }));
+        }
+        
         // Animate the form in
         Animated.parallel([
           Animated.timing(fadeAnim, {
@@ -173,6 +208,8 @@ export default function JoinByCodeScreen() {
         setIsVerifying(false);
         return;
       }
+      
+      // If no match found from join_requests, check region_invite_codes (fallback)
       
       // Fallback: Query the region_invite_codes table
       const { data: codeData, error: codeError } = await supabase
@@ -260,6 +297,13 @@ export default function JoinByCodeScreen() {
       };
 
       setOrgInfo(orgInfo);
+      
+      // Pre-fill member_type from allowed_member_types (default to first allowed type, or 'learner')
+      if (codeData.allowed_member_types && codeData.allowed_member_types.length > 0) {
+        const allowedTypes = codeData.allowed_member_types as MemberType[];
+        const defaultType = allowedTypes.includes('learner') ? 'learner' : allowedTypes[0];
+        setFormData(prev => ({ ...prev, member_type: defaultType }));
+      }
       
       // Animate the form in
       Animated.parallel([

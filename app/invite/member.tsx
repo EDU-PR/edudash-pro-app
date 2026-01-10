@@ -76,8 +76,8 @@ export default function MemberInviteScreen() {
 
   const handleJoin = async () => {
     if (!user || !inviteDetails) {
-      // Redirect to sign up/login with the code preserved
-      router.push(`/sign-up?inviteCode=${code}`);
+      // Redirect to join screen with the code preserved (better for learner registration)
+      router.push(`/screens/membership/join?code=${code}`);
       return;
     }
 
