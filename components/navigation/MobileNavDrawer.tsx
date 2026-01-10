@@ -76,7 +76,8 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
       ...(isPresident ? [{ id: 'approvals', label: 'Approvals', icon: 'checkmark-circle', route: '/screens/membership/pending-approvals' }] : []),
       { id: 'id-card', label: 'My ID Card', icon: 'card', route: '/screens/membership/id-card' },
       { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
-      { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/membership/settings' },
+      { id: 'app-settings', label: 'App Settings', icon: 'settings', route: '/screens/settings' },
+      { id: 'org-settings', label: 'Organization Settings', icon: 'business', route: '/screens/membership/settings' },
     ];
   }
   
