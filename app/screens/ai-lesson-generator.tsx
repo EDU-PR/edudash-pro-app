@@ -204,11 +204,11 @@ export default function AILessonGeneratorScreen() {
           </View>
         )}
 
-        {/* Generated Content */}
+        {/* Generated Content - No maxHeight to allow full scrolling */}
         {generated?.description && (
-          <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16 }]}>
+          <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16, marginBottom: 100 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Generated!</Text></View>
-            <ScrollView style={{ maxHeight: 280, backgroundColor: palette.bg, borderRadius: 8, padding: 10 }}><Text style={{ color: palette.text, fontSize: 14, lineHeight: 20 }}>{generated.description}</Text></ScrollView>
+            <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10 }}><Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>{generated.description}</Text></View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
               <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: theme.primary, flex: 1 }]} disabled={saving}>{saving ? <ActivityIndicator color={theme.onPrimary} size="small" /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>Save</Text>}</TouchableOpacity>
               <TouchableOpacity onPress={() => { setGenerated(null); toast.info('Cleared'); }} style={[styles.btn, { backgroundColor: palette.outline, paddingHorizontal: 12 }]}><Ionicons name="refresh-outline" size={16} color={palette.text} /></TouchableOpacity>
