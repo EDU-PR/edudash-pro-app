@@ -127,11 +127,27 @@ export default function YouthSecretaryDashboard() {
         .in('status', ['pending', 'proposed', 'draft', 'frozen']);
 
       // Fetch pending event proposals
-      const { count: pendingEventProposalsCount } = await supabase
-        .from('events')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .in('status', ['pending', 'proposed', 'draft']);
+      // Note: Status filter requires CHECK constraint on events.status column
+      // Migration: 20260110_fix_events_status_constraint.sql
+      let pendingEventProposalsCount = 0;
+      try {
+        const { count, error } = await supabase
+          .from('events')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', orgId)
+          .in('status', ['pending', 'proposed', 'draft']);
+        
+        if (error) {
+          // If status filter fails (e.g., constraint not applied), return 0
+          console.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
+          pendingEventProposalsCount = 0;
+        } else {
+          pendingEventProposalsCount = count || 0;
+        }
+      } catch (err) {
+        console.warn('Error fetching pending event proposals:', err);
+        pendingEventProposalsCount = 0;
+      }
 
       setPendingBudgetCount(pendingBudgetCount || 0);
       setPendingEventProposalsCount(pendingEventProposalsCount || 0);
