@@ -285,27 +285,33 @@ export class OrganizationDocumentService {
         .getPublicUrl(storagePath);
 
       // Create document record
+      const insertData: Record<string, any> = {
+        organization_id: organizationId,
+        folder_id: input.folder_id || null,
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        document_type: input.document_type || 'general',
+        file_url: urlData.publicUrl,
+        file_name: fileName,
+        file_size: fileContent.byteLength,
+        mime_type: mimeType,
+        storage_path: storagePath,
+        is_encrypted: input.encrypt || false,
+        access_level: input.access_level || 'admin_only',
+        requires_approval: input.requires_approval || false,
+        tags: input.tags || [],
+        uploaded_by: userId,
+        version: 1, // Explicitly set version
+      };
+
+      // Only include encryption_key_id if encryption is enabled
+      if (input.encrypt && encryptionKeyId) {
+        insertData.encryption_key_id = encryptionKeyId;
+      }
+
       const { data, error } = await assertSupabase()
         .from('organization_documents')
-        .insert({
-          organization_id: organizationId,
-          folder_id: input.folder_id || null,
-          name: input.name,
-          description: input.description || null,
-          document_type: input.document_type || 'general',
-          file_url: urlData.publicUrl,
-          file_name: fileName,
-          file_size: fileContent.byteLength,
-          mime_type: mimeType,
-          storage_path: storagePath,
-          is_encrypted: input.encrypt || false,
-          encryption_key_id: encryptionKeyId || null,
-          access_level: input.access_level || 'admin_only',
-          requires_approval: input.requires_approval || false,
-          tags: input.tags || [],
-          uploaded_by: userId,
-          version: 1, // Explicitly set version
-        })
+        .insert(insertData)
         .select()
         .single();
 
