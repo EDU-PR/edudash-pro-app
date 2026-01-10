@@ -17,6 +17,7 @@ interface SuccessModalProps {
   buttonText?: string;
   onClose: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  type?: 'success' | 'error' | 'warning' | 'info';
 }
 
 export const SuccessModal: React.FC<SuccessModalProps> = ({
@@ -26,10 +27,27 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
   buttonText = 'OK',
   onClose,
   icon = 'checkmark-circle',
+  type = 'success',
 }) => {
   const { theme } = useTheme();
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
+
+  // Get color based on type
+  const getColor = () => {
+    switch (type) {
+      case 'error':
+        return theme.error || '#EF4444';
+      case 'warning':
+        return theme.warning || '#F59E0B';
+      case 'info':
+        return theme.primary;
+      default:
+        return theme.success;
+    }
+  };
+
+  const iconColor = getColor();
 
   React.useEffect(() => {
     if (visible) {
@@ -87,17 +105,17 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
             },
           ]}
         >
-          {/* Success Icon with pulse animation */}
+          {/* Icon with pulse animation */}
           <Animated.View 
             style={[
               styles.iconContainer, 
               { 
-                backgroundColor: theme.success + '15',
+                backgroundColor: iconColor + '15',
                 transform: [{ scale: pulseAnim }],
               }
             ]}
           >
-            <Ionicons name={icon as any} size={64} color={theme.success} />
+            <Ionicons name={icon as any} size={64} color={iconColor} />
           </Animated.View>
 
           {/* Title */}
@@ -110,7 +128,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
           <TouchableOpacity
             style={[
               styles.button,
-              { backgroundColor: theme.success },
+              { backgroundColor: iconColor },
             ]}
             onPress={onClose}
             activeOpacity={0.8}
