@@ -60,8 +60,12 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
   if (memberType === 'youth_president' || memberType === 'youth_deputy' || 
       memberType === 'youth_secretary' || memberType === 'youth_treasurer') {
     const isPresident = memberType === 'youth_president';
+    const isSecretary = memberType === 'youth_secretary';
+    const dashboardRoute = isSecretary 
+      ? '/screens/membership/youth-secretary-dashboard'
+      : '/screens/membership/youth-president-dashboard';
     return [
-      { id: 'home', label: 'Youth Dashboard', icon: 'people', route: '/screens/membership/youth-president-dashboard' },
+      { id: 'home', label: isSecretary ? 'Secretary Dashboard' : 'Youth Dashboard', icon: 'people', route: dashboardRoute },
       { id: 'members', label: 'Youth Members', icon: 'person-circle', route: '/screens/membership/members-list' },
       { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
       { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/membership/programs' },
