@@ -59,6 +59,7 @@ const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '6', label: 'Budget', icon: 'wallet', color: '#EF4444', route: '/screens/membership/budget-requests' },
   { id: '7', label: 'Documents', icon: 'document-text', color: '#6366F1', route: '/screens/membership/documents' },
   { id: '8', label: 'ID Card', icon: 'card', color: '#9333EA', route: '/screens/membership/id-card' },
+  { id: '9', label: 'Upload Photo', icon: 'camera', color: '#EC4899', route: '/screens/membership/id-card' },
 ];
 
 export default function YouthPresidentDashboard() {

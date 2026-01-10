@@ -56,8 +56,8 @@ BEGIN
   END;
   
   -- Verify the user exists in auth.users (with retry logic for timing issues)
-  -- Wait a bit if user was just created
-  FOR i IN 1..3 LOOP
+  -- Wait longer if user was just created (Supabase Auth can take up to 2-3 seconds)
+  FOR i IN 1..5 LOOP
     SELECT EXISTS(
       SELECT 1 FROM auth.users WHERE id = p_user_id
     ) INTO v_user_exists;
@@ -66,15 +66,16 @@ BEGIN
       EXIT;
     END IF;
     
-    -- Wait 500ms before retry
-    PERFORM pg_sleep(0.5);
+    -- Progressive wait: 0.5s, 1s, 1.5s, 2s, 2.5s
+    PERFORM pg_sleep(0.5 * i);
   END LOOP;
   
   IF NOT v_user_exists THEN
     RETURN jsonb_build_object(
       'success', false,
       'code', 'USER_NOT_FOUND',
-      'error', 'User does not exist in auth system. Account may not be fully created yet. Please wait a moment and try again.'
+      'error', 'User does not exist in auth system. Account may still be being created. Please wait a moment and try again. If this persists, contact support.',
+      'retries_exhausted', true
     );
   END IF;
   
