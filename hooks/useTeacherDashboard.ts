@@ -147,7 +147,7 @@ export const useTeacherDashboard = () => {
           // First try to get preschool with its subscription
           const { data: school } = await supabase
             .from('preschools')
-            .select('id, name, organization_id')
+            .select('id, name')
             .eq('id', schoolIdToUse)
             .maybeSingle();
           
@@ -171,15 +171,16 @@ export const useTeacherDashboard = () => {
               schoolTier = subscription.subscription_plans.tier as any;
               log('🎓 School tier from subscription:', schoolTier);
             } else {
-              // PRIORITY 2: Get tier from the organization (preschool inherits tier from organization)
-              if (school.organization_id) {
-                const { data: org } = await supabase
-                  .from('organizations')
-                  .select('plan_tier')
-                  .eq('id', school.organization_id)
-                  .maybeSingle();
-                schoolTier = (org?.plan_tier as any) || 'free';
-                log('🏢 School tier from organization:', schoolTier);
+              // PRIORITY 2: Fallback to preschool's subscription_tier column
+              const { data: preschoolData } = await supabase
+                .from('preschools')
+                .select('subscription_tier')
+                .eq('id', schoolIdToUse)
+                .maybeSingle();
+              
+              if (preschoolData?.subscription_tier) {
+                schoolTier = preschoolData.subscription_tier as any;
+                log('🏫 School tier from preschool.subscription_tier:', schoolTier);
               }
             }
           } else {
