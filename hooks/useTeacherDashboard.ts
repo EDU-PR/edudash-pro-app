@@ -144,7 +144,7 @@ export const useTeacherDashboard = () => {
         log('👨‍🏫 Using IDs:', { authUserId: teacherId, usersTableId, schoolIdToUse });
         
         if (schoolIdToUse) {
-          // First try to get preschool with its organization
+          // First try to get preschool with its subscription
           const { data: school } = await supabase
             .from('preschools')
             .select('id, name, organization_id')
@@ -153,14 +153,34 @@ export const useTeacherDashboard = () => {
           
           if (school) {
             schoolName = school.name || schoolName;
-            // Get tier from the organization (preschool inherits tier from organization)
-            if (school.organization_id) {
-              const { data: org } = await supabase
-                .from('organizations')
-                .select('plan_tier')
-                .eq('id', school.organization_id)
-                .maybeSingle();
-              schoolTier = (org?.plan_tier as any) || 'free';
+            
+            // PRIORITY 1: Get tier from active subscription
+            const { data: subscription } = await supabase
+              .from('subscriptions')
+              .select(`
+                id,
+                plan_id,
+                status,
+                subscription_plans!inner(tier)
+              `)
+              .eq('school_id', schoolIdToUse)
+              .in('status', ['active', 'trialing'])
+              .maybeSingle();
+            
+            if (subscription?.subscription_plans?.tier) {
+              schoolTier = subscription.subscription_plans.tier as any;
+              log('🎓 School tier from subscription:', schoolTier);
+            } else {
+              // PRIORITY 2: Get tier from the organization (preschool inherits tier from organization)
+              if (school.organization_id) {
+                const { data: org } = await supabase
+                  .from('organizations')
+                  .select('plan_tier')
+                  .eq('id', school.organization_id)
+                  .maybeSingle();
+                schoolTier = (org?.plan_tier as any) || 'free';
+                log('🏢 School tier from organization:', schoolTier);
+              }
             }
           } else {
             // Fallback: schoolIdToUse might be an organization ID
@@ -171,6 +191,7 @@ export const useTeacherDashboard = () => {
               .maybeSingle();
             schoolName = org?.name || schoolName;
             schoolTier = (org?.plan_tier as any) || 'free';
+            log('🏢 Fallback tier from organization:', schoolTier);
           }
         }
 
