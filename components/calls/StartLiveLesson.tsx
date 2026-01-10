@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { View, ActivityIndicator, ScrollView, StyleSheet, useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LiveLessonHero } from './live-lesson/LiveLessonHero';
 import { ExistingCallBanner } from './live-lesson/ExistingCallBanner';
@@ -34,6 +35,7 @@ export function StartLiveLesson({
   const systemColorScheme = useColorScheme();
   const { isDark: themeIsDark } = useTheme();
   const isDark = themeIsDark ?? systemColorScheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const logic = useStartLessonLogic(preschoolId, teacherId, teacherName, subscriptionTier);
   
@@ -74,7 +76,10 @@ export function StartLiveLesson({
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 100 }}
+    >
       {/* Hero Card */}
       <LiveLessonHero
         classCount={logic.classes.length}
