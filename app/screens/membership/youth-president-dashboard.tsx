@@ -54,6 +54,7 @@ const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '4', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
   { id: '5', label: 'Programs', icon: 'school', color: '#F59E0B', route: '/screens/membership/programs' },
   { id: '6', label: 'Budget', icon: 'wallet', color: '#EF4444', route: '/screens/membership/budget-requests' },
+  { id: '7', label: 'Documents', icon: 'document-text', color: '#6366F1', route: '/screens/membership/documents' },
 ];
 
 export default function YouthPresidentDashboard() {
@@ -92,9 +93,10 @@ export default function YouthPresidentDashboard() {
 
       // Fetch youth wing members count - include all members for the wing president to manage
       // This includes youth members, coordinators, and members assigned to the youth wing
+      // Fetch both birth_year and date_of_birth for age calculation
       const { data: members, error: membersError } = await supabase
         .from('organization_members')
-        .select('id, created_at, birth_year, member_type, wing')
+        .select('id, created_at, birth_year, date_of_birth, member_type, wing')
         .eq('organization_id', orgId)
         .or('wing.eq.youth,member_type.ilike.youth%,member_type.eq.learner,member_type.eq.regional_manager');
 
@@ -138,17 +140,35 @@ export default function YouthPresidentDashboard() {
         .in('status', ['pending', 'proposed', 'draft', 'frozen']);
 
       // Fetch pending event proposals (events awaiting approval)
-      const { data: pendingEventsData, count: pendingEventProposalsCount } = await supabase
-        .from('events')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .in('status', ['pending', 'proposed', 'draft']);
+      // Note: Status filter requires CHECK constraint on events.status column
+      // Migration: 20260110_fix_events_status_constraint.sql
+      let pendingEventProposalsCount = 0;
+      try {
+        const { count, error } = await supabase
+          .from('events')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', orgId)
+          .in('status', ['pending', 'proposed', 'draft']);
+        
+        if (error) {
+          // If status filter fails (e.g., constraint not applied), return 0
+          console.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
+          pendingEventProposalsCount = 0;
+        } else {
+          pendingEventProposalsCount = count || 0;
+        }
+      } catch (err) {
+        console.warn('Error fetching pending event proposals:', err);
+        pendingEventProposalsCount = 0;
+      }
 
       setPendingBudgetCount(pendingBudgetCount || 0);
       setPendingEventProposalsCount(pendingEventProposalsCount || 0);
 
       // Calculate age breakdown
+      // Support both birth_year and date_of_birth fields
       const currentYear = new Date().getFullYear();
+      const currentDate = new Date();
       const ageBreakdown = {
         under18: 0,
         age18to25: 0,
@@ -156,8 +176,31 @@ export default function YouthPresidentDashboard() {
       };
 
       members?.forEach(m => {
+        let age: number | null = null;
+        
+        // Try birth_year first (faster calculation)
         if (m.birth_year) {
-          const age = currentYear - m.birth_year;
+          age = currentYear - m.birth_year;
+        } 
+        // Fallback to date_of_birth if birth_year is not available
+        else if (m.date_of_birth) {
+          try {
+            const birthDate = new Date(m.date_of_birth);
+            if (!isNaN(birthDate.getTime())) {
+              age = currentYear - birthDate.getFullYear();
+              const monthDiff = currentDate.getMonth() - birthDate.getMonth();
+              // Adjust if birthday hasn't occurred this year
+              if (monthDiff < 0 || (monthDiff === 0 && currentDate.getDate() < birthDate.getDate())) {
+                age--;
+              }
+            }
+          } catch (e) {
+            console.warn('Error parsing date_of_birth:', m.date_of_birth, e);
+          }
+        }
+        
+        // Categorize age if we have a valid age
+        if (age !== null && age >= 0) {
           if (age < 18) ageBreakdown.under18++;
           else if (age <= 25) ageBreakdown.age18to25++;
           else if (age <= 35) ageBreakdown.age26to35++;
