@@ -55,7 +55,12 @@ interface UseOrganizationStatsReturn {
   organizationName: string | null;
 }
 
-export function useOrganizationStats(): UseOrganizationStatsReturn {
+interface UseOrganizationStatsOptions {
+  memberType?: string; // Filter by member type (e.g., 'youth_president' to show only youth structure)
+}
+
+export function useOrganizationStats(options: UseOrganizationStatsOptions = {}): UseOrganizationStatsReturn {
+  const { memberType } = options;
   const [stats, setStats] = useState<OrganizationStats | null>(null);
   const [regions, setRegions] = useState<RegionWithStats[]>([]);
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([]);
@@ -83,6 +88,7 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
         .select(`
           organization_id,
           role,
+          member_type,
           organizations (
             id,
             name
@@ -103,10 +109,18 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
       setOrganizationName(org?.name || 'Organization');
 
       // Fetch all members for this organization
-      const { data: allMembers, error: membersError } = await supabase
+      // If memberType is youth_president, only show youth wing members
+      let membersQuery = supabase
         .from('organization_members')
-        .select('id, user_id, membership_status, member_type, role, region_id, created_at, first_name, last_name, email, phone')
+        .select('id, user_id, membership_status, member_type, role, region_id, created_at, first_name, last_name, email, phone, wing')
         .eq('organization_id', orgId);
+      
+      // Filter for youth structure if user is youth president
+      if (memberType === 'youth_president' || memberType === 'youth_secretary') {
+        membersQuery = membersQuery.or('wing.eq.youth,member_type.ilike.youth%');
+      }
+      
+      const { data: allMembers, error: membersError } = await membersQuery;
 
       if (membersError) {
         console.error('[useOrganizationStats] Error fetching members:', membersError);
@@ -115,6 +129,8 @@ export function useOrganizationStats(): UseOrganizationStatsReturn {
       }
 
       // Fetch all regions for this organization
+      // If memberType is youth_president, filter regions (if regions have wing field in future)
+      // For now, show all regions but filter members above
       const { data: allRegions, error: regionsError } = await supabase
         .from('organization_regions')
         .select('id, name, code, province_code, is_active, manager_id')

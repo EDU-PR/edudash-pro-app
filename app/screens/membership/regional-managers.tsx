@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground, PROVINCE_COLORS } from '@/components/membership/dashboard';
 import { useOrganizationStats, type RegionWithStats } from '@/hooks/membership/useOrganizationStats';
 
@@ -36,11 +37,18 @@ const CODE_COLORS: Record<string, string> = {
 
 export default function RegionalManagersScreen() {
   const { theme } = useTheme();
+  const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   
-  // Real data from Supabase
-  const { regions, loading, error, refetch } = useOrganizationStats();
+  // Get member type to filter for youth president
+  const memberType = (profile as any)?.organization_membership?.member_type;
+  const isYouthPresident = memberType === 'youth_president' || memberType === 'youth_secretary';
+  
+  // Real data from Supabase - filter for youth structure if youth president
+  const { regions, loading, error, refetch } = useOrganizationStats({ 
+    memberType: isYouthPresident ? memberType : undefined 
+  });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -187,7 +195,9 @@ export default function RegionalManagersScreen() {
             <Ionicons name="arrow-back" size={24} color={theme.text} />
           </TouchableOpacity>
           <View style={styles.headerLeft}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Regions</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              {isYouthPresident ? 'Youth Regional and Branches' : 'Regions'}
+            </Text>
             <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               {activeManagers} active • {vacantPositions} vacant
             </Text>
@@ -214,7 +224,9 @@ export default function RegionalManagersScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.summaryCard}
           >
-            <Text style={styles.summaryTitle}>Regional Leadership</Text>
+            <Text style={styles.summaryTitle}>
+              {isYouthPresident ? 'Youth Regional Leadership' : 'Regional Leadership'}
+            </Text>
             <View style={styles.summaryStats}>
               <View style={styles.summaryStat}>
                 <Text style={styles.summaryValue}>{activeManagers}</Text>

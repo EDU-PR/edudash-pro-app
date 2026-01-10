@@ -82,7 +82,7 @@ export function StyledAlert({
   buttons = [{ text: 'OK', style: 'default' }],
   onDismiss,
   icon,
-  showCloseButton = false,
+  showCloseButton = true, // Default to showing close button
 }: StyledAlertProps) {
   const { theme } = useTheme();
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -285,12 +285,18 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
   };
   
   const show: AlertContextType['show'] = (title, message, buttons = [{ text: 'OK' }], options = {}) => {
+    // Ensure there's always a cancel/close button
+    const hasCancelButton = buttons.some(b => b.style === 'cancel' || b.text.toLowerCase() === 'cancel' || b.text.toLowerCase() === 'close');
+    const finalButtons = hasCancelButton 
+      ? buttons 
+      : [...buttons, { text: 'Close', style: 'cancel' as const, onPress: () => {} }];
+    
     setAlertState({
       visible: true,
       type: options.type || 'info',
       title,
       message,
-      buttons,
+      buttons: finalButtons,
       icon: options.icon,
     });
   };
