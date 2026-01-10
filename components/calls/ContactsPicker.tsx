@@ -43,40 +43,86 @@ export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPi
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch contacts (users from same preschool/organization)
+  // TEACHER FIX: Teachers should see parents from their assigned class, not all parents
   // PRIVACY FIX: Parents should ONLY see teachers and principals, NOT other parents
   const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ['call-contacts', user?.id, profile?.preschool_id, profile?.role],
+    queryKey: ['call-contacts', user?.id, profile?.preschool_id, profile?.role, profile?.id],
     queryFn: async (): Promise<Contact[]> => {
       if (!user?.id) return [];
       
       const client = assertSupabase();
       
-      // Get users from same preschool
-      let query = client
-        .from('profiles')
-        .select('id, first_name, last_name, role, avatar_url')
-        .neq('id', user.id);
-      
-      if (profile?.preschool_id) {
-        query = query.eq('preschool_id', profile.preschool_id);
-      }
-      
       // CRITICAL: Filter roles based on current user's role
       let allowedRoles: string[];
+      let parentFilter: any = null;
+      
       if (profile?.role === 'parent') {
         // Parents can ONLY call teachers and principals (NOT other parents)
         allowedRoles = ['principal', 'teacher', 'principal_admin', 'admin'];
       } else if (profile?.role === 'teacher') {
-        // Teachers can call principals, other teachers, and parents
-        allowedRoles = ['principal', 'teacher', 'parent', 'principal_admin', 'admin'];
+        // Teachers can call principals, other teachers, and parents FROM THEIR CLASS
+        allowedRoles = ['principal', 'teacher', 'principal_admin', 'admin'];
+        
+        // Fetch teacher's assigned class
+        const { data: teacherClass } = await client
+          .from('classes')
+          .select('id')
+          .eq('teacher_id', profile.id)
+          .eq('active', true)
+          .maybeSingle();
+        
+        if (teacherClass?.id) {
+          // Get parent IDs from students in teacher's class
+          const { data: students } = await client
+            .from('students')
+            .select('parent_user_id')
+            .eq('class_id', teacherClass.id)
+            .not('parent_user_id', 'is', null);
+          
+          const parentIds = [...new Set((students || []).map(s => s.parent_user_id).filter(Boolean))];
+          
+          if (parentIds.length > 0) {
+            parentFilter = parentIds;
+          }
+        }
+        
+        // Also include parents role for general access
+        allowedRoles.push('parent');
       } else {
         // Principals/admins can call everyone
         allowedRoles = ['principal', 'teacher', 'parent', 'principal_admin', 'admin'];
       }
       
-      const { data, error} = await query
-        .in('role', allowedRoles)
-        .order('first_name');
+      // Build query
+      let query = client
+        .from('profiles')
+        .select('id, first_name, last_name, role, avatar_url')
+        .neq('id', user.id)
+        .in('role', allowedRoles);
+      
+      if (profile?.preschool_id) {
+        query = query.eq('preschool_id', profile.preschool_id);
+      }
+      
+      // For teachers, filter parents to only those in their class
+      if (profile?.role === 'teacher' && parentFilter && parentFilter.length > 0) {
+        // Get all contacts, then filter parents
+        const { data, error } = await query.order('first_name');
+        
+        if (error) {
+          console.error('[ContactsPicker] Error:', error);
+          return [];
+        }
+        
+        // Filter: include non-parents OR parents in teacher's class
+        return (data || []).filter(c => {
+          if (c.role !== 'parent') return true; // Include all non-parents
+          return parentFilter.includes(c.id); // Only include parents from teacher's class
+        }).filter(c => c.first_name || c.last_name);
+      }
+      
+      // For other roles, use standard query
+      const { data, error} = await query.order('first_name');
       
       if (error) {
         console.error('[ContactsPicker] Error:', error);
@@ -218,8 +264,8 @@ export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPi
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  container: { flex: 1, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1 },
   title: { fontSize: 20, fontWeight: '700' },
   closeButton: { padding: 4 },

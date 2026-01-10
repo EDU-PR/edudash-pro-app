@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +28,7 @@ import { useCallHistory, filterCalls, getCallCounts, CallFilter } from '@/hooks/
 import { CallItem } from '@/components/calls/CallItem';
 import { CallFilterChip } from '@/components/calls/CallFilterChip';
 import { ContactsPicker } from '@/components/calls/ContactsPicker';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 // Custom Header Component
 interface ScreenHeaderProps {
@@ -83,6 +83,7 @@ export default function CallsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const alert = useAlert();
   const [filterType, setFilterType] = useState<CallFilter>('all');
   const [showContactsPicker, setShowContactsPicker] = useState(false);
   
@@ -120,66 +121,56 @@ export default function CallsScreen() {
   
   const handleClearCallHistory = useCallback(() => {
     if (calls.length === 0) {
-      Alert.alert(
+      alert.showWarning(
         t('calls.no_history', { defaultValue: 'No History' }),
         t('calls.history_empty', { defaultValue: 'Your call history is already empty.' })
       );
       return;
     }
     
-    Alert.alert(
+    alert.showConfirm(
       t('calls.clear_history', { defaultValue: 'Clear Call History' }),
       t('calls.clear_history_confirm', { defaultValue: 'Are you sure you want to clear all call history? This action cannot be undone.' }),
-      [
-        {
-          text: t('common.cancel', { defaultValue: 'Cancel' }),
-          style: 'cancel',
-        },
-        {
-          text: t('common.clear', { defaultValue: 'Clear' }),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const client = assertSupabase();
-              
-              // Delete calls where user is caller or callee
-              const { error } = await client
-                .from('active_calls')
-                .delete()
-                .or(`caller_id.eq.${user?.id},callee_id.eq.${user?.id}`);
-              
-              if (error) {
-                console.error('[ClearCallHistory] Error:', error);
-                Alert.alert(
-                  t('common.error', { defaultValue: 'Error' }),
-                  t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
-                );
-                return;
-              }
-              
-              // Refresh the list
-              await refetch();
-              
-              Alert.alert(
-                t('common.success', { defaultValue: 'Success' }),
-                t('calls.history_cleared', { defaultValue: 'Call history has been cleared.' })
-              );
-            } catch (error) {
-              console.error('[ClearCallHistory] Exception:', error);
-              Alert.alert(
-                t('common.error', { defaultValue: 'Error' }),
-                t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
-              );
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          const client = assertSupabase();
+          
+          // Delete calls where user is caller or callee
+          const { error } = await client
+            .from('active_calls')
+            .delete()
+            .or(`caller_id.eq.${user?.id},callee_id.eq.${user?.id}`);
+          
+          if (error) {
+            console.error('[ClearCallHistory] Error:', error);
+            alert.showError(
+              t('common.error', { defaultValue: 'Error' }),
+              t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
+            );
+            return;
+          }
+          
+          // Refresh the list
+          await refetch();
+          
+          alert.showSuccess(
+            t('common.success', { defaultValue: 'Success' }),
+            t('calls.history_cleared', { defaultValue: 'Call history has been cleared.' })
+          );
+        } catch (error) {
+          console.error('[ClearCallHistory] Exception:', error);
+          alert.showError(
+            t('common.error', { defaultValue: 'Error' }),
+            t('calls.clear_error', { defaultValue: 'Failed to clear call history. Please try again.' })
+          );
+        }
+      }
     );
-  }, [calls.length, user?.id, refetch, t]);
+  }, [calls.length, user?.id, refetch, t, alert]);
   
   const handleCall = useCallback((userId: string, userName: string, callType: 'voice' | 'video') => {
     if (!callContext) {
-      Alert.alert(
+      alert.showError(
         t('common.error', { defaultValue: 'Error' }),
         t('calls.not_available', { defaultValue: 'Calling is not available right now.' })
       );
@@ -191,7 +182,7 @@ export default function CallsScreen() {
     } else {
       callContext.startVideoCall(userId, userName);
     }
-  }, [callContext, t]);
+  }, [callContext, t, alert]);
   
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
