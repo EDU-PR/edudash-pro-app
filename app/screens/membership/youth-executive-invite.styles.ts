@@ -3,7 +3,7 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const createStyles = (theme: any) => StyleSheet.create({
+export const createStyles = (_theme: any) => StyleSheet.create({
   container: {
     flex: 1,
   },

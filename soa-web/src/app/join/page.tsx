@@ -213,6 +213,13 @@ export default function JoinPage() {
       });
 
       if (authError) throw authError;
+      
+      if (!authData.user?.id) {
+        throw new Error('Failed to create user account - no user ID returned');
+      }
+
+      // 1.5. Wait briefly for user to be committed to auth.users (timing issue fix)
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
 
       // 2. Send password reset email so user can set their own password
       // Since we created them with a temporary password, they need to reset it
@@ -234,12 +241,18 @@ export default function JoinPage() {
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
-      // 4. Create membership record using RPC (handles both anon and authenticated users)
+      // 4. Create membership record using RPC with retry for timing issues
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
-      const { data: rpcResult, error: rpcError } = await supabase
-        .rpc('register_organization_member', {
+      // Wing is automatically set by RPC function based on member_type
+      let rpcResult: any = null;
+      let rpcError: any = null;
+      let retries = 0;
+      const maxRetries = 3;
+      
+      while (retries < maxRetries) {
+        const { data, error } = await supabase.rpc('register_organization_member', {
           p_organization_id: orgInfo?.organization_id,
-          p_user_id: authData.user?.id,
+          p_user_id: authData.user.id,
           p_region_id: orgInfo?.region_id || null,
           p_member_number: generatedMemberNumber,
           p_member_type: formData.member_type,
@@ -254,9 +267,32 @@ export default function JoinPage() {
           p_invite_code_used: inviteCode.toUpperCase(),
           p_joined_via: 'invite_code',
         });
+        
+        rpcResult = data;
+        rpcError = error;
+        
+        // If RPC error or user not found, retry after a delay
+        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`[WebJoin] Retry attempt ${retries}/${maxRetries} after delay...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+            continue;
+          }
+        } else {
+          // Success or non-retryable error
+          break;
+        }
+      }
 
       if (rpcError) throw rpcError;
-      if (!rpcResult?.success) throw new Error(rpcResult?.error || 'Failed to create membership record');
+      if (!rpcResult?.success) {
+        // Handle USER_NOT_FOUND with helpful message
+        if (rpcResult?.code === 'USER_NOT_FOUND') {
+          throw new Error('Your account is being created. Please wait a moment and try again, or check your email for a confirmation link.');
+        }
+        throw new Error(rpcResult?.error || 'Failed to create membership record');
+      }
       
       // Handle existing member case
       if (rpcResult.action === 'existing') {

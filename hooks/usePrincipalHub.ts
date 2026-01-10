@@ -900,7 +900,10 @@ useEffect(() => {
       logger.info('[PrincipalHub] Component unmounting, resetting fetch guard');
       initialFetchComplete.current = false;
     };
-  }, [userId, preschoolId, fetchData]);
+    // Only depend on userId and preschoolId - fetchData is stable due to useCallback with stable dependencies
+    // Removing fetchData from deps prevents potential infinite loops if translation function 't' changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, preschoolId]);
 
   const refresh = useCallback(() => {
     fetchData(true);

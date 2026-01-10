@@ -325,6 +325,14 @@ function RegisterPageContent() {
       });
 
       if (authError) throw authError;
+      
+      if (!authData.user?.id) {
+        throw new Error('Failed to create user account - no user ID returned');
+      }
+
+      // 3.5. Wait briefly for user to be committed to auth.users (timing issue fix)
+      // Supabase Auth signUp can have a small delay before user is visible in auth.users
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
 
       // 4. Send password reset email so user can set their own password
       // Since we created them with a temporary password, they need to reset it
@@ -346,12 +354,18 @@ function RegisterPageContent() {
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${formData.region_code}-${year}-${sequence}`;
 
-      // 6. Create membership record using RPC (handles both anon and authenticated users)
+      // 6. Create membership record using RPC with retry for timing issues
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
-      const { data: rpcResult, error: rpcError } = await supabase
-        .rpc('register_organization_member', {
+      // Wing is automatically set by RPC function based on member_type
+      let rpcResult: any = null;
+      let rpcError: any = null;
+      let retries = 0;
+      const maxRetries = 3;
+      
+      while (retries < maxRetries) {
+        const { data, error } = await supabase.rpc('register_organization_member', {
           p_organization_id: SOA_ORGANIZATION_ID,
-          p_user_id: authData.user?.id,
+          p_user_id: authData.user.id,
           p_region_id: selectedRegion.id || null,
           p_member_number: generatedMemberNumber,
           p_member_type: formData.member_type,
@@ -366,9 +380,32 @@ function RegisterPageContent() {
           p_invite_code_used: null,
           p_joined_via: 'direct_registration',
         });
+        
+        rpcResult = data;
+        rpcError = error;
+        
+        // If RPC error or user not found, retry after a delay
+        if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`[WebRegister] Retry attempt ${retries}/${maxRetries} after delay...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
+            continue;
+          }
+        } else {
+          // Success or non-retryable error
+          break;
+        }
+      }
 
       if (rpcError) throw rpcError;
-      if (!rpcResult?.success) throw new Error(rpcResult?.error || 'Failed to create membership record');
+      if (!rpcResult?.success) {
+        // Handle USER_NOT_FOUND with helpful message
+        if (rpcResult?.code === 'USER_NOT_FOUND') {
+          throw new Error('Your account is being created. Please wait a moment and try again, or check your email for a confirmation link.');
+        }
+        throw new Error(rpcResult?.error || 'Failed to create membership record');
+      }
       
       // Handle existing member case
       if (rpcResult.action === 'existing') {

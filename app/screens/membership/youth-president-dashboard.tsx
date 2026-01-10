@@ -28,6 +28,9 @@ import {
   DashboardBackground,
   DashboardWallpaperBackground,
 } from '@/components/membership/dashboard';
+import AdBanner from '@/components/ui/AdBanner';
+import { useAds } from '@/contexts/AdsContext';
+import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -55,6 +58,7 @@ const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '5', label: 'Programs', icon: 'school', color: '#F59E0B', route: '/screens/membership/programs' },
   { id: '6', label: 'Budget', icon: 'wallet', color: '#EF4444', route: '/screens/membership/budget-requests' },
   { id: '7', label: 'Documents', icon: 'document-text', color: '#6366F1', route: '/screens/membership/documents' },
+  { id: '8', label: 'ID Card', icon: 'card', color: '#9333EA', route: '/screens/membership/id-card' },
 ];
 
 export default function YouthPresidentDashboard() {
@@ -62,6 +66,7 @@ export default function YouthPresidentDashboard() {
   const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
+  const { maybeShowInterstitial } = useAds();
 
   // Route guard: Ensure youth_secretary is redirected to their own dashboard
   React.useEffect(() => {
@@ -257,6 +262,21 @@ export default function YouthPresidentDashboard() {
   useEffect(() => {
     fetchYouthStats();
   }, [fetchYouthStats]);
+
+  // Show interstitial ad on dashboard load (only for free tier membership users)
+  useEffect(() => {
+    if (!stats || loading) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await maybeShowInterstitial(PLACEMENT_KEYS.INTERSTITIAL_MEMBERSHIP_DASHBOARD_ENTER);
+      } catch (error) {
+        console.debug('Failed to show interstitial ad:', error);
+      }
+    }, 2000); // 2 second delay after dashboard load
+
+    return () => clearTimeout(timer);
+  }, [stats, loading, maybeShowInterstitial]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -598,6 +618,15 @@ export default function YouthPresidentDashboard() {
               </View>
             )}
           </Card>
+        </View>
+
+        {/* Ad Banner for Free Tier Membership Users (Android only) */}
+        <View style={styles.adSection}>
+          <AdBanner 
+            placement={PLACEMENT_KEYS.BANNER_MEMBERSHIP_DASHBOARD}
+            style={styles.adBanner}
+            showFallback={true}
+          />
         </View>
         </ScrollView>
       </DashboardBackground>
@@ -1002,5 +1031,16 @@ const styles = StyleSheet.create({
   greetingSubtext: {
     fontSize: 14,
     marginTop: 4,
+  },
+  
+  // Ad Section
+  adSection: {
+    marginTop: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  adBanner: {
+    width: '100%',
+    minHeight: 50,
   },
 });

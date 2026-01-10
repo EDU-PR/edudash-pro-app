@@ -87,7 +87,7 @@ export const MEMBERSHIP_TIERS: MembershipTierConfig[] = [
   { 
     tier: 'standard', 
     title: 'Standard', 
-    price: 50, 
+    price: 20, 
     features: ['Digital ID Card', 'Access to resources', 'Event notifications', 'Community access']
   },
   { 

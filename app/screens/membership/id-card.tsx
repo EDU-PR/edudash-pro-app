@@ -51,8 +51,11 @@ export default function MemberIDCardScreen() {
   const [showImagePreview, setShowImagePreview] = useState(false);
 
   // Check if current user can upload photo (must be executive and own card)
-  const canUploadPhoto = member && isExecutiveMemberType(member.member_type) && 
-    (!memberId || member.user_id === user?.id);
+  // When viewing own card (no memberId), allow upload if executive member type
+  // When viewing another member's card (memberId provided), only allow if that member belongs to current user
+  const canUploadPhoto = member && 
+    isExecutiveMemberType(member.member_type) && 
+    (memberId ? (member.user_id === user?.id) : true); // If no memberId, assume own card (queried by user_id)
   
   const flipAnimation = useRef(new Animated.Value(0)).current;
 

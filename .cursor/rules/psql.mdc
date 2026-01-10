@@ -13,3 +13,5 @@ When ever there is an Edge function - always deploy it
 When ever there is a change in the native app - also apply the same changes to web(PWA) app - the two apps must be in parity at all times
 When ever there is an enhancement that you can add to any prompt or request do so  
 The app must cater for principals - teachers - learners and parents - to bring about a seamless integration of traditional schooling and advanced technological teaching 
+
+When you come accross a file that violates WARP.md / .cursor rules file size - refactor it 
