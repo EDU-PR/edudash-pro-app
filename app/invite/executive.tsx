@@ -134,21 +134,30 @@ export default function ExecutiveInviteScreen() {
         // Don't throw - the invite was accepted, membership may already exist
       }
 
-      // Update user profile
+      // Update user profile (member_type is NOT in profiles table, only in organization_members)
       await supabase
         .from('profiles')
         .update({
           organization_id: inviteDetails.organization_id,
-          member_type: position,
-          role: 'admin',
+          role: 'admin', // Executive members get admin role in profiles
         })
         .eq('id', user.id);
 
       const positionLabel = POSITION_LABELS[position] || position;
+      
+      // IMPORTANT: After accepting invite, we need to refresh the profile and re-route
+      // The member_type is now set in organization_members, so routing should work correctly
+      // Use a small delay to ensure database updates are committed
+      setTimeout(() => {
+        // Force a profile refresh by navigating to a route that triggers routeAfterLogin
+        // This ensures the new member_type is picked up for routing
+        router.replace('/');
+      }, 500);
+      
       Alert.alert(
         'Congratulations!',
         `You are now the ${positionLabel} of ${inviteDetails.organizations?.name || 'the organization'}!`,
-        [{ text: 'OK', onPress: () => router.replace('/') }]
+        [{ text: 'OK' }]
       );
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to accept position');
