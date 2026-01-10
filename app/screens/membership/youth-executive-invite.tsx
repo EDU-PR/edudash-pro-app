@@ -250,12 +250,34 @@ export default function YouthExecutiveInviteScreen() {
             <View style={styles.positionGrid}>
               {EXECUTIVE_POSITIONS.map((position) => {
                 const isFilled = filledPositions.has(position.id);
-                const hasPending = invites.some(i => i.position === position.id && i.status === 'pending');
+                const pendingInvite = invites.find(i => i.position === position.id && i.status === 'pending');
+                const hasPending = !!pendingInvite;
                 return (
                   <TouchableOpacity
                     key={position.id}
                     style={[styles.positionCard, { backgroundColor: theme.surface }, isFilled && styles.positionFilled]}
-                    onPress={() => { if (!isFilled) { setSelectedPosition(position); setShowInviteModal(true); }}}
+                    onPress={() => {
+                      if (isFilled) {
+                        // Position is filled - do nothing (disabled)
+                        return;
+                      } else if (hasPending && pendingInvite) {
+                        // Show pending invite details - scroll to pending invites section
+                        Alert.alert(
+                          'Pending Invite',
+                          `There is already a pending invite for ${position.label}.\n\nInvite Code: ${pendingInvite.invite_code}\n${pendingInvite.email ? `Email: ${pendingInvite.email}` : ''}\n${pendingInvite.phone ? `Phone: ${pendingInvite.phone}` : ''}\n\nStatus: ${pendingInvite.status}`,
+                          [
+                            { text: 'Copy Code', onPress: () => copyToClipboard(pendingInvite.invite_code) },
+                            { text: 'Share', onPress: () => shareInvite(pendingInvite.invite_code, pendingInvite.position_label) },
+                            { text: 'Revoke', style: 'destructive', onPress: () => revokeInvite(pendingInvite) },
+                            { text: 'OK' },
+                          ]
+                        );
+                      } else {
+                        // No invite yet - open invite modal
+                        setSelectedPosition(position);
+                        setShowInviteModal(true);
+                      }
+                    }}
                     disabled={isFilled}
                   >
                     <View style={[styles.positionIcon, { backgroundColor: position.color + '20' }]}>
