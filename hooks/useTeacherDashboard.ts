@@ -145,16 +145,25 @@ export const useTeacherDashboard = () => {
         
         if (schoolIdToUse) {
           // First try to get preschool with its subscription
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:146',message:'Before preschool query',data:{schoolIdToUse},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T1'})}).catch(()=>{});
+          // #endregion
           const { data: school } = await supabase
             .from('preschools')
             .select('id, name')
             .eq('id', schoolIdToUse)
             .maybeSingle();
           
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:154',message:'After preschool query',data:{hasSchool:!!school,schoolName:school?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T1'})}).catch(()=>{});
+          // #endregion
           if (school) {
             schoolName = school.name || schoolName;
             
             // PRIORITY 1: Get tier from active subscription
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:158',message:'Before subscription query',data:{schoolIdToUse},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
+            // #endregion
             const { data: subscription } = await supabase
               .from('subscriptions')
               .select(`
@@ -167,20 +176,35 @@ export const useTeacherDashboard = () => {
               .in('status', ['active', 'trialing'])
               .maybeSingle();
             
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:170',message:'After subscription query',data:{hasSubscription:!!subscription,subscriptionTier:subscription?.subscription_plans?.tier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
+            // #endregion
             if (subscription?.subscription_plans?.tier) {
               schoolTier = subscription.subscription_plans.tier as any;
               log('🎓 School tier from subscription:', schoolTier);
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:172',message:'Tier set from subscription',data:{schoolTier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
+              // #endregion
             } else {
               // PRIORITY 2: Fallback to preschool's subscription_tier column
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:174',message:'Subscription not found, checking preschool tier',data:{schoolIdToUse},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T3'})}).catch(()=>{});
+              // #endregion
               const { data: preschoolData } = await supabase
                 .from('preschools')
                 .select('subscription_tier')
                 .eq('id', schoolIdToUse)
                 .maybeSingle();
               
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:182',message:'After preschool tier query',data:{hasTier:!!preschoolData?.subscription_tier,tier:preschoolData?.subscription_tier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T3'})}).catch(()=>{});
+              // #endregion
               if (preschoolData?.subscription_tier) {
                 schoolTier = preschoolData.subscription_tier as any;
                 log('🏫 School tier from preschool.subscription_tier:', schoolTier);
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:184',message:'Tier set from preschool',data:{schoolTier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T3'})}).catch(()=>{});
+                // #endregion
               }
             }
           } else {
