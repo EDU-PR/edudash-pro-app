@@ -55,6 +55,12 @@ export default function DashboardPage() {
           // Tertiary education facilitator (teaches courses, grades assignments)
           router.replace('/dashboard/instructor');
           break;
+        case 'student':
+        case 'learner':
+          // Students/Learners - for now redirect to parent dashboard (web learner dashboard TODO)
+          // NOTE: Mobile app has full learner-dashboard; web version to be implemented
+          router.replace('/dashboard/parent');
+          break;
         default:
           router.replace('/dashboard/parent'); // Default to parent dashboard
       }

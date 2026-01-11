@@ -96,6 +96,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Role-based redirect
+      // NOTE: For students/learners, redirect to generic /dashboard which will handle routing
+      // Mobile app has full learner-dashboard; web version to be implemented
       const redirectPath = next 
         ? next 
         : role === 'parent' 
@@ -106,7 +108,9 @@ export async function GET(request: NextRequest) {
               ? '/dashboard/principal'
               : role === 'superadmin'
                 ? '/admin'
-                : '/dashboard';
+                : role === 'student' || role === 'learner'
+                  ? '/dashboard' // Generic dashboard handles learner routing
+                  : '/dashboard';
 
       return NextResponse.redirect(`${origin}${redirectPath}`);
     }

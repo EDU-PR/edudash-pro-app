@@ -30,6 +30,9 @@ import {
   Calendar,
   Home,
   CreditCard,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 // Organization info returned from database
@@ -66,6 +69,8 @@ interface FormData {
   date_of_birth: string;
   physical_address: string;
   member_type: MemberType;
+  password: string;
+  confirm_password: string;
 }
 
 export default function JoinPage() {
@@ -103,7 +108,11 @@ function JoinPageContent() {
     date_of_birth: '',
     physical_address: '',
     member_type: 'learner',
+    password: '',
+    confirm_password: '',
   });
+  
+  const [showPassword, setShowPassword] = useState(false);
 
   // Auto-fill invite code from URL params and verify
   useEffect(() => {
@@ -380,6 +389,32 @@ function JoinPageContent() {
       setFormError('Please enter your home address');
       return;
     }
+    
+    // Password validation
+    if (!formData.password) {
+      setFormError('Please create a password');
+      return;
+    }
+    if (formData.password.length < 8) {
+      setFormError('Password must be at least 8 characters long');
+      return;
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      setFormError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      setFormError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/[0-9]/.test(formData.password)) {
+      setFormError('Password must contain at least one number');
+      return;
+    }
+    if (formData.password !== formData.confirm_password) {
+      setFormError('Passwords do not match');
+      return;
+    }
 
     setIsSubmitting(true);
     setFormError('');
@@ -440,16 +475,19 @@ function JoinPageContent() {
         console.warn('[Join] Email check error (continuing anyway):', emailCheckError.message);
       }
       
-      // 1. Create user in Supabase Auth
+      // 1. Create user in Supabase Auth with user's chosen password
+      // User sets their own password during registration - no need for password reset emails
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: Math.random().toString(36).slice(-12) + 'Aa1!',
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
         options: {
           data: {
             first_name: formData.first_name,
             last_name: formData.last_name,
             phone: formData.phone,
           },
+          // After email confirmation, redirect to sign-in page (they already have password)
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
         },
       });
 
@@ -467,27 +505,15 @@ function JoinPageContent() {
       // #endregion
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
 
-      // 2. Send password reset email so user can set their own password
-      // Since we created them with a temporary password, they need to reset it
-      try {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
-          redirectTo: `${window.location.origin}/auth/callback?type=password-reset`,
-        });
-        if (resetError) {
-          console.warn('Failed to send password reset email:', resetError);
-          // Don't throw - registration should still succeed even if email fails
-        }
-      } catch (emailError) {
-        console.warn('Error sending password reset email:', emailError);
-        // Don't throw - registration should still succeed
-      }
+      // User sets their own password during registration - much simpler flow!
+      // They just need to confirm their email, then they can sign in directly
 
-      // 3. Generate member number
+      // 2. Generate member number
       const year = new Date().getFullYear().toString().slice(-2);
       const sequence = String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
       const generatedMemberNumber = `SOA-${orgInfo?.region_code}-${year}-${sequence}`;
 
-      // 4. Create membership record using RPC with retry for timing issues
+      // 3. Create membership record using RPC with retry for timing issues
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
       // Wing is automatically set by RPC function based on member_type
       // #region agent log
@@ -636,21 +662,21 @@ function JoinPageContent() {
                     <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
                       1
                     </div>
-                    <span className="text-gray-600">Check your email for confirmation</span>
+                    <span className="text-gray-600"><strong>Check your email</strong> for a confirmation link (check spam folder too)</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
                       2
                     </div>
                     <span className="text-gray-600">
-                      Regional manager will review your application
+                      Click the link to <strong>verify your email address</strong>
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-soa-primary text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
                       3
                     </div>
-                    <span className="text-gray-600">Download the app to access your membership</span>
+                    <span className="text-gray-600">Download the app and <strong>sign in with your email and password</strong></span>
                   </li>
                 </ul>
               </div>
@@ -1011,6 +1037,78 @@ function JoinPageContent() {
                               </button>
                             );
                           })}
+                        </div>
+                      </div>
+
+                      {/* Password Fields */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-4">Create Your Password</h4>
+                        
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Password *
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={formData.password}
+                                onChange={(e) => updateField('password', e.target.value)}
+                                className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                                placeholder="Create a strong password"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                              </button>
+                            </div>
+                            <div className="mt-2 space-y-1 text-xs">
+                              <p className={formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}>
+                                • At least 8 characters
+                              </p>
+                              <p className={/[A-Z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One uppercase letter
+                              </p>
+                              <p className={/[a-z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One lowercase letter
+                              </p>
+                              <p className={/[0-9]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}>
+                                • One number
+                              </p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Confirm Password *
+                            </label>
+                            <div className="relative">
+                              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={formData.confirm_password}
+                                onChange={(e) => updateField('confirm_password', e.target.value)}
+                                className={`w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent ${
+                                  formData.confirm_password && formData.password !== formData.confirm_password
+                                    ? 'border-red-300 bg-red-50'
+                                    : 'border-gray-200'
+                                }`}
+                                placeholder="Confirm your password"
+                              />
+                            </div>
+                            {formData.confirm_password && formData.password !== formData.confirm_password && (
+                              <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
+                            )}
+                            {formData.confirm_password && formData.password === formData.confirm_password && formData.password.length >= 8 && (
+                              <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> Passwords match
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

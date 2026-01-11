@@ -17,6 +17,8 @@ interface CreateMemberRequest {
   last_name: string;
   phone?: string | null;
   id_number?: string | null;
+  date_of_birth?: string | null;
+  physical_address?: string | null;
   organization_id: string;
   region_id?: string | null;
   member_number?: string | null;
@@ -141,6 +143,8 @@ serve(async (req) => {
       p_email: requestData.email.toLowerCase().trim(),
       p_phone: requestData.phone || null,
       p_id_number: requestData.id_number || null,
+      p_date_of_birth: requestData.date_of_birth || null,
+      p_physical_address: requestData.physical_address || null,
       p_role: 'member',
       p_invite_code_used: null,
       p_joined_via: 'admin_add',
