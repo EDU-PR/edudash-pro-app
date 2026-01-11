@@ -326,17 +326,24 @@ function JoinPageContent() {
       const supabase = getSupabase();
       
       // Check for duplicate email in this organization
-      const { data: existingEmail } = await supabase
+      // Use maybeSingle() instead of single() to avoid 406 error when no results
+      const { data: existingEmail, error: emailCheckError } = await supabase
         .from('organization_members')
         .select('id')
         .eq('organization_id', orgInfo?.organization_id)
         .eq('email', formData.email.toLowerCase())
-        .single();
+        .maybeSingle();
 
-      if (existingEmail) {
+      // Only fail if we found an existing email (not if there was an error or no result)
+      if (existingEmail && !emailCheckError) {
         setFormError('This email is already registered. Please use a different email or contact your regional manager.');
         setIsSubmitting(false);
         return;
+      }
+      
+      // Log any error for debugging but continue - the RPC will also check for duplicates
+      if (emailCheckError) {
+        console.warn('[Join] Email check error (continuing anyway):', emailCheckError.message);
       }
       
       // 1. Create user in Supabase Auth
