@@ -135,6 +135,15 @@ export default function JoinPage() {
         .eq('status', 'pending')
         .maybeSingle();
 
+      // Debug logging
+      if (joinRequestError) {
+        console.error('[Join] join_requests query error:', joinRequestError);
+        console.error('[Join] Error code:', joinRequestError.code);
+        console.error('[Join] Error message:', joinRequestError.message);
+      }
+      console.log('[Join] joinRequestData:', joinRequestData ? 'Found' : 'Not found');
+      console.log('[Join] Code searched:', codeUpper);
+
       if (!joinRequestError && joinRequestData) {
         // Check if code has expired
         if (joinRequestData.expires_at && new Date(joinRequestData.expires_at) < new Date()) {
