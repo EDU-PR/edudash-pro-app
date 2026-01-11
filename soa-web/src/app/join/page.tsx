@@ -388,6 +388,9 @@ function JoinPageContent() {
       const supabase = getSupabase();
       
       // Check for duplicate email in this organization
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:390',message:'Checking for duplicate email',data:{email:formData.email.toLowerCase(),orgId:orgInfo?.organization_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
       // Use maybeSingle() instead of single() to avoid 406 error when no results
       const { data: existingEmail, error: emailCheckError } = await supabase
         .from('organization_members')
@@ -398,9 +401,38 @@ function JoinPageContent() {
 
       // Only fail if we found an existing email (not if there was an error or no result)
       if (existingEmail && !emailCheckError) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:400',message:'Duplicate email found',data:{email:formData.email.toLowerCase(),existingId:existingEmail.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
         setFormError('This email is already registered. Please use a different email or contact your regional manager.');
         setIsSubmitting(false);
         return;
+      }
+      
+      // Check for duplicate ID number in this organization (like register page does)
+      if (formData.id_number && formData.id_number.trim()) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:407',message:'Checking for duplicate ID number',data:{idNumber:formData.id_number.trim(),orgId:orgInfo?.organization_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
+        const { data: existingIdNumber, error: idCheckError } = await supabase
+          .from('organization_members')
+          .select('id, id_number, member_number, first_name, last_name')
+          .eq('organization_id', orgInfo?.organization_id)
+          .eq('id_number', formData.id_number.trim())
+          .maybeSingle();
+        
+        if (existingIdNumber && !idCheckError) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:415',message:'Duplicate ID number found',data:{idNumber:formData.id_number.trim(),existingId:existingIdNumber.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          setFormError('This ID number is already registered. Each person can only register once, regardless of region.');
+          setIsSubmitting(false);
+          return;
+        }
+        
+        if (idCheckError) {
+          console.warn('[Join] ID number check error (continuing anyway):', idCheckError.message);
+        }
       }
       
       // Log any error for debugging but continue - the RPC will also check for duplicates
@@ -430,6 +462,9 @@ function JoinPageContent() {
       // 1.5. Wait for user to be committed to auth.users (timing issue fix)
       // Supabase auth.signUp is eventually consistent - the user may not immediately appear in auth.users
       // Increased from 1s to 2s based on production observation of USER_NOT_FOUND errors
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:430',message:'Waiting for auth.user propagation',data:{userId:authData.user?.id,waitMs:2000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H5'})}).catch(()=>{});
+      // #endregion
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
 
       // 2. Send password reset email so user can set their own password
@@ -455,12 +490,18 @@ function JoinPageContent() {
       // 4. Create membership record using RPC with retry for timing issues
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
       // Wing is automatically set by RPC function based on member_type
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:456',message:'Before RPC call',data:{userId:authData.user.id,orgId:orgInfo?.organization_id,memberType:formData.member_type,hasDateOfBirth:!!formData.date_of_birth,hasPhysicalAddress:!!formData.physical_address},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H5'})}).catch(()=>{});
+      // #endregion
       let rpcResult: any = null;
       let rpcError: any = null;
       let retries = 0;
       const maxRetries = 5; // Increased from 3 to give more time for user propagation
       
       while (retries < maxRetries) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:463',message:'RPC call attempt',data:{retry:retries+1,maxRetries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         const { data, error } = await supabase.rpc('register_organization_member', {
           p_organization_id: orgInfo?.organization_id,
           p_user_id: authData.user.id,
@@ -484,11 +525,18 @@ function JoinPageContent() {
         rpcResult = data;
         rpcError = error;
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:485',message:'After RPC call',data:{hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code,error:rpcError?.message,rpcError:rpcResult?.error,retry:retries+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        
         // If RPC error or user not found, retry after a delay
         if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
           retries++;
           if (retries < maxRetries) {
             console.log(`[WebJoin] Retry attempt ${retries}/${maxRetries} after delay...`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:492',message:'Retrying RPC after delay',data:{retry:retries,delayMs:1000*retries},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
             await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
             continue;
           }
@@ -498,10 +546,16 @@ function JoinPageContent() {
         }
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:502',message:'RPC retries complete',data:{finalRetries:retries,hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
       if (rpcError) throw rpcError;
       if (!rpcResult?.success) {
         // Handle USER_NOT_FOUND with helpful message
         if (rpcResult?.code === 'USER_NOT_FOUND') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'join/page.tsx:506',message:'USER_NOT_FOUND after all retries',data:{retries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+          // #endregion
           throw new Error('Your account is being created. Please wait a moment and try again, or check your email for a confirmation link.');
         }
         throw new Error(rpcResult?.error || 'Failed to create membership record');

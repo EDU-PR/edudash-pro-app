@@ -174,7 +174,7 @@ export function TierBadge({ userId, preschoolId, size = 'md', showUpgrade = fals
             fontWeight: 600,
           }}
           onClick={() => {
-            router.push('/#pricing');
+            router.push('/pricing');
           }}
         >
           Upgrade

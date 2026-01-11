@@ -330,9 +330,13 @@ function RegisterPageContent() {
         throw new Error('Failed to create user account - no user ID returned');
       }
 
-      // 3.5. Wait briefly for user to be committed to auth.users (timing issue fix)
-      // Supabase Auth signUp can have a small delay before user is visible in auth.users
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      // 3.5. Wait for user to be committed to auth.users (timing issue fix)
+      // Supabase auth.signUp is eventually consistent - the user may not immediately appear in auth.users
+      // Increased from 1s to 2s based on production observation of USER_NOT_FOUND errors
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:333',message:'Waiting for auth.user propagation',data:{userId:authData.user?.id,waitMs:2000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H5'})}).catch(()=>{});
+      // #endregion
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
 
       // 4. Send password reset email so user can set their own password
       // Since we created them with a temporary password, they need to reset it
@@ -357,12 +361,18 @@ function RegisterPageContent() {
       // 6. Create membership record using RPC with retry for timing issues
       // Uses SECURITY DEFINER to bypass RLS when session might not be fully established
       // Wing is automatically set by RPC function based on member_type
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:357',message:'Before RPC call',data:{userId:authData.user.id,orgId:SOA_ORGANIZATION_ID,memberType:formData.member_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1,H5'})}).catch(()=>{});
+      // #endregion
       let rpcResult: any = null;
       let rpcError: any = null;
       let retries = 0;
-      const maxRetries = 3;
+      const maxRetries = 5; // Increased from 3 to give more time for user propagation
       
       while (retries < maxRetries) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:365',message:'RPC call attempt',data:{retry:retries+1,maxRetries,userId:authData.user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         const { data, error } = await supabase.rpc('register_organization_member', {
           p_organization_id: SOA_ORGANIZATION_ID,
           p_user_id: authData.user.id,
@@ -376,6 +386,8 @@ function RegisterPageContent() {
           p_email: formData.email.toLowerCase().trim(),
           p_phone: formData.phone || null,
           p_id_number: formData.id_number || null,
+          p_date_of_birth: formData.date_of_birth || null, // Added: pass date_of_birth to RPC
+          p_physical_address: formData.address ? `${formData.address}, ${formData.city}`.trim() : null, // Added: combine address fields for physical_address
           p_role: 'member',
           p_invite_code_used: null,
           p_joined_via: 'direct_registration',
@@ -384,11 +396,18 @@ function RegisterPageContent() {
         rpcResult = data;
         rpcError = error;
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:388',message:'After RPC call',data:{hasResult:!!rpcResult,hasError:!!rpcError,success:rpcResult?.success,code:rpcResult?.code,error:rpcError?.message,rpcError:rpcResult?.error,retry:retries+1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        
         // If RPC error or user not found, retry after a delay
         if (rpcError || (rpcResult && !rpcResult.success && rpcResult.code === 'USER_NOT_FOUND')) {
           retries++;
           if (retries < maxRetries) {
             console.log(`[WebRegister] Retry attempt ${retries}/${maxRetries} after delay...`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'register/page.tsx:391',message:'Retrying RPC after delay',data:{retry:retries,delayMs:1000*retries},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
             await new Promise(resolve => setTimeout(resolve, 1000 * retries)); // Exponential backoff
             continue;
           }
