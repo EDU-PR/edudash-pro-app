@@ -155,8 +155,8 @@ export const TierBadge: React.FC<TierBadgeProps> = ({ tier, showManageButton = f
             if (profile?.role === 'super_admin') {
               router.push('/screens/super-admin-subscriptions')
             } else {
-              // Principals/admins go to subscription setup to manage/upgrade
-              router.push('/screens/subscription-setup')
+              // Principals/admins go to plan management to view/upgrade plans
+              router.push('/screens/plan-management')
             }
           }}
           accessibilityLabel={t('subscription.managePlan', { defaultValue: 'Manage plan' })}

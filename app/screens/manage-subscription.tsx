@@ -84,7 +84,7 @@ export default function ManageSubscriptionScreen() {
           {isFreeTier ? (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.push('/screens/subscription-upgrade-post')}
+              onPress={() => router.push('/screens/plan-management')}
             >
               <Ionicons name="arrow-up-circle" size={24} color="#fff" />
               <View style={styles.actionContent}>
@@ -101,7 +101,7 @@ export default function ManageSubscriptionScreen() {
             <>
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }]}
-                onPress={() => router.push('/screens/subscription-upgrade-post')}
+                onPress={() => router.push('/screens/plan-management')}
               >
                 <Ionicons name="swap-horizontal" size={24} color={theme.primary} />
                 <View style={styles.actionContent}>
