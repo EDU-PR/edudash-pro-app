@@ -158,6 +158,8 @@ function JoinPageContent() {
           id,
           invite_code,
           organization_id,
+          region_id,
+          invited_by,
           temp_password,
           requested_role,
           status,
@@ -192,13 +194,52 @@ function JoinPageContent() {
           org = orgData;
         }
 
-        // Get organization region info
-        const { data: orgRegionData } = await supabase
-          .from('organization_regions')
-          .select('id, name, code, province_code')
-          .eq('organization_id', joinRequestData.organization_id)
-          .limit(1)
-          .maybeSingle();
+        // Get region info - prioritize region_id from join_request, then inviter's region, then first region
+        let orgRegionData: any = null;
+        
+        // 1. Try region_id directly stored in join_request
+        if (joinRequestData.region_id) {
+          const { data: regionData } = await supabase
+            .from('organization_regions')
+            .select('id, name, code, province_code')
+            .eq('id', joinRequestData.region_id)
+            .maybeSingle();
+          orgRegionData = regionData;
+          console.log('[Join] Using region from join_request:', regionData?.name);
+        }
+        
+        // 2. Fall back to inviter's region
+        if (!orgRegionData && joinRequestData.invited_by) {
+          const { data: inviterMember } = await supabase
+            .from('organization_members')
+            .select('region_id')
+            .eq('user_id', joinRequestData.invited_by)
+            .eq('organization_id', joinRequestData.organization_id)
+            .maybeSingle();
+          
+          if (inviterMember?.region_id) {
+            const { data: regionData } = await supabase
+              .from('organization_regions')
+              .select('id, name, code, province_code')
+              .eq('id', inviterMember.region_id)
+              .maybeSingle();
+            orgRegionData = regionData;
+            console.log('[Join] Using inviter region:', regionData?.name);
+          }
+        }
+        
+        // 3. Last resort: first region for the organization (alphabetically)
+        if (!orgRegionData) {
+          const { data: fallbackRegion } = await supabase
+            .from('organization_regions')
+            .select('id, name, code, province_code')
+            .eq('organization_id', joinRequestData.organization_id)
+            .order('name', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          orgRegionData = fallbackRegion;
+          console.log('[Join] Using fallback region:', fallbackRegion?.name);
+        }
 
         const { count: memberCount } = await supabase
           .from('organization_members')
@@ -386,8 +427,10 @@ function JoinPageContent() {
         throw new Error('Failed to create user account - no user ID returned');
       }
 
-      // 1.5. Wait briefly for user to be committed to auth.users (timing issue fix)
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      // 1.5. Wait for user to be committed to auth.users (timing issue fix)
+      // Supabase auth.signUp is eventually consistent - the user may not immediately appear in auth.users
+      // Increased from 1s to 2s based on production observation of USER_NOT_FOUND errors
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
 
       // 2. Send password reset email so user can set their own password
       // Since we created them with a temporary password, they need to reset it
@@ -415,7 +458,7 @@ function JoinPageContent() {
       let rpcResult: any = null;
       let rpcError: any = null;
       let retries = 0;
-      const maxRetries = 3;
+      const maxRetries = 5; // Increased from 3 to give more time for user propagation
       
       while (retries < maxRetries) {
         const { data, error } = await supabase.rpc('register_organization_member', {
