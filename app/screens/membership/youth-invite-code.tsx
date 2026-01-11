@@ -28,6 +28,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { generateTemporaryPassword } from '@/lib/memberRegistrationUtils';
 import { MEMBER_TYPE_LABELS } from '@/components/membership/types';
+import { useOrganizationRegions, OrganizationRegion } from '@/hooks/membership';
 import Constants from 'expo-constants';
 
 let Clipboard: any = null;
@@ -100,9 +101,15 @@ export default function YouthInviteCodeScreen() {
   const [expiryDays, setExpiryDays] = useState('30');
   const [description, setDescription] = useState('Youth Wing Invite');
   const [selectedRole, setSelectedRole] = useState<string>('youth_member');
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [selectedCode, setSelectedCode] = useState<YouthInviteCode | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const qrSvgRef = useRef<any>(null);
+
+  // Load all regions for the organization
+  const { regions, loading: regionsLoading } = useOrganizationRegions({ 
+    organizationId: organizationId || undefined 
+  });
 
   const loadCodes = useCallback(async () => {
     if (!organizationId) return;
@@ -159,6 +166,7 @@ export default function YouthInviteCodeScreen() {
         
         if (!error && data?.region_id) {
           setUserRegionId(data.region_id);
+          setSelectedRegionId(data.region_id); // Default to user's region
           console.log('[YouthInviteCode] User region_id:', data.region_id);
         }
       } catch (e) {
@@ -183,6 +191,11 @@ export default function YouthInviteCodeScreen() {
       return;
     }
     
+    if (!selectedRegionId) {
+      Alert.alert('Select Region', 'Please select a region for this invite code.');
+      return;
+    }
+    
     setLoading(true);
     try {
       const supabase = assertSupabase();
@@ -199,7 +212,7 @@ export default function YouthInviteCodeScreen() {
         .from('join_requests')
         .insert({
           organization_id: organizationId,
-          region_id: userRegionId, // Include inviter's region for proper routing
+          region_id: selectedRegionId, // Use selected region from form
           request_type: 'member_join',
           invite_code: inviteCode,
           invited_by: user.id,
@@ -449,8 +462,56 @@ export default function YouthInviteCodeScreen() {
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Create New Invite</Text>
                 
+                {/* Region Selection */}
+                <Text style={styles.inputLabel}>Select Region *</Text>
+                {regionsLoading ? (
+                  <View style={styles.loadingRegions}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={[styles.text, { marginLeft: 8 }]}>Loading regions...</Text>
+                  </View>
+                ) : regions.length === 0 ? (
+                  <Text style={[styles.text, { color: theme.error || '#EF4444' }]}>
+                    No regions available. Contact your administrator.
+                  </Text>
+                ) : (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={styles.regionScroll}
+                    contentContainerStyle={styles.regionScrollContent}
+                  >
+                    {regions.map((region) => (
+                      <TouchableOpacity
+                        key={region.id}
+                        style={[
+                          styles.regionChip,
+                          { backgroundColor: theme.surface, borderColor: theme.border },
+                          selectedRegionId === region.id && { borderColor: theme.primary, backgroundColor: `${theme.primary}20` },
+                        ]}
+                        onPress={() => setSelectedRegionId(region.id)}
+                      >
+                        <Text style={[
+                          styles.regionChipCode, 
+                          { color: selectedRegionId === region.id ? theme.primary : theme.text }
+                        ]}>
+                          {region.province_code || region.code}
+                        </Text>
+                        <Text style={[
+                          styles.regionChipName, 
+                          { color: selectedRegionId === region.id ? theme.primary : theme.textSecondary }
+                        ]}>
+                          {region.name}
+                        </Text>
+                        {selectedRegionId === region.id && (
+                          <Ionicons name="checkmark-circle" size={16} color={theme.primary} style={{ marginLeft: 4 }} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                
                 {/* Role Selection */}
-                <Text style={styles.inputLabel}>Invite Role</Text>
+                <Text style={[styles.inputLabel, { marginTop: 16 }]}>Invite Role</Text>
                 <View style={styles.roleSelector}>
                   {YOUTH_ROLES.map((role) => (
                     <TouchableOpacity
@@ -1011,6 +1072,37 @@ const createStyles = (theme: any) => StyleSheet.create({
   roleDescription: {
     fontSize: 12,
     marginTop: 4,
+  },
+  // Region selection styles
+  loadingRegions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  regionScroll: {
+    marginBottom: 8,
+  },
+  regionScrollContent: {
+    gap: 10,
+    paddingVertical: 4,
+  },
+  regionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    minWidth: 100,
+  },
+  regionChipCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginRight: 6,
+  },
+  regionChipName: {
+    fontSize: 12,
+    maxWidth: 100,
   },
   modalOverlay: {
     flex: 1,

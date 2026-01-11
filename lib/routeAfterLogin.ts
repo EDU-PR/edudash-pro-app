@@ -613,7 +613,7 @@ export function validateUserAccess(profile: EnhancedUserProfile | null): {
   // If user has a valid role, grant access regardless of capability check
   // This prevents users from getting stuck on profiles-gate
   const role = normalizeRole(profile.role) as Role;
-  if (role && ['parent', 'teacher', 'principal_admin', 'admin', 'super_admin'].includes(role)) {
+  if (role && ['parent', 'teacher', 'principal_admin', 'admin', 'super_admin', 'student', 'learner'].includes(role)) {
     console.log('[validateUserAccess] User has valid role:', role, '- granting access');
     return { hasAccess: true };
   }
@@ -645,6 +645,9 @@ export function getRouteForRole(role: Role | string | null): string {
       return '/screens/teacher-dashboard';
     case 'parent':
       return '/screens/parent-dashboard';
+    case 'student':
+    case 'learner':
+      return '/screens/learner-dashboard';
     default:
       return '/landing';
   }

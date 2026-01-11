@@ -17,6 +17,7 @@ function AuthCallbackContent() {
         
         // Get the code from URL (Supabase PKCE flow)
         const code = searchParams.get('code');
+        const type = searchParams.get('type');
         const flow = searchParams.get('flow');
         const errorDescription = searchParams.get('error_description');
 
@@ -26,9 +27,80 @@ function AuthCallbackContent() {
           return;
         }
 
+        // Check if this is a password reset flow
+        if (type === 'password-reset' || type === 'recovery') {
+          // Redirect to set-password page with the code
+          if (code) {
+            router.replace(`/set-password?code=${code}`);
+          } else {
+            router.replace('/set-password');
+          }
+          return;
+        }
+
+        // Check if this is an email confirmation from the OLD registration flow
+        // (where users needed to set password after email confirmation)
+        // Keep this for backwards compatibility with users who registered before the change
+        if (type === 'email-confirmation') {
+          if (code) {
+            // Exchange code for session first
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (error) {
+              console.error('Auth callback error:', error);
+              setStatus('error');
+              setMessage(error.message || 'Failed to verify email. Please try again.');
+              return;
+            }
+            
+            // Redirect to set-password page to let user set their password
+            router.replace('/set-password');
+          } else {
+            router.replace('/set-password');
+          }
+          return;
+        }
+
+        // Handle NEW signup flow - user already set password during registration
+        // Just verify email and show success message
+        if (type === 'signup') {
+          if (code) {
+            // Exchange code for session
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (error) {
+              console.error('Auth callback error:', error);
+              setStatus('error');
+              setMessage(error.message || 'Failed to verify email. Please try again.');
+              return;
+            }
+            
+            // Email verified! User can now sign in with their password
+            setStatus('success');
+            setMessage('Your email has been verified! You can now sign in with your email and password.');
+            
+            // Sign out the temporary session created by exchangeCodeForSession
+            // so user can properly sign in through the login page
+            await supabase.auth.signOut();
+            
+            // Redirect to sign-in page after a delay
+            setTimeout(() => {
+              router.push('/signin');
+            }, 3000);
+          } else {
+            // No code provided, just show success
+            setStatus('success');
+            setMessage('Your email has been verified! You can now sign in.');
+            setTimeout(() => {
+              router.push('/signin');
+            }, 3000);
+          }
+          return;
+        }
+
         if (code) {
           // Exchange code for session
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           
           if (error) {
             console.error('Auth callback error:', error);
@@ -36,9 +108,16 @@ function AuthCallbackContent() {
             setMessage(error.message || 'Failed to verify email. Please try again.');
             return;
           }
+
+          // Check if this is actually a recovery/password reset based on session
+          // Supabase may not pass type param, but session will indicate recovery
+          if (data.session?.user?.recovery_sent_at) {
+            router.replace('/set-password');
+            return;
+          }
         }
 
-        // Success!
+        // Success - this is email verification
         setStatus('success');
         setMessage('Email verified successfully! You can now sign in to the Soil of Africa app.');
         
