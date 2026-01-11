@@ -92,6 +92,7 @@ export default function YouthInviteCodeScreen() {
   const [codes, setCodes] = useState<YouthInviteCode[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [userRegionId, setUserRegionId] = useState<string | null>(null);
 
   // New code form
   const [unlimited, setUnlimited] = useState(true);
@@ -143,6 +144,30 @@ export default function YouthInviteCodeScreen() {
 
   useEffect(() => { loadCodes(); }, [loadCodes]);
 
+  // Load user's region_id from organization_members
+  useEffect(() => {
+    const loadUserRegion = async () => {
+      if (!user?.id || !organizationId) return;
+      try {
+        const supabase = assertSupabase();
+        const { data, error } = await supabase
+          .from('organization_members')
+          .select('region_id')
+          .eq('user_id', user.id)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        
+        if (!error && data?.region_id) {
+          setUserRegionId(data.region_id);
+          console.log('[YouthInviteCode] User region_id:', data.region_id);
+        }
+      } catch (e) {
+        console.warn('[YouthInviteCode] Failed to load user region:', e);
+      }
+    };
+    loadUserRegion();
+  }, [user?.id, organizationId]);
+
   const generateInviteCode = (): string => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I,O,0,1 for readability
     let code = '';
@@ -174,6 +199,7 @@ export default function YouthInviteCodeScreen() {
         .from('join_requests')
         .insert({
           organization_id: organizationId,
+          region_id: userRegionId, // Include inviter's region for proper routing
           request_type: 'member_join',
           invite_code: inviteCode,
           invited_by: user.id,
@@ -304,6 +330,39 @@ export default function YouthInviteCodeScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const deleteCode = async (item: YouthInviteCode) => {
+    Alert.alert(
+      'Delete Invite Code',
+      `Are you sure you want to permanently delete the invite code "${item.code}"?\n\nThis action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const supabase = assertSupabase();
+              
+              const { error } = await supabase
+                .from('join_requests')
+                .delete()
+                .eq('id', item.id);
+              
+              if (error) throw error;
+              await loadCodes();
+              Alert.alert('Deleted', 'Invite code has been deleted');
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to delete');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const latest = codes.find(c => c.is_active);
@@ -488,76 +547,111 @@ export default function YouthInviteCodeScreen() {
                     ? `${item.current_uses || 0}/${item.max_uses}` 
                     : `${item.current_uses || 0}/∞`;
                   const expired = item.expires_at && new Date(item.expires_at) < new Date();
+                  const isInactive = !item.is_active;
+                  const canDelete = isInactive || expired;
+                  const roleLabel = YOUTH_ROLES.find(r => r.id === item.requested_role)?.label || item.requested_role || 'Youth Member';
                   
                   return (
-                    <View key={item.id} style={styles.card}>
-                      <View style={styles.rowBetween}>
-                        <Text style={styles.code}>{item.code}</Text>
-                        <View style={[
-                          styles.badge, 
-                          expired ? styles.badgeExpired : item.is_active ? styles.badgeActive : styles.badgeInactive
-                        ]}>
-                          <Text style={styles.badgeText}>
-                            {expired ? 'EXPIRED' : item.is_active ? 'ACTIVE' : 'INACTIVE'}
-                          </Text>
+                    <View key={item.id} style={[styles.card, (isInactive || expired) && styles.cardInactive]}>
+                      {/* Header Row: Code + Status + Delete */}
+                      <View style={styles.cardHeader}>
+                        <View style={styles.codeContainer}>
+                          <Text style={[styles.code, (isInactive || expired) && styles.codeInactive]}>{item.code}</Text>
+                          <TouchableOpacity onPress={() => copyToClipboard(item.code)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <Ionicons name="copy-outline" size={18} color={theme.textSecondary} />
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.headerRight}>
+                          <View style={[
+                            styles.badge, 
+                            expired ? styles.badgeExpired : item.is_active ? styles.badgeActive : styles.badgeInactive
+                          ]}>
+                            <Text style={styles.badgeText}>
+                              {expired ? 'EXPIRED' : item.is_active ? 'ACTIVE' : 'INACTIVE'}
+                            </Text>
+                          </View>
+                          {canDelete && (
+                            <TouchableOpacity 
+                              onPress={() => deleteCode(item)} 
+                              style={styles.deleteBtn}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                            </TouchableOpacity>
+                          )}
                         </View>
                       </View>
                       
-                      <Text style={[styles.description, { color: theme.textSecondary }]}>{item.description}</Text>
+                      {/* Role & Description */}
+                      <View style={styles.metaRow}>
+                        <View style={[styles.roleTag, { backgroundColor: `${theme.primary}20` }]}>
+                          <Ionicons name="person" size={12} color={theme.primary} />
+                          <Text style={[styles.roleTagText, { color: theme.primary }]}>{roleLabel}</Text>
+                        </View>
+                        <Text style={[styles.description, { color: theme.textSecondary }]}>• {item.description}</Text>
+                      </View>
                       
-                      {/* Show temporary password if available */}
-                      {item.temp_password && (
-                        <View style={[styles.passwordBox, { backgroundColor: theme.surface, borderColor: theme.primary }]}>
-                          <View style={styles.row}>
-                            <Ionicons name="lock-closed" size={16} color={theme.primary} />
-                            <Text style={[styles.passwordLabel, { color: theme.primary }]}>Temp Password:</Text>
+                      {/* Temp Password (collapsible visual) */}
+                      {item.temp_password && item.is_active && !expired && (
+                        <View style={[styles.passwordBox, { backgroundColor: `${theme.primary}10`, borderColor: theme.primary }]}>
+                          <View style={styles.passwordRow}>
+                            <Ionicons name="key" size={14} color={theme.primary} />
+                            <Text style={[styles.passwordLabel, { color: theme.primary }]}>Password:</Text>
+                            <Text style={[styles.passwordValue, { color: theme.text }]}>{item.temp_password}</Text>
+                            <TouchableOpacity 
+                              onPress={() => copyToClipboard(item.temp_password!)}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                              <Ionicons name="copy" size={14} color={theme.primary} />
+                            </TouchableOpacity>
                           </View>
-                          <Text style={[styles.passwordValue, { color: theme.text }]}>{item.temp_password}</Text>
-                          <Text style={[styles.passwordHint, { color: theme.textSecondary }]}>
-                            Share this with invitees for initial login
-                          </Text>
                         </View>
                       )}
                       
+                      {/* Stats Row */}
                       <View style={styles.statsRow}>
                         <View style={styles.stat}>
-                          <Ionicons name="people" size={16} color={theme.textSecondary} />
-                          <Text style={[styles.statText, { color: theme.textSecondary }]}>Uses: {usesText}</Text>
+                          <Ionicons name="people-outline" size={14} color={theme.textSecondary} />
+                          <Text style={[styles.statText, { color: theme.textSecondary }]}>{usesText}</Text>
                         </View>
                         <View style={styles.stat}>
-                          <Ionicons name="calendar" size={16} color={theme.textSecondary} />
+                          <Ionicons name="time-outline" size={14} color={theme.textSecondary} />
                           <Text style={[styles.statText, { color: theme.textSecondary }]}>
                             {item.expires_at 
-                              ? `Expires: ${new Date(item.expires_at).toLocaleDateString()}` 
-                              : 'No expiry'}
+                              ? new Date(item.expires_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
+                              : '∞'}
+                          </Text>
+                        </View>
+                        <View style={styles.stat}>
+                          <Ionicons name="calendar-outline" size={14} color={theme.textSecondary} />
+                          <Text style={[styles.statText, { color: theme.textSecondary }]}>
+                            {new Date(item.created_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
                           </Text>
                         </View>
                       </View>
 
-                      <View style={styles.row}>
-                        <TouchableOpacity style={styles.smallBtn} onPress={() => copyToClipboard(item.code)}>
-                          <Ionicons name="copy-outline" size={14} color={theme.text} />
-                          <Text style={styles.smallBtnText}>Copy</Text>
+                      {/* Action Buttons - Compact Grid */}
+                      <View style={styles.actionsGrid}>
+                        <TouchableOpacity style={[styles.actionBtnCompact, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={() => showQRCode(item)}>
+                          <Ionicons name="qr-code" size={16} color={theme.text} />
+                          <Text style={[styles.actionBtnTextCompact, { color: theme.text }]}>QR</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.smallBtn} onPress={() => showQRCode(item)}>
-                          <Ionicons name="qr-code-outline" size={14} color={theme.text} />
-                          <Text style={styles.smallBtnText}>QR Code</Text>
+                        <TouchableOpacity style={[styles.actionBtnCompact, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={() => shareInvite(item)}>
+                          <Ionicons name="share-social" size={16} color={theme.text} />
+                          <Text style={[styles.actionBtnTextCompact, { color: theme.text }]}>Share</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.smallBtn} onPress={() => shareInvite(item)}>
-                          <Ionicons name="share-social-outline" size={14} color={theme.text} />
-                          <Text style={styles.smallBtnText}>Share</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.smallBtn, styles.whatsappBtn]} onPress={() => shareWhatsApp(item)}>
-                          <Ionicons name="logo-whatsapp" size={14} color="#fff" />
-                          <Text style={styles.smallBtnTextDark}>WhatsApp</Text>
+                        <TouchableOpacity style={[styles.actionBtnCompact, { backgroundColor: '#25D366' }]} onPress={() => shareWhatsApp(item)}>
+                          <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                          <Text style={[styles.actionBtnTextCompact, { color: '#fff' }]}>WhatsApp</Text>
                         </TouchableOpacity>
                         {!expired && (
                           <TouchableOpacity 
-                            style={[styles.smallBtn, item.is_active ? styles.deactivateBtn : styles.activateBtn]} 
+                            style={[styles.actionBtnCompact, { backgroundColor: item.is_active ? '#F59E0B' : '#22C55E' }]} 
                             onPress={() => toggleActive(item)}
                           >
-                            <Text style={styles.smallBtnTextDark}>
-                              {item.is_active ? 'Deactivate' : 'Activate'}
+                            <Ionicons name={item.is_active ? 'pause' : 'play'} size={16} color="#fff" />
+                            <Text style={[styles.actionBtnTextCompact, { color: '#fff' }]}>
+                              {item.is_active ? 'Pause' : 'Resume'}
                             </Text>
                           </TouchableOpacity>
                         )}
@@ -873,22 +967,23 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
   },
   passwordBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   passwordLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 6,
+    fontSize: 11,
+    fontWeight: '600',
   },
   passwordValue: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
     letterSpacing: 1,
-    marginTop: 6,
     fontFamily: 'monospace',
+    flex: 1,
   },
   passwordHint: {
     fontSize: 11,
@@ -995,5 +1090,78 @@ const createStyles = (theme: any) => StyleSheet.create({
   modalBtnText: {
     fontWeight: '700',
     fontSize: 15,
+  },
+  // New styles for improved card layout
+  cardInactive: {
+    opacity: 0.7,
+    borderStyle: 'dashed',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  codeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  codeInactive: {
+    textDecorationLine: 'line-through',
+    opacity: 0.7,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteBtn: {
+    padding: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  roleTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  roleTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  actionBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 70,
+  },
+  actionBtnTextCompact: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
