@@ -27,6 +27,9 @@ import {
   Building2,
   Heart,
   Smartphone,
+  Calendar,
+  Home,
+  CreditCard,
 } from 'lucide-react';
 
 // Organization info returned from database
@@ -59,6 +62,9 @@ interface FormData {
   last_name: string;
   email: string;
   phone: string;
+  id_number: string;
+  date_of_birth: string;
+  physical_address: string;
   member_type: MemberType;
 }
 
@@ -93,6 +99,9 @@ function JoinPageContent() {
     last_name: '',
     email: '',
     phone: '',
+    id_number: '',
+    date_of_birth: '',
+    physical_address: '',
     member_type: 'learner',
   });
 
@@ -318,6 +327,18 @@ function JoinPageContent() {
       setFormError('Please enter your phone number');
       return;
     }
+    if (!formData.id_number) {
+      setFormError('Please enter your ID or passport number');
+      return;
+    }
+    if (!formData.date_of_birth) {
+      setFormError('Please enter your date of birth');
+      return;
+    }
+    if (!formData.physical_address) {
+      setFormError('Please enter your home address');
+      return;
+    }
 
     setIsSubmitting(true);
     setFormError('');
@@ -409,7 +430,9 @@ function JoinPageContent() {
           p_last_name: formData.last_name,
           p_email: formData.email.toLowerCase(),
           p_phone: formData.phone || null,
-          p_id_number: null,
+          p_id_number: formData.id_number || null,
+          p_date_of_birth: formData.date_of_birth || null,
+          p_physical_address: formData.physical_address || null,
           p_role: 'member',
           p_invite_code_used: inviteCode.toUpperCase(),
           p_joined_via: 'invite_code',
@@ -798,6 +821,55 @@ function JoinPageContent() {
                             onChange={(e) => updateField('phone', e.target.value)}
                             className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
                             placeholder="+27 82 123 4567"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ID/Passport Number *
+                        </label>
+                        <div className="relative">
+                          <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={formData.id_number}
+                            onChange={(e) => updateField('id_number', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            placeholder="9001011234567"
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">SA ID (13 digits) or passport number</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Date of Birth *
+                        </label>
+                        <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                          <input
+                            type="date"
+                            value={formData.date_of_birth}
+                            onChange={(e) => updateField('date_of_birth', e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent"
+                            max={new Date().toISOString().split('T')[0]}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Home Address *
+                        </label>
+                        <div className="relative">
+                          <Home className="absolute left-4 top-4 w-5 h-5 text-gray-400" />
+                          <textarea
+                            value={formData.physical_address}
+                            onChange={(e) => updateField('physical_address', e.target.value)}
+                            rows={3}
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-soa-primary focus:border-transparent resize-none"
+                            placeholder="123 Main Street, Suburb, City, Province"
                           />
                         </div>
                       </div>
