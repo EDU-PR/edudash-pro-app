@@ -1,3 +1,5 @@
+// needs refactor to use AuthContext for sign-in state management
+
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
