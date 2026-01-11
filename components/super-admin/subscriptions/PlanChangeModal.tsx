@@ -19,6 +19,7 @@ import { createCheckout } from '@/lib/payments';
 import { track } from '@/lib/analytics';
 import { Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { validateTierAssignment, ORGANIZATION_MIN_MONTHLY_PRICE, isValidOrganizationTier } from '@/lib/tiers';
 
 interface Subscription {
   id: string;
@@ -104,15 +105,28 @@ export default function PlanChangeModal({
       setPlansLoading(true);
       const plansData = await listActivePlans(assertSupabase());
       
-      // Sort plans from lowest to highest (Free → Starter → Basic → Premium → Pro → Enterprise)
-      const sortedPlans = plansData.sort((a, b) => {
-        // Define tier hierarchy
+      // Filter to only show valid organization tiers (schools cannot use parent/teacher tiers)
+      const organizationPlans = plansData.filter(plan => {
+        const tierLower = (plan.tier || '').toLowerCase();
+        // Only allow free and school_* tiers for organizations
+        return tierLower === 'free' || 
+               tierLower.startsWith('school_') || 
+               isValidOrganizationTier(plan.tier);
+      });
+      
+      // Sort plans from lowest to highest (Free → Starter → Premium → Pro → Enterprise)
+      const sortedPlans = organizationPlans.sort((a, b) => {
+        // Define tier hierarchy for organizations
         const tierOrder: Record<string, number> = {
           'free': 0,
+          'school_starter': 1,
           'starter': 1, 
           'basic': 2,
+          'school_premium': 3,
           'premium': 3,
+          'school_pro': 4,
           'pro': 4,
+          'school_enterprise': 5,
           'enterprise': 5
         };
         
@@ -184,6 +198,17 @@ export default function PlanChangeModal({
     
     if (!currentPlan || !newPlan) {
       Alert.alert('Error', 'Please select a valid plan');
+      return;
+    }
+
+    // Validate that the selected tier is appropriate for organizations
+    const tierValidation = validateTierAssignment(newPlan.tier, 'organization');
+    if (!tierValidation.valid) {
+      Alert.alert(
+        'Invalid Tier for Organization',
+        `${tierValidation.error}\n\nSchools must use school-level tiers (minimum R${ORGANIZATION_MIN_MONTHLY_PRICE}/month).`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 

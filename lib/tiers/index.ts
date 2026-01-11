@@ -402,3 +402,108 @@ export function normalizeTierName(tier: string): TierNameAligned {
   
   return legacyMap[normalized] || (normalized as TierNameAligned) || 'free';
 }
+
+// =============================================================================
+// ORGANIZATION TIER VALIDATION
+// =============================================================================
+
+/**
+ * Minimum monthly price for organization/school tiers (R299)
+ * Organizations cannot use parent-level pricing (R99)
+ */
+export const ORGANIZATION_MIN_MONTHLY_PRICE = 299;
+
+/**
+ * Valid tiers for organizations (preschools, schools, etc.)
+ * Organizations CANNOT use parent_starter, parent_plus, teacher_starter, or teacher_pro
+ */
+export const VALID_ORGANIZATION_TIERS: TierNameAligned[] = [
+  'free',
+  'school_starter',
+  'school_premium', 
+  'school_pro',
+  'school_enterprise',
+];
+
+/**
+ * Check if a tier is valid for an organization/school
+ * @param tier - The tier to validate
+ * @returns true if tier is valid for organizations
+ */
+export function isValidOrganizationTier(tier: string): boolean {
+  const normalized = normalizeTierName(tier);
+  return VALID_ORGANIZATION_TIERS.includes(normalized);
+}
+
+/**
+ * Validate that a tier assignment is appropriate for the entity type
+ * @param tier - The tier being assigned
+ * @param entityType - 'organization' | 'parent' | 'teacher'
+ * @returns Object with valid flag and error message if invalid
+ */
+export function validateTierAssignment(
+  tier: string,
+  entityType: 'organization' | 'parent' | 'teacher'
+): { valid: boolean; error?: string; suggestedTier?: TierNameAligned } {
+  const normalized = normalizeTierName(tier);
+  
+  if (entityType === 'organization') {
+    // Organizations cannot use parent or individual teacher tiers
+    if (normalized.startsWith('parent_') || normalized.startsWith('teacher_')) {
+      return {
+        valid: false,
+        error: `Organizations cannot use ${normalized} tier. Minimum organization tier is school_starter (R${ORGANIZATION_MIN_MONTHLY_PRICE}/month).`,
+        suggestedTier: 'school_starter',
+      };
+    }
+    
+    // Check if it's a valid organization tier
+    if (!VALID_ORGANIZATION_TIERS.includes(normalized)) {
+      return {
+        valid: false,
+        error: `Invalid organization tier: ${tier}. Valid tiers are: ${VALID_ORGANIZATION_TIERS.join(', ')}`,
+        suggestedTier: 'school_starter',
+      };
+    }
+  }
+  
+  if (entityType === 'parent') {
+    // Parents can only use free, parent_starter, or parent_plus
+    const validParentTiers: TierNameAligned[] = ['free', 'parent_starter', 'parent_plus'];
+    if (!validParentTiers.includes(normalized)) {
+      return {
+        valid: false,
+        error: `Invalid parent tier: ${tier}. Valid tiers are: ${validParentTiers.join(', ')}`,
+        suggestedTier: 'parent_starter',
+      };
+    }
+  }
+  
+  if (entityType === 'teacher') {
+    // Individual teachers can use free, teacher_starter, or teacher_pro
+    const validTeacherTiers: TierNameAligned[] = ['free', 'teacher_starter', 'teacher_pro'];
+    if (!validTeacherTiers.includes(normalized)) {
+      return {
+        valid: false,
+        error: `Invalid teacher tier: ${tier}. Valid tiers are: ${validTeacherTiers.join(', ')}`,
+        suggestedTier: 'teacher_starter',
+      };
+    }
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Get the minimum valid tier for an organization upgrading from free
+ */
+export function getMinimumOrganizationPaidTier(): TierNameAligned {
+  return 'school_starter';
+}
+
+/**
+ * Get pricing for minimum organization tier
+ */
+export function getMinimumOrganizationPricing(): TierPricing {
+  return TIER_PRICING.school_starter!;
+}

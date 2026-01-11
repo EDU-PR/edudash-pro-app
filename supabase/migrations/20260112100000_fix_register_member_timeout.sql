@@ -68,8 +68,22 @@ BEGIN
     ELSE COALESCE(p_membership_status, 'pending_verification')
   END;
   
-  -- Quick check if user exists (NO retry loop - client handles retries)
-  -- Check both auth.users and profiles table
+  -- Trust p_user_id if provided - it came from auth.signUp() which returns a valid user ID
+  -- Even if email confirmation is pending, the user exists and will be created
+  -- The foreign key constraint on user_id will ensure data integrity
+  -- Only skip this check if p_user_id is explicitly NULL (shouldn't happen)
+  -- NOTE: With email confirmation enabled, user might not be visible in auth.users immediately
+  -- but the user ID from auth.signUp() is valid, so we proceed with member creation
+  IF p_user_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'code', 'NULL_USER_ID',
+      'error', 'User ID is required'
+    );
+  END IF;
+  
+  -- Optional check: Verify user exists (but don't fail if not found - email confirmation might be pending)
+  -- This is for logging/debugging purposes only
   SELECT EXISTS(
     SELECT 1 FROM auth.users WHERE id = p_user_id
   ) INTO v_user_exists;
@@ -81,13 +95,12 @@ BEGIN
     ) INTO v_user_exists;
   END IF;
   
+  -- Log warning if user not found, but proceed anyway (user will be created when email is confirmed)
+  -- The foreign key constraint will prevent invalid user_ids
   IF NOT v_user_exists THEN
-    RETURN jsonb_build_object(
-      'success', false,
-      'code', 'USER_NOT_FOUND',
-      'error', 'User account not found. Please try again in a moment.',
-      'retry_suggested', true
-    );
+    -- Log warning but continue - email confirmation might be pending
+    -- The INSERT will fail with foreign key violation if user truly doesn't exist
+    NULL; -- Continue with member creation
   END IF;
   
   -- Check if member already exists for this organization
@@ -132,54 +145,70 @@ BEGIN
   END IF;
   
   -- Insert the new member WITH wing column and new fields
-  INSERT INTO organization_members (
-    organization_id,
-    user_id,
-    region_id,
-    member_number,
-    member_type,
-    membership_tier,
-    membership_status,
-    first_name,
-    last_name,
-    email,
-    phone,
-    id_number,
-    date_of_birth,
-    physical_address,
-    role,
-    invite_code_used,
-    joined_via,
-    seat_status,
-    join_date,
-    created_at,
-    updated_at,
-    wing
-  ) VALUES (
-    p_organization_id,
-    p_user_id,
-    p_region_id,
-    v_member_number,
-    COALESCE(p_member_type, 'learner'),
-    COALESCE(p_membership_tier, 'standard'),
-    v_normalized_status,
-    p_first_name,
-    p_last_name,
-    p_email,
-    p_phone,
-    p_id_number,
-    p_date_of_birth,
-    p_physical_address,
-    COALESCE(p_role, 'member'),
-    p_invite_code_used,
-    COALESCE(p_joined_via, 'direct_registration'),
-    'active',
-    CURRENT_DATE,
-    NOW(),
-    NOW(),
-    v_wing
-  )
-  RETURNING id INTO v_member_id;
+  -- NOTE: If user_id foreign key violation occurs, it means the user doesn't exist in auth.users yet
+  -- This can happen if email confirmation is pending - the user exists but might not be visible
+  -- The foreign_key_violation exception handler will catch this and return USER_NOT_FOUND
+  BEGIN
+    INSERT INTO organization_members (
+      organization_id,
+      user_id,
+      region_id,
+      member_number,
+      member_type,
+      membership_tier,
+      membership_status,
+      first_name,
+      last_name,
+      email,
+      phone,
+      id_number,
+      date_of_birth,
+      physical_address,
+      role,
+      invite_code_used,
+      joined_via,
+      seat_status,
+      join_date,
+      created_at,
+      updated_at,
+      wing
+    ) VALUES (
+      p_organization_id,
+      p_user_id,
+      p_region_id,
+      v_member_number,
+      COALESCE(p_member_type, 'learner'),
+      COALESCE(p_membership_tier, 'standard'),
+      v_normalized_status,
+      p_first_name,
+      p_last_name,
+      p_email,
+      p_phone,
+      p_id_number,
+      p_date_of_birth,
+      p_physical_address,
+      COALESCE(p_role, 'member'),
+      p_invite_code_used,
+      COALESCE(p_joined_via, 'direct_registration'),
+      'active',
+      CURRENT_DATE,
+      NOW(),
+      NOW(),
+      v_wing
+    )
+    RETURNING id INTO v_member_id;
+  EXCEPTION
+    WHEN foreign_key_violation THEN
+      -- User doesn't exist in auth.users yet - likely email confirmation pending
+      -- Return USER_NOT_FOUND so client can retry
+      RETURN jsonb_build_object(
+        'success', false,
+        'code', 'USER_NOT_FOUND',
+        'error', 'User account not found in auth.users. Please wait a moment and try again, or check your email for a confirmation link.',
+        'retry_suggested', true,
+        'details', SQLERRM
+      );
+  END;
   
   -- Update the user's profile (optional - don't fail if profile doesn't exist)
   BEGIN
@@ -258,7 +287,8 @@ EXCEPTION
 END;
 $function$;
 
-COMMENT ON FUNCTION public.register_organization_member IS 
+COMMENT ON FUNCTION public.register_organization_member(uuid,uuid,uuid,text,text,text,text,text,text,text,text,text,date,text,text,text,text) IS 
 'Registers a new organization member. No retry loop - client handles retries.
 Added p_date_of_birth and p_physical_address parameters for Youth Wing registration.
-Wing is auto-set based on member_type prefix.';
+Wing is auto-set based on member_type prefix.
+Trusts p_user_id from auth.signUp() - proceeds even if email confirmation is pending.';

@@ -147,7 +147,7 @@ export default function TeachersPage() {
                 <button 
                   className="btn"
                   style={{ background: 'white', color: '#dc2626', border: 'none', fontWeight: 600 }}
-                  onClick={() => router.push('/dashboard/principal/settings')}
+                  onClick={() => router.push('/pricing')}
                 >
                   Upgrade Plan
                 </button>

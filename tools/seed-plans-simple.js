@@ -57,23 +57,9 @@ const defaultPlans = [
       'Custom reporting'
     ],
     is_active: true
-  },
-  {
-    name: 'Young Eagles',
-    tier: 'young_eagles',
-    price_monthly: 99,
-    price_annual: 990,
-    max_teachers: 5,
-    max_students: 100,
-    features: [
-      'Young Eagles program',
-      'Special curriculum',
-      'Parent engagement tools',
-      'Progress tracking',
-      'Community features'
-    ],
-    is_active: true
   }
+  // NOTE: "young_eagles" tier was removed - schools must use school_starter (R299+)
+  // Parent/individual tiers (R99) are not valid for organizations/preschools
 ];
 
 async function seedSubscriptionPlans() {

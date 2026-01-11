@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
+import { validateTierAssignment, ORGANIZATION_MIN_MONTHLY_PRICE } from '@/lib/tiers';
 import type {
   Subscription,
   School,
@@ -149,6 +150,17 @@ export function useSubscriptions(): UseSubscriptionsResult {
     const selectedSchool = schools.find((s) => s.id === createForm.school_id);
     if (!selectedSchool) {
       Alert.alert('Error', 'Selected school is invalid. Please refresh and try again.');
+      return;
+    }
+
+    // Validate tier is appropriate for organizations
+    const tierValidation = validateTierAssignment(createForm.plan_tier, 'organization');
+    if (!tierValidation.valid) {
+      Alert.alert(
+        'Invalid Tier',
+        `${tierValidation.error}\n\nMinimum organization tier: school_starter (R${ORGANIZATION_MIN_MONTHLY_PRICE}/month)`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 
