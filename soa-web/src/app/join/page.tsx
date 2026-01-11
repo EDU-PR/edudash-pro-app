@@ -118,8 +118,9 @@ export default function JoinPage() {
         setInviteCode(codeToVerify);
       }
 
+      console.log('[Join] Verifying code:', codeUpper);
+
       // First try join_requests table (youth wing invites with temp passwords)
-      // Query without join first to avoid RLS issues with organizations join
       const { data: joinRequestData, error: joinRequestError } = await supabase
         .from('join_requests')
         .select(`
@@ -137,12 +138,9 @@ export default function JoinPage() {
 
       // Debug logging
       if (joinRequestError) {
-        console.error('[Join] join_requests query error:', joinRequestError);
-        console.error('[Join] Error code:', joinRequestError.code);
-        console.error('[Join] Error message:', joinRequestError.message);
+        console.error('[Join] join_requests query error:', joinRequestError.code, joinRequestError.message);
       }
       console.log('[Join] joinRequestData:', joinRequestData ? 'Found' : 'Not found');
-      console.log('[Join] Code searched:', codeUpper);
 
       if (!joinRequestError && joinRequestData) {
         // Check if code has expired
@@ -206,7 +204,7 @@ export default function JoinPage() {
       
       // Log join_requests error for debugging (but continue to region_invite_codes fallback)
       if (joinRequestError) {
-        console.warn('join_requests query error:', joinRequestError);
+        console.warn('[Join] join_requests failed, trying region_invite_codes:', joinRequestError.message);
       }
       
       // Fallback: Query the region_invite_codes table
@@ -234,6 +232,7 @@ export default function JoinPage() {
         .maybeSingle();
 
       if (inviteError || !inviteData) {
+        console.error('[Join] Both queries failed:', { joinRequestError, inviteError });
         setCodeError('Invalid invite code. Please check and try again.');
         return;
       }
@@ -266,7 +265,7 @@ export default function JoinPage() {
       // Pre-fill member_type
       setFormData(prev => ({ ...prev, member_type: defaultType }));
     } catch (error: any) {
-      console.error('Code verification error:', error);
+      console.error('[Join] Code verification error:', error);
       if (error.message?.includes('Supabase URL')) {
         setCodeError('Service temporarily unavailable. Please try again later.');
       } else {
