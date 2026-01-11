@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -63,6 +63,21 @@ interface FormData {
 }
 
 export default function JoinPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-green-900 to-green-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto"></div>
+          <p className="text-white mt-4">Loading...</p>
+        </div>
+      </div>
+    }>
+      <JoinPageContent />
+    </Suspense>
+  );
+}
+
+function JoinPageContent() {
   const searchParams = useSearchParams();
   const [inviteCode, setInviteCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -84,15 +99,22 @@ export default function JoinPage() {
   // Auto-fill invite code from URL params and verify
   useEffect(() => {
     const codeParam = searchParams?.get('code');
-    if (codeParam && codeParam.length >= 5 && !orgInfo && !isVerifying) {
-      setInviteCode(codeParam);
-      // Auto-verify the code after a short delay to ensure state is set
-      setTimeout(() => {
-        verifyCode(codeParam);
-      }, 100);
+    console.log('[Join] URL code param:', codeParam);
+    
+    // Only auto-verify if we have a valid code and haven't already verified
+    if (codeParam && codeParam.trim().length >= 5 && !orgInfo && !isVerifying) {
+      const cleanCode = codeParam.trim().toUpperCase();
+      console.log('[Join] Auto-filling code:', cleanCode);
+      setInviteCode(cleanCode);
+      
+      // Auto-verify the code immediately
+      verifyCode(cleanCode);
+    } else if (codeParam && codeParam.trim().length > 0 && codeParam.trim().length < 5) {
+      // Code exists but is too short - still show it but don't auto-verify
+      setInviteCode(codeParam.trim().toUpperCase());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams?.get('code')]);
+  }, [searchParams]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value as any }));
