@@ -119,6 +119,7 @@ export default function JoinPage() {
       }
 
       // First try join_requests table (youth wing invites with temp passwords)
+      // Query without join first to avoid RLS issues with organizations join
       const { data: joinRequestData, error: joinRequestError } = await supabase
         .from('join_requests')
         .select(`
@@ -128,12 +129,7 @@ export default function JoinPage() {
           temp_password,
           requested_role,
           status,
-          expires_at,
-          organizations (
-            id,
-            name,
-            logo_url
-          )
+          expires_at
         `)
         .eq('invite_code', codeUpper)
         .eq('status', 'pending')
@@ -147,7 +143,16 @@ export default function JoinPage() {
           return;
         }
 
-        const org = joinRequestData.organizations as any;
+        // Fetch organization separately to avoid join RLS issues
+        let org: any = null;
+        if (joinRequestData.organization_id) {
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('id, name, logo_url')
+            .eq('id', joinRequestData.organization_id)
+            .maybeSingle();
+          org = orgData;
+        }
 
         // Get organization region info
         const { data: orgRegionData } = await supabase
@@ -188,6 +193,11 @@ export default function JoinPage() {
 
         setIsVerifying(false);
         return;
+      }
+      
+      // Log join_requests error for debugging (but continue to region_invite_codes fallback)
+      if (joinRequestError) {
+        console.warn('join_requests query error:', joinRequestError);
       }
       
       // Fallback: Query the region_invite_codes table
