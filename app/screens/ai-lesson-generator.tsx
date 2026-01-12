@@ -243,8 +243,23 @@ export default function AILessonGeneratorScreen() {
         {/* Generated Content - No maxHeight to allow full scrolling */}
         {(generated?.content || generated?.description) && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16, marginBottom: 100 }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Generated!</Text></View>
-            <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10 }}><Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>{typeof generated.content === 'string' ? generated.content : generated.description}</Text></View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Lesson Generated!</Text></View>
+            <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10, minHeight: 100 }}>
+              {(() => {
+                // Safely extract content string
+                const contentText = typeof generated.content === 'string' && generated.content.trim() 
+                  ? generated.content 
+                  : typeof generated.content === 'object' && generated.content
+                    ? JSON.stringify(generated.content, null, 2)
+                    : generated.description || 'No content generated';
+                
+                return (
+                  <Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>
+                    {contentText || 'No content generated. Please try again.'}
+                  </Text>
+                );
+              })()}
+            </View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
               <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: theme.primary, flex: 1 }]} disabled={saving}>{saving ? <ActivityIndicator color={theme.onPrimary} size="small" /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>Save</Text>}</TouchableOpacity>
               <TouchableOpacity onPress={() => { setGenerated(null); toast.info('Cleared'); }} style={[styles.btn, { backgroundColor: palette.outline, paddingHorizontal: 12 }]}><Ionicons name="refresh-outline" size={16} color={palette.text} /></TouchableOpacity>

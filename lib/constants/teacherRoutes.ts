@@ -111,6 +111,16 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     category: 'ai',
   },
   
+  // === ATTENDANCE ===
+  take_attendance: {
+    path: '/screens/attendance' as Href,
+    title: 'Take Attendance',
+    titleKey: 'teacher.take_attendance',
+    icon: 'checkbox',
+    color: '#10B981',
+    category: 'classroom',
+  },
+  
   // === REPORTS ===
   student_reports: {
     path: '/screens/teacher-reports' as Href,
@@ -143,6 +153,7 @@ export const getRoutesByCategory = (category: TeacherRoute['category']): Teacher
 export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'create_lesson',
   'my_lessons',
+  'take_attendance',
   'start_live_lesson',
   'assign_lesson',
   'my_class',
