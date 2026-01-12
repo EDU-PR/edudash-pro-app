@@ -45,10 +45,10 @@ interface WomenStats {
 // Women's League Executive Actions
 const WOMEN_EXECUTIVE_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#EC4899', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Invite Members', icon: 'person-add', color: '#10B981', route: '/screens/membership/women-invite-code' },
-  { id: '3', label: 'Office Structure', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/women-executive-invite' },
-  { id: '4', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
-  { id: '5', label: 'Programs', icon: 'school', color: '#F59E0B', route: '/screens/membership/programs' },
+  { id: '2', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
+  { id: '3', label: 'Invite Members', icon: 'person-add', color: '#06B6D4', route: '/screens/membership/women-invite-code' },
+  { id: '4', label: 'Office Structure', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/women-executive-invite' },
+  { id: '5', label: 'Events', icon: 'calendar', color: '#F59E0B', route: '/screens/membership/events' },
   { id: '6', label: 'Budget', icon: 'wallet', color: '#EF4444', route: '/screens/membership/budget-requests' },
 ];
 

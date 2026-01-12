@@ -16,12 +16,14 @@ export interface MemberPhotoUploadResult {
 
 export class MemberPhotoService {
   private static readonly BUCKET_NAME = 'avatars';
-  private static readonly MAX_SIZE = 800; // Max width/height for ID card photos
+  private static readonly MAX_WIDTH = 400; // Portrait width for ID card photos
+  private static readonly MAX_HEIGHT = 500; // Portrait height (ratio ~1:1.25 to match ID card photo area)
   private static readonly QUALITY = 0.9; // Higher quality for ID cards
 
   /**
    * Upload photo for organization member (ID card photo)
    * Updates organization_members.photo_url
+   * Photo is processed to fit ID card portrait format (ratio ~70:90)
    */
   static async uploadMemberPhoto(
     userId: string,
@@ -40,11 +42,13 @@ export class MemberPhotoService {
         };
       }
 
-      // Step 2: Process and resize image for ID card (square, high quality)
+      // Step 2: Process and resize image for ID card portrait format
+      // First resize to a larger size, then crop to portrait ratio
       const processedImage = await ImageManipulator.manipulateAsync(
         imageUri,
         [
-          { resize: { width: this.MAX_SIZE, height: this.MAX_SIZE } },
+          // Resize maintaining aspect ratio to fit within bounds
+          { resize: { width: this.MAX_WIDTH, height: this.MAX_HEIGHT } },
         ],
         {
           compress: this.QUALITY,
