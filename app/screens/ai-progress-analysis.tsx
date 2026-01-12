@@ -83,7 +83,7 @@ export default function AIProgressAnalysisScreen() {
         .from('classes')
         .select(`*`)
         .eq('teacher_id', user.id)
-        .eq('is_active', true);
+        .eq('active', true);
         
       if (classesError) {
         console.error('Error fetching classes:', classesError);

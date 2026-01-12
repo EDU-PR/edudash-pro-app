@@ -117,14 +117,50 @@ export default function AILessonGeneratorScreen() {
       const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('id', auth?.user?.id || '').maybeSingle();
       if (!profile) { toast.error('Not signed in'); return; }
       const schoolId = profile.preschool_id || profile.organization_id;
-      const categoryId = categoriesQuery.data?.[0]?.id;
-      if (!categoryId) { toast.warn('Create a category first'); return; }
-      const res = await LessonGeneratorService.saveGeneratedLesson({ lesson: generated, teacherId: profile.id, preschoolId: schoolId, ageGroupId: 'n/a', categoryId, template: { duration: 30, complexity: 'moderate' }, isPublished: true });
+      
+      // Get or create a default category if none exists
+      let categoryId = categoriesQuery.data?.[0]?.id;
+      if (!categoryId) {
+        // Try to create a default category
+        const { data: newCat, error: catError } = await assertSupabase()
+          .from('lesson_categories')
+          .insert({ name: 'General', description: 'General lessons' })
+          .select('id')
+          .single();
+        
+        if (catError) {
+          console.error('[AILessonGen] Failed to create category:', catError);
+          toast.warn('Could not create lesson category. Please contact support.');
+          return;
+        }
+        categoryId = newCat.id;
+      }
+      
+      const res = await LessonGeneratorService.saveGeneratedLesson({ 
+        lesson: generated, 
+        teacherId: profile.id, 
+        preschoolId: schoolId || profile.id, // Fallback to teacher ID if no school
+        ageGroupId: 'n/a', 
+        categoryId, 
+        template: { duration: parseInt(duration) || 30, complexity: 'moderate' }, 
+        isPublished: true 
+      });
+      
       if (!res.success) { toast.error(`Save failed: ${res.error || 'Unknown error'}`); return; }
-      toast.success(`Lesson saved (id ${res.lessonId})`);
+      toast.success(`Lesson saved! View in My Lessons`);
+      
+      // Optionally navigate to My Lessons
+      Alert.alert(
+        'Lesson Saved!',
+        'Your lesson has been saved. Would you like to view your lessons?',
+        [
+          { text: 'Stay Here', style: 'cancel' },
+          { text: 'View My Lessons', onPress: () => router.push('/screens/my-lessons') }
+        ]
+      );
     } catch (e: unknown) { toast.error(`Save error: ${e instanceof Error ? e.message : 'Failed'}`); }
     finally { setSaving(false); }
-  }, [categoriesQuery.data, generated]);
+  }, [categoriesQuery.data, generated, duration]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]}>

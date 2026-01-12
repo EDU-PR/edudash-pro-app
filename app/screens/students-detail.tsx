@@ -20,6 +20,7 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -84,12 +85,14 @@ export default function StudentsDetailScreen() {
 
   const [filters, setFilters] = useState<FilterOptions>({
     grade: [],
-    status: [],
+    status: ['active'], // Default to showing only active students
     teacher: [],
     paymentStatus: [],
     search: '',
   });
 
+  // Track whether to include inactive students in the database query
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   // Get preschool ID from user context
   const getPreschoolId = useCallback((): string | null => {
@@ -140,7 +143,8 @@ if (!preschoolId) {
       console.log('🔍 Fetching real students for preschool:', preschoolId);
       
       // **FETCH REAL STUDENTS FROM DATABASE**
-const { data: studentsData, error: studentsError } = await assertSupabase()
+      // Include inactive students if filter allows it
+      let query = assertSupabase()
         .from('students')
         .select(`
           id,
@@ -159,8 +163,14 @@ const { data: studentsData, error: studentsError } = await assertSupabase()
           emergency_contact_name,
           emergency_contact_phone
         `)
-        .eq('preschool_id', preschoolId)
-        .eq('is_active', true);
+        .eq('preschool_id', preschoolId);
+      
+      // Only filter by is_active if we're not including inactive students
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+        
+      const { data: studentsData, error: studentsError } = await query;
         
       if (studentsError) {
         console.error('Error fetching students:', studentsError);
@@ -246,6 +256,21 @@ const { data: studentsData, error: studentsError } = await assertSupabase()
   useEffect(() => {
     loadStudents();
   }, []);
+
+  // When filter changes to include 'inactive', we need to refetch with includeInactive
+  useEffect(() => {
+    const shouldIncludeInactive = filters.status.includes('inactive');
+    if (shouldIncludeInactive !== includeInactive) {
+      setIncludeInactive(shouldIncludeInactive);
+    }
+  }, [filters.status]);
+
+  // Refetch when includeInactive changes
+  useEffect(() => {
+    if (students.length > 0) {
+      loadStudents(true);
+    }
+  }, [includeInactive]);
 
   useEffect(() => {
     applyFilters();
@@ -348,7 +373,7 @@ const canEditStudent = (_student: Student): boolean => {
     setShowStudentModal(true);
   };
 
-  const handleDeleteStudent = (studentId: string) => {
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
     if (!canManageStudent()) {
       Alert.alert('Access Denied', 'Only principals can delete students.');
       return;
@@ -356,15 +381,81 @@ const canEditStudent = (_student: Student): boolean => {
 
     Alert.alert(
       'Delete Student',
-      'Are you sure you want to delete this student? This action cannot be undone.',
+      `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n• Mark the student as inactive\n• Keep historical records\n• Notify the parent (if applicable)`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Remove Student',
           style: 'destructive',
-          onPress: () => {
-            setStudents(prev => prev.filter(s => s.id !== studentId));
-            // In production, this would call the delete API
+          onPress: async () => {
+            try {
+              const supabase = assertSupabase();
+              
+              // Update student to inactive (soft delete)
+              const { error: updateError } = await supabase
+                .from('students')
+                .update({ 
+                  is_active: false, 
+                  status: 'inactive',
+                  updated_at: new Date().toISOString() 
+                })
+                .eq('id', studentId);
+              
+              if (updateError) {
+                throw updateError;
+              }
+              
+              // Remove from local state
+              setStudents(prev => prev.filter(s => s.id !== studentId));
+              
+              Alert.alert('Success', `${studentName} has been removed from the active students list.`);
+            } catch (error: any) {
+              console.error('Error deleting student:', error);
+              Alert.alert('Error', error.message || 'Failed to remove student. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Permanently delete student (for principals only - use with caution)
+  const handlePermanentDelete = async (studentId: string, studentName: string) => {
+    if (!canManageStudent()) {
+      Alert.alert('Access Denied', 'Only principals can permanently delete students.');
+      return;
+    }
+
+    Alert.alert(
+      '⚠️ Permanent Delete',
+      `This will PERMANENTLY delete ${studentName} and all associated records.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Permanently',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = assertSupabase();
+              
+              // Permanently delete student
+              const { error: deleteError } = await supabase
+                .from('students')
+                .delete()
+                .eq('id', studentId);
+              
+              if (deleteError) {
+                throw deleteError;
+              }
+              
+              // Remove from local state
+              setStudents(prev => prev.filter(s => s.id !== studentId));
+              
+              Alert.alert('Deleted', `${studentName} has been permanently deleted.`);
+            } catch (error: any) {
+              console.error('Error permanently deleting student:', error);
+              Alert.alert('Error', error.message || 'Failed to delete student. Please try again.');
+            }
           }
         }
       ]
@@ -461,7 +552,7 @@ const canEditStudent = (_student: Student): boolean => {
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => handleDeleteStudent(item.id)}
+                onPress={() => handleDeleteStudent(item.id, `${item.firstName} ${item.lastName}`)}
               >
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
               </TouchableOpacity>
@@ -540,7 +631,7 @@ const canEditStudent = (_student: Student): boolean => {
           <View style={styles.modalActions}>
             <TouchableOpacity 
               style={styles.clearFiltersButton}
-              onPress={() => setFilters({ grade: [], status: [], teacher: [], paymentStatus: [], search: '' })}
+              onPress={() => setFilters({ grade: [], status: ['active'], teacher: [], paymentStatus: [], search: '' })}
             >
               <Text style={styles.clearFiltersText}>Clear All</Text>
             </TouchableOpacity>
@@ -555,6 +646,166 @@ const canEditStudent = (_student: Student): boolean => {
       </View>
     </Modal>
   );
+
+  // Student Detail Modal
+  const renderStudentDetailModal = () => {
+    if (!selectedStudent) return null;
+    
+    const age = calculateAge(selectedStudent.dateOfBirth);
+    
+    return (
+      <Modal visible={showStudentModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, styles.studentDetailModal]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Student Details</Text>
+              <TouchableOpacity onPress={() => {
+                setShowStudentModal(false);
+                setSelectedStudent(null);
+              }}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.studentDetailContent} showsVerticalScrollIndicator={false}>
+              {/* Student Profile Header */}
+              <View style={styles.studentDetailHeader}>
+                <View style={styles.studentPhotoLarge}>
+                  {selectedStudent.profilePhoto ? (
+                    <Image source={{ uri: selectedStudent.profilePhoto }} style={styles.studentPhotoLargeImg} />
+                  ) : (
+                    <View style={styles.studentPhotoLargePlaceholder}>
+                      <Ionicons name="person" size={40} color={theme.colors.text} />
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.studentDetailName}>
+                  {selectedStudent.firstName} {selectedStudent.lastName}
+                </Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedStudent.status) + '20' }]}>
+                  <Text style={[styles.statusText, { color: getStatusColor(selectedStudent.status) }]}>
+                    {selectedStudent.status}
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Student Info Sections */}
+              <View style={styles.studentDetailSection}>
+                <Text style={styles.studentDetailSectionTitle}>Basic Information</Text>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Student ID:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.studentId}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Grade:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.grade}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Age:</Text>
+                  <Text style={styles.studentDetailValue}>{age} years old</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Date of Birth:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.dateOfBirth}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Enrollment Date:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.enrollmentDate}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.studentDetailSection}>
+                <Text style={styles.studentDetailSectionTitle}>Guardian Information</Text>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Guardian:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianName}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Phone:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianPhone}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Email:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianEmail}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.studentDetailSection}>
+                <Text style={styles.studentDetailSectionTitle}>Emergency Contact</Text>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Name:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.emergencyContact}</Text>
+                </View>
+                <View style={styles.studentDetailRow}>
+                  <Text style={styles.studentDetailLabel}>Phone:</Text>
+                  <Text style={styles.studentDetailValue}>{selectedStudent.emergencyPhone}</Text>
+                </View>
+              </View>
+              
+              {(selectedStudent.medicalConditions || selectedStudent.allergies) && (
+                <View style={styles.studentDetailSection}>
+                  <Text style={styles.studentDetailSectionTitle}>Medical Information</Text>
+                  {selectedStudent.medicalConditions && (
+                    <View style={styles.studentDetailRow}>
+                      <Text style={styles.studentDetailLabel}>Conditions:</Text>
+                      <Text style={styles.studentDetailValue}>{selectedStudent.medicalConditions}</Text>
+                    </View>
+                  )}
+                  {selectedStudent.allergies && (
+                    <View style={styles.studentDetailRow}>
+                      <Text style={styles.studentDetailLabel}>Allergies:</Text>
+                      <Text style={[styles.studentDetailValue, { color: '#DC2626' }]}>{selectedStudent.allergies}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              {/* Action Buttons */}
+              {canManageStudent() && (
+                <View style={styles.studentDetailActions}>
+                  {selectedStudent.status === 'inactive' ? (
+                    <>
+                      <TouchableOpacity 
+                        style={[styles.studentDetailButton, styles.studentDetailButtonPrimary]}
+                        onPress={() => {
+                          toggleStudentStatus(selectedStudent.id, selectedStudent.status);
+                          setShowStudentModal(false);
+                        }}
+                      >
+                        <Ionicons name="checkmark-circle" size={20} color="white" />
+                        <Text style={styles.studentDetailButtonTextWhite}>Reactivate Student</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.studentDetailButton, styles.studentDetailButtonDanger]}
+                        onPress={() => {
+                          setShowStudentModal(false);
+                          handlePermanentDelete(selectedStudent.id, `${selectedStudent.firstName} ${selectedStudent.lastName}`);
+                        }}
+                      >
+                        <Ionicons name="trash" size={20} color="white" />
+                        <Text style={styles.studentDetailButtonTextWhite}>Delete Permanently</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity 
+                      style={[styles.studentDetailButton, styles.studentDetailButtonWarning]}
+                      onPress={() => {
+                        setShowStudentModal(false);
+                        handleDeleteStudent(selectedStudent.id, `${selectedStudent.firstName} ${selectedStudent.lastName}`);
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={20} color="white" />
+                      <Text style={styles.studentDetailButtonTextWhite}>Remove Student</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 
   const getActiveFiltersCount = (): number => {
     return filters.grade.length + filters.status.length + filters.paymentStatus.length + 
@@ -642,6 +893,9 @@ const canEditStudent = (_student: Student): boolean => {
 
       {/* Filter Modal */}
       {renderFilterModal()}
+
+      {/* Student Detail Modal */}
+      {renderStudentDetailModal()}
     </View>
   );
 }
@@ -921,6 +1175,93 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
   },
   applyFiltersText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Student Detail Modal styles
+  studentDetailModal: {
+    maxHeight: '90%',
+  },
+  studentDetailContent: {
+    padding: 20,
+  },
+  studentDetailHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  studentPhotoLarge: {
+    marginBottom: 12,
+  },
+  studentPhotoLargeImg: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  studentPhotoLargePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  studentDetailName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  studentDetailSection: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  studentDetailSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 12,
+  },
+  studentDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  studentDetailLabel: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+  },
+  studentDetailValue: {
+    fontSize: 14,
+    color: theme.colors.text,
+    fontWeight: '500',
+    flex: 1,
+    textAlign: 'right',
+  },
+  studentDetailActions: {
+    gap: 12,
+    marginTop: 8,
+  },
+  studentDetailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  studentDetailButtonPrimary: {
+    backgroundColor: '#059669',
+  },
+  studentDetailButtonWarning: {
+    backgroundColor: '#EA580C',
+  },
+  studentDetailButtonDanger: {
+    backgroundColor: '#DC2626',
+  },
+  studentDetailButtonTextWhite: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',

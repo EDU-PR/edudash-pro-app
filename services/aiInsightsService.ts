@@ -60,10 +60,10 @@ export class AIInsightsService {
     try {
       const { data: attendanceRecords } = await supabase!
         .from('attendance_records')
-        .select('status, date')
+        .select('status, attendance_date')
         .eq('preschool_id', schoolId)
-        .gte('date', startDate.toISOString())
-        .lte('date', endDate.toISOString());
+        .gte('attendance_date', startDate.toISOString())
+        .lte('attendance_date', endDate.toISOString());
       
       if (!attendanceRecords || attendanceRecords.length === 0) return null;
       
@@ -77,8 +77,8 @@ export class AIInsightsService {
         .from('attendance_records')
         .select('status')
         .eq('preschool_id', schoolId)
-        .gte('date', prevWeekStart.toISOString())
-        .lt('date', startDate.toISOString());
+        .gte('attendance_date', prevWeekStart.toISOString())
+        .lt('attendance_date', startDate.toISOString());
       
       let trend = 'stable';
       let trendDescription = '';

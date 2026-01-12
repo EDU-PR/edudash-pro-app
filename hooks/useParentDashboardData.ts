@@ -101,7 +101,7 @@ export function useParentDashboardData() {
           .from('attendance_records')
           .select('status')
           .eq('student_id', studentId)
-          .eq('date', today)
+          .eq('attendance_date', today)
           .maybeSingle();
         
         if (attendanceData) {
@@ -202,12 +202,12 @@ export function useParentDashboardData() {
           try {
             const { data: latestAtt } = await client
               .from('attendance_records')
-              .select('status, date, created_at')
+              .select('status, attendance_date, created_at')
               .eq('student_id', child.id)
-              .order('date', { ascending: false })
+              .order('attendance_date', { ascending: false })
               .limit(1);
             if (latestAtt && latestAtt[0]) {
-              lastActivity = new Date(latestAtt[0].created_at || latestAtt[0].date);
+              lastActivity = new Date(latestAtt[0].created_at || latestAtt[0].attendance_date);
               const st = String(latestAtt[0].status || '').toLowerCase();
               status = st === 'late' ? 'late' : st === 'absent' ? 'absent' : 'active';
             }
@@ -215,7 +215,7 @@ export function useParentDashboardData() {
               .from('attendance_records')
               .select('status')
               .eq('student_id', child.id)
-              .gte('date', thirtyDaysAgo)
+              .gte('attendance_date', thirtyDaysAgo)
               .limit(1000);
             if (windowAtt && windowAtt.length > 0) {
               const present = windowAtt.filter((a: any) => String(a.status).toLowerCase() === 'present').length;

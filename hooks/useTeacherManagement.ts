@@ -169,6 +169,28 @@ export function useTeacherManagement(
       }
       
       console.log('✅ Real teachers fetched:', teachersData?.length || 0);
+
+      // Fetch profile data for teachers (to get proper names from profiles table)
+      const teacherUserIds = (teachersData || []).map((t: Record<string, unknown>) => t.user_id).filter(Boolean);
+      const profileByUserId = new Map<string, { first_name: string; last_name: string }>();
+      
+      if (teacherUserIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await assertSupabase()
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', teacherUserIds);
+        
+        if (!profilesError && profilesData) {
+          profilesData.forEach((p: { id: string; first_name?: string; last_name?: string }) => {
+            if (p.id) {
+              profileByUserId.set(p.id, {
+                first_name: p.first_name || '',
+                last_name: p.last_name || '',
+              });
+            }
+          });
+        }
+      }
       
       // Query secure tenant-isolated view for per-teacher class and student stats
       const { data: overviewRows, error: overviewError } = await assertSupabase()
@@ -188,18 +210,34 @@ export function useTeacherManagement(
       
       // Transform database data to match Teacher interface
       const transformedTeachersRaw: (Teacher | null)[] = (teachersData || []).map((dbTeacher: Record<string, unknown>) => {
+        // Try to get name from multiple sources: teachers.full_name, profiles, or email fallback
+        const teacherUserId = dbTeacher.user_id as string;
+        const profileData = teacherUserId ? profileByUserId.get(teacherUserId) : null;
+        
+        let firstName = '';
+        let lastName = '';
         let fullName = dbTeacher.full_name as string | null;
 
-        if (!fullName) {
-          console.log('[fetchTeachers] full_name is null, using fallback for:', dbTeacher.email);
-          if (dbTeacher.email) {
-            fullName = (dbTeacher.email as string).split('@')[0];
-          }
+        // Priority 1: Use profile data if available (most reliable)
+        if (profileData && (profileData.first_name || profileData.last_name)) {
+          firstName = profileData.first_name || '';
+          lastName = profileData.last_name || '';
+          fullName = `${firstName} ${lastName}`.trim();
+          console.log('[fetchTeachers] Using profile name for:', dbTeacher.email, '→', fullName);
         }
-
-        if (!fullName) {
-          console.warn('[fetchTeachers] Using email as fallback for name:', dbTeacher.email);
-          fullName = (dbTeacher.email as string)?.split('@')[0] || 'Unknown Teacher';
+        // Priority 2: Use teachers.full_name if set
+        else if (fullName && fullName.trim()) {
+          const nameParts = fullName.trim().split(' ');
+          firstName = nameParts[0] || '';
+          lastName = nameParts.slice(1).join(' ') || '';
+        }
+        // Priority 3: Fallback to email username
+        else {
+          console.log('[fetchTeachers] full_name is null, using email fallback for:', dbTeacher.email);
+          const emailName = (dbTeacher.email as string)?.split('@')[0] || 'Unknown';
+          firstName = emailName;
+          lastName = 'Teacher';
+          fullName = `${firstName} ${lastName}`;
         }
 
         // Convert document data from teachers table format to TeacherDocument format
@@ -225,11 +263,6 @@ export function useTeacherManagement(
           }
         }
 
-        const nameParts = fullName.split(' ');
-        const firstName = nameParts[0] || 'Unknown';
-        const lastName = nameParts.slice(1).join(' ') || 'Teacher';
-
-        const teacherUserId = dbTeacher.user_id as string;
         const authUserId = (dbTeacher.auth_user_id as string) || null;
 
         if (!teacherUserId) {

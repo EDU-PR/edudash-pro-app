@@ -62,10 +62,10 @@ export interface CreatePOPUploadData {
   payment_reference?: string;
 }
 
-// Storage buckets
+// Storage buckets - must match actual bucket names in Supabase Storage
 const STORAGE_BUCKETS = {
-  proof_of_payment: 'proof-of-payment',
-  picture_of_progress: 'picture-of-progress',
+  proof_of_payment: 'proof-of-payments', // Actual bucket name in database
+  picture_of_progress: 'proof-of-payments', // Using same bucket until picture-of-progress is created
 } as const;
 
 /**

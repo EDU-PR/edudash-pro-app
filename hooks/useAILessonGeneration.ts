@@ -17,7 +17,7 @@ import { toast } from '@/components/ui/ToastProvider';
 interface GeneratedLesson {
   title: string;
   description: string;
-  content: { sections: unknown[] };
+  content: string | { sections: unknown[] }; // Can be markdown string or structured object
   activities: unknown[];
 }
 
@@ -224,10 +224,12 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       setProgress(100);
       setProgressMessage('Complete!');
 
+      // Store the AI-generated content in the 'content' field for proper display
+      // The 'description' field is used for a short summary
       setGenerated({
         title: `${subject}: ${topic}`,
-        description: lessonText || 'No lesson content returned.',
-        content: { sections: [] },
+        description: lessonText?.substring(0, 200) + (lessonText?.length > 200 ? '...' : '') || 'AI-generated lesson plan',
+        content: lessonText, // Store the full lesson text as content
         activities: [],
       });
 

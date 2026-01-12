@@ -527,7 +527,7 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
               )}
               {registration.status === 'pending' && (
                 <>
-                  {registration.proof_of_payment_url && registration.registration_fee_paid && !registration.payment_verified && (
+                  {registration.proof_of_payment_url && !registration.payment_verified && (
                     <button
                       onClick={() => handleVerifyPayment(true)}
                       disabled={processing}

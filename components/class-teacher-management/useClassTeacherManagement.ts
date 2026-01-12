@@ -41,23 +41,17 @@ export function useClassTeacherManagement({
       setLoading(true);
       const schoolId = orgId;
 
-      // Load classes with teacher info (use profiles table, not users)
+      // Load classes (without embedded join - no FK constraint on teacher_id)
       const { data: classesData, error: classesError } = await assertSupabase()
         .from('classes')
         .select(`
           id,
           name,
           grade_level,
-          capacity,
+          max_capacity,
           room_number,
           teacher_id,
-          active,
-          profiles:teacher_id (
-            id,
-            first_name,
-            last_name,
-            email
-          )
+          active
         `)
         .eq('preschool_id', schoolId);
 
@@ -65,9 +59,27 @@ export function useClassTeacherManagement({
         console.error('Error loading classes:', classesError);
       }
 
-      // Process classes
+      // Fetch teacher profiles separately (teacher_id references auth.users.id)
+      const teacherIds = (classesData || [])
+        .map((c: any) => c.teacher_id)
+        .filter((id: any) => !!id);
+      
+      let teacherProfilesMap: Record<string, { first_name?: string; last_name?: string; email?: string }> = {};
+      
+      if (teacherIds.length > 0) {
+        const { data: profilesData } = await assertSupabase()
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', teacherIds);
+        
+        (profilesData || []).forEach((p: any) => {
+          teacherProfilesMap[p.id] = p;
+        });
+      }
+
+      // Process classes with teacher names from profiles lookup
       const processedClasses: ClassInfo[] = (classesData || []).map((cls: any) => {
-        const teacher = cls.profiles;
+        const teacher = cls.teacher_id ? teacherProfilesMap[cls.teacher_id] : null;
         const teacherName = teacher
           ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.email
           : undefined;
@@ -75,7 +87,7 @@ export function useClassTeacherManagement({
           id: cls.id,
           name: cls.name,
           grade_level: cls.grade_level,
-          capacity: cls.capacity,
+          capacity: cls.max_capacity,
           current_enrollment: 0, // Will be updated below
           room_number: cls.room_number,
           teacher_id: cls.teacher_id,
@@ -202,7 +214,7 @@ export function useClassTeacherManagement({
         .insert({
           name: classForm.name.trim(),
           grade_level: classForm.grade_level.trim(),
-          capacity: classForm.capacity,
+          max_capacity: classForm.capacity,
           room_number: classForm.room_number.trim() || null,
           teacher_id: classForm.teacher_id || null,
           preschool_id: schoolId,
@@ -283,7 +295,7 @@ export function useClassTeacherManagement({
       try {
         const { error } = await assertSupabase()
           .from('classes')
-          .update({ is_active: !classInfo.is_active })
+          .update({ active: !classInfo.is_active })
           .eq('id', classInfo.id);
 
         if (error) {

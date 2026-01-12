@@ -27,7 +27,7 @@ export class ClassPlacementService {
       .from('classes')
       .select('id, name, grade_level')
       .eq('preschool_id', organizationId) // Database field still named preschool_id
-      .eq('is_active', true)
+      .eq('active', true)
       .eq('grade_level', gradeLevel);
 
     if (clsErr) {
@@ -42,7 +42,7 @@ export class ClassPlacementService {
         .from('classes')
         .select('id, name, grade_level')
         .eq('preschool_id', organizationId) // Database field still named preschool_id
-        .eq('is_active', true)
+        .eq('active', true)
         .limit(10);
       classList = anyClasses || [];
     }
@@ -104,7 +104,7 @@ export class ClassPlacementService {
         .from('classes')
         .select('id, name, grade_level')
         .eq('preschool_id', organizationId) // Database field still named preschool_id
-        .eq('is_active', true)
+        .eq('active', true)
         .limit(10);
       if (!anyClasses || !anyClasses.length) return null;
 

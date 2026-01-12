@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      academic_terms: {
+        Row: {
+          academic_year: number
+          created_at: string | null
+          created_by: string
+          description: string | null
+          end_date: string
+          id: string
+          is_active: boolean | null
+          is_published: boolean | null
+          name: string
+          notes: string | null
+          preschool_id: string
+          start_date: string
+          term_number: number
+          updated_at: string | null
+        }
+        Insert: {
+          academic_year: number
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          end_date: string
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          name: string
+          notes?: string | null
+          preschool_id: string
+          start_date: string
+          term_number: number
+          updated_at?: string | null
+        }
+        Update: {
+          academic_year?: number
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          end_date?: string
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          name?: string
+          notes?: string | null
+          preschool_id?: string
+          start_date?: string
+          term_number?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "academic_terms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "academic_terms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "academic_terms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "academic_terms_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "academic_terms_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+        ]
+      }
       active_calls: {
         Row: {
           answered_at: string | null
@@ -207,12 +294,64 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      activity_comments: {
+        Row: {
+          activity_id: string
+          comment_text: string
+          created_at: string
+          id: string
+          is_approved: boolean | null
+          parent_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          comment_text: string
+          created_at?: string
+          id?: string
+          is_approved?: boolean | null
+          parent_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          comment_text?: string
+          created_at?: string
+          id?: string
+          is_approved?: boolean | null
+          parent_id?: string
+          updated_at?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "activity_attempts_student_id_fkey"
-            columns: ["student_id"]
+            foreignKeyName: "activity_comments_activity_id_fkey"
+            columns: ["activity_id"]
             isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
+            referencedRelation: "student_activity_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "activity_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -285,13 +424,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "activity_feed_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "activity_feed_preschool_id_fkey"
@@ -390,6 +522,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "students"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_reactions: {
+        Row: {
+          activity_id: string
+          created_at: string
+          emoji: string
+          id: string
+          parent_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          emoji: string
+          id?: string
+          parent_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          emoji?: string
+          id?: string
+          parent_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_reactions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "student_activity_feed"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_reactions_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_reactions_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "activity_reactions_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -577,13 +765,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "ad_impressions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       addresses: {
@@ -662,13 +843,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "addresses_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       admin_users: {
@@ -736,13 +910,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "admin_users_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "fk_admin_users_organization_id"
             columns: ["organization_id"]
             isOneToOne: false
@@ -755,6 +922,127 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_profiles_with_tier"
             referencedColumns: ["preschool_id_nested"]
+          },
+        ]
+      }
+      aftercare_registrations: {
+        Row: {
+          child_allergies: string | null
+          child_date_of_birth: string | null
+          child_first_name: string
+          child_grade: string
+          child_last_name: string
+          child_medical_conditions: string | null
+          created_at: string | null
+          emergency_contact_name: string
+          emergency_contact_phone: string
+          emergency_contact_relation: string
+          enrolled_at: string | null
+          how_did_you_hear: string | null
+          id: string
+          notes: string | null
+          parent_email: string
+          parent_first_name: string
+          parent_id_number: string | null
+          parent_last_name: string
+          parent_phone: string
+          parent_user_id: string | null
+          payment_date: string | null
+          payment_reference: string | null
+          preschool_id: string
+          promotion_code: string | null
+          proof_of_payment_url: string | null
+          registration_fee: number | null
+          registration_fee_original: number | null
+          status: string | null
+          student_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          child_allergies?: string | null
+          child_date_of_birth?: string | null
+          child_first_name: string
+          child_grade: string
+          child_last_name: string
+          child_medical_conditions?: string | null
+          created_at?: string | null
+          emergency_contact_name: string
+          emergency_contact_phone: string
+          emergency_contact_relation: string
+          enrolled_at?: string | null
+          how_did_you_hear?: string | null
+          id?: string
+          notes?: string | null
+          parent_email: string
+          parent_first_name: string
+          parent_id_number?: string | null
+          parent_last_name: string
+          parent_phone: string
+          parent_user_id?: string | null
+          payment_date?: string | null
+          payment_reference?: string | null
+          preschool_id: string
+          promotion_code?: string | null
+          proof_of_payment_url?: string | null
+          registration_fee?: number | null
+          registration_fee_original?: number | null
+          status?: string | null
+          student_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          child_allergies?: string | null
+          child_date_of_birth?: string | null
+          child_first_name?: string
+          child_grade?: string
+          child_last_name?: string
+          child_medical_conditions?: string | null
+          created_at?: string | null
+          emergency_contact_name?: string
+          emergency_contact_phone?: string
+          emergency_contact_relation?: string
+          enrolled_at?: string | null
+          how_did_you_hear?: string | null
+          id?: string
+          notes?: string | null
+          parent_email?: string
+          parent_first_name?: string
+          parent_id_number?: string | null
+          parent_last_name?: string
+          parent_phone?: string
+          parent_user_id?: string | null
+          payment_date?: string | null
+          payment_reference?: string | null
+          preschool_id?: string
+          promotion_code?: string | null
+          proof_of_payment_url?: string | null
+          registration_fee?: number | null
+          registration_fee_original?: number | null
+          status?: string | null
+          student_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aftercare_registrations_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aftercare_registrations_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "aftercare_registrations_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -868,13 +1156,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ai_admin_actions_actor_user_id_fkey"
-            columns: ["actor_user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "ai_admin_actions_target_preschool_id_fkey"
             columns: ["target_preschool_id"]
             isOneToOne: false
@@ -922,13 +1203,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_admin_actions_target_user_id_fkey"
-            columns: ["target_user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -1006,13 +1280,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ai_allocation_history_performed_by_fkey"
-            columns: ["performed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "ai_allocation_history_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -1060,13 +1327,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_allocation_history_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -1173,13 +1433,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ai_allocation_requests_requested_by_fkey"
-            columns: ["requested_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "ai_allocation_requests_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -1215,13 +1468,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ai_allocation_requests_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "ai_allocation_requests_teacher_id_fkey"
             columns: ["teacher_id"]
             isOneToOne: false
@@ -1255,13 +1501,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_allocation_requests_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -1732,13 +1971,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "ai_generations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       ai_global_settings: {
@@ -2113,13 +2345,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_overage_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -2746,13 +2971,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ai_usage_resets_requested_by_user_id_fkey"
-            columns: ["requested_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "ai_usage_resets_target_preschool_id_fkey"
             columns: ["target_preschool_id"]
             isOneToOne: false
@@ -2800,13 +3018,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_usage_resets_target_user_id_fkey"
-            columns: ["target_user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -3043,13 +3254,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "assessment_rubrics_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "assessment_rubrics_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -3172,13 +3376,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "assessments_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "fk_assessment_created_by"
             columns: ["created_by"]
             isOneToOne: false
@@ -3212,13 +3409,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_assessment_created_by"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "fk_assessment_student"
@@ -3819,13 +4009,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "fk_attendance_recorded_by"
-            columns: ["recorded_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "fk_attendance_student"
             columns: ["student_id"]
             isOneToOne: false
@@ -4080,13 +4263,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "audit_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       beta_feedback: {
@@ -4179,13 +4355,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "beta_feedback_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -4453,13 +4622,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "billing_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       blocked_content: {
@@ -4533,13 +4695,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "blocked_content_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "blocked_content_blocker_id_fkey"
             columns: ["blocker_id"]
             isOneToOne: false
@@ -4573,13 +4728,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "blocked_content_blocker_id_fkey"
-            columns: ["blocker_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "blocked_content_school_id_fkey"
@@ -5416,19 +5564,29 @@ export type Database = {
       }
       child_registration_requests: {
         Row: {
+          campaign_applied: string | null
           child_birth_date: string
           child_first_name: string
           child_gender: string | null
           child_last_name: string
           created_at: string | null
           dietary_requirements: string | null
+          discount_amount: number | null
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
+          final_amount: number | null
           id: string
           medical_info: string | null
           notes: string | null
           parent_id: string
+          payment_method: string | null
+          payment_verified: boolean | null
+          payment_verified_at: string | null
+          payment_verified_by: string | null
           preschool_id: string
+          proof_of_payment_url: string | null
+          registration_fee_amount: number | null
+          registration_fee_paid: boolean | null
           rejection_reason: string | null
           requested_at: string | null
           reviewed_at: string | null
@@ -5438,19 +5596,29 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          campaign_applied?: string | null
           child_birth_date: string
           child_first_name: string
           child_gender?: string | null
           child_last_name: string
           created_at?: string | null
           dietary_requirements?: string | null
+          discount_amount?: number | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
+          final_amount?: number | null
           id?: string
           medical_info?: string | null
           notes?: string | null
           parent_id: string
+          payment_method?: string | null
+          payment_verified?: boolean | null
+          payment_verified_at?: string | null
+          payment_verified_by?: string | null
           preschool_id: string
+          proof_of_payment_url?: string | null
+          registration_fee_amount?: number | null
+          registration_fee_paid?: boolean | null
           rejection_reason?: string | null
           requested_at?: string | null
           reviewed_at?: string | null
@@ -5460,19 +5628,29 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          campaign_applied?: string | null
           child_birth_date?: string
           child_first_name?: string
           child_gender?: string | null
           child_last_name?: string
           created_at?: string | null
           dietary_requirements?: string | null
+          discount_amount?: number | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
+          final_amount?: number | null
           id?: string
           medical_info?: string | null
           notes?: string | null
           parent_id?: string
+          payment_method?: string | null
+          payment_verified?: boolean | null
+          payment_verified_at?: string | null
+          payment_verified_by?: string | null
           preschool_id?: string
+          proof_of_payment_url?: string | null
+          registration_fee_amount?: number | null
+          registration_fee_paid?: boolean | null
           rejection_reason?: string | null
           requested_at?: string | null
           reviewed_at?: string | null
@@ -5499,6 +5677,27 @@ export type Database = {
           {
             foreignKeyName: "child_registration_requests_parent_id_fkey"
             columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "child_registration_requests_payment_verified_by_fkey"
+            columns: ["payment_verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "child_registration_requests_payment_verified_by_fkey"
+            columns: ["payment_verified_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "child_registration_requests_payment_verified_by_fkey"
+            columns: ["payment_verified_by"]
             isOneToOne: false
             referencedRelation: "user_subscription_info"
             referencedColumns: ["user_id"]
@@ -6006,13 +6205,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "classroom_reports_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       config_kv: {
@@ -6221,13 +6413,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "content_reports_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "content_reports_reporter_id_fkey"
             columns: ["reporter_id"]
             isOneToOne: false
@@ -6263,13 +6448,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "content_reports_reporter_id_fkey"
-            columns: ["reporter_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "content_reports_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -6303,13 +6481,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "content_reports_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "content_reports_school_id_fkey"
@@ -6401,13 +6572,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "conversation_members_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       conversations: {
@@ -6496,13 +6660,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "conversations_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "conversations_preschool_id_fkey"
@@ -6799,6 +6956,118 @@ export type Database = {
           },
         ]
       }
+      curriculum_themes: {
+        Row: {
+          age_groups: string[] | null
+          created_at: string | null
+          created_by: string
+          description: string | null
+          developmental_domains: Json | null
+          end_date: string | null
+          id: string
+          is_published: boolean | null
+          is_template: boolean | null
+          key_concepts: Json | null
+          learning_objectives: Json | null
+          materials_needed: Json | null
+          preschool_id: string
+          start_date: string | null
+          suggested_activities: Json | null
+          term_id: string | null
+          title: string
+          updated_at: string | null
+          vocabulary_words: Json | null
+          week_number: number | null
+        }
+        Insert: {
+          age_groups?: string[] | null
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          developmental_domains?: Json | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean | null
+          is_template?: boolean | null
+          key_concepts?: Json | null
+          learning_objectives?: Json | null
+          materials_needed?: Json | null
+          preschool_id: string
+          start_date?: string | null
+          suggested_activities?: Json | null
+          term_id?: string | null
+          title: string
+          updated_at?: string | null
+          vocabulary_words?: Json | null
+          week_number?: number | null
+        }
+        Update: {
+          age_groups?: string[] | null
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          developmental_domains?: Json | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean | null
+          is_template?: boolean | null
+          key_concepts?: Json | null
+          learning_objectives?: Json | null
+          materials_needed?: Json | null
+          preschool_id?: string
+          start_date?: string | null
+          suggested_activities?: Json | null
+          term_id?: string | null
+          title?: string
+          updated_at?: string | null
+          vocabulary_words?: Json | null
+          week_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_themes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "curriculum_themes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "curriculum_themes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "curriculum_themes_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "curriculum_themes_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "curriculum_themes_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "academic_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cv_templates: {
         Row: {
           created_at: string
@@ -7012,13 +7281,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_daily_activity_created_by"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -7694,13 +7956,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "dm_settings_partner_user_id_fkey"
-            columns: ["partner_user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "dm_settings_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -7735,14 +7990,34 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "dm_settings_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
+      }
+      early_access_signups: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          notified: boolean | null
+          platform: string | null
+          source: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          notified?: boolean | null
+          platform?: string | null
+          source?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          notified?: boolean | null
+          platform?: string | null
+          source?: string | null
+        }
+        Relationships: []
       }
       email_logs: {
         Row: {
@@ -7871,13 +8146,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "email_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       email_templates: {
@@ -7961,13 +8229,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_templates_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "email_templates_preschool_id_fkey"
@@ -8180,13 +8441,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "enrollment_applications_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -8503,13 +8757,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_invitations_invitee_id_fkey"
-            columns: ["invitee_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "event_invitations_inviter_id_fkey"
             columns: ["inviter_id"]
             isOneToOne: false
@@ -8543,13 +8790,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_invitations_inviter_id_fkey"
-            columns: ["inviter_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -8655,13 +8895,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "event_media_uploader_id_fkey"
-            columns: ["uploader_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       event_notifications: {
@@ -8746,13 +8979,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_notifications_recipient_id_fkey"
-            columns: ["recipient_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "event_notifications_update_id_fkey"
@@ -8859,13 +9085,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "event_participants_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       event_reactions: {
@@ -8961,13 +9180,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_reactions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -9112,13 +9324,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_updates_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "event_updates_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
@@ -9244,13 +9449,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "events_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "events_preschool_id_fkey"
@@ -10442,13 +10640,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "group_invitations_invitee_id_fkey"
-            columns: ["invitee_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "group_invitations_inviter_id_fkey"
             columns: ["inviter_id"]
             isOneToOne: false
@@ -10482,13 +10673,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_invitations_inviter_id_fkey"
-            columns: ["inviter_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -10573,13 +10757,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "group_members_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "group_members_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -10613,13 +10790,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "group_members_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -10876,13 +11046,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "homework_activity_log_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "homework_activity_log_assignment_id_fkey"
             columns: ["assignment_id"]
             isOneToOne: false
@@ -11025,13 +11188,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "homework_assignment_targets_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "homework_assignment_targets_submission_id_fkey"
@@ -11214,13 +11370,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "homework_assignments_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       homework_notifications: {
@@ -11313,13 +11462,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "homework_notifications_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "homework_notifications_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -11369,13 +11511,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "homework_notifications_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "homework_notifications_target_id_fkey"
             columns: ["target_id"]
             isOneToOne: false
@@ -11386,6 +11521,8 @@ export type Database = {
       }
       homework_submissions: {
         Row: {
+          ai_analysis: Json | null
+          ai_feedback: string | null
           ai_grade_id: string | null
           assignment_id: string | null
           content_metadata: Json
@@ -11400,15 +11537,19 @@ export type Database = {
           graded_by: string | null
           homework_assignment_id: string | null
           id: string
+          media_urls: Json | null
           preschool_id: string | null
           status: string | null
           student_id: string | null
           submission_text: string | null
+          submission_type: string | null
           submitted_at: string | null
           submitted_by: string | null
           updated_at: string | null
         }
         Insert: {
+          ai_analysis?: Json | null
+          ai_feedback?: string | null
           ai_grade_id?: string | null
           assignment_id?: string | null
           content_metadata?: Json
@@ -11423,15 +11564,19 @@ export type Database = {
           graded_by?: string | null
           homework_assignment_id?: string | null
           id?: string
+          media_urls?: Json | null
           preschool_id?: string | null
           status?: string | null
           student_id?: string | null
           submission_text?: string | null
+          submission_type?: string | null
           submitted_at?: string | null
           submitted_by?: string | null
           updated_at?: string | null
         }
         Update: {
+          ai_analysis?: Json | null
+          ai_feedback?: string | null
           ai_grade_id?: string | null
           assignment_id?: string | null
           content_metadata?: Json
@@ -11446,10 +11591,12 @@ export type Database = {
           graded_by?: string | null
           homework_assignment_id?: string | null
           id?: string
+          media_urls?: Json | null
           preschool_id?: string | null
           status?: string | null
           student_id?: string | null
           submission_text?: string | null
+          submission_type?: string | null
           submitted_at?: string | null
           submitted_by?: string | null
           updated_at?: string | null
@@ -11503,13 +11650,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "homework_submissions_graded_by_fkey"
-            columns: ["graded_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "homework_submissions_homework_assignment_id_fkey"
@@ -11573,13 +11713,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "homework_submissions_submitted_by_fkey"
-            columns: ["submitted_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -11711,13 +11844,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "independent_children_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       independent_content_library: {
@@ -11828,6 +11954,156 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_profiles_with_tier"
             referencedColumns: ["preschool_id_nested"]
+          },
+        ]
+      }
+      interactive_activities: {
+        Row: {
+          activity_type: string
+          age_group_max: number | null
+          age_group_min: number | null
+          average_score: number | null
+          avg_score: number | null
+          badge_reward: string | null
+          content: Json
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          difficulty_level: number | null
+          id: string
+          instructions: string | null
+          is_active: boolean | null
+          is_published: boolean | null
+          is_template: boolean | null
+          max_attempts: number | null
+          play_count: number | null
+          preschool_id: string | null
+          skills: Json | null
+          stars_reward: number | null
+          stem_category: string | null
+          subject: string | null
+          teacher_id: string | null
+          time_limit_seconds: number | null
+          times_played: number | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          activity_type: string
+          age_group_max?: number | null
+          age_group_min?: number | null
+          average_score?: number | null
+          avg_score?: number | null
+          badge_reward?: string | null
+          content: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          difficulty_level?: number | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean | null
+          is_published?: boolean | null
+          is_template?: boolean | null
+          max_attempts?: number | null
+          play_count?: number | null
+          preschool_id?: string | null
+          skills?: Json | null
+          stars_reward?: number | null
+          stem_category?: string | null
+          subject?: string | null
+          teacher_id?: string | null
+          time_limit_seconds?: number | null
+          times_played?: number | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          activity_type?: string
+          age_group_max?: number | null
+          age_group_min?: number | null
+          average_score?: number | null
+          avg_score?: number | null
+          badge_reward?: string | null
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          difficulty_level?: number | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean | null
+          is_published?: boolean | null
+          is_template?: boolean | null
+          max_attempts?: number | null
+          play_count?: number | null
+          preschool_id?: string | null
+          skills?: Json | null
+          stars_reward?: number | null
+          stem_category?: string | null
+          subject?: string | null
+          teacher_id?: string | null
+          time_limit_seconds?: number | null
+          times_played?: number | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interactive_activities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "interactive_activities_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "interactive_activities_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -11958,13 +12234,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "invitation_codes_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "invitation_codes_invited_by_fkey"
             columns: ["invited_by"]
             isOneToOne: false
@@ -11998,13 +12267,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invitation_codes_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "invitation_codes_preschool_id_fkey"
@@ -12054,13 +12316,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invitation_codes_used_by_fkey"
-            columns: ["used_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -12774,6 +13029,120 @@ export type Database = {
           },
         ]
       }
+      join_requests: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          invite_code: string | null
+          invite_token: string | null
+          invited_by: string | null
+          message: string | null
+          organization_id: string | null
+          preschool_id: string | null
+          region_id: string | null
+          relationship: string | null
+          request_type: Database["public"]["Enums"]["join_request_type"]
+          requested_role: string | null
+          requester_email: string | null
+          requester_id: string | null
+          requester_phone: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["join_request_status"]
+          target_student_id: string | null
+          temp_password: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          invite_code?: string | null
+          invite_token?: string | null
+          invited_by?: string | null
+          message?: string | null
+          organization_id?: string | null
+          preschool_id?: string | null
+          region_id?: string | null
+          relationship?: string | null
+          request_type: Database["public"]["Enums"]["join_request_type"]
+          requested_role?: string | null
+          requester_email?: string | null
+          requester_id?: string | null
+          requester_phone?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["join_request_status"]
+          target_student_id?: string | null
+          temp_password?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          invite_code?: string | null
+          invite_token?: string | null
+          invited_by?: string | null
+          message?: string | null
+          organization_id?: string | null
+          preschool_id?: string | null
+          region_id?: string | null
+          relationship?: string | null
+          request_type?: Database["public"]["Enums"]["join_request_type"]
+          requested_role?: string | null
+          requester_email?: string | null
+          requester_id?: string | null
+          requester_phone?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["join_request_status"]
+          target_student_id?: string | null
+          temp_password?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "join_requests_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_target_student_id_fkey"
+            columns: ["target_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       learner_connections: {
         Row: {
           connection_id: string
@@ -13008,6 +13377,243 @@ export type Database = {
           },
         ]
       }
+      lesson_approvals: {
+        Row: {
+          created_at: string | null
+          id: string
+          lesson_id: string
+          preschool_id: string
+          rejection_reason: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lesson_id: string
+          preschool_id: string
+          rejection_reason?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lesson_id?: string
+          preschool_id?: string
+          rejection_reason?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_approvals_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_approvals_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      lesson_assignments: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          class_id: string | null
+          created_at: string | null
+          due_date: string | null
+          id: string
+          interactive_activity_id: string | null
+          lesson_id: string | null
+          lesson_type: string | null
+          notes: string | null
+          preschool_id: string
+          priority: string | null
+          status: string
+          stem_category: string | null
+          student_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          interactive_activity_id?: string | null
+          lesson_id?: string | null
+          lesson_type?: string | null
+          notes?: string | null
+          preschool_id: string
+          priority?: string | null
+          status?: string
+          stem_category?: string | null
+          student_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          interactive_activity_id?: string | null
+          lesson_id?: string | null
+          lesson_type?: string | null
+          notes?: string | null
+          preschool_id?: string
+          priority?: string | null
+          status?: string
+          stem_category?: string | null
+          student_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes_with_teachers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_interactive_activity_id_fkey"
+            columns: ["interactive_activity_id"]
+            isOneToOne: false
+            referencedRelation: "interactive_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "lesson_assignments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_categories: {
         Row: {
           color_code: string | null
@@ -13037,6 +13643,269 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      lesson_completions: {
+        Row: {
+          assignment_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          feedback: Json | null
+          id: string
+          lesson_id: string | null
+          preschool_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          score: number | null
+          started_at: string | null
+          status: string | null
+          student_id: string
+          teacher_notes: string | null
+          time_spent_minutes: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          assignment_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          feedback?: Json | null
+          id?: string
+          lesson_id?: string | null
+          preschool_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score?: number | null
+          started_at?: string | null
+          status?: string | null
+          student_id: string
+          teacher_notes?: string | null
+          time_spent_minutes?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          assignment_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          feedback?: Json | null
+          id?: string
+          lesson_id?: string | null
+          preschool_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          score?: number | null
+          started_at?: string | null
+          status?: string | null
+          student_id?: string
+          teacher_notes?: string | null
+          time_spent_minutes?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_completions_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "lesson_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "lesson_completions_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_completions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_progress: {
+        Row: {
+          completed_at: string | null
+          completed_sections: Json | null
+          created_at: string | null
+          current_section: number | null
+          id: string
+          last_accessed_at: string | null
+          lesson_id: string
+          notes: string | null
+          progress_percentage: number
+          quiz_scores: Json | null
+          started_at: string | null
+          status: string
+          time_spent_seconds: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_sections?: Json | null
+          created_at?: string | null
+          current_section?: number | null
+          id?: string
+          last_accessed_at?: string | null
+          lesson_id: string
+          notes?: string | null
+          progress_percentage?: number
+          quiz_scores?: Json | null
+          started_at?: string | null
+          status?: string
+          time_spent_seconds?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_sections?: Json | null
+          created_at?: string | null
+          current_section?: number | null
+          id?: string
+          last_accessed_at?: string | null
+          lesson_id?: string
+          notes?: string | null
+          progress_percentage?: number
+          quiz_scores?: Json | null
+          started_at?: string | null
+          status?: string
+          time_spent_seconds?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_templates: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          default_age_group: string | null
+          default_duration_minutes: number | null
+          default_subject: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          preschool_id: string
+          template_structure: Json
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          default_age_group?: string | null
+          default_duration_minutes?: number | null
+          default_subject?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          preschool_id: string
+          template_structure?: Json
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          default_age_group?: string | null
+          default_duration_minutes?: number | null
+          default_subject?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          preschool_id?: string
+          template_structure?: Json
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "lesson_templates_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_templates_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+        ]
       }
       lessons: {
         Row: {
@@ -13149,43 +14018,22 @@ export type Database = {
             foreignKeyName: "lessons_teacher_id_fkey"
             columns: ["teacher_id"]
             isOneToOne: false
-            referencedRelation: "classes_with_teachers"
-            referencedColumns: ["teacher_user_id"]
-          },
-          {
-            foreignKeyName: "lessons_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "teacher_stats"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "lessons_teacher_id_fkey"
             columns: ["teacher_id"]
             isOneToOne: false
-            referencedRelation: "user_profiles_with_tier"
-            referencedColumns: ["id"]
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "lessons_teacher_id_fkey"
             columns: ["teacher_id"]
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lessons_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "users_with_subscription"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lessons_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -13380,13 +14228,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "media_uploads_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -13770,6 +14611,125 @@ export type Database = {
           },
         ]
       }
+      member_fees: {
+        Row: {
+          balance_due: number | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          discount_amount: number | null
+          discount_reason: string | null
+          due_date: string
+          fee_name: string
+          fee_structure_id: string | null
+          fee_type: string
+          final_amount: number
+          id: string
+          last_payment_amount: number | null
+          last_payment_date: string | null
+          last_reminder_sent_at: string | null
+          member_id: string
+          notes: string | null
+          organization_id: string
+          original_amount: number
+          paid_amount: number | null
+          payment_count: number | null
+          period_end: string | null
+          period_start: string | null
+          reminder_sent_count: number | null
+          status: string | null
+          transaction_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          balance_due?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_reason?: string | null
+          due_date: string
+          fee_name: string
+          fee_structure_id?: string | null
+          fee_type: string
+          final_amount: number
+          id?: string
+          last_payment_amount?: number | null
+          last_payment_date?: string | null
+          last_reminder_sent_at?: string | null
+          member_id: string
+          notes?: string | null
+          organization_id: string
+          original_amount: number
+          paid_amount?: number | null
+          payment_count?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reminder_sent_count?: number | null
+          status?: string | null
+          transaction_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          balance_due?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_reason?: string | null
+          due_date?: string
+          fee_name?: string
+          fee_structure_id?: string | null
+          fee_type?: string
+          final_amount?: number
+          id?: string
+          last_payment_amount?: number | null
+          last_payment_date?: string | null
+          last_reminder_sent_at?: string | null
+          member_id?: string
+          notes?: string | null
+          organization_id?: string
+          original_amount?: number
+          paid_amount?: number | null
+          payment_count?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reminder_sent_count?: number | null
+          status?: string | null
+          transaction_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_fees_fee_structure_id_fkey"
+            columns: ["fee_structure_id"]
+            isOneToOne: false
+            referencedRelation: "membership_fee_structure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_fees_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_fees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_fees_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "organization_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_id_cards: {
         Row: {
           card_number: string
@@ -13920,6 +14880,213 @@ export type Database = {
           },
         ]
       }
+      membership_fee_structure: {
+        Row: {
+          allow_installments: boolean | null
+          amount: number
+          created_at: string | null
+          created_by: string | null
+          currency: string | null
+          description: string | null
+          display_order: number | null
+          early_bird_deadline_days: number | null
+          early_bird_discount_percent: number | null
+          fee_code: string
+          fee_name: string
+          fee_type: string
+          id: string
+          includes_vat: boolean | null
+          installment_count: number | null
+          is_active: boolean | null
+          is_mandatory: boolean | null
+          member_types: string[] | null
+          membership_tiers: string[] | null
+          organization_id: string
+          pensioner_discount_percent: number | null
+          regions: string[] | null
+          student_discount_percent: number | null
+          tier_benefits: Json | null
+          tier_color: string | null
+          tier_name: string | null
+          updated_at: string | null
+          valid_from: string | null
+          valid_to: string | null
+          vat_percent: number | null
+          wings: string[] | null
+        }
+        Insert: {
+          allow_installments?: boolean | null
+          amount: number
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          display_order?: number | null
+          early_bird_deadline_days?: number | null
+          early_bird_discount_percent?: number | null
+          fee_code: string
+          fee_name: string
+          fee_type: string
+          id?: string
+          includes_vat?: boolean | null
+          installment_count?: number | null
+          is_active?: boolean | null
+          is_mandatory?: boolean | null
+          member_types?: string[] | null
+          membership_tiers?: string[] | null
+          organization_id: string
+          pensioner_discount_percent?: number | null
+          regions?: string[] | null
+          student_discount_percent?: number | null
+          tier_benefits?: Json | null
+          tier_color?: string | null
+          tier_name?: string | null
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          vat_percent?: number | null
+          wings?: string[] | null
+        }
+        Update: {
+          allow_installments?: boolean | null
+          amount?: number
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          display_order?: number | null
+          early_bird_deadline_days?: number | null
+          early_bird_discount_percent?: number | null
+          fee_code?: string
+          fee_name?: string
+          fee_type?: string
+          id?: string
+          includes_vat?: boolean | null
+          installment_count?: number | null
+          is_active?: boolean | null
+          is_mandatory?: boolean | null
+          member_types?: string[] | null
+          membership_tiers?: string[] | null
+          organization_id?: string
+          pensioner_discount_percent?: number | null
+          regions?: string[] | null
+          student_discount_percent?: number | null
+          tier_benefits?: Json | null
+          tier_color?: string | null
+          tier_name?: string | null
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          vat_percent?: number | null
+          wings?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_fee_structure_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      membership_pop_uploads: {
+        Row: {
+          bank_reference: string | null
+          created_at: string | null
+          file_name: string | null
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          member_fee_id: string | null
+          member_id: string
+          organization_id: string
+          payment_amount: number | null
+          payment_date: string | null
+          payment_method: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          status: string | null
+          updated_at: string | null
+          upload_type: string
+          uploaded_by: string | null
+          uploader_notes: string | null
+        }
+        Insert: {
+          bank_reference?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          member_fee_id?: string | null
+          member_id: string
+          organization_id: string
+          payment_amount?: number | null
+          payment_date?: string | null
+          payment_method?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string | null
+          updated_at?: string | null
+          upload_type?: string
+          uploaded_by?: string | null
+          uploader_notes?: string | null
+        }
+        Update: {
+          bank_reference?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          member_fee_id?: string | null
+          member_id?: string
+          organization_id?: string
+          payment_amount?: number | null
+          payment_date?: string | null
+          payment_method?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string | null
+          updated_at?: string | null
+          upload_type?: string
+          uploaded_by?: string | null
+          uploader_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_pop_uploads_member_fee_id_fkey"
+            columns: ["member_fee_id"]
+            isOneToOne: false
+            referencedRelation: "member_fees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_pop_uploads_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_pop_uploads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_drafts: {
         Row: {
           content: string | null
@@ -13983,13 +15150,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "message_drafts_sender_id_fkey"
-            columns: ["sender_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -14150,13 +15310,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "message_recipients_recipient_id_fkey"
-            columns: ["recipient_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -14428,13 +15581,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "moderation_actions_moderator_id_fkey"
-            columns: ["moderator_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "moderation_actions_queue_item_id_fkey"
             columns: ["queue_item_id"]
             isOneToOne: false
@@ -14544,13 +15690,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "moderation_queue_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "moderation_queue_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -14584,13 +15723,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "moderation_queue_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "moderation_queue_school_id_fkey"
@@ -14688,13 +15820,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "newsletter_recipients_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       newsletters: {
@@ -14790,13 +15915,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "newsletters_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "newsletters_preschool_id_fkey"
@@ -15393,13 +16511,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "onboarding_progress_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "onboarding_progress_school_id_fkey"
             columns: ["school_id"]
             isOneToOne: false
@@ -15567,13 +16678,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "org_invites_accepted_by_fkey"
-            columns: ["accepted_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "org_invites_invited_by_fkey"
             columns: ["invited_by"]
             isOneToOne: false
@@ -15607,13 +16711,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "org_invites_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "org_invites_preschool_id_fkey"
@@ -15737,6 +16834,279 @@ export type Database = {
             columns: ["target_region_id"]
             isOneToOne: false
             referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_bank_accounts: {
+        Row: {
+          account_name: string
+          account_number: string | null
+          account_number_masked: string | null
+          account_type: string
+          bank_name: string
+          branch_code: string | null
+          created_at: string | null
+          created_by: string | null
+          current_balance: number | null
+          float_amount: number | null
+          id: string
+          is_active: boolean | null
+          is_primary: boolean | null
+          organization_id: string
+          region_id: string | null
+          required_signatures: number | null
+          signatories: Json | null
+          spending_limit_daily: number | null
+          spending_limit_monthly: number | null
+          spending_limit_per_transaction: number | null
+          swift_code: string | null
+          updated_at: string | null
+          wing_id: string | null
+        }
+        Insert: {
+          account_name: string
+          account_number?: string | null
+          account_number_masked?: string | null
+          account_type: string
+          bank_name: string
+          branch_code?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_balance?: number | null
+          float_amount?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          organization_id: string
+          region_id?: string | null
+          required_signatures?: number | null
+          signatories?: Json | null
+          spending_limit_daily?: number | null
+          spending_limit_monthly?: number | null
+          spending_limit_per_transaction?: number | null
+          swift_code?: string | null
+          updated_at?: string | null
+          wing_id?: string | null
+        }
+        Update: {
+          account_name?: string
+          account_number?: string | null
+          account_number_masked?: string | null
+          account_type?: string
+          bank_name?: string
+          branch_code?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_balance?: number | null
+          float_amount?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_primary?: boolean | null
+          organization_id?: string
+          region_id?: string | null
+          required_signatures?: number | null
+          signatories?: Json | null
+          spending_limit_daily?: number | null
+          spending_limit_monthly?: number | null
+          spending_limit_per_transaction?: number | null
+          swift_code?: string | null
+          updated_at?: string | null
+          wing_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_bank_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_bank_accounts_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_bank_accounts_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "organization_wings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_board_positions: {
+        Row: {
+          appointed_at: string | null
+          appointed_by: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          member_id: string | null
+          organization_id: string
+          position_code: string
+          position_order: number | null
+          position_title: string
+          term_end: string | null
+          term_start: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          appointed_at?: string | null
+          appointed_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          member_id?: string | null
+          organization_id: string
+          position_code: string
+          position_order?: number | null
+          position_title: string
+          term_end?: string | null
+          term_start?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          appointed_at?: string | null
+          appointed_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          member_id?: string | null
+          organization_id?: string
+          position_code?: string
+          position_order?: number | null
+          position_title?: string
+          term_end?: string | null
+          term_start?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_board_positions_appointed_by_fkey"
+            columns: ["appointed_by"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_board_positions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_board_positions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_budgets: {
+        Row: {
+          allocated_amount: number | null
+          approved_at: string | null
+          approved_by: string | null
+          budgeted_amount: number
+          category: string
+          committed_amount: number | null
+          created_at: string | null
+          created_by: string | null
+          department: string | null
+          fiscal_year: number
+          id: string
+          notes: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          period_type: string | null
+          region_id: string | null
+          remaining_amount: number | null
+          spent_amount: number | null
+          status: string | null
+          updated_at: string | null
+          utilization_percent: number | null
+          wing_id: string | null
+        }
+        Insert: {
+          allocated_amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          budgeted_amount: number
+          category: string
+          committed_amount?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          department?: string | null
+          fiscal_year: number
+          id?: string
+          notes?: string | null
+          organization_id: string
+          period_end: string
+          period_start: string
+          period_type?: string | null
+          region_id?: string | null
+          remaining_amount?: number | null
+          spent_amount?: number | null
+          status?: string | null
+          updated_at?: string | null
+          utilization_percent?: number | null
+          wing_id?: string | null
+        }
+        Update: {
+          allocated_amount?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          budgeted_amount?: number
+          category?: string
+          committed_amount?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          department?: string | null
+          fiscal_year?: number
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          period_type?: string | null
+          region_id?: string | null
+          remaining_amount?: number | null
+          spent_amount?: number | null
+          status?: string | null
+          updated_at?: string | null
+          utilization_percent?: number | null
+          wing_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_budgets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_budgets_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_budgets_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "organization_wings"
             referencedColumns: ["id"]
           },
         ]
@@ -16088,6 +17458,11 @@ export type Database = {
       }
       organization_members: {
         Row: {
+          age_verified: boolean | null
+          age_verified_at: string | null
+          appointed_at: string | null
+          appointed_by: string | null
+          birth_year: number | null
           city: string | null
           created_at: string
           created_by: string | null
@@ -16099,8 +17474,10 @@ export type Database = {
           first_name: string | null
           id: string
           id_number: string | null
+          invite_code_used: string | null
           invited_by: string | null
           join_date: string | null
+          joined_via: string | null
           last_name: string | null
           member_number: string | null
           member_type: string | null
@@ -16119,8 +17496,14 @@ export type Database = {
           seat_status: string
           updated_at: string
           user_id: string
+          wing: string | null
         }
         Insert: {
+          age_verified?: boolean | null
+          age_verified_at?: string | null
+          appointed_at?: string | null
+          appointed_by?: string | null
+          birth_year?: number | null
           city?: string | null
           created_at?: string
           created_by?: string | null
@@ -16132,8 +17515,10 @@ export type Database = {
           first_name?: string | null
           id?: string
           id_number?: string | null
+          invite_code_used?: string | null
           invited_by?: string | null
           join_date?: string | null
+          joined_via?: string | null
           last_name?: string | null
           member_number?: string | null
           member_type?: string | null
@@ -16152,8 +17537,14 @@ export type Database = {
           seat_status?: string
           updated_at?: string
           user_id: string
+          wing?: string | null
         }
         Update: {
+          age_verified?: boolean | null
+          age_verified_at?: string | null
+          appointed_at?: string | null
+          appointed_by?: string | null
+          birth_year?: number | null
           city?: string | null
           created_at?: string
           created_by?: string | null
@@ -16165,8 +17556,10 @@ export type Database = {
           first_name?: string | null
           id?: string
           id_number?: string | null
+          invite_code_used?: string | null
           invited_by?: string | null
           join_date?: string | null
+          joined_via?: string | null
           last_name?: string | null
           member_number?: string | null
           member_type?: string | null
@@ -16185,6 +17578,7 @@ export type Database = {
           seat_status?: string
           updated_at?: string
           user_id?: string
+          wing?: string | null
         }
         Relationships: [
           {
@@ -16192,6 +17586,13 @@ export type Database = {
             columns: ["region_id"]
             isOneToOne: false
             referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_members_appointed_by_fkey"
+            columns: ["appointed_by"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
             referencedColumns: ["id"]
           },
           {
@@ -16270,6 +17671,83 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_petty_cash: {
+        Row: {
+          created_at: string | null
+          current_balance: number
+          custodian_id: string | null
+          float_amount: number
+          id: string
+          is_active: boolean | null
+          last_replenishment_amount: number | null
+          last_replenishment_date: string | null
+          max_single_expense: number | null
+          organization_id: string
+          region_id: string | null
+          updated_at: string | null
+          wing_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          current_balance?: number
+          custodian_id?: string | null
+          float_amount?: number
+          id?: string
+          is_active?: boolean | null
+          last_replenishment_amount?: number | null
+          last_replenishment_date?: string | null
+          max_single_expense?: number | null
+          organization_id: string
+          region_id?: string | null
+          updated_at?: string | null
+          wing_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          current_balance?: number
+          custodian_id?: string | null
+          float_amount?: number
+          id?: string
+          is_active?: boolean | null
+          last_replenishment_amount?: number | null
+          last_replenishment_date?: string | null
+          max_single_expense?: number | null
+          organization_id?: string
+          region_id?: string | null
+          updated_at?: string | null
+          wing_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_petty_cash_custodian_id_fkey"
+            columns: ["custodian_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_petty_cash_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_petty_cash_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_petty_cash_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "organization_wings"
             referencedColumns: ["id"]
           },
         ]
@@ -16379,6 +17857,264 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_transactions: {
+        Row: {
+          account_id: string | null
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          attachments: Json | null
+          category: string
+          created_at: string | null
+          currency: string | null
+          description: string
+          external_reference: string | null
+          id: string
+          invoice_number: string | null
+          invoice_url: string | null
+          member_id: string | null
+          organization_id: string
+          payee_account: string | null
+          payee_name: string | null
+          payment_date: string | null
+          payment_method: string | null
+          receipt_url: string | null
+          reconciled: boolean | null
+          reconciled_at: string | null
+          reconciled_by: string | null
+          reference_number: string | null
+          region_id: string | null
+          rejection_reason: string | null
+          status: string | null
+          subcategory: string | null
+          submitted_at: string | null
+          submitted_by: string | null
+          transaction_type: string
+          updated_at: string | null
+          vat_amount: number | null
+          wing_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          attachments?: Json | null
+          category: string
+          created_at?: string | null
+          currency?: string | null
+          description: string
+          external_reference?: string | null
+          id?: string
+          invoice_number?: string | null
+          invoice_url?: string | null
+          member_id?: string | null
+          organization_id: string
+          payee_account?: string | null
+          payee_name?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          receipt_url?: string | null
+          reconciled?: boolean | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          reference_number?: string | null
+          region_id?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          subcategory?: string | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          transaction_type: string
+          updated_at?: string | null
+          vat_amount?: number | null
+          wing_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          attachments?: Json | null
+          category?: string
+          created_at?: string | null
+          currency?: string | null
+          description?: string
+          external_reference?: string | null
+          id?: string
+          invoice_number?: string | null
+          invoice_url?: string | null
+          member_id?: string | null
+          organization_id?: string
+          payee_account?: string | null
+          payee_name?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          receipt_url?: string | null
+          reconciled?: boolean | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          reference_number?: string | null
+          region_id?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+          subcategory?: string | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          transaction_type?: string
+          updated_at?: string | null
+          vat_amount?: number | null
+          wing_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "organization_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_transactions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_transactions_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_transactions_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "organization_wings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_wings: {
+        Row: {
+          annual_budget: number | null
+          created_at: string | null
+          created_by: string | null
+          current_balance: number | null
+          deputy_id: string | null
+          description: string | null
+          email: string | null
+          established_date: string | null
+          id: string
+          is_active: boolean | null
+          max_age: number | null
+          min_age: number | null
+          monthly_allocation: number | null
+          motto: string | null
+          name: string
+          organization_id: string
+          phone: string | null
+          president_id: string | null
+          secretary_id: string | null
+          treasurer_id: string | null
+          updated_at: string | null
+          wing_code: string
+        }
+        Insert: {
+          annual_budget?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          current_balance?: number | null
+          deputy_id?: string | null
+          description?: string | null
+          email?: string | null
+          established_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_age?: number | null
+          min_age?: number | null
+          monthly_allocation?: number | null
+          motto?: string | null
+          name: string
+          organization_id: string
+          phone?: string | null
+          president_id?: string | null
+          secretary_id?: string | null
+          treasurer_id?: string | null
+          updated_at?: string | null
+          wing_code: string
+        }
+        Update: {
+          annual_budget?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          current_balance?: number | null
+          deputy_id?: string | null
+          description?: string | null
+          email?: string | null
+          established_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_age?: number | null
+          min_age?: number | null
+          monthly_allocation?: number | null
+          motto?: string | null
+          name?: string
+          organization_id?: string
+          phone?: string | null
+          president_id?: string | null
+          secretary_id?: string | null
+          treasurer_id?: string | null
+          updated_at?: string | null
+          wing_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_wings_deputy_id_fkey"
+            columns: ["deputy_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_wings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_wings_president_id_fkey"
+            columns: ["president_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_wings_secretary_id_fkey"
+            columns: ["secretary_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_wings_treasurer_id_fkey"
+            columns: ["treasurer_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
             referencedColumns: ["id"]
           },
         ]
@@ -16777,13 +18513,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "parent_access_codes_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "parent_access_codes_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -16839,13 +18568,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "parent_access_codes_used_by_fkey"
-            columns: ["used_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       parent_child_links: {
@@ -16887,85 +18609,29 @@ export type Database = {
             foreignKeyName: "parent_child_links_child_id_fkey"
             columns: ["child_id"]
             isOneToOne: false
-            referencedRelation: "classes_with_teachers"
-            referencedColumns: ["teacher_user_id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_child_id_fkey"
-            columns: ["child_id"]
-            isOneToOne: false
-            referencedRelation: "teacher_stats"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_child_id_fkey"
-            columns: ["child_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles_with_tier"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_child_id_fkey"
-            columns: ["child_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_child_id_fkey"
-            columns: ["child_id"]
-            isOneToOne: false
-            referencedRelation: "users_with_subscription"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_child_id_fkey"
-            columns: ["child_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "classes_with_teachers"
-            referencedColumns: ["teacher_user_id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "teacher_stats"
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "parent_child_links_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "user_profiles_with_tier"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "parent_child_links_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "parent_child_links_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "users_with_subscription"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_child_links_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -17120,13 +18786,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "parent_payments_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "parent_payments_preschool_id_fkey"
@@ -17544,43 +19203,22 @@ export type Database = {
             foreignKeyName: "payments_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "classes_with_teachers"
-            referencedColumns: ["teacher_user_id"]
-          },
-          {
-            foreignKeyName: "payments_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "teacher_stats"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "payments_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "user_profiles_with_tier"
-            referencedColumns: ["id"]
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "payments_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payments_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "users_with_subscription"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payments_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "payments_preschool_id_fkey"
@@ -18104,6 +19742,223 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_collected_payments: {
+        Row: {
+          amount: number
+          bank_reference: string | null
+          completed_at: string | null
+          created_at: string | null
+          currency: string | null
+          description: string | null
+          destination_organization_id: string
+          disbursement_date: string | null
+          disbursement_reference: string | null
+          disbursement_status: string | null
+          id: string
+          net_amount: number | null
+          payer_member_id: string | null
+          payer_profile_id: string | null
+          payer_type: string
+          payer_user_id: string | null
+          payfast_payment_id: string | null
+          payfast_pf_payment_id: string | null
+          payment_date: string | null
+          payment_method: string
+          payment_purpose: string
+          payment_reference: string | null
+          platform_fee_amount: number | null
+          platform_fee_percent: number | null
+          related_fee_id: string | null
+          related_invoice_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          bank_reference?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          destination_organization_id: string
+          disbursement_date?: string | null
+          disbursement_reference?: string | null
+          disbursement_status?: string | null
+          id?: string
+          net_amount?: number | null
+          payer_member_id?: string | null
+          payer_profile_id?: string | null
+          payer_type: string
+          payer_user_id?: string | null
+          payfast_payment_id?: string | null
+          payfast_pf_payment_id?: string | null
+          payment_date?: string | null
+          payment_method: string
+          payment_purpose: string
+          payment_reference?: string | null
+          platform_fee_amount?: number | null
+          platform_fee_percent?: number | null
+          related_fee_id?: string | null
+          related_invoice_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_reference?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          destination_organization_id?: string
+          disbursement_date?: string | null
+          disbursement_reference?: string | null
+          disbursement_status?: string | null
+          id?: string
+          net_amount?: number | null
+          payer_member_id?: string | null
+          payer_profile_id?: string | null
+          payer_type?: string
+          payer_user_id?: string | null
+          payfast_payment_id?: string | null
+          payfast_pf_payment_id?: string | null
+          payment_date?: string | null
+          payment_method?: string
+          payment_purpose?: string
+          payment_reference?: string | null
+          platform_fee_amount?: number | null
+          platform_fee_percent?: number | null
+          related_fee_id?: string | null
+          related_invoice_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_collected_payments_destination_organization_id_fkey"
+            columns: ["destination_organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_collected_payments_payer_member_id_fkey"
+            columns: ["payer_member_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_collected_payments_payer_profile_id_fkey"
+            columns: ["payer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_collected_payments_payer_profile_id_fkey"
+            columns: ["payer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "platform_collected_payments_payer_profile_id_fkey"
+            columns: ["payer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "platform_collected_payments_related_invoice_id_fkey"
+            columns: ["related_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "member_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_disbursements: {
+        Row: {
+          account_number_last4: string | null
+          amount: number
+          bank_account_id: string | null
+          bank_name: string | null
+          batch_id: string | null
+          created_at: string | null
+          created_by: string | null
+          currency: string | null
+          failure_reason: string | null
+          id: string
+          included_payment_ids: string[] | null
+          notes: string | null
+          organization_id: string
+          payment_count: number | null
+          processed_at: string | null
+          reference: string | null
+          scheduled_date: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_number_last4?: string | null
+          amount: number
+          bank_account_id?: string | null
+          bank_name?: string | null
+          batch_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string | null
+          failure_reason?: string | null
+          id?: string
+          included_payment_ids?: string[] | null
+          notes?: string | null
+          organization_id: string
+          payment_count?: number | null
+          processed_at?: string | null
+          reference?: string | null
+          scheduled_date?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_number_last4?: string | null
+          amount?: number
+          bank_account_id?: string | null
+          bank_name?: string | null
+          batch_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string | null
+          failure_reason?: string | null
+          id?: string
+          included_payment_ids?: string[] | null
+          notes?: string | null
+          organization_id?: string
+          payment_count?: number | null
+          processed_at?: string | null
+          reference?: string | null
+          scheduled_date?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_disbursements_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "organization_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_disbursements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_subscriptions: {
         Row: {
           amount: number
@@ -18409,6 +20264,60 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      preschool_settings: {
+        Row: {
+          created_at: string | null
+          default_homework_due_days: number | null
+          enable_ai_program: boolean | null
+          enable_computer_literacy: boolean | null
+          enable_robotics_program: boolean | null
+          id: string
+          preschool_id: string
+          require_lesson_approval: boolean | null
+          stem_curriculum_version: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          default_homework_due_days?: number | null
+          enable_ai_program?: boolean | null
+          enable_computer_literacy?: boolean | null
+          enable_robotics_program?: boolean | null
+          id?: string
+          preschool_id: string
+          require_lesson_approval?: boolean | null
+          stem_curriculum_version?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          default_homework_due_days?: number | null
+          enable_ai_program?: boolean | null
+          enable_computer_literacy?: boolean | null
+          enable_robotics_program?: boolean | null
+          id?: string
+          preschool_id?: string
+          require_lesson_approval?: boolean | null
+          stem_curriculum_version?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preschool_settings_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: true
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "preschool_settings_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: true
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+        ]
       }
       preschool_voice_usage: {
         Row: {
@@ -18746,13 +20655,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "principal_groups_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "principal_groups_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -18780,6 +20682,7 @@ export type Database = {
           created_at: string
           date_of_birth: string | null
           email: string | null
+          expo_push_token: string | null
           first_name: string | null
           full_name: string | null
           guardian_profile_id: string | null
@@ -18795,7 +20698,9 @@ export type Database = {
           organization_id: string | null
           phone: string | null
           phone_secondary: string | null
+          preferred_language: string | null
           preschool_id: string | null
+          push_token_updated_at: string | null
           ringtone_preferences: Json | null
           role: string
           seat_status: string | null
@@ -18803,7 +20708,9 @@ export type Database = {
           signature_updated_at: string | null
           signature_url: string | null
           subject_specialization: string[] | null
-          subscription_tier: string | null
+          subscription_tier:
+            | Database["public"]["Enums"]["tier_name_aligned"]
+            | null
           tenant_slug: string | null
           trial_end_date: string | null
           trial_ends_at: string | null
@@ -18824,6 +20731,7 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           email?: string | null
+          expo_push_token?: string | null
           first_name?: string | null
           full_name?: string | null
           guardian_profile_id?: string | null
@@ -18839,7 +20747,9 @@ export type Database = {
           organization_id?: string | null
           phone?: string | null
           phone_secondary?: string | null
+          preferred_language?: string | null
           preschool_id?: string | null
+          push_token_updated_at?: string | null
           ringtone_preferences?: Json | null
           role?: string
           seat_status?: string | null
@@ -18847,7 +20757,9 @@ export type Database = {
           signature_updated_at?: string | null
           signature_url?: string | null
           subject_specialization?: string[] | null
-          subscription_tier?: string | null
+          subscription_tier?:
+            | Database["public"]["Enums"]["tier_name_aligned"]
+            | null
           tenant_slug?: string | null
           trial_end_date?: string | null
           trial_ends_at?: string | null
@@ -18868,6 +20780,7 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           email?: string | null
+          expo_push_token?: string | null
           first_name?: string | null
           full_name?: string | null
           guardian_profile_id?: string | null
@@ -18883,7 +20796,9 @@ export type Database = {
           organization_id?: string | null
           phone?: string | null
           phone_secondary?: string | null
+          preferred_language?: string | null
           preschool_id?: string | null
+          push_token_updated_at?: string | null
           ringtone_preferences?: Json | null
           role?: string
           seat_status?: string | null
@@ -18891,7 +20806,9 @@ export type Database = {
           signature_updated_at?: string | null
           signature_url?: string | null
           subject_specialization?: string[] | null
-          subscription_tier?: string | null
+          subscription_tier?:
+            | Database["public"]["Enums"]["tier_name_aligned"]
+            | null
           tenant_slug?: string | null
           trial_end_date?: string | null
           trial_ends_at?: string | null
@@ -19143,13 +21060,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "progress_reports_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "progress_reports_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -19190,13 +21100,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "progress_reports_teacher_id_fkey"
-            columns: ["teacher_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -19336,22 +21239,16 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "push_device_tokens_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       push_devices: {
         Row: {
           created_at: string
           device_id: string | null
-          device_installation_id: string | null
+          device_installation_id: string
           device_metadata: Json | null
           expo_push_token: string
+          fcm_token: string | null
           id: string
           is_active: boolean
           language: string | null
@@ -19365,9 +21262,10 @@ export type Database = {
         Insert: {
           created_at?: string
           device_id?: string | null
-          device_installation_id?: string | null
+          device_installation_id: string
           device_metadata?: Json | null
           expo_push_token: string
+          fcm_token?: string | null
           id?: string
           is_active?: boolean
           language?: string | null
@@ -19381,9 +21279,10 @@ export type Database = {
         Update: {
           created_at?: string
           device_id?: string | null
-          device_installation_id?: string | null
+          device_installation_id?: string
           device_metadata?: Json | null
           expo_push_token?: string
+          fcm_token?: string | null
           id?: string
           is_active?: boolean
           language?: string | null
@@ -19793,6 +21692,7 @@ export type Database = {
           max_uses: number | null
           organization_id: string
           region_id: string
+          temp_password: string | null
           updated_at: string | null
         }
         Insert: {
@@ -19809,6 +21709,7 @@ export type Database = {
           max_uses?: number | null
           organization_id: string
           region_id: string
+          temp_password?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -19825,6 +21726,7 @@ export type Database = {
           max_uses?: number | null
           organization_id?: string
           region_id?: string
+          temp_password?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -21073,13 +22975,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "school_invitation_codes_used_by_fkey"
-            columns: ["used_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       school_settings: {
@@ -21232,13 +23127,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "school_verifications_verified_by_fkey"
-            columns: ["verified_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       schools: {
@@ -21378,13 +23266,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "seats_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -21995,6 +23876,297 @@ export type Database = {
           },
         ]
       }
+      stem_progress: {
+        Row: {
+          activities_completed: number | null
+          badges_earned: Json | null
+          category: string
+          created_at: string | null
+          engagement_score: number | null
+          homework_submitted: number | null
+          id: string
+          last_activity_date: string | null
+          lessons_completed: number | null
+          preschool_id: string
+          streak_days: number | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          activities_completed?: number | null
+          badges_earned?: Json | null
+          category: string
+          created_at?: string | null
+          engagement_score?: number | null
+          homework_submitted?: number | null
+          id?: string
+          last_activity_date?: string | null
+          lessons_completed?: number | null
+          preschool_id: string
+          streak_days?: number | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          activities_completed?: number | null
+          badges_earned?: Json | null
+          category?: string
+          created_at?: string | null
+          engagement_score?: number | null
+          homework_submitted?: number | null
+          id?: string
+          last_activity_date?: string | null
+          lessons_completed?: number | null
+          preschool_id?: string
+          streak_days?: number | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stem_progress_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stem_progress_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "stem_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_achievements: {
+        Row: {
+          achievement_color: string | null
+          achievement_icon: string | null
+          achievement_name: string
+          achievement_type: string
+          awarded_by: string | null
+          category: string | null
+          created_at: string | null
+          description: string | null
+          earned_at: string | null
+          id: string
+          level: number | null
+          points: number | null
+          preschool_id: string
+          related_activity_id: string | null
+          related_lesson_id: string | null
+          student_id: string
+        }
+        Insert: {
+          achievement_color?: string | null
+          achievement_icon?: string | null
+          achievement_name: string
+          achievement_type: string
+          awarded_by?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          earned_at?: string | null
+          id?: string
+          level?: number | null
+          points?: number | null
+          preschool_id: string
+          related_activity_id?: string | null
+          related_lesson_id?: string | null
+          student_id: string
+        }
+        Update: {
+          achievement_color?: string | null
+          achievement_icon?: string | null
+          achievement_name?: string
+          achievement_type?: string
+          awarded_by?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          earned_at?: string | null
+          id?: string
+          level?: number | null
+          points?: number | null
+          preschool_id?: string
+          related_activity_id?: string | null
+          related_lesson_id?: string | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_achievements_awarded_by_fkey"
+            columns: ["awarded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_achievements_awarded_by_fkey"
+            columns: ["awarded_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "student_achievements_awarded_by_fkey"
+            columns: ["awarded_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "student_achievements_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_achievements_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "student_achievements_related_lesson_id_fkey"
+            columns: ["related_lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_achievements_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_activity_feed: {
+        Row: {
+          activity_at: string
+          activity_type: string
+          class_id: string | null
+          created_at: string | null
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          is_published: boolean | null
+          media_urls: Json | null
+          preschool_id: string
+          reactions: Json | null
+          student_id: string | null
+          teacher_id: string
+          title: string
+          updated_at: string | null
+          visibility: string | null
+        }
+        Insert: {
+          activity_at?: string
+          activity_type: string
+          class_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_published?: boolean | null
+          media_urls?: Json | null
+          preschool_id: string
+          reactions?: Json | null
+          student_id?: string | null
+          teacher_id: string
+          title: string
+          updated_at?: string | null
+          visibility?: string | null
+        }
+        Update: {
+          activity_at?: string
+          activity_type?: string
+          class_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_published?: boolean | null
+          media_urls?: Json | null
+          preschool_id?: string
+          reactions?: Json | null
+          student_id?: string | null
+          teacher_id?: string
+          title?: string
+          updated_at?: string | null
+          visibility?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_activity_feed_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes_with_teachers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "student_activity_feed_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       student_enrollments: {
         Row: {
           class_id: string
@@ -22382,13 +24554,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "fk_parent"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "fk_student"
             columns: ["student_id"]
             isOneToOne: false
@@ -22504,6 +24669,155 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_subscription_info"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      student_progress_summary: {
+        Row: {
+          activities_attempted: number | null
+          activities_completed: number | null
+          areas_for_improvement: Json | null
+          average_score: number | null
+          badges_earned: Json | null
+          calculated_at: string | null
+          created_at: string | null
+          id: string
+          lessons_assigned: number | null
+          lessons_completed: number | null
+          lessons_in_progress: number | null
+          period_end: string
+          period_start: string
+          period_type: string
+          preschool_id: string
+          streak_days: number | null
+          strengths: Json | null
+          student_id: string
+          total_time_spent_minutes: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          activities_attempted?: number | null
+          activities_completed?: number | null
+          areas_for_improvement?: Json | null
+          average_score?: number | null
+          badges_earned?: Json | null
+          calculated_at?: string | null
+          created_at?: string | null
+          id?: string
+          lessons_assigned?: number | null
+          lessons_completed?: number | null
+          lessons_in_progress?: number | null
+          period_end: string
+          period_start: string
+          period_type: string
+          preschool_id: string
+          streak_days?: number | null
+          strengths?: Json | null
+          student_id: string
+          total_time_spent_minutes?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          activities_attempted?: number | null
+          activities_completed?: number | null
+          areas_for_improvement?: Json | null
+          average_score?: number | null
+          badges_earned?: Json | null
+          calculated_at?: string | null
+          created_at?: string | null
+          id?: string
+          lessons_assigned?: number | null
+          lessons_completed?: number | null
+          lessons_in_progress?: number | null
+          period_end?: string
+          period_start?: string
+          period_type?: string
+          preschool_id?: string
+          streak_days?: number | null
+          strengths?: Json | null
+          student_id?: string
+          total_time_spent_minutes?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_progress_summary_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_progress_summary_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "student_progress_summary_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_streaks: {
+        Row: {
+          created_at: string | null
+          current_streak: number | null
+          id: string
+          last_activity_date: string | null
+          longest_streak: number | null
+          preschool_id: string
+          streak_type: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          current_streak?: number | null
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number | null
+          preschool_id: string
+          streak_type: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          current_streak?: number | null
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number | null
+          preschool_id?: string
+          streak_type?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_streaks_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_streaks_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "student_streaks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -23019,13 +25333,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "subscription_seats_assigned_by_fkey"
-            columns: ["assigned_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "subscription_seats_revoked_by_fkey"
             columns: ["revoked_by"]
             isOneToOne: false
@@ -23087,13 +25394,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "subscription_seats_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -24270,13 +26570,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "support_tickets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       sync_logs: {
@@ -24473,13 +26766,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "teacher_ai_allocations_allocated_by_fkey"
-            columns: ["allocated_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "teacher_ai_allocations_preschool_id_fkey"
             columns: ["preschool_id"]
             isOneToOne: false
@@ -24528,12 +26814,117 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      teacher_approvals: {
+        Row: {
+          created_at: string | null
+          id: string
+          invite_id: string | null
+          notes: string | null
+          preschool_id: string
+          rejection_reason: string | null
+          requested_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          seat_assigned: boolean | null
+          status: string
+          teacher_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          invite_id?: string | null
+          notes?: string | null
+          preschool_id: string
+          rejection_reason?: string | null
+          requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          seat_assigned?: boolean | null
+          status?: string
+          teacher_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          invite_id?: string | null
+          notes?: string | null
+          preschool_id?: string
+          rejection_reason?: string | null
+          requested_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          seat_assigned?: boolean | null
+          status?: string
+          teacher_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
           {
-            foreignKeyName: "teacher_ai_allocations_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "teacher_approvals_invite_id_fkey"
+            columns: ["invite_id"]
             isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
+            referencedRelation: "teacher_invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "teacher_approvals_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -24661,13 +27052,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "teacher_invitations_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "teacher_invitations_preschool_id_fkey"
@@ -24817,6 +27201,99 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_profiles_with_tier"
             referencedColumns: ["preschool_id_nested"]
+          },
+        ]
+      }
+      teacher_student_notes: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          class_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          is_visible_to_parents: boolean | null
+          note_type: string
+          preschool_id: string | null
+          read_at: string | null
+          requires_acknowledgment: boolean | null
+          student_id: string
+          teacher_id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          class_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          is_visible_to_parents?: boolean | null
+          note_type?: string
+          preschool_id?: string | null
+          read_at?: string | null
+          requires_acknowledgment?: boolean | null
+          student_id: string
+          teacher_id: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          class_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          is_visible_to_parents?: boolean | null
+          note_type?: string
+          preschool_id?: string | null
+          read_at?: string | null
+          requires_acknowledgment?: boolean | null
+          student_id?: string
+          teacher_id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_student_notes_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_student_notes_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes_with_teachers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_student_notes_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teacher_student_notes_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "teacher_student_notes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -25591,13 +28068,13 @@ export type Database = {
       tts_audio_cache: {
         Row: {
           created_at: string | null
-          created_by: string
+          created_by: string | null
           hash: string
           hit_count: number | null
           id: string
           language_code: string
           last_used_at: string | null
-          preschool_id: string
+          preschool_id: string | null
           provider: string
           size_bytes: number | null
           storage_path: string
@@ -25606,13 +28083,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           hash: string
           hit_count?: number | null
           id?: string
           language_code: string
           last_used_at?: string | null
-          preschool_id: string
+          preschool_id?: string | null
           provider: string
           size_bytes?: number | null
           storage_path: string
@@ -25621,13 +28098,13 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           hash?: string
           hit_count?: number | null
           id?: string
           language_code?: string
           last_used_at?: string | null
-          preschool_id?: string
+          preschool_id?: string | null
           provider?: string
           size_bytes?: number | null
           storage_path?: string
@@ -25798,6 +28275,54 @@ export type Database = {
           },
         ]
       }
+      user_ai_tiers_backup_20260101: {
+        Row: {
+          assigned_by: string | null
+          assigned_reason: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string | null
+          is_active: boolean | null
+          metadata: Json | null
+          override_daily_limit: number | null
+          override_monthly_limit: number | null
+          override_rpm_limit: number | null
+          tier: Database["public"]["Enums"]["tier_name_aligned"] | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_reason?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          metadata?: Json | null
+          override_daily_limit?: number | null
+          override_monthly_limit?: number | null
+          override_rpm_limit?: number | null
+          tier?: Database["public"]["Enums"]["tier_name_aligned"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_reason?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          metadata?: Json | null
+          override_daily_limit?: number | null
+          override_monthly_limit?: number | null
+          override_rpm_limit?: number | null
+          tier?: Database["public"]["Enums"]["tier_name_aligned"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_ai_usage: {
         Row: {
           chat_messages_today: number | null
@@ -25923,13 +28448,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "user_blocks_blocked_id_fkey"
-            columns: ["blocked_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "user_blocks_blocker_id_fkey"
             columns: ["blocker_id"]
             isOneToOne: false
@@ -25963,13 +28481,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_blocks_blocker_id_fkey"
-            columns: ["blocker_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "user_blocks_school_id_fkey"
@@ -26238,13 +28749,6 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
         ]
       }
@@ -26759,13 +29263,6 @@ export type Database = {
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "video_call_participants_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
         ]
       }
       video_calls: {
@@ -27015,7 +29512,7 @@ export type Database = {
           language_code: string
           latency_ms: number | null
           metadata: Json | null
-          preschool_id: string
+          preschool_id: string | null
           provider: string
           service: string
           success: boolean | null
@@ -27029,7 +29526,7 @@ export type Database = {
           language_code: string
           latency_ms?: number | null
           metadata?: Json | null
-          preschool_id: string
+          preschool_id?: string | null
           provider: string
           service: string
           success?: boolean | null
@@ -27043,7 +29540,7 @@ export type Database = {
           language_code?: string
           latency_ms?: number | null
           metadata?: Json | null
-          preschool_id?: string
+          preschool_id?: string | null
           provider?: string
           service?: string
           success?: boolean | null
@@ -27154,6 +29651,260 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_learning_reports: {
+        Row: {
+          ai_model: string | null
+          ai_prompt_version: string | null
+          created_at: string
+          generated_at: string
+          generation_duration_ms: number | null
+          id: string
+          parent_feedback: string | null
+          parent_id: string
+          parent_rating: number | null
+          preschool_id: string
+          report_data: Json
+          sent_via: Json | null
+          student_id: string
+          updated_at: string
+          viewed_at: string | null
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          ai_model?: string | null
+          ai_prompt_version?: string | null
+          created_at?: string
+          generated_at?: string
+          generation_duration_ms?: number | null
+          id?: string
+          parent_feedback?: string | null
+          parent_id: string
+          parent_rating?: number | null
+          preschool_id: string
+          report_data?: Json
+          sent_via?: Json | null
+          student_id: string
+          updated_at?: string
+          viewed_at?: string | null
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          ai_model?: string | null
+          ai_prompt_version?: string | null
+          created_at?: string
+          generated_at?: string
+          generation_duration_ms?: number | null
+          id?: string
+          parent_feedback?: string | null
+          parent_id?: string
+          parent_rating?: number | null
+          preschool_id?: string
+          report_data?: Json
+          sent_via?: Json | null
+          student_id?: string
+          updated_at?: string
+          viewed_at?: string | null
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_learning_reports_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_learning_reports_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_learning_reports_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_learning_reports_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_learning_reports_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "weekly_learning_reports_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weekly_plans: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          class_id: string | null
+          created_at: string | null
+          created_by: string
+          daily_plans: Json | null
+          id: string
+          materials_list: Json | null
+          preschool_id: string
+          status: string | null
+          submitted_at: string | null
+          term_id: string | null
+          theme_id: string | null
+          updated_at: string | null
+          week_end_date: string
+          week_number: number
+          week_start_date: string
+          weekly_focus: string | null
+          weekly_objectives: Json | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          created_by: string
+          daily_plans?: Json | null
+          id?: string
+          materials_list?: Json | null
+          preschool_id: string
+          status?: string | null
+          submitted_at?: string | null
+          term_id?: string | null
+          theme_id?: string | null
+          updated_at?: string | null
+          week_end_date: string
+          week_number: number
+          week_start_date: string
+          weekly_focus?: string | null
+          weekly_objectives?: Json | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          class_id?: string | null
+          created_at?: string | null
+          created_by?: string
+          daily_plans?: Json | null
+          id?: string
+          materials_list?: Json | null
+          preschool_id?: string
+          status?: string | null
+          submitted_at?: string | null
+          term_id?: string | null
+          theme_id?: string | null
+          updated_at?: string | null
+          week_end_date?: string
+          week_number?: number
+          week_start_date?: string
+          weekly_focus?: string | null
+          weekly_objectives?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_plans_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes_with_teachers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_organizations"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_subscription_info"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
+          },
+          {
+            foreignKeyName: "weekly_plans_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "academic_terms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_plans_theme_id_fkey"
+            columns: ["theme_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_contacts: {
         Row: {
           consent_status: Database["public"]["Enums"]["whatsapp_consent_status"]
@@ -27202,6 +29953,86 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_profiles_with_tier"
             referencedColumns: ["preschool_id_nested"]
+          },
+        ]
+      }
+      wing_regional_coordinators: {
+        Row: {
+          appointed_by: string | null
+          appointed_date: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          coordinator_id: string | null
+          created_at: string | null
+          current_balance: number | null
+          id: string
+          is_active: boolean | null
+          monthly_float: number | null
+          region_id: string
+          spending_limit: number | null
+          updated_at: string | null
+          wing_id: string
+        }
+        Insert: {
+          appointed_by?: string | null
+          appointed_date?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          coordinator_id?: string | null
+          created_at?: string | null
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean | null
+          monthly_float?: number | null
+          region_id: string
+          spending_limit?: number | null
+          updated_at?: string | null
+          wing_id: string
+        }
+        Update: {
+          appointed_by?: string | null
+          appointed_date?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          coordinator_id?: string | null
+          created_at?: string | null
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean | null
+          monthly_float?: number | null
+          region_id?: string
+          spending_limit?: number | null
+          updated_at?: string | null
+          wing_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wing_regional_coordinators_appointed_by_fkey"
+            columns: ["appointed_by"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wing_regional_coordinators_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "organization_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wing_regional_coordinators_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "organization_regions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wing_regional_coordinators_wing_id_fkey"
+            columns: ["wing_id"]
+            isOneToOne: false
+            referencedRelation: "organization_wings"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -27413,6 +30244,35 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "delivery_providers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      duplicate_aftercare_registrations: {
+        Row: {
+          child_date_of_birth: string | null
+          child_first_name: string | null
+          child_last_name: string | null
+          created_dates: string[] | null
+          duplicate_count: number | null
+          parent_email: string | null
+          preschool_id: string | null
+          registration_ids: string[] | null
+          statuses: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aftercare_registrations_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "preschools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aftercare_registrations_preschool_id_fkey"
+            columns: ["preschool_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles_with_tier"
+            referencedColumns: ["preschool_id_nested"]
           },
         ]
       }
@@ -27798,13 +30658,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "subscription_seats_assigned_by_fkey"
-            columns: ["assigned_by"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
-          },
-          {
             foreignKeyName: "subscription_seats_subscription_id_fkey"
             columns: ["subscription_id"]
             isOneToOne: false
@@ -27845,13 +30698,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users_with_subscription"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "subscription_seats_user_id_fkey"
-            columns: ["users_table_id"]
-            isOneToOne: false
-            referencedRelation: "vw_teacher_overview"
-            referencedColumns: ["public_user_id"]
           },
           {
             foreignKeyName: "subscriptions_plan_id_fkey"
@@ -27985,9 +30831,14 @@ export type Database = {
         Args: { invite_code: string; user_id: string }
         Returns: boolean
       }
+      accept_join_request: { Args: { p_invite_token: string }; Returns: Json }
       activate_notification_template: {
         Args: { p_template_id: string }
         Returns: Json
+      }
+      activate_organization_member: {
+        Args: { member_uuid: string }
+        Returns: boolean
       }
       add_message_attachment: {
         Args: {
@@ -28086,6 +30937,39 @@ export type Database = {
         }
         Returns: number
       }
+      appoint_board_member: {
+        Args: {
+          p_appointed_by?: string
+          p_member_id: string
+          p_position_id: string
+        }
+        Returns: {
+          appointed_at: string | null
+          appointed_by: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          member_id: string | null
+          organization_id: string
+          position_code: string
+          position_order: number | null
+          position_title: string
+          term_end: string | null
+          term_start: string | null
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "organization_board_positions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      approve_membership_pop: {
+        Args: { p_pop_id: string; p_reviewer_notes?: string }
+        Returns: Json
+      }
       assign_all_teachers_to_subscription: {
         Args: { p_school_id: string; p_subscription_id: string }
         Returns: {
@@ -28128,6 +31012,19 @@ export type Database = {
         Returns: number
       }
       auto_publish_announcements: { Args: never; Returns: undefined }
+      award_student_achievement: {
+        Args: {
+          p_achievement_name: string
+          p_achievement_type: string
+          p_category?: string
+          p_color?: string
+          p_description?: string
+          p_icon?: string
+          p_points?: number
+          p_student_id: string
+        }
+        Returns: string
+      }
       backfill_profile_age_groups: {
         Args: never
         Returns: {
@@ -28154,6 +31051,13 @@ export type Database = {
           p_reason?: string
         }
         Returns: Json
+      }
+      bulk_activate_organization_members: {
+        Args: { organization_uuid: string }
+        Returns: {
+          activated_count: number
+          member_ids: string[]
+        }[]
       }
       bytea_to_text: { Args: { data: string }; Returns: string }
       calculate_distance_km: {
@@ -28182,6 +31086,14 @@ export type Database = {
       }
       can_access_submission: {
         Args: { submission_id: string }
+        Returns: boolean
+      }
+      can_approve_transaction: {
+        Args: {
+          approver_member_id: string
+          transaction_amount: number
+          transaction_wing_id?: string
+        }
         Returns: boolean
       }
       can_manage_user: {
@@ -28454,6 +31366,10 @@ export type Database = {
         Args: { p_template_id: string }
         Returns: Json
       }
+      deactivate_student: {
+        Args: { reason?: string; student_uuid: string }
+        Returns: boolean
+      }
       debug_auth_detailed: { Args: never; Returns: Json }
       debug_auth_uid: { Args: never; Returns: Json }
       debug_find_profile: { Args: { search_auth_id?: string }; Returns: Json }
@@ -28470,6 +31386,7 @@ export type Database = {
           created_at: string
           date_of_birth: string | null
           email: string | null
+          expo_push_token: string | null
           first_name: string | null
           full_name: string | null
           guardian_profile_id: string | null
@@ -28485,7 +31402,9 @@ export type Database = {
           organization_id: string | null
           phone: string | null
           phone_secondary: string | null
+          preferred_language: string | null
           preschool_id: string | null
+          push_token_updated_at: string | null
           ringtone_preferences: Json | null
           role: string
           seat_status: string | null
@@ -28493,7 +31412,9 @@ export type Database = {
           signature_updated_at: string | null
           signature_url: string | null
           subject_specialization: string[] | null
-          subscription_tier: string | null
+          subscription_tier:
+            | Database["public"]["Enums"]["tier_name_aligned"]
+            | null
           tenant_slug: string | null
           trial_end_date: string | null
           trial_ends_at: string | null
@@ -28621,6 +31542,7 @@ export type Database = {
         Returns: string
       }
       expire_old_allocation_requests: { Args: never; Returns: undefined }
+      expire_old_join_requests: { Args: never; Returns: number }
       expire_user_trials: { Args: never; Returns: number }
       find_caps_topics_by_page: {
         Args: { p_page_number: number; p_textbook_id: string }
@@ -28642,12 +31564,23 @@ export type Database = {
             Args: { p_email: string; p_preschool_id: string; p_role: string }
             Returns: string
           }
+      generate_invite_code: { Args: never; Returns: string }
+      generate_invite_token: { Args: never; Returns: string }
       generate_invoice_number:
         | { Args: never; Returns: string }
         | { Args: { org_id: string }; Returns: string }
       generate_member_number: {
         Args: { org_id: string; prefix?: string }
         Returns: string
+      }
+      generate_membership_fees_for_period: {
+        Args: {
+          p_due_date: string
+          p_organization_id: string
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: number
       }
       generate_otp: { Args: never; Returns: string }
       generate_region_invite_code: {
@@ -28757,6 +31690,16 @@ export type Database = {
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
       get_active_connections: { Args: never; Returns: Json }
+      get_active_term: {
+        Args: { p_preschool_id: string }
+        Returns: {
+          academic_year: number
+          end_date: string
+          id: string
+          name: string
+          start_date: string
+        }[]
+      }
       get_age_groups_for_school_type: {
         Args: { p_school_type: string }
         Returns: {
@@ -28791,6 +31734,10 @@ export type Database = {
           service_name: string
           status: string
         }[]
+      }
+      get_appointable_roles: {
+        Args: { appointer_role: string; appointer_wing?: string }
+        Returns: string[]
       }
       get_approved_organizations: {
         Args: never
@@ -28904,6 +31851,16 @@ export type Database = {
           year: number
         }[]
       }
+      get_member_fee_summary: {
+        Args: { p_member_id: string }
+        Returns: {
+          next_due_date: string
+          overdue_count: number
+          total_due: number
+          total_paid: number
+          total_pending: number
+        }[]
+      }
       get_message_display_text: { Args: { content: string }; Returns: string }
       get_message_with_attachments: {
         Args: { p_message_id: string }
@@ -28995,6 +31952,7 @@ export type Database = {
           created_at: string
           date_of_birth: string | null
           email: string | null
+          expo_push_token: string | null
           first_name: string | null
           full_name: string | null
           guardian_profile_id: string | null
@@ -29010,7 +31968,9 @@ export type Database = {
           organization_id: string | null
           phone: string | null
           phone_secondary: string | null
+          preferred_language: string | null
           preschool_id: string | null
+          push_token_updated_at: string | null
           ringtone_preferences: Json | null
           role: string
           seat_status: string | null
@@ -29018,7 +31978,9 @@ export type Database = {
           signature_updated_at: string | null
           signature_url: string | null
           subject_specialization: string[] | null
-          subscription_tier: string | null
+          subscription_tier:
+            | Database["public"]["Enums"]["tier_name_aligned"]
+            | null
           tenant_slug: string | null
           trial_end_date: string | null
           trial_ends_at: string | null
@@ -29239,6 +32201,17 @@ export type Database = {
         Args: { expires_in?: number; file_path: string }
         Returns: string
       }
+      get_spending_limit: { Args: { member_role: string }; Returns: number }
+      get_student_badges: {
+        Args: { p_student_id: string }
+        Returns: {
+          badge_color: string
+          badge_icon: string
+          badge_name: string
+          category: string
+          earned_at: string
+        }[]
+      }
       get_student_course_progress: {
         Args: { course_id: string; student_id: string }
         Returns: {
@@ -29272,6 +32245,7 @@ export type Database = {
           upload_type: string
         }[]
       }
+      get_student_stars: { Args: { p_student_id: string }; Returns: number }
       get_submission_attempt_count: {
         Args: { assignment_id: string; student_id: string }
         Returns: number
@@ -29675,6 +32649,10 @@ export type Database = {
         Args: { curlopt: string; value: string }
         Returns: boolean
       }
+      increment_activity_play_count: {
+        Args: { activity_uuid: string }
+        Returns: undefined
+      }
       increment_ai_usage: {
         Args: {
           p_metadata?: Json
@@ -29712,6 +32690,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_template_usage: {
+        Args: { template_uuid: string }
+        Returns: undefined
+      }
+      initialize_organization_board_positions: {
+        Args: { p_organization_id: string }
+        Returns: undefined
+      }
       is_admin_level: { Args: never; Returns: boolean }
       is_conversation_admin: {
         Args: { p_auth_user_id: string; p_conversation_id: string }
@@ -29721,6 +32707,7 @@ export type Database = {
         Args: { course_id: string }
         Returns: boolean
       }
+      is_edudashpro_principal: { Args: { user_id: string }; Returns: boolean }
       is_feature_enabled: {
         Args: { feature_name: string; org_id: string }
         Returns: boolean
@@ -29744,6 +32731,7 @@ export type Database = {
       is_super_admin: { Args: never; Returns: boolean }
       is_superadmin: { Args: never; Returns: boolean }
       is_superadmin_by_id: { Args: { user_id: string }; Returns: boolean }
+      is_superadmin_safe: { Args: never; Returns: boolean }
       is_superadmin_user: { Args: never; Returns: boolean }
       is_trial_active: { Args: { p_school_id: string }; Returns: boolean }
       is_user_blocked: {
@@ -30023,6 +33011,7 @@ export type Database = {
           tenant_slug: string
         }[]
       }
+      reactivate_student: { Args: { student_uuid: string }; Returns: boolean }
       recalculate_all_class_enrollments: {
         Args: { preschool_uuid: string }
         Returns: {
@@ -30093,6 +33082,28 @@ export type Database = {
           p_school_name: string
           p_school_type?: string
           p_selected_plan_id?: string
+        }
+        Returns: Json
+      }
+      register_organization_member: {
+        Args: {
+          p_date_of_birth?: string
+          p_email?: string
+          p_first_name?: string
+          p_id_number?: string
+          p_invite_code_used?: string
+          p_joined_via?: string
+          p_last_name?: string
+          p_member_number?: string
+          p_member_type?: string
+          p_membership_status?: string
+          p_membership_tier?: string
+          p_organization_id: string
+          p_phone?: string
+          p_physical_address?: string
+          p_region_id?: string
+          p_role?: string
+          p_user_id: string
         }
         Returns: Json
       }
@@ -30257,6 +33268,10 @@ export type Database = {
             Returns: string
           }
       set_user_as_principal: { Args: { p_user_id: string }; Returns: Json }
+      set_user_language: {
+        Args: { p_language: string; p_user_id: string }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       sign: {
@@ -31017,6 +34032,10 @@ export type Database = {
         Args: { p_patch: Json; p_preschool_id: string }
         Returns: Json
       }
+      update_student_streak: {
+        Args: { p_streak_type: string; p_student_id: string }
+        Returns: number
+      }
       update_typing_indicator: {
         Args: { p_is_typing: boolean; p_thread_id: string }
         Returns: undefined
@@ -31080,6 +34099,46 @@ export type Database = {
         Args: { submission_id: string }
         Returns: boolean
       }
+      user_can_create_course: { Args: { p_org_id: string }; Returns: boolean }
+      user_can_manage_classes: {
+        Args: { preschool_org_id: string }
+        Returns: boolean
+      }
+      user_can_manage_org_documents: {
+        Args: { p_org_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      user_can_manage_org_members: {
+        Args: { target_org_id: string }
+        Returns: boolean
+      }
+      user_can_read_profile: {
+        Args: { profile_user_id: string }
+        Returns: boolean
+      }
+      user_can_view_classes: {
+        Args: { class_teacher_id: string; preschool_org_id: string }
+        Returns: boolean
+      }
+      user_can_view_org_document:
+        | {
+            Args: { doc_access_level: string; doc_id: string }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              p_access_level: string
+              p_document_id: string
+              p_is_deleted: boolean
+              p_org_id: string
+              p_user_id: string
+            }
+            Returns: boolean
+          }
+      user_can_view_org_members: {
+        Args: { target_org_id: string }
+        Returns: boolean
+      }
       user_can_view_thread_participants: {
         Args: { p_thread_id: string }
         Returns: boolean
@@ -31089,6 +34148,10 @@ export type Database = {
       user_has_active_seat: { Args: { p_user_id: string }; Returns: boolean }
       user_has_any_role: { Args: { roles: string[] }; Returns: boolean }
       user_has_role: { Args: { required_role: string }; Returns: boolean }
+      user_is_thread_participant: {
+        Args: { p_thread_id: string }
+        Returns: boolean
+      }
       user_owns_course: { Args: { course_id: string }; Returns: boolean }
       user_owns_submission: {
         Args: { submission_id: string }
@@ -31106,6 +34169,7 @@ export type Database = {
         Args: { p_code: string; p_email?: string }
         Returns: Json
       }
+      validate_join_invite_code: { Args: { p_code: string }; Returns: Json }
       validate_program_code: { Args: { p_code: string }; Returns: Json }
       validate_report_status_transition: {
         Args: { new_status: string; old_status: string; user_role: string }
@@ -31240,6 +34304,20 @@ export type Database = {
       escalation_level_enum: "warning" | "suspension" | "termination"
       feedback_severity: "bug" | "feature" | "improvement"
       feedback_status: "new" | "reviewing" | "resolved"
+      join_request_status:
+        | "pending"
+        | "approved"
+        | "rejected"
+        | "expired"
+        | "cancelled"
+        | "revoked"
+      join_request_type:
+        | "teacher_invite"
+        | "parent_join"
+        | "member_join"
+        | "guardian_claim"
+        | "staff_invite"
+        | "learner_enroll"
       lead_status:
         | "new"
         | "contacted"
@@ -31274,6 +34352,9 @@ export type Database = {
         | "community_org"
         | "training_center"
         | "tutoring_center"
+        | "skills_development"
+        | "membership_org"
+        | "npo"
       overage_billing_status:
         | "pending"
         | "processing"
@@ -31650,6 +34731,22 @@ export const Constants = {
       escalation_level_enum: ["warning", "suspension", "termination"],
       feedback_severity: ["bug", "feature", "improvement"],
       feedback_status: ["new", "reviewing", "resolved"],
+      join_request_status: [
+        "pending",
+        "approved",
+        "rejected",
+        "expired",
+        "cancelled",
+        "revoked",
+      ],
+      join_request_type: [
+        "teacher_invite",
+        "parent_join",
+        "member_join",
+        "guardian_claim",
+        "staff_invite",
+        "learner_enroll",
+      ],
       lead_status: [
         "new",
         "contacted",
@@ -31687,6 +34784,9 @@ export const Constants = {
         "community_org",
         "training_center",
         "tutoring_center",
+        "skills_development",
+        "membership_org",
+        "npo",
       ],
       overage_billing_status: [
         "pending",

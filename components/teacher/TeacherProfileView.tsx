@@ -16,6 +16,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { TeacherDocumentsService, TeacherDocument } from '@/lib/services/TeacherDocumentsService';
 import type { Teacher } from '@/types/teacher-management';
@@ -176,6 +177,54 @@ export function TeacherProfileView({
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+      </View>
+
+      {/* Classes Card - Shows assigned classes with management option */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderInfo}>
+            <Text style={styles.cardTitle}>Classes</Text>
+            <Text style={styles.cardSubtitle}>
+              {teacher.classes.length > 0 
+                ? `${teacher.classes.length} class${teacher.classes.length > 1 ? 'es' : ''} assigned` 
+                : 'No classes assigned'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.manageClassesButton}
+            onPress={() => router.push('/screens/class-teacher-management' as any)}
+          >
+            <Ionicons name="settings" size={16} color="#fff" />
+            <Text style={styles.manageClassesText}>Manage</Text>
+          </TouchableOpacity>
+        </View>
+        {teacher.classes.length > 0 ? (
+          <View style={styles.classesGrid}>
+            {teacher.classes.map((className, index) => (
+              <View key={index} style={styles.classChip}>
+                <Ionicons name="school" size={14} color={theme?.primary || '#6366f1'} />
+                <Text style={styles.classChipText}>{className}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyClasses}>
+            <Ionicons name="school-outline" size={32} color={theme?.textSecondary || '#9ca3af'} />
+            <Text style={styles.emptyClassesText}>No classes assigned yet</Text>
+            <TouchableOpacity
+              style={styles.assignClassButton}
+              onPress={() => router.push('/screens/class-teacher-management' as any)}
+            >
+              <Text style={styles.assignClassButtonText}>Go to Class Management</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={styles.studentsInfo}>
+          <Ionicons name="people" size={16} color={theme?.textSecondary || '#6b7280'} />
+          <Text style={styles.studentsInfoText}>
+            {teacher.studentCount || 0} student{(teacher.studentCount || 0) !== 1 ? 's' : ''} total
+          </Text>
         </View>
       </View>
 
@@ -443,6 +492,75 @@ const createStyles = (theme?: ThemeColors) =>
       fontSize: 11,
       color: theme?.textSecondary || '#6b7280',
       marginTop: 2,
+    },
+    // Classes card styles
+    manageClassesButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme?.primary || '#6366f1',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      gap: 4,
+    },
+    manageClassesText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    classesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 12,
+    },
+    classChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme?.surfaceVariant || '#f3f4f6',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      gap: 6,
+    },
+    classChipText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: theme?.text || '#374151',
+    },
+    emptyClasses: {
+      alignItems: 'center',
+      paddingVertical: 20,
+    },
+    emptyClassesText: {
+      fontSize: 13,
+      color: theme?.textSecondary || '#9ca3af',
+      marginTop: 8,
+    },
+    assignClassButton: {
+      marginTop: 12,
+      backgroundColor: theme?.primary || '#6366f1',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    assignClassButtonText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    studentsInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme?.border || '#e5e7eb',
+    },
+    studentsInfoText: {
+      fontSize: 13,
+      color: theme?.textSecondary || '#6b7280',
     },
   });
 
