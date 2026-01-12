@@ -29,22 +29,82 @@ export type EffectiveLimits = {
 
 async function getUserTier(): Promise<Tier> {
   try {
-    const { data } = await assertSupabase().auth.getUser()
+    const client = assertSupabase()
+    const { data } = await client.auth.getUser()
+    const userId = data?.user?.id
+    
+    // First try user_metadata (fastest)
     const metaTier = String((data?.user?.user_metadata as any)?.subscription_tier || '').toLowerCase()
-    switch (metaTier) {
-      case 'pro':
-      case 'enterprise':
-      case 'parent_starter':
-      case 'parent-plus':
-      case 'parent_plus':
-      case 'private-teacher':
-      case 'private_teacher':
-        return (metaTier.replace('-', '_') as Tier)
-      default:
-        return 'free'
+    const normalizedMetaTier = normalizeTierString(metaTier)
+    if (normalizedMetaTier !== 'free') {
+      return normalizedMetaTier
     }
-  } catch {
+    
+    // Fallback: Check profiles.subscription_tier (single source of truth)
+    if (userId) {
+      const { data: profile } = await client
+        .from('profiles')
+        .select('subscription_tier, preschool_id, role')
+        .eq('id', userId)
+        .maybeSingle()
+      
+      if (profile?.subscription_tier) {
+        const profileTier = normalizeTierString(String(profile.subscription_tier).toLowerCase())
+        if (profileTier !== 'free') {
+          return profileTier
+        }
+      }
+      
+      // For staff with 'free' tier, inherit from school
+      const isStaff = ['teacher', 'principal', 'admin', 'principal_admin'].includes(profile?.role || '')
+      if (isStaff && profile?.preschool_id) {
+        const { data: school } = await client
+          .from('preschools')
+          .select('subscription_tier')
+          .eq('id', profile.preschool_id)
+          .maybeSingle()
+        
+        if (school?.subscription_tier) {
+          return normalizeTierString(String(school.subscription_tier).toLowerCase())
+        }
+      }
+    }
+    
     return 'free'
+  } catch (err) {
+    console.warn('[getUserTier] Error fetching tier:', err)
+    return 'free'
+  }
+}
+
+/**
+ * Normalize tier string to valid Tier type
+ */
+function normalizeTierString(tier: string): Tier {
+  switch (tier) {
+    case 'pro':
+    case 'school_pro':
+      return 'pro'
+    case 'enterprise':
+    case 'school_enterprise':
+      return 'enterprise'
+    case 'parent_starter':
+    case 'parent-starter':
+      return 'parent_starter'
+    case 'parent_plus':
+    case 'parent-plus':
+      return 'parent_plus'
+    case 'private_teacher':
+    case 'private-teacher':
+      return 'private_teacher'
+    case 'school_premium':
+    case 'premium':
+      return 'pro' // Map school_premium to 'pro' tier for quota purposes
+    case 'school_starter':
+    case 'starter':
+      return 'free' // school_starter gets free tier quotas (can be adjusted)
+    default:
+      return 'free'
   }
 }
 
