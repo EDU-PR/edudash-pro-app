@@ -675,6 +675,11 @@ export class LessonsService implements ILessonsService {
    * Convert structured content (JSON with sections) to Markdown
    */
   private convertContentToMarkdown(content: any): string {
+    // Guard against null/undefined/primitive values
+    if (!content) return '';
+    if (typeof content === 'string') return content;
+    if (typeof content !== 'object') return String(content);
+    
     // If content has a text or markdown property, use it directly
     if (content.text) return content.text;
     if (content.markdown) return content.markdown;
@@ -697,69 +702,115 @@ export class LessonsService implements ILessonsService {
     }
     
     // Fallback: stringify the object
-    return JSON.stringify(content, null, 2);
+    try {
+      return JSON.stringify(content, null, 2);
+    } catch {
+      return String(content);
+    }
   }
 
   /**
    * Transform database lesson to UI lesson format
    */
   private transformDbLessonToLesson(dbLesson: any): Lesson {
-    const category = this.getSubjectCategory(dbLesson.subject);
-    const skillLevel = DEFAULT_SKILL_LEVELS[0] || { id: 'beginner', name: 'Beginner', level: 1, description: 'Beginner level', order: 1, color: '#4CAF50' };
-    
-    // Parse content - can be string or JSON
-    let contentString: string | undefined;
-    if (typeof dbLesson.content === 'string') {
-      // Try to parse if it looks like JSON
-      try {
-        const parsed = JSON.parse(dbLesson.content);
-        contentString = this.convertContentToMarkdown(parsed);
-      } catch {
-        // Not JSON, use as-is (raw markdown or plain text)
-        contentString = dbLesson.content;
+    try {
+      const category = this.getSubjectCategory(dbLesson?.subject);
+      const skillLevel = DEFAULT_SKILL_LEVELS[0] || { id: 'beginner', name: 'Beginner', level: 1, description: 'Beginner level', order: 1, color: '#4CAF50' };
+      
+      // Parse content - can be string or JSON
+      let contentString: string | undefined;
+      if (typeof dbLesson?.content === 'string') {
+        // Try to parse if it looks like JSON
+        try {
+          const parsed = JSON.parse(dbLesson.content);
+          contentString = this.convertContentToMarkdown(parsed);
+        } catch {
+          // Not JSON, use as-is (raw markdown or plain text)
+          contentString = dbLesson.content;
+        }
+      } else if (dbLesson?.content && typeof dbLesson.content === 'object') {
+        // Content is already an object, convert to readable format
+        contentString = this.convertContentToMarkdown(dbLesson.content);
       }
-    } else if (dbLesson.content && typeof dbLesson.content === 'object') {
-      // Content is already an object, convert to readable format
-      contentString = this.convertContentToMarkdown(dbLesson.content);
+      
+      return {
+        id: dbLesson?.id || '',
+        title: dbLesson?.title || 'Untitled Lesson',
+        description: dbLesson?.description || 'No description provided',
+        short_description: dbLesson?.description?.substring(0, 100) + '...' || 'Preschool lesson',
+        content: contentString, // Raw markdown content for AI-generated lessons
+        is_ai_generated: dbLesson?.is_ai_generated || false,
+        category: category,
+        category_id: category.id,
+        estimated_duration: dbLesson?.duration_minutes || 30,
+        difficulty_rating: this.mapAgeGroupToDifficulty(dbLesson?.age_group),
+        age_range: this.parseAgeGroup(dbLesson?.age_group),
+        language: 'en',
+        is_featured: dbLesson?.status === 'active',
+        is_premium: false,
+        status: dbLesson?.status === 'active' ? 'published' : 'draft',
+        created_at: dbLesson?.created_at,
+        updated_at: dbLesson?.updated_at,
+        rating: 4.5, // Default rating
+        completion_count: 0,
+        tags: dbLesson?.subject ? [dbLesson.subject] : [],
+        skill_level: skillLevel,
+        skill_level_id: skillLevel.id,
+        prerequisites: [],
+        author_id: dbLesson?.teacher_id || 'system',
+        author_name: 'Teacher',
+        organization_id: dbLesson?.preschool_id || null,
+        version: '1.0',
+        review_count: 0,
+        bookmark_count: 0,
+        visibility: 'public',
+        thumbnail_url: undefined,
+        learning_objectives: dbLesson?.objectives || [],
+        steps: [],
+        resources: [],
+        assessments: []
+      };
+    } catch (error) {
+      console.error('[LessonsService] Error transforming lesson:', error, dbLesson);
+      // Return a safe default lesson object
+      return {
+        id: dbLesson?.id || '',
+        title: dbLesson?.title || 'Untitled Lesson',
+        description: 'Error loading lesson details',
+        short_description: 'Error loading lesson',
+        content: undefined,
+        is_ai_generated: false,
+        category: { id: 'general', name: 'General', icon: 'book-outline', color: '#6366F1', description: '', order: 0 },
+        category_id: 'general',
+        estimated_duration: 30,
+        difficulty_rating: 1,
+        age_range: { min_age: 3, max_age: 5 },
+        language: 'en',
+        is_featured: false,
+        is_premium: false,
+        status: 'draft',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        rating: 0,
+        completion_count: 0,
+        tags: [],
+        skill_level: { id: 'beginner', name: 'Beginner', description: 'Beginner level', order: 1, color: '#4CAF50' },
+        skill_level_id: 'beginner',
+        prerequisites: [],
+        author_id: 'system',
+        author_name: 'Unknown',
+        organization_id: null,
+        version: '1.0',
+        review_count: 0,
+        bookmark_count: 0,
+        visibility: 'public',
+        thumbnail_url: undefined,
+        learning_objectives: [],
+        steps: [],
+        resources: [],
+        assessments: []
+      };
     }
-    
-    return {
-      id: dbLesson.id,
-      title: dbLesson.title,
-      description: dbLesson.description || 'No description provided',
-      short_description: dbLesson.description?.substring(0, 100) + '...' || 'Preschool lesson',
-      content: contentString, // Raw markdown content for AI-generated lessons
-      is_ai_generated: dbLesson.is_ai_generated || false,
-      category: category,
-      category_id: category.id,
-      estimated_duration: dbLesson.duration_minutes || 30,
-      difficulty_rating: this.mapAgeGroupToDifficulty(dbLesson.age_group),
-      age_range: this.parseAgeGroup(dbLesson.age_group),
-      language: 'en',
-      is_featured: dbLesson.status === 'active',
-      is_premium: false,
-      status: dbLesson.status === 'active' ? 'published' : 'draft',
-      created_at: dbLesson.created_at,
-      updated_at: dbLesson.updated_at,
-      rating: 4.5, // Default rating
-      completion_count: 0,
-      tags: [dbLesson.subject],
-      skill_level: skillLevel,
-      skill_level_id: skillLevel.id,
-      prerequisites: [],
-      author_id: dbLesson.teacher_id || 'system',
-      author_name: 'Teacher',
-      organization_id: dbLesson.preschool_id || null,
-      version: '1.0',
-      review_count: 0,
-      bookmark_count: 0,
-      visibility: 'public',
-      thumbnail_url: undefined,
-      learning_objectives: dbLesson.objectives || [],
-      steps: [],
-      resources: [],
-      assessments: []
-    };
   }
 
   /**

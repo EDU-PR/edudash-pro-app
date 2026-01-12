@@ -354,15 +354,43 @@ export default function LessonDetailScreen() {
               </Text>
             </View>
             <View style={styles.contentContainer}>
-              {Markdown ? (
-                <Markdown style={markdownStyles}>
-                  {lesson.content}
-                </Markdown>
-              ) : (
-                <Text style={[styles.contentText, { color: theme.text }]}>
-                  {lesson.content}
-                </Text>
-              )}
+              {(() => {
+                // Safe content rendering - ensure content is a string
+                const contentString = typeof lesson.content === 'string' 
+                  ? lesson.content 
+                  : (typeof lesson.content === 'object' ? JSON.stringify(lesson.content, null, 2) : String(lesson.content || ''));
+                
+                if (!contentString || !contentString.trim()) {
+                  return (
+                    <Text style={[styles.contentText, { color: theme.textSecondary }]}>
+                      No content available
+                    </Text>
+                  );
+                }
+                
+                if (Markdown) {
+                  try {
+                    return (
+                      <Markdown style={markdownStyles}>
+                        {contentString}
+                      </Markdown>
+                    );
+                  } catch (markdownError) {
+                    console.warn('[LessonDetail] Markdown render error:', markdownError);
+                    return (
+                      <Text style={[styles.contentText, { color: theme.text }]}>
+                        {contentString}
+                      </Text>
+                    );
+                  }
+                }
+                
+                return (
+                  <Text style={[styles.contentText, { color: theme.text }]}>
+                    {contentString}
+                  </Text>
+                );
+              })()}
             </View>
           </View>
         )}
@@ -374,15 +402,43 @@ export default function LessonDetailScreen() {
               Lesson Content
             </Text>
             <View style={styles.contentContainer}>
-              {Markdown ? (
-                <Markdown style={markdownStyles}>
-                  {lesson.content}
-                </Markdown>
-              ) : (
-                <Text style={[styles.contentText, { color: theme.text }]}>
-                  {lesson.content}
-                </Text>
-              )}
+              {(() => {
+                // Safe content rendering - ensure content is a string
+                const contentString = typeof lesson.content === 'string' 
+                  ? lesson.content 
+                  : (typeof lesson.content === 'object' ? JSON.stringify(lesson.content, null, 2) : String(lesson.content || ''));
+                
+                if (!contentString || !contentString.trim()) {
+                  return (
+                    <Text style={[styles.contentText, { color: theme.textSecondary }]}>
+                      No content available
+                    </Text>
+                  );
+                }
+                
+                if (Markdown) {
+                  try {
+                    return (
+                      <Markdown style={markdownStyles}>
+                        {contentString}
+                      </Markdown>
+                    );
+                  } catch (markdownError) {
+                    console.warn('[LessonDetail] Markdown render error:', markdownError);
+                    return (
+                      <Text style={[styles.contentText, { color: theme.text }]}>
+                        {contentString}
+                      </Text>
+                    );
+                  }
+                }
+                
+                return (
+                  <Text style={[styles.contentText, { color: theme.text }]}>
+                    {contentString}
+                  </Text>
+                );
+              })()}
             </View>
           </View>
         )}
