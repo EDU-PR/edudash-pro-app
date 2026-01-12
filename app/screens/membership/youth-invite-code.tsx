@@ -609,7 +609,8 @@ export default function YouthInviteCodeScreen() {
                     : `${item.current_uses || 0}/∞`;
                   const expired = item.expires_at && new Date(item.expires_at) < new Date();
                   const isInactive = !item.is_active;
-                  const canDelete = isInactive || expired;
+                  // Allow deleting any code (active, inactive, or expired)
+                  const canDelete = true;
                   const roleLabel = YOUTH_ROLES.find(r => r.id === item.requested_role)?.label || item.requested_role || 'Youth Member';
                   
                   return (
