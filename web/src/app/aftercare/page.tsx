@@ -164,7 +164,7 @@ export default function AftercarePage() {
       }
       
       if (existingRegistrations && existingRegistrations.length > 0) {
-        const activeRegistration = existingRegistrations.find(r => r.status !== 'cancelled');
+        const activeRegistration = existingRegistrations.find((r: { status: string }) => r.status !== 'cancelled');
         if (activeRegistration) {
           setError('A registration for this child already exists. Please contact the school if you need to update your registration.');
           setIsSubmitting(false);
