@@ -102,6 +102,10 @@ export interface Lesson {
   thumbnail_url?: string;
   banner_url?: string;
   
+  // Raw content for AI-generated lessons (markdown)
+  content?: string;
+  is_ai_generated?: boolean;
+  
   // Categorization
   category_id: string;
   category: LessonCategory;

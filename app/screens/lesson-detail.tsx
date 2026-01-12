@@ -5,7 +5,7 @@
  * progress tracking, and navigation capabilities.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,12 +14,24 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Lesson, LessonProgress } from '@/types/lessons';
 import LessonsService from '@/services/LessonsService';
+
+// Conditional import for markdown rendering
+const isWeb = Platform.OS === 'web';
+let Markdown: React.ComponentType<any> | null = null;
+if (!isWeb) {
+  try {
+    Markdown = require('react-native-markdown-display').default;
+  } catch (e) {
+    console.warn('[LessonDetail] Markdown not available:', e);
+  }
+}
 
 export default function LessonDetailScreen() {
   const { theme } = useTheme();
@@ -29,6 +41,87 @@ export default function LessonDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const lessonsService = LessonsService;
+
+  // Markdown styles for AI-generated content
+  const markdownStyles = useMemo(() => ({
+    body: {
+      color: theme.text,
+      fontSize: 15,
+      lineHeight: 24,
+    },
+    heading1: {
+      color: '#FF6B6B',
+      fontSize: 22,
+      fontWeight: '700' as const,
+      marginTop: 20,
+      marginBottom: 10,
+    },
+    heading2: {
+      color: theme.primary,
+      fontSize: 18,
+      fontWeight: '600' as const,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    heading3: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600' as const,
+      marginTop: 12,
+      marginBottom: 6,
+    },
+    paragraph: {
+      marginBottom: 10,
+      color: theme.text,
+    },
+    strong: {
+      fontWeight: '700' as const,
+      color: theme.text,
+    },
+    em: {
+      fontStyle: 'italic' as const,
+    },
+    bullet_list: {
+      marginLeft: 8,
+      marginBottom: 8,
+    },
+    ordered_list: {
+      marginLeft: 8,
+      marginBottom: 8,
+    },
+    list_item: {
+      marginBottom: 6,
+      color: theme.text,
+    },
+    code_inline: {
+      backgroundColor: theme.surface || theme.cardBackground,
+      padding: 3,
+      borderRadius: 4,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 13,
+      color: theme.primary,
+    },
+    fence: {
+      backgroundColor: theme.surface || theme.cardBackground,
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 10,
+    },
+    blockquote: {
+      backgroundColor: theme.surface || theme.cardBackground,
+      borderLeftColor: '#FF6B6B',
+      borderLeftWidth: 4,
+      paddingLeft: 12,
+      paddingVertical: 8,
+      marginLeft: 0,
+      marginVertical: 10,
+    },
+    hr: {
+      backgroundColor: theme.border,
+      height: 1,
+      marginVertical: 16,
+    },
+  }), [theme]);
 
   useEffect(() => {
     loadLessonData();
@@ -251,6 +344,49 @@ export default function LessonDetailScreen() {
           </View>
         )}
 
+        {/* AI-Generated Lesson Content */}
+        {lesson.is_ai_generated && lesson.content && (
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <View style={styles.aiLabelContainer}>
+              <Ionicons name="sparkles" size={18} color="#FF6B6B" />
+              <Text style={[styles.sectionTitle, { color: theme.text, marginLeft: 8 }]}>
+                AI-Generated Lesson Plan
+              </Text>
+            </View>
+            <View style={styles.contentContainer}>
+              {Markdown ? (
+                <Markdown style={markdownStyles}>
+                  {lesson.content}
+                </Markdown>
+              ) : (
+                <Text style={[styles.contentText, { color: theme.text }]}>
+                  {lesson.content}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Regular Lesson Content (non-AI) */}
+        {!lesson.is_ai_generated && lesson.content && (
+          <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Lesson Content
+            </Text>
+            <View style={styles.contentContainer}>
+              {Markdown ? (
+                <Markdown style={markdownStyles}>
+                  {lesson.content}
+                </Markdown>
+              ) : (
+                <Text style={[styles.contentText, { color: theme.text }]}>
+                  {lesson.content}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Learning Objectives */}
         {lesson.learning_objectives && lesson.learning_objectives.length > 0 && (
           <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
@@ -451,6 +587,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  aiLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  contentContainer: {
+    paddingTop: 8,
+  },
+  contentText: {
+    fontSize: 15,
+    lineHeight: 24,
   },
   objectiveItem: {
     flexDirection: 'row',

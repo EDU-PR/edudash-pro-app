@@ -110,11 +110,10 @@ export default function AttendanceScreen() {
         const { data: auth } = await assertSupabase().auth.getUser()
         const authUserId = auth?.user?.id || null
         await assertSupabase().from('attendance').insert(entries.map(e => ({
-          class_id: classId,
           student_id: e.student_id,
-          present: e.present,
-          date: today,
-          taken_by: authUserId,
+          status: e.present ? 'present' : 'absent',
+          attendance_date: today,
+          recorded_by: authUserId,
         })) as any)
       } catch { /* noop */ void 0; }
 

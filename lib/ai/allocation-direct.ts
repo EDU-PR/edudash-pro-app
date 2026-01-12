@@ -333,10 +333,10 @@ export async function allocateAIQuotasDirect(
       }
       allocation = updated;
     } else {
-      // Create new allocation
+      // Create new allocation with UPSERT to handle race conditions and duplicate conflicts
       const { data: created, error: createError } = await client
         .from('teacher_ai_allocations')
-        .insert({
+        .upsert({
           preschool_id: preschoolId,
           user_id: teacherId,
           teacher_name: teacherName,
@@ -354,6 +354,9 @@ export async function allocateAIQuotasDirect(
           is_suspended: false,
           auto_renew: options.auto_renew || false,
           priority_level: options.priority_level || 'normal',
+        }, {
+          onConflict: 'preschool_id,user_id',
+          ignoreDuplicates: false
         })
         .select()
         .single();
@@ -659,10 +662,10 @@ export async function ensureTeacherAllocation(preschoolId: string, userId: strin
     const role = user.role || 'teacher';
     const defaultQuotas = getDefaultTeacherQuotas(role);
     
-    // Create new teacher allocation
+    // Create new teacher allocation with UPSERT to avoid conflicts
     const { data: newAllocation, error } = await client
       .from('teacher_ai_allocations')
-      .insert({
+      .upsert({
         preschool_id: preschoolId,
         user_id: userId,
         teacher_name: fullName,
@@ -680,6 +683,9 @@ export async function ensureTeacherAllocation(preschoolId: string, userId: strin
         is_suspended: false,
         auto_renew: true,
         priority_level: 'normal',
+      }, {
+        onConflict: 'preschool_id,user_id',
+        ignoreDuplicates: false
       })
       .select()
       .single();

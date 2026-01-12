@@ -665,11 +665,22 @@ export class LessonsService implements ILessonsService {
     const category = this.getSubjectCategory(dbLesson.subject);
     const skillLevel = DEFAULT_SKILL_LEVELS[0] || { id: 'beginner', name: 'Beginner', level: 1, description: 'Beginner level', order: 1, color: '#4CAF50' };
     
+    // Parse content - can be string or JSON
+    let contentString: string | undefined;
+    if (typeof dbLesson.content === 'string') {
+      contentString = dbLesson.content;
+    } else if (dbLesson.content && typeof dbLesson.content === 'object') {
+      // If content is JSON, try to extract text or stringify
+      contentString = dbLesson.content.text || dbLesson.content.markdown || JSON.stringify(dbLesson.content, null, 2);
+    }
+    
     return {
       id: dbLesson.id,
       title: dbLesson.title,
       description: dbLesson.description || 'No description provided',
       short_description: dbLesson.description?.substring(0, 100) + '...' || 'Preschool lesson',
+      content: contentString, // Raw markdown content for AI-generated lessons
+      is_ai_generated: dbLesson.is_ai_generated || false,
       category: category,
       category_id: category.id,
       estimated_duration: dbLesson.duration_minutes || 30,
