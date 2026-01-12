@@ -28,7 +28,7 @@ interface ClassInfo {
   id: string;
   name: string;
   grade_level: string;
-  capacity: number;
+  max_capacity: number;
   room_number?: string;
 }
 
@@ -63,7 +63,7 @@ export default function MyClassScreen() {
       
       const { data, error } = await assertSupabase()
         .from('classes')
-        .select('id, name, grade_level, capacity, room_number')
+        .select('id, name, grade_level, max_capacity, room_number')
         .eq('teacher_id', teacherId)
         .eq('preschool_id', organizationId)
         .eq('active', true)
@@ -388,7 +388,7 @@ export default function MyClassScreen() {
               <Text style={styles.statLabel}>{t('teacher.students', { defaultValue: 'Students' })}</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{myClass.capacity}</Text>
+              <Text style={styles.statValue}>{myClass.max_capacity}</Text>
               <Text style={styles.statLabel}>{t('teacher.capacity', { defaultValue: 'Capacity' })}</Text>
             </View>
           </View>
