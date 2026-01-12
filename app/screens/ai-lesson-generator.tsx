@@ -210,8 +210,8 @@ export default function AILessonGeneratorScreen() {
           <TouchableOpacity onPress={handleGenerate} style={[styles.btn, { backgroundColor: isQuotaExhausted ? '#9CA3AF' : theme.primary, flex: 1 }]} disabled={pending}>
             {pending ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>{isQuotaExhausted ? 'Upgrade' : 'Generate'}</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: generated?.description ? theme.accent : palette.outline, flex: 1 }]} disabled={saving || !generated?.description}>
-            {saving ? <ActivityIndicator color={theme.onAccent} /> : <Text style={[styles.btnText, { color: generated?.description ? theme.onAccent : palette.textSec }]}>Save</Text>}
+          <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: (generated?.content || generated?.description) ? theme.accent : palette.outline, flex: 1 }]} disabled={saving || !(generated?.content || generated?.description)}>
+            {saving ? <ActivityIndicator color={theme.onAccent} /> : <Text style={[styles.btnText, { color: (generated?.content || generated?.description) ? theme.onAccent : palette.textSec }]}>Save</Text>}
           </TouchableOpacity>
         </View>
 
@@ -241,10 +241,10 @@ export default function AILessonGeneratorScreen() {
         )}
 
         {/* Generated Content - No maxHeight to allow full scrolling */}
-        {generated?.description && (
+        {(generated?.content || generated?.description) && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.success, borderWidth: 2, marginTop: 16, marginBottom: 100 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="checkmark-circle" size={18} color={theme.success} /><Text style={{ color: theme.success, fontWeight: '600', marginLeft: 8 }}>Generated!</Text></View>
-            <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10 }}><Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>{generated.description}</Text></View>
+            <View style={{ backgroundColor: palette.bg, borderRadius: 8, padding: 10 }}><Text style={{ color: palette.text, fontSize: 14, lineHeight: 22 }}>{typeof generated.content === 'string' ? generated.content : generated.description}</Text></View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
               <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: theme.primary, flex: 1 }]} disabled={saving}>{saving ? <ActivityIndicator color={theme.onPrimary} size="small" /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>Save</Text>}</TouchableOpacity>
               <TouchableOpacity onPress={() => { setGenerated(null); toast.info('Cleared'); }} style={[styles.btn, { backgroundColor: palette.outline, paddingHorizontal: 12 }]}><Ionicons name="refresh-outline" size={16} color={palette.text} /></TouchableOpacity>

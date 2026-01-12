@@ -672,6 +672,35 @@ export class LessonsService implements ILessonsService {
   // Private helper methods
 
   /**
+   * Convert structured content (JSON with sections) to Markdown
+   */
+  private convertContentToMarkdown(content: any): string {
+    // If content has a text or markdown property, use it directly
+    if (content.text) return content.text;
+    if (content.markdown) return content.markdown;
+    
+    // If content has sections array, convert to Markdown
+    if (content.sections && Array.isArray(content.sections)) {
+      const markdownParts: string[] = [];
+      
+      for (const section of content.sections) {
+        if (section.title) {
+          markdownParts.push(`## ${section.title}`);
+        }
+        if (section.content) {
+          markdownParts.push(section.content);
+        }
+        markdownParts.push(''); // Empty line between sections
+      }
+      
+      return markdownParts.join('\n\n');
+    }
+    
+    // Fallback: stringify the object
+    return JSON.stringify(content, null, 2);
+  }
+
+  /**
    * Transform database lesson to UI lesson format
    */
   private transformDbLessonToLesson(dbLesson: any): Lesson {
@@ -681,10 +710,17 @@ export class LessonsService implements ILessonsService {
     // Parse content - can be string or JSON
     let contentString: string | undefined;
     if (typeof dbLesson.content === 'string') {
-      contentString = dbLesson.content;
+      // Try to parse if it looks like JSON
+      try {
+        const parsed = JSON.parse(dbLesson.content);
+        contentString = this.convertContentToMarkdown(parsed);
+      } catch {
+        // Not JSON, use as-is (raw markdown or plain text)
+        contentString = dbLesson.content;
+      }
     } else if (dbLesson.content && typeof dbLesson.content === 'object') {
-      // If content is JSON, try to extract text or stringify
-      contentString = dbLesson.content.text || dbLesson.content.markdown || JSON.stringify(dbLesson.content, null, 2);
+      // Content is already an object, convert to readable format
+      contentString = this.convertContentToMarkdown(dbLesson.content);
     }
     
     return {
