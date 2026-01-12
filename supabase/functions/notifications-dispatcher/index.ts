@@ -505,7 +505,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         break;
       case 'new_announcement':
         if (request.announcement_id) {
-          const { data: announcement } = await supabase.from('principal_announcements').select('title, content, priority').eq('id', request.announcement_id).single();
+          // Use 'announcements' table (not 'principal_announcements' which doesn't exist)
+          const { data: announcement } = await supabase.from('announcements').select('title, content, priority').eq('id', request.announcement_id).single();
           if (announcement) {
             context.announcement_title = announcement.title;
             context.announcement_preview = announcement.content?.substring(0, 100);
@@ -1134,7 +1135,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           };
         }
         break;
-      case 'principal_announcements':
+      case 'announcements': // Note: was 'principal_announcements' but table is named 'announcements'
         if (type === 'INSERT' && record.is_published) {
           notificationRequest = {
             event_type: 'new_announcement',
