@@ -23,6 +23,7 @@ import {
   X,
   Sparkles,
   Bell,
+  BookOpen,
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';

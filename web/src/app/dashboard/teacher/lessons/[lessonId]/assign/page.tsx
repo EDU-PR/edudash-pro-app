@@ -31,7 +31,10 @@ export default function AssignLessonPage() {
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
-  const { assignLesson, assignLessonToClass, isAssigning } = useLessonAssignment();
+  const { assignLesson, assignLessonToClass, isAssigning } = useLessonAssignment({
+    organizationId: profile?.preschoolId,
+    userId,
+  });
 
   useEffect(() => {
     const initAuth = async () => {
@@ -150,7 +153,7 @@ export default function AssignLessonPage() {
         );
         
         const results = await Promise.all(assignments);
-        const allSuccess = results.every(r => r === true);
+        const allSuccess = results.every((r: boolean) => r === true);
         
         if (allSuccess) {
           setSuccess(true);

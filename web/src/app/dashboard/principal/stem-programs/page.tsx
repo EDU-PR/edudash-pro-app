@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { Brain, Cpu, Laptop, CheckCircle, X } from 'lucide-react';
+import { Brain, Cpu, Laptop, CheckCircle, X, Loader2 } from 'lucide-react';
 
 export default function STEMProgramsPage() {
   const router = useRouter();

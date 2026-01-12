@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { TrendingUp, BookOpen, Users, CheckCircle, Brain, Cpu, Laptop } from 'lucide-react';
+import { TrendingUp, BookOpen, Users, CheckCircle, Brain, Cpu, Laptop, Loader2 } from 'lucide-react';
 
 interface AnalyticsData {
   lessonCompletionRate: number;
@@ -93,13 +93,13 @@ export default function PrincipalAnalyticsPage() {
 
         // Calculate metrics
         const totalAssignments = assignments?.length || 0;
-        const completedAssignments = assignments?.filter(a => a.status === 'completed').length || 0;
+        const completedAssignments = assignments?.filter((a: { status: string }) => a.status === 'completed').length || 0;
         const lessonCompletionRate = totalAssignments > 0 
           ? Math.round((completedAssignments / totalAssignments) * 100) 
           : 0;
 
         const totalHomework = homeworkAssignments?.length || 0;
-        const submittedHomework = homeworkSubmissions?.filter(s => s.status === 'submitted' || s.status === 'graded').length || 0;
+        const submittedHomework = homeworkSubmissions?.filter((s: { status: string }) => s.status === 'submitted' || s.status === 'graded').length || 0;
         const homeworkSubmissionRate = totalHomework > 0
           ? Math.round((submittedHomework / totalHomework) * 100)
           : 0;

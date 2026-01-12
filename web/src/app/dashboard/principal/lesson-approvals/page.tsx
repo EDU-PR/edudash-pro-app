@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { CheckCircle, X, Clock, FileText } from 'lucide-react';
+import { CheckCircle, X, Clock, FileText, Loader2 } from 'lucide-react';
 
 interface LessonApproval {
   id: string;
