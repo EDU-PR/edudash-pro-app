@@ -7,6 +7,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { track } from '@/lib/analytics';
 import type { AITool, QuickAction } from './types';
+import { getTeacherRoute } from '@/lib/constants/teacherRoutes';
 
 interface BuildAIToolsParams {
   hasActiveSeat: boolean;
@@ -53,8 +54,8 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
           return;
         }
         track("edudash.ai.lesson_generator_opened", { isPreschool });
-        // Route preschool teachers to the specialized preschool lesson generator
-        router.push(isPreschool ? "/screens/preschool-lesson-generator" : "/screens/ai-lesson-generator");
+        // Route to the lesson generator (preschool uses same route now)
+        router.push(getTeacherRoute('create_lesson'));
       },
     },
     {

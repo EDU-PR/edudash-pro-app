@@ -259,8 +259,8 @@ export const useTeacherDashboard = () => {
             .from('attendance_records')
             .select('student_id, status')
             .in('student_id', allStudentIds)
-            .gte('date', today + 'T00:00:00')
-            .lt('date', today + 'T23:59:59');
+            .gte('attendance_date', today + 'T00:00:00')
+            .lt('attendance_date', today + 'T23:59:59');
           
           todayAttendanceData = attendanceData || [];
         }

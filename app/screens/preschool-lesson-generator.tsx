@@ -49,6 +49,7 @@ import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import { QuotaBar } from '@/components/ai-lesson-generator';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { getCombinedUsage, incrementUsage, logUsageEvent } from '@/lib/ai/usage';
+import { SuccessModal } from '@/components/ui/SuccessModal';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { track } from '@/lib/analytics';
 
@@ -195,6 +196,7 @@ export default function PreschoolLessonGeneratorScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'lesson' | 'insights' | 'homework'>('lesson');
+  const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
   
   // Usage state
   const [usage, setUsage] = useState({ lesson_generation: 0 });
@@ -539,11 +541,25 @@ Create a simple take-home activity for parents:
       }
       
       const schoolId = teacherProfile.preschool_id || teacherProfile.organization_id;
-      const categoryId = categoriesQuery.data?.[0]?.id;
       
+      // Get or create a default category if none exists
+      let categoryId = categoriesQuery.data?.[0]?.id;
       if (!categoryId) {
-        toast.warn('Create a category first');
-        return;
+        // Try to create a default category
+        const { data: newCat, error: catError } = await assertSupabase()
+          .from('lesson_categories')
+          .insert({ name: 'Preschool', description: 'Preschool lessons and activities' })
+          .select('id')
+          .single();
+        
+        if (catError) {
+          console.error('[PreschoolLessonGen] Failed to create category:', catError);
+          toast.warn('Could not create lesson category. Please contact support.');
+          return;
+        }
+        categoryId = newCat.id;
+        // Refresh categories query
+        categoriesQuery.refetch();
       }
 
       // Combine all content for saving
@@ -560,11 +576,12 @@ Create a simple take-home activity for parents:
           content: generated.lesson,
         },
         teacherId: teacherProfile.id,
-        preschoolId: schoolId,
+        preschoolId: schoolId || teacherProfile.id, // Fallback to teacher ID if no school
         ageGroupId: selectedAgeGroup || 'preschool',
         categoryId,
         template: { duration: Number(duration) || 30, complexity: 'moderate' },
         isPublished: true,
+        subject: selectedSubject || 'general',
       });
 
       if (!res.success) {
@@ -572,14 +589,17 @@ Create a simple take-home activity for parents:
         return;
       }
 
-      toast.success(`Lesson saved!`);
+      toast.success(`Lesson saved! View in My Lessons`);
       track('edudash.ai.preschool_lesson.saved', { lessonId: res.lessonId });
+      
+      // Show custom success modal instead of Alert.alert
+      setShowSaveSuccessModal(true);
     } catch (e: unknown) {
       toast.error(`Save error: ${e instanceof Error ? e.message : 'Failed'}`);
     } finally {
       setSaving(false);
     }
-  }, [generated, categoriesQuery.data, selectedSubjectInfo, topic, selectedAgeGroup, duration]);
+  }, [generated, categoriesQuery, selectedSubjectInfo, topic, selectedAgeGroup, duration, selectedSubject]);
 
   const onShareHomework = useCallback(async () => {
     if (!generated?.homework) {
@@ -957,6 +977,22 @@ Create a simple take-home activity for parents:
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Success Modal for Save */}
+      <SuccessModal
+        visible={showSaveSuccessModal}
+        title="Lesson Saved!"
+        message="Your lesson has been saved. Would you like to view your lessons?"
+        buttonText="View My Lessons"
+        secondaryButtonText="Stay Here"
+        onSecondaryPress={() => setShowSaveSuccessModal(false)}
+        onClose={() => {
+          setShowSaveSuccessModal(false);
+          router.push('/screens/my-lessons');
+        }}
+        icon="checkmark-circle"
+        type="success"
+      />
     </SafeAreaView>
   );
 }

@@ -299,13 +299,13 @@ export default function LessonDetailScreen() {
             <View style={styles.metaItem}>
               <Ionicons name="time-outline" size={20} color={theme.primary} />
               <Text style={[styles.metaText, { color: theme.text }]}>
-                {lesson.estimated_duration} min
+                {lesson.estimated_duration || 30} min
               </Text>
             </View>
             <View style={styles.metaItem}>
               <Ionicons name="school-outline" size={20} color={theme.primary} />
               <Text style={[styles.metaText, { color: theme.text }]}>
-                {lesson.skill_level.name}
+                {lesson.skill_level?.name || 'Beginner'}
               </Text>
             </View>
           </View>
@@ -314,13 +314,13 @@ export default function LessonDetailScreen() {
             <View style={styles.metaItem}>
               <Ionicons name="people-outline" size={20} color={theme.primary} />
               <Text style={[styles.metaText, { color: theme.text }]}>
-                Ages {lesson.age_range.min_age}-{lesson.age_range.max_age}
+                Ages {lesson.age_range?.min_age || 3}-{lesson.age_range?.max_age || 6}
               </Text>
             </View>
             <View style={styles.metaItem}>
               <Ionicons name="star" size={20} color={"#FFD700"} />
               <Text style={[styles.metaText, { color: theme.text }]}>
-                {lesson.rating.toFixed(1)} ({lesson.review_count})
+                {(lesson.rating || 4.5).toFixed(1)} ({lesson.review_count || 0})
               </Text>
             </View>
           </View>
@@ -391,14 +391,20 @@ export default function LessonDetailScreen() {
         {lesson.learning_objectives && lesson.learning_objectives.length > 0 && (
           <View style={[styles.section, { backgroundColor: theme.cardBackground }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Learning Objectives</Text>
-            {lesson.learning_objectives.map((objective, index) => (
-              <View key={index} style={styles.objectiveItem}>
-                <Ionicons name="checkmark-circle-outline" size={20} color={theme.primary} />
-                <Text style={[styles.objectiveText, { color: theme.textSecondary }]}>
-                  {objective.description}
-                </Text>
-              </View>
-            ))}
+            {lesson.learning_objectives.map((objective, index) => {
+              // Handle both string and object formats (database may store as array of strings)
+              const objectiveText = typeof objective === 'string' 
+                ? objective 
+                : (objective?.description || (objective as any)?.text || String(objective));
+              return (
+                <View key={index} style={styles.objectiveItem}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={theme.primary} />
+                  <Text style={[styles.objectiveText, { color: theme.textSecondary }]}>
+                    {objectiveText}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
 

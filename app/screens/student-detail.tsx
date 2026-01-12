@@ -211,10 +211,10 @@ export default function StudentDetailScreen() {
             name,
             grade_level,
             teacher_id,
-            capacity
+            max_capacity
           `)
           .eq('preschool_id', userProfile.preschool_id)
-          .eq('is_active', true);
+          .eq('active', true);
 
         // Get teacher names for each class
         const teacherIds = [...new Set((classesData || []).map(c => c.teacher_id).filter(Boolean))];
@@ -252,7 +252,7 @@ export default function StudentDetailScreen() {
           grade_level: cls.grade_level,
           teacher_id: cls.teacher_id || null,
           teacher_name: cls.teacher_id ? teacherMap[cls.teacher_id] : undefined,
-          capacity: cls.capacity || 25,
+          capacity: cls.max_capacity || 25,
           current_enrollment: enrollmentMap[cls.id] || 0,
         }));
 
@@ -452,7 +452,7 @@ export default function StudentDetailScreen() {
             <TouchableOpacity onPress={handleEditToggle}>
               <Ionicons name="create" size={24} color={theme.primary} />
             </TouchableOpacity>
-            {userProfile.role === 'principal' && (
+            {isPrincipal && (
               <TouchableOpacity onPress={handleRemoveStudent} disabled={saving}>
                 <Ionicons name="person-remove-outline" size={24} color={theme.error} />
               </TouchableOpacity>

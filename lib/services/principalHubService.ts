@@ -86,7 +86,7 @@ export class PrincipalHubService {
           .from('classes')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .eq('is_active', true),
+          .eq('active', true),
 
         // Pending applications from enrollment_applications
         assertSupabase()
@@ -104,7 +104,7 @@ export class PrincipalHubService {
           .from('attendance_records')
           .select('status')
           .eq('preschool_id', preschoolId)
-          .gte('date', thirtyDaysAgo)
+          .gte('attendance_date', thirtyDaysAgo)
           .limit(5000);
         if (att && att.length > 0) {
           const present = att.filter((a: any) => String(a.status).toLowerCase() === 'present').length;
@@ -204,14 +204,14 @@ export class PrincipalHubService {
             .from('classes')
             .select('id', { count: 'exact', head: true })
             .eq('teacher_id', teacher.user_id)
-            .eq('is_active', true);
+            .eq('active', true);
 
           // Get classes first, then count students
           const { data: teacherClasses } = await supabase
             .from('classes')
             .select('id')
             .eq('teacher_id', teacher.user_id)
-            .eq('is_active', true);
+            .eq('active', true);
             
           const classIds = (teacherClasses || []).map(c => c.id);
           

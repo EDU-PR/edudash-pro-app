@@ -320,6 +320,7 @@ export class LessonsService implements ILessonsService {
 
   /**
    * Get user's lesson progress
+   * Note: lesson_progress table may not exist - returns null gracefully
    */
   async getUserLessonProgress(lessonId: string): Promise<LessonProgress | null> {
     try {
@@ -333,7 +334,13 @@ export class LessonsService implements ILessonsService {
         .eq('user_id', session.user_id)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
+      // Handle table not existing (42P01) or no rows found (PGRST116)
+      if (error) {
+        if (error.code === '42P01' || error.code === 'PGRST116') {
+          // Table doesn't exist or no rows - return null silently
+          console.log('[LessonsService] lesson_progress not available:', error.code);
+          return null;
+        }
         console.error('Error fetching lesson progress:', error);
         return null;
       }
@@ -347,6 +354,7 @@ export class LessonsService implements ILessonsService {
 
   /**
    * Update lesson progress
+   * Note: lesson_progress table may not exist - returns null gracefully
    */
   async updateLessonProgress(
     lessonId: string,
@@ -384,6 +392,11 @@ export class LessonsService implements ILessonsService {
       }
 
       if (error) {
+        // Handle table not existing gracefully
+        if (error.code === '42P01') {
+          console.log('[LessonsService] lesson_progress table not available');
+          return null;
+        }
         console.error('Error updating lesson progress:', error);
         return null;
       }

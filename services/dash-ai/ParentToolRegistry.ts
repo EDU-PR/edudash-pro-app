@@ -86,10 +86,10 @@ export class ParentToolRegistry extends DashToolRegistry {
 
             const { data: attendance } = await client
               .from('attendance_records')
-              .select('date, status')
+              .select('attendance_date, status')
               .eq('student_id', args.student_id)
-              .gte('date', startDate)
-              .order('date', { ascending: false });
+              .gte('attendance_date', startDate)
+              .order('attendance_date', { ascending: false });
 
             context.attendance_summary = {
               records: attendance || [],

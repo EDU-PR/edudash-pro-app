@@ -9,6 +9,7 @@ export class LessonGeneratorService {
     categoryId: string
     template?: { duration: number; complexity: 'simple' | 'moderate' | 'complex' }
     isPublished?: boolean
+    subject?: string
   }): Promise<{ success: boolean; lessonId?: string; error?: string }> {
     try {
       const objectivesArray: string[] = Array.isArray(params?.lesson?.assessmentQuestions)
@@ -41,6 +42,8 @@ export class LessonGeneratorService {
           is_public: params.isPublished === true,
           is_ai_generated: true,
           difficulty_level: difficultyLevel,
+          subject: params.subject || 'general',
+          age_group: params.ageGroupId || '3-4',
         } as any)
         .select('id')
         .single()

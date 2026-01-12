@@ -29,6 +29,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import LessonsService from '@/services/LessonsService';
 import { Lesson } from '@/types/lessons';
+import { getTeacherRoute } from '@/lib/constants/teacherRoutes';
 
 // Conditional import for markdown rendering
 const isWeb = Platform.OS === 'web';
@@ -109,11 +110,23 @@ export default function MyLessonsScreen() {
       const teacherId = profile.id;
       const preschoolId = profile.preschool_id || profile.organization_id;
       
-      // Fetch lessons from the database
-      const { data, error } = await assertSupabase()
+      console.log('[MyLessons] Fetching lessons for teacher:', teacherId, 'preschool:', preschoolId);
+      
+      // Build the query - handle case where preschoolId might be null
+      let query = assertSupabase()
         .from('lessons')
-        .select('*')
-        .or(`teacher_id.eq.${teacherId},preschool_id.eq.${preschoolId}`)
+        .select('*');
+      
+      // If we have preschoolId, fetch lessons for teacher OR the preschool
+      // If no preschoolId, only fetch lessons by this teacher
+      if (preschoolId) {
+        query = query.or(`teacher_id.eq.${teacherId},preschool_id.eq.${preschoolId}`);
+      } else {
+        query = query.eq('teacher_id', teacherId);
+      }
+      
+      // Filter for AI-generated lessons and order by newest
+      const { data, error } = await query
         .eq('is_ai_generated', true)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -123,6 +136,7 @@ export default function MyLessonsScreen() {
         throw error;
       }
       
+      console.log('[MyLessons] Found', data?.length || 0, 'lessons');
       return data || [];
     },
     enabled: !!profile?.id,
@@ -296,7 +310,7 @@ export default function MyLessonsScreen() {
       </Text>
       <TouchableOpacity
         style={[styles.createButton, { backgroundColor: '#FF6B6B' }]}
-        onPress={() => router.push('/screens/preschool-lesson-generator')}
+        onPress={() => router.push(getTeacherRoute('create_lesson'))}
       >
         <Ionicons name="sparkles" size={20} color="#FFF" />
         <Text style={styles.createButtonText}>Create Lesson</Text>
@@ -363,7 +377,7 @@ export default function MyLessonsScreen() {
       {lessons.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: '#FF6B6B' }]}
-          onPress={() => router.push('/screens/preschool-lesson-generator')}
+          onPress={() => router.push(getTeacherRoute('create_lesson'))}
         >
           <Ionicons name="add" size={28} color="#FFF" />
         </TouchableOpacity>

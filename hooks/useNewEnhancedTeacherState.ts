@@ -13,6 +13,12 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
+import { 
+  TEACHER_ROUTES, 
+  TEACHER_QUICK_ACTIONS, 
+  getTeacherRoute,
+  resolveRouteColor 
+} from '@/lib/constants/teacherRoutes';
 
 export const useNewEnhancedTeacherState = () => {
   const { user, profile } = useAuth();
@@ -44,42 +50,38 @@ export const useNewEnhancedTeacherState = () => {
     }
   };
 
-  // Check if user is from a preschool
+  // Check if user is from a preschool (no longer needed for routing - all preschool teachers use same route)
   const isPreschool = Boolean(profile?.preschool_id);
 
-  // Handle quick action navigation with analytics tracking
+  /**
+   * Navigate to a teacher route using centralized route config
+   * Single source of truth for all navigation
+   */
   const handleQuickAction = (action: string) => {
-    track('teacher.dashboard.quick_action', { action, layout: 'enhanced' });
+    track('teacher.dashboard.quick_action', { action, layout: 'enhanced', isPreschool });
     
-    switch (action) {
-      case 'create_lesson':
-        // Route preschool teachers to the specialized preschool lesson generator
-        router.push(isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator');
-        break;
-      case 'start_live_lesson':
-        router.push('/screens/start-live-lesson');
-        break;
-      case 'grade_assignments':
-        router.push('/screens/assign-lesson');
-        break;
-      case 'my_class':
-        router.push('/screens/my-class');
-        break;
-      case 'parent_communication':
-        router.push('/screens/teacher-message-list');
-        break;
-      case 'student_reports':
-        router.push('/screens/teacher-reports');
-        break;
-      case 'ai_assistant':
-        router.push('/screens/dash-assistant');
-        break;
-      case 'call_parent':
-        router.push('/screens/calls');
-        break;
-      default:
-        Alert.alert(t('common.coming_soon'), t('dashboard.feature_coming_soon'));
+    const routeConfig = TEACHER_ROUTES[action as keyof typeof TEACHER_ROUTES];
+    
+    if (!routeConfig) {
+      Alert.alert(t('common.coming_soon'), t('dashboard.feature_coming_soon'));
+      return;
     }
+    
+    // Check premium requirement
+    if (routeConfig.requiresPremium && tier === 'free') {
+      Alert.alert(
+        t('subscription.premium_required', { defaultValue: 'Premium Required' }),
+        t('subscription.upgrade_for_feature', { defaultValue: 'Upgrade your plan to access this feature.' }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('subscription.upgrade'), onPress: () => router.push('/pricing') }
+        ]
+      );
+      return;
+    }
+    
+    // Navigate to the route from single source of truth
+    router.push(routeConfig.path);
   };
 
   // Build metrics data for display
@@ -114,58 +116,24 @@ export const useNewEnhancedTeacherState = () => {
     }
   ];
 
-  // Build quick actions data
-  const buildQuickActions = () => [
-    {
-      title: t('teacher.create_lesson'),
-      icon: 'book',
-      color: theme.primary,
-      onPress: () => handleQuickAction('create_lesson')
-    },
-    {
-      title: t('teacher.start_live_lesson', { defaultValue: 'Start Live Lesson' }),
-      icon: 'videocam',
-      color: '#ec4899',
-      onPress: () => handleQuickAction('start_live_lesson')
-    },
-    {
-      title: t('teacher.grade_assignments'),
-      icon: 'checkmark-circle',
-      color: theme.success,
-      onPress: () => handleQuickAction('grade_assignments')
-    },
-    {
-      title: t('teacher.my_class', { defaultValue: 'My Class' }),
-      icon: 'school',
-      color: theme.secondary,
-      onPress: () => handleQuickAction('my_class')
-    },
-    {
-      title: t('teacher.parent_communication'),
-      icon: 'chatbubbles',
-      color: theme.info,
-      onPress: () => handleQuickAction('parent_communication')
-    },
-    {
-      title: t('teacher.student_reports'),
-      icon: 'bar-chart',
-      color: theme.warning,
-      onPress: () => handleQuickAction('student_reports')
-    },
-    {
-      title: t('teacher.ai_assistant'),
-      icon: 'sparkles',
-      color: theme.accent,
-      onPress: () => handleQuickAction('ai_assistant'),
-      disabled: tier === 'free'
-    },
-    {
-      title: t('teacher.call_parent', { defaultValue: '📞 Call Parent' }),
-      icon: 'call',
-      color: '#10B981',
-      onPress: () => handleQuickAction('call_parent')
-    }
-  ];
+  /**
+   * Build quick actions from centralized route config
+   * Uses TEACHER_QUICK_ACTIONS array for ordering
+   */
+  const buildQuickActions = () => {
+    return TEACHER_QUICK_ACTIONS.map(actionKey => {
+      const route = TEACHER_ROUTES[actionKey];
+      if (!route) return null;
+      
+      return {
+        title: t(route.titleKey, { defaultValue: route.title }),
+        icon: route.icon,
+        color: resolveRouteColor(route.color, theme),
+        onPress: () => handleQuickAction(actionKey),
+        disabled: route.requiresPremium && tier === 'free',
+      };
+    }).filter(Boolean);
+  };
 
   return {
     user,
@@ -173,10 +141,14 @@ export const useNewEnhancedTeacherState = () => {
     theme,
     tier,
     refreshing,
+    isPreschool,
     getGreeting,
     handleRefresh,
     handleQuickAction,
     buildMetrics,
     buildQuickActions,
+    // Export route config for external use
+    routes: TEACHER_ROUTES,
+    getRoute: getTeacherRoute,
   };
 };

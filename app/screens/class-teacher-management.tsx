@@ -82,7 +82,7 @@ export default function ClassTeacherManagementScreen() {
     editClass: (id: string) => router.push(`/screens/edit-class?classId=${id}` as any),
     teacherClasses: (id: string) => router.push(`/screens/teacher-classes?teacherId=${id}` as any),
     editTeacher: (id: string) => router.push(`/screens/edit-teacher?teacherId=${id}` as any),
-    addTeacher: () => router.push('/screens/invite-teacher' as any),
+    addTeacher: () => router.push('/screens/hiring-hub' as any),
   };
 
   const styles = getStyles(theme);

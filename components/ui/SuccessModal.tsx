@@ -18,6 +18,9 @@ interface SuccessModalProps {
   onClose: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   type?: 'success' | 'error' | 'warning' | 'info';
+  /** Optional secondary button */
+  secondaryButtonText?: string;
+  onSecondaryPress?: () => void;
 }
 
 export const SuccessModal: React.FC<SuccessModalProps> = ({
@@ -28,6 +31,8 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
   onClose,
   icon = 'checkmark-circle',
   type = 'success',
+  secondaryButtonText,
+  onSecondaryPress,
 }) => {
   const { theme } = useTheme();
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
@@ -124,17 +129,38 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
           {/* Message */}
           <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
 
-          {/* Action Button */}
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { backgroundColor: iconColor },
-            ]}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>{buttonText}</Text>
-          </TouchableOpacity>
+          {/* Action Buttons */}
+          <View style={secondaryButtonText ? styles.buttonRow : undefined}>
+            {secondaryButtonText && onSecondaryPress && (
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.secondaryButton,
+                  { 
+                    backgroundColor: 'transparent',
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={onSecondaryPress}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>
+                  {secondaryButtonText}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.button,
+                secondaryButtonText ? styles.primaryButtonFlex : null,
+                { backgroundColor: iconColor },
+              ]}
+              onPress={onClose}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>{buttonText}</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -189,6 +215,22 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  primaryButtonFlex: {
+    flex: 1,
+  },
+  secondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
   },
   buttonText: {
     color: '#FFFFFF',

@@ -111,16 +111,16 @@ export function usePrincipalAnalytics() {
         // Attendance (current month)
         supabase
           .from('attendance_records')
-          .select('status, date')
+          .select('status, attendance_date')
           .eq('preschool_id', school.id)
-          .gte('date', monthStart),
+          .gte('attendance_date', monthStart),
         // Today's attendance
         supabase
           .from('attendance_records')
           .select('status')
           .eq('preschool_id', school.id)
-          .gte('date', today + 'T00:00:00')
-          .lt('date', today + 'T23:59:59'),
+          .gte('attendance_date', today + 'T00:00:00')
+          .lt('attendance_date', today + 'T23:59:59'),
         // Monthly revenue
         supabase
           .from('financial_transactions')
@@ -174,7 +174,7 @@ export function usePrincipalAnalytics() {
       // Weekly trend
       const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const weeklyTrend = dayLabels.map((label, idx) => {
-        const recs = attendanceRecords.filter(r => new Date(r.date).getDay() === idx);
+        const recs = attendanceRecords.filter(r => new Date(r.attendance_date).getDay() === idx);
         const present = recs.filter(r => r.status === 'present').length;
         const rate = recs.length > 0 ? Math.round((present / recs.length) * 100) : 0;
         return { day: label, rate };
@@ -183,10 +183,10 @@ export function usePrincipalAnalytics() {
       // Low attendance alerts (last 7 days)
       const sevenDaysAgo = new Date(now);
       sevenDaysAgo.setDate(now.getDate() - 7);
-      const recent = attendanceRecords.filter(r => new Date(r.date) >= sevenDaysAgo);
+      const recent = attendanceRecords.filter(r => new Date(r.attendance_date) >= sevenDaysAgo);
       const byDay: Record<string, { present: number; total: number }> = {};
       for (const r of recent) {
-        const key = new Date(r.date).toISOString().split('T')[0];
+        const key = new Date(r.attendance_date).toISOString().split('T')[0];
         if (!byDay[key]) byDay[key] = { present: 0, total: 0 };
         byDay[key].total += 1;
         if (r.status === 'present') byDay[key].present += 1;
