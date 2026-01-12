@@ -209,13 +209,25 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/principal-year-planner');
         break;
       case 'curriculum-themes':
-        router.push('/screens/principal-curriculum-themes');
+        // TODO: Create screen - for now show coming soon
+        Alert.alert(
+          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+          t('ecd.curriculum_themes_coming_soon', { defaultValue: 'Curriculum Themes management is coming in the next update.' })
+        );
         break;
       case 'lesson-templates':
-        router.push('/screens/principal-lesson-templates');
+        // TODO: Create screen - for now show coming soon
+        Alert.alert(
+          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+          t('ecd.lesson_templates_coming_soon', { defaultValue: 'Lesson Templates are coming in the next update.' })
+        );
         break;
       case 'weekly-plans':
-        router.push('/screens/principal-weekly-plans');
+        // TODO: Create screen - for now show coming soon
+        Alert.alert(
+          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+          t('ecd.weekly_plans_coming_soon', { defaultValue: 'Weekly Plans management is coming in the next update.' })
+        );
         break;
       default:
         Alert.alert(
