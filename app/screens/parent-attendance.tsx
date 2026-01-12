@@ -192,9 +192,9 @@ const useChildAttendance = (childId: string | null) => {
       // Fetch attendance records for the child
       const { data, error } = await client
         .from('attendance')
-        .select('id, date, present, status, notes')
+        .select('id, attendance_date, status, notes')
         .eq('student_id', childId)
-        .order('date', { ascending: false })
+        .order('attendance_date', { ascending: false })
         .limit(100);
       
       if (error) {
@@ -209,9 +209,9 @@ const useChildAttendance = (childId: string | null) => {
       
       return (data || []).map(record => ({
         id: record.id,
-        date: record.date,
-        present: record.present,
-        status: record.status || (record.present ? 'present' : 'absent'),
+        date: record.attendance_date,
+        present: record.status === 'present',
+        status: record.status || 'absent',
         notes: record.notes,
       }));
     },

@@ -90,10 +90,10 @@ export function ChildProgressBadges({
       
       const { data: attendanceData } = await supabase
         .from('attendance')
-        .select('date, status')
+        .select('attendance_date, status')
         .eq('student_id', studentId)
-        .gte('date', weekStart.toISOString().split('T')[0])
-        .order('date', { ascending: false });
+        .gte('attendance_date', weekStart.toISOString().split('T')[0])
+        .order('attendance_date', { ascending: false });
       
       const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
       const totalDays = attendanceData?.length || 0;

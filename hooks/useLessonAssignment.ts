@@ -208,11 +208,37 @@ export function useLessonAssignment(options?: {
         stem_category: params.stem_category || 'none',
       };
       
-      const { error } = await supabase
+      const { data: insertedAssignment, error } = await supabase
         .from('lesson_assignments')
-        .insert(assignmentData);
+        .insert(assignmentData)
+        .select('id')
+        .single();
       
       if (error) throw error;
+      
+      // Send notification to parent(s) if assigned to a student
+      if (params.student_id && insertedAssignment?.id) {
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          if (session?.session?.access_token) {
+            await supabase.functions.invoke('notifications-dispatcher', {
+              body: {
+                event_type: 'lesson_assigned',
+                assignment_id: insertedAssignment.id,
+                student_id: params.student_id,
+                preschool_id: organizationId,
+                send_immediately: true,
+              },
+              headers: {
+                Authorization: `Bearer ${session.session.access_token}`,
+              },
+            });
+          }
+        } catch (notifyError) {
+          // Don't fail the assignment if notification fails
+          console.warn('[useLessonAssignment] Failed to send notification:', notifyError);
+        }
+      }
       
       queryClient.invalidateQueries({ queryKey: ['lesson-assignments'] });
       return true;
@@ -275,11 +301,43 @@ export function useLessonAssignment(options?: {
           status: 'assigned' as const,
         }));
         
-        const { error } = await supabase
+        const { data: insertedAssignments, error } = await supabase
           .from('lesson_assignments')
-          .insert(assignments);
+          .insert(assignments)
+          .select('id, student_id');
         
         if (error) throw error;
+        
+        // Send notifications to parents of all students in the class
+        if (insertedAssignments && insertedAssignments.length > 0) {
+          try {
+            const { data: session } = await supabase.auth.getSession();
+            if (session?.session?.access_token) {
+              // Send notification for each student assignment
+              await Promise.all(
+                insertedAssignments
+                  .filter(a => a.student_id)
+                  .map(assignment => 
+                    supabase.functions.invoke('notifications-dispatcher', {
+                      body: {
+                        event_type: 'lesson_assigned',
+                        assignment_id: assignment.id,
+                        student_id: assignment.student_id,
+                        preschool_id: organizationId,
+                        send_immediately: true,
+                      },
+                      headers: {
+                        Authorization: `Bearer ${session.session.access_token}`,
+                      },
+                    })
+                  )
+              );
+            }
+          } catch (notifyError) {
+            // Don't fail the assignment if notifications fail
+            console.warn('[useLessonAssignment] Failed to send class notifications:', notifyError);
+          }
+        }
       }
       
       queryClient.invalidateQueries({ queryKey: ['lesson-assignments'] });

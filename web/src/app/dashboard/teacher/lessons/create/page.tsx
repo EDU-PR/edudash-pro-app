@@ -299,10 +299,27 @@ Format the response in clear sections with practical, age-appropriate activities
                   </div>
 
                   <div className="max-h-96 overflow-y-auto">
-                    <div className="prose prose-invert prose-sm max-w-none">
-                      <pre className="whitespace-pre-wrap text-gray-300 text-sm leading-relaxed">
-                        {generatedLesson.content}
-                      </pre>
+                    <div className="markdown-content prose prose-invert prose-sm max-w-none">
+                      {generatedLesson.content.split('\n').map((line: string, index: number) => {
+                        // Render markdown-style headers and content with proper styling
+                        if (line.startsWith('# ')) {
+                          return <h1 key={index} className="text-xl font-bold text-cyan-400 mt-4 mb-2">{line.substring(2)}</h1>;
+                        } else if (line.startsWith('## ')) {
+                          return <h2 key={index} className="text-lg font-bold text-indigo-400 mt-4 mb-2">{line.substring(3)}</h2>;
+                        } else if (line.startsWith('### ')) {
+                          return <h3 key={index} className="text-base font-semibold text-purple-400 mt-3 mb-1">{line.substring(4)}</h3>;
+                        } else if (line.startsWith('**') && line.endsWith('**')) {
+                          return <p key={index} className="font-bold text-yellow-400 my-1">{line.replace(/\*\*/g, '')}</p>;
+                        } else if (line.startsWith('- ') || line.startsWith('• ')) {
+                          return <li key={index} className="text-gray-300 ml-4 my-0.5 list-disc">{line.substring(2)}</li>;
+                        } else if (line.match(/^\d+\./)) {
+                          return <li key={index} className="text-gray-300 ml-4 my-0.5 list-decimal">{line.replace(/^\d+\./, '').trim()}</li>;
+                        } else if (line.trim() === '') {
+                          return <div key={index} className="h-2"></div>;
+                        } else {
+                          return <p key={index} className="text-gray-300 my-1 leading-relaxed">{line}</p>;
+                        }
+                      })}
                     </div>
                   </div>
 

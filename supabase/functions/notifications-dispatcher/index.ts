@@ -422,6 +422,22 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       channelId: 'incoming-calls',
       _contentAvailable: true,
       categoryId: 'incoming_call'
+    },
+    lesson_assigned: {
+      title: '📚 New Lesson Assigned',
+      body: context.student_name 
+        ? `${context.student_name} has been assigned: ${context.assignment_title || 'a new lesson'}` 
+        : `Your child has been assigned: ${context.assignment_title || 'a new lesson'}`,
+      data: {
+        type: 'lesson_assignment',
+        assignment_id: context.assignment_id,
+        student_id: context.student_id,
+        screen: 'lesson-detail'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'homework'
     }
   };
 
@@ -647,6 +663,21 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
               userIds.push(...principals.map((p: { id: string }) => p.id));
             }
           }
+        }
+      }
+      break;
+
+    case 'lesson_assigned':
+      // Notify the parent(s) of the student who was assigned a lesson
+      if (request.student_id) {
+        const { data: student } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id')
+          .eq('id', request.student_id)
+          .single();
+        if (student) {
+          if (student.parent_id) userIds.push(student.parent_id);
+          if (student.guardian_id) userIds.push(student.guardian_id);
         }
       }
       break;
@@ -910,6 +941,45 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         context.caller_name = request.caller_name;
         context.call_type = request.call_type || 'voice';
         context.meeting_url = request.meeting_url;
+        break;
+
+      case 'lesson_assigned':
+        // Get assignment and student details for notification
+        if (request.assignment_id) {
+          const { data: assignment } = await supabase
+            .from('lesson_assignments')
+            .select(`
+              id,
+              lesson:lessons(id, title, subject),
+              student:students(id, first_name, last_name)
+            `)
+            .eq('id', request.assignment_id)
+            .single();
+
+          if (assignment) {
+            context.assignment_id = assignment.id;
+            if (assignment.lesson) {
+              context.assignment_title = assignment.lesson.title;
+              context.subject = assignment.lesson.subject;
+            }
+            if (assignment.student) {
+              context.student_id = assignment.student.id;
+              context.student_name = `${assignment.student.first_name} ${assignment.student.last_name}`;
+            }
+          }
+        } else if (request.student_id) {
+          // Fallback to student_id if no assignment_id
+          const { data: student } = await supabase
+            .from('students')
+            .select('id, first_name, last_name')
+            .eq('id', request.student_id)
+            .single();
+
+          if (student) {
+            context.student_id = student.id;
+            context.student_name = `${student.first_name} ${student.last_name}`;
+          }
+        }
         break;
     }
   } catch (error) {

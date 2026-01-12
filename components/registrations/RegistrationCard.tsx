@@ -253,14 +253,22 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
         </TouchableOpacity>
       )}
 
-      {/* POP Warning */}
-      {item.status === 'pending' && !canApproveItem && (
+      {/* POP Warning - only show if pending and needs payment */}
+      {item.status === 'pending' && !canApproveItem && item.registration_fee_amount && item.registration_fee_amount > 0 && (
         <View style={[styles.popWarning, { backgroundColor: '#F59E0B20' }]}>
           <Ionicons name="warning" size={16} color="#F59E0B" />
           <Text style={styles.popWarningText}>
-            {!item.proof_of_payment_url 
-              ? 'Proof of Payment not uploaded yet' 
-              : 'Payment needs verification before approval'}
+            Proof of Payment not uploaded yet - cannot approve
+          </Text>
+        </View>
+      )}
+
+      {/* Payment verification reminder - show if POP uploaded but not verified */}
+      {item.status === 'pending' && item.proof_of_payment_url && !item.payment_verified && (
+        <View style={[styles.popWarning, { backgroundColor: '#3B82F620' }]}>
+          <Ionicons name="information-circle" size={16} color="#3B82F6" />
+          <Text style={[styles.popWarningText, { color: '#3B82F6' }]}>
+            POP uploaded - verify payment before approving
           </Text>
         </View>
       )}
@@ -323,7 +331,8 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
             <Ionicons name="close" size={18} color="#fff" />
             <Text style={styles.actionButtonText}>Reject</Text>
           </TouchableOpacity>
-          {!item.payment_verified && item.registration_fee_paid && (
+          {/* Verify Payment Button - show when POP is uploaded but not yet verified */}
+          {item.proof_of_payment_url && !item.payment_verified && (
             <TouchableOpacity
               style={[styles.actionButton, styles.verifyButton]}
               onPress={() => onVerifyPayment(item, true)}

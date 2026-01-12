@@ -384,20 +384,33 @@ export function useRegistrations(): UseRegistrationsReturn {
     }
   };
 
-  // Check if registration can be approved (needs POP and payment verification)
+  // Check if registration can be approved
+  // Updated: Allow approval if POP is uploaded (verification is recommended but not required)
   const canApprove = (item: Registration): boolean => {
-    // Aftercare registrations: can approve if paid or enrolled
-    if (item.source === 'aftercare') {
-      return item.status === 'approved' || (!!item.proof_of_payment_url && item.payment_verified === true);
+    // Already approved items shouldn't show approve button
+    if (item.status !== 'pending') {
+      return false;
     }
+    
+    // Aftercare registrations: can approve if POP is uploaded
+    if (item.source === 'aftercare') {
+      // If there's a fee, need proof of payment
+      if (item.registration_fee_amount && item.registration_fee_amount > 0) {
+        return !!item.proof_of_payment_url;
+      }
+      return true;
+    }
+    
     // EduSite registrations need proof of payment
     if (item.source === 'edusite') {
-      return !!item.proof_of_payment_url && item.payment_verified === true;
+      return !!item.proof_of_payment_url;
     }
-    // In-app registrations with registration fee need POP and verification
+    
+    // In-app registrations with registration fee need POP uploaded
     if (item.registration_fee_amount && item.registration_fee_amount > 0) {
-      return !!item.proof_of_payment_url && item.payment_verified === true;
+      return !!item.proof_of_payment_url;
     }
+    
     // In-app registrations without fee can be approved directly
     return true;
   };
@@ -405,14 +418,24 @@ export function useRegistrations(): UseRegistrationsReturn {
   // Approve registration
   const handleApprove = (registration: Registration) => {
     const isInApp = registration.source === 'in-app';
+    const hasUnverifiedPayment = registration.proof_of_payment_url && !registration.payment_verified;
+    
+    // Build the confirmation message
+    let message = `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?`;
+    if (isInApp) {
+      message += '\n\nThis will create a student profile.';
+    }
+    if (hasUnverifiedPayment) {
+      message += '\n\n⚠️ Note: Payment has not been verified yet. Consider clicking "Verify" first to confirm the payment.';
+    }
     
     Alert.alert(
       'Approve Registration',
-      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?${isInApp ? '\n\nThis will create a student profile.' : ''}`,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Approve',
+          text: hasUnverifiedPayment ? 'Approve Anyway' : 'Approve',
           onPress: async () => {
             setProcessing(registration.id);
             try {

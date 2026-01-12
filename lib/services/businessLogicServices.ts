@@ -344,13 +344,13 @@ class AttendanceAnalyticsService {
 const { data: attendanceData } = await assertSupabase()
         .from('attendance')
         .select(`
-          present,
-          date,
+          status,
+          attendance_date,
           student:students!inner(grade_level)
         `)
-        .eq('school_id', schoolId)
-        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-        .order('date');
+        .eq('organization_id', schoolId)
+        .gte('attendance_date', thirtyDaysAgo.toISOString().split('T')[0])
+        .order('attendance_date');
 
       if (!attendanceData || attendanceData.length === 0) {
         return this.getEmptyAttendanceMetrics();
@@ -358,7 +358,7 @@ const { data: attendanceData } = await assertSupabase()
 
       // Calculate overall attendance rate
       const totalRecords = attendanceData.length;
-      const presentRecords = attendanceData.filter(record => record.present).length;
+      const presentRecords = attendanceData.filter(record => record.status === 'present').length;
       const overallRate = (presentRecords / totalRecords) * 100;
 
       // Calculate weekly trend (last 4 weeks)
@@ -374,7 +374,7 @@ const { data: attendanceData } = await assertSupabase()
           gradeStats[grade] = { present: 0, total: 0 };
         }
         gradeStats[grade].total++;
-        if (record.present) {
+        if (record.status === 'present') {
           gradeStats[grade].present++;
         }
       });
@@ -392,7 +392,7 @@ const { data: attendanceData } = await assertSupabase()
           studentAttendance[studentId] = { present: 0, total: 0 };
         }
         studentAttendance[studentId].total++;
-        if (record.present) {
+        if (record.status === 'present') {
           studentAttendance[studentId].present++;
         }
       });
@@ -424,7 +424,7 @@ const { data: attendanceData } = await assertSupabase()
     const weeklyData: { [week: string]: { present: number; total: number } } = {};
 
     attendanceData.forEach(record => {
-      const date = new Date(record.date);
+      const date = new Date(record.attendance_date);
       const week = this.getWeekKey(date);
       
       if (!weeklyData[week]) {
@@ -432,7 +432,7 @@ const { data: attendanceData } = await assertSupabase()
       }
       
       weeklyData[week].total++;
-      if (record.present) {
+      if (record.status === 'present') {
         weeklyData[week].present++;
       }
     });

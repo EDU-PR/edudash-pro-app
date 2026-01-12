@@ -81,12 +81,11 @@ export function TeacherQuickNotes({
       const supabase = assertSupabase();
       
       // Get recent teacher notes for this student
+      // Note: We fetch notes first, then separately fetch teacher profile info
+      // because there's no direct FK from teacher_student_notes.teacher_id to profiles
       const { data, error } = await supabase
         .from('teacher_student_notes')
-        .select(`
-          *,
-          profiles:teacher_id (first_name, last_name, avatar_url)
-        `)
+        .select('*')
         .eq('student_id', studentId)
         .order('created_at', { ascending: false })
         .limit(maxItems);
@@ -96,13 +95,34 @@ export function TeacherQuickNotes({
         console.log('[TeacherQuickNotes] Notes table may not exist:', error.message);
         setNotes([]);
       } else {
-        const mapped = (data || []).map((n: any) => ({
-          ...n,
-          teacher_name: n.profiles 
-            ? `${n.profiles.first_name || ''} ${n.profiles.last_name || ''}`.trim()
-            : 'Teacher',
-          teacher_photo: n.profiles?.avatar_url,
-        }));
+        // Fetch teacher profiles separately if we have notes
+        const teacherIds = [...new Set((data || []).map((n: any) => n.teacher_id).filter(Boolean))];
+        let teacherProfiles: Record<string, { first_name?: string; last_name?: string; avatar_url?: string }> = {};
+        
+        if (teacherIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, avatar_url')
+            .in('id', teacherIds);
+          
+          if (profiles) {
+            teacherProfiles = profiles.reduce((acc: Record<string, any>, p: any) => {
+              acc[p.id] = p;
+              return acc;
+            }, {});
+          }
+        }
+        
+        const mapped = (data || []).map((n: any) => {
+          const profile = teacherProfiles[n.teacher_id];
+          return {
+            ...n,
+            teacher_name: profile 
+              ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Teacher'
+              : 'Teacher',
+            teacher_photo: profile?.avatar_url,
+          };
+        });
         setNotes(mapped);
       }
     } catch (err) {

@@ -170,7 +170,7 @@ export default function StudentDetailPage() {
             .from('attendance')
             .select('status')
             .eq('student_id', studentId)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+            .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
             .then(({ data: attendance }: any) => {
               if (attendance) {
                 const present = attendance.filter((a: any) => a.status === 'present').length;

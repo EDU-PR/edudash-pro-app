@@ -57,12 +57,12 @@ export const calculateAttendanceRate = async (schoolId: string): Promise<number>
     
     const { data: attendanceData } = await assertSupabase()
       .from('attendance')
-      .select('present, student_id')
-      .eq('school_id', schoolId)
-      .gte('date', thirtyDaysAgo.toISOString().split('T')[0]);
+      .select('status, student_id')
+      .eq('organization_id', schoolId)
+      .gte('attendance_date', thirtyDaysAgo.toISOString().split('T')[0]);
     
     if (attendanceData && attendanceData.length > 0) {
-      const presentCount = attendanceData.filter(a => a.present).length;
+      const presentCount = attendanceData.filter(a => a.status === 'present').length;
       return Math.round((presentCount / attendanceData.length) * 1000) / 10;
     }
   } catch (error) {
