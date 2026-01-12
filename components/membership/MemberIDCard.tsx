@@ -122,7 +122,7 @@ export function MemberIDCardFront({
             {showPhoto && member.photo_url ? (
               <Image 
                 source={{ uri: member.photo_url }} 
-                style={styles.photo}
+                style={[styles.photo, { resizeMode: 'cover' }]}
                 resizeMode="cover"
               />
             ) : showPhoto && !member.photo_url ? (
@@ -479,6 +479,7 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   photoPlaceholder: {
     width: '100%',
