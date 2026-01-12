@@ -25,6 +25,17 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// Conditional import for markdown rendering on native
+const isWeb = Platform.OS === 'web';
+let Markdown: React.ComponentType<any> | null = null;
+if (!isWeb) {
+  try {
+    Markdown = require('react-native-markdown-display').default;
+  } catch (e) {
+    console.warn('[PreschoolLessonGenerator] Markdown not available:', e);
+  }
+}
+
 import { assertSupabase } from '@/lib/supabase';
 import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
 import { setPreferredModel } from '@/lib/ai/preferences';
@@ -91,6 +102,80 @@ export default function PreschoolLessonGeneratorScreen() {
     surface: theme.surface,
     primary: theme.primary,
     accent: theme.accent,
+  }), [theme]);
+
+  // Markdown styles for rendering generated content
+  const markdownStyles = useMemo(() => ({
+    body: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    heading1: {
+      color: '#FF6B6B',
+      fontSize: 20,
+      fontWeight: '700' as const,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    heading2: {
+      color: theme.primary,
+      fontSize: 17,
+      fontWeight: '600' as const,
+      marginTop: 12,
+      marginBottom: 6,
+    },
+    heading3: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: '600' as const,
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    paragraph: {
+      marginBottom: 8,
+    },
+    strong: {
+      fontWeight: '700' as const,
+      color: theme.text,
+    },
+    em: {
+      fontStyle: 'italic' as const,
+    },
+    bullet_list: {
+      marginLeft: 8,
+    },
+    ordered_list: {
+      marginLeft: 8,
+    },
+    list_item: {
+      marginBottom: 4,
+    },
+    code_inline: {
+      backgroundColor: theme.surface,
+      padding: 2,
+      borderRadius: 4,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      fontSize: 13,
+    },
+    fence: {
+      backgroundColor: theme.surface,
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 8,
+    },
+    blockquote: {
+      backgroundColor: theme.surface,
+      borderLeftColor: '#FF6B6B',
+      borderLeftWidth: 4,
+      paddingLeft: 12,
+      marginLeft: 0,
+    },
+    hr: {
+      backgroundColor: theme.border,
+      height: 1,
+      marginVertical: 12,
+    },
   }), [theme]);
 
   // Form state
@@ -806,11 +891,19 @@ Create a simple take-home activity for parents:
 
             {/* Content */}
             <ScrollView style={styles.contentScroll}>
-              <Text style={[styles.generatedText, { color: palette.text }]}>
-                {activeTab === 'lesson' && generated.lesson}
-                {activeTab === 'insights' && generated.insights}
-                {activeTab === 'homework' && generated.homework}
-              </Text>
+              {Markdown ? (
+                <Markdown style={markdownStyles}>
+                  {activeTab === 'lesson' ? generated.lesson :
+                   activeTab === 'insights' ? generated.insights :
+                   generated.homework}
+                </Markdown>
+              ) : (
+                <Text style={[styles.generatedText, { color: palette.text }]}>
+                  {activeTab === 'lesson' && generated.lesson}
+                  {activeTab === 'insights' && generated.insights}
+                  {activeTab === 'homework' && generated.homework}
+                </Text>
+              )}
             </ScrollView>
 
             {/* Actions */}
@@ -848,6 +941,17 @@ Create a simple take-home activity for parents:
                 <Text style={styles.actionButtonText}>PDF</Text>
               </TouchableOpacity>
             </View>
+            
+            {/* View Saved Lessons Button */}
+            <TouchableOpacity
+              style={[styles.viewLessonsButton, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}
+              onPress={() => router.push('/screens/my-lessons')}
+            >
+              <Ionicons name="library-outline" size={18} color={theme.primary} />
+              <Text style={[styles.viewLessonsButtonText, { color: theme.primary }]}>
+                View My Saved Lessons
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -956,4 +1060,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   actionButtonText: { color: '#FFF', fontWeight: '600', fontSize: 13 },
+  viewLessonsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 12,
+    gap: 8,
+  },
+  viewLessonsButtonText: {
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });
