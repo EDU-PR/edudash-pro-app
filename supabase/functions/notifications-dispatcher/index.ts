@@ -1,15 +1,127 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-nocheck - Deno Edge Function with URL imports
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+
+// Type definitions for Deno environment
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
+// Notification context type
+interface NotificationContext {
+  sender_name?: string;
+  thread_id?: string;
+  message_id?: string;
+  message_preview?: string;
+  announcement_title?: string;
+  announcement_preview?: string;
+  priority?: string;
+  announcement_id?: string;
+  assignment_title?: string;
+  assignment_id?: string;
+  submission_id?: string;
+  student_id?: string;
+  student_name?: string;
+  subject?: string;
+  due_text?: string;
+  school_name?: string;
+  plan_tier?: string;
+  amount?: number;
+  subscription_id?: string;
+  payment_url?: string;
+  message?: string;
+  plan_name?: string;
+  action_required?: string;
+  payment_deadline?: string;
+  trial_end_text?: string;
+  requester_email?: string;
+  report_id?: string;
+  teacher_name?: string;
+  rejection_reason?: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  total_amount?: number;
+  due_date?: string;
+  status?: string;
+  overdue_days?: number;
+  call_id?: string;
+  caller_id?: string;
+  caller_name?: string;
+  call_type?: string;
+  meeting_url?: string;
+}
+
+// Notification template type
+interface NotificationTemplate {
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  sound?: string | null;
+  badge?: number;
+  priority?: string;
+  channelId?: string;
+  _contentAvailable?: boolean;
+  categoryId?: string;
+}
+
+// Notification request type
+interface NotificationRequest {
+  event_type: string;
+  user_ids?: string[];
+  role_targets?: string[];
+  preschool_id?: string;
+  thread_id?: string;
+  message_id?: string;
+  announcement_id?: string;
+  assignment_id?: string;
+  student_id?: string;
+  report_id?: string;
+  invoice_id?: string;
+  subscription_id?: string;
+  plan_tier?: string;
+  call_id?: string;
+  caller_id?: string;
+  caller_name?: string;
+  call_type?: string;
+  meeting_url?: string;
+  rejection_reason?: string;
+  custom_payload?: Record<string, unknown>;
+  template_override?: Partial<NotificationTemplate>;
+  send_immediately?: boolean;
+  include_email?: boolean;
+  test?: boolean;
+  target_user_id?: string;
+  channel?: string;
+  email_template_override?: {
+    subject?: string;
+    text?: string;
+    html?: string;
+  };
+}
+
+// Push device type
+interface PushDevice {
+  user_id: string;
+  expo_push_token: string;
+  language?: string;
+}
+
 // Environment variables
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const EXPO_ACCESS_TOKEN = Deno.env.get('EXPO_ACCESS_TOKEN');
+
 // Create Supabase client with service role for bypassing RLS
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 /**
  * Get notification template for different event types
- */ function getNotificationTemplate(eventType, context = {}) {
-  const templates = {
+ */
+function getNotificationTemplate(eventType: string, context: NotificationContext = {}): NotificationTemplate {
+  const templates: Record<string, NotificationTemplate> = {
     new_message: {
       title: "New Message",
       body: context.sender_name ? `${context.sender_name} sent you a message` : "You have a new message",
@@ -309,9 +421,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       priority: 'high',
       channelId: 'incoming-calls',
       _contentAvailable: true,
-      categoryId: 'incoming_call' // For action buttons
+      categoryId: 'incoming_call'
     }
   };
+
   return templates[eventType] || {
     title: "EduDash Pro",
     body: "You have a new notification",
@@ -320,87 +433,134 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     channelId: 'general'
   };
 }
+
 /**
  * Get push tokens for users
- */ async function getPushTokensForUsers(userIds) {
-  const { data, error } = await supabase.from('push_devices').select('user_id, expo_push_token, language').in('user_id', userIds).eq('is_active', true).order('updated_at', {
-    ascending: false
-  });
+ */
+async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
+  const { data, error } = await supabase
+    .from('push_devices')
+    .select('user_id, expo_push_token, language')
+    .in('user_id', userIds)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false });
+
   if (error) {
     console.error('Error fetching push tokens:', error);
     return [];
   }
+
   // Deduplicate by user_id (keeping the most recent)
-  const uniqueTokens = new Map();
-  data.forEach((device)=>{
+  const uniqueTokens = new Map<string, PushDevice>();
+  (data || []).forEach((device: PushDevice) => {
     if (!uniqueTokens.has(device.user_id)) {
       uniqueTokens.set(device.user_id, device);
     }
   });
+
   return Array.from(uniqueTokens.values());
 }
+
 /**
  * Get users to notify based on context
- */ async function getUsersToNotify(request) {
+ */
+async function getUsersToNotify(request: NotificationRequest): Promise<string[]> {
   if (request.user_ids && request.user_ids.length > 0) {
     return request.user_ids;
   }
-  const userIds = [];
+
+  const userIds: string[] = [];
+
   // Role-based targeting within a preschool
   if (request.role_targets && request.role_targets.length > 0) {
     try {
       const roles = request.role_targets;
+
       if (roles.includes('superadmin')) {
-        const { data: superAdmins } = await supabase.from('profiles').select('id, role').eq('role', 'superadmin').eq('is_active', true);
-        if (superAdmins) userIds.push(...superAdmins.map((r)=>r.id));
+        const { data: superAdmins } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .eq('role', 'superadmin')
+          .eq('is_active', true);
+        if (superAdmins) userIds.push(...superAdmins.map((r: { id: string }) => r.id));
       }
-      const filteredRoles = roles.filter((r)=>r !== 'superadmin');
+
+      const filteredRoles = roles.filter((r: string) => r !== 'superadmin');
       if (filteredRoles.length > 0 && request.preschool_id) {
-        const { data: schoolUsers } = await supabase.from('profiles').select('id, role').eq('preschool_id', request.preschool_id).in('role', filteredRoles).eq('is_active', true);
-        if (schoolUsers) userIds.push(...schoolUsers.map((r)=>r.id));
+        const { data: schoolUsers } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .eq('preschool_id', request.preschool_id)
+          .in('role', filteredRoles)
+          .eq('is_active', true);
+        if (schoolUsers) userIds.push(...schoolUsers.map((r: { id: string }) => r.id));
       }
     } catch (e) {
       console.error('Role-based targeting failed:', e);
     }
   }
+
   // Get users based on event context
-  switch(request.event_type){
+  switch (request.event_type) {
     case 'new_message':
       if (request.thread_id) {
-        const { data: thread } = await supabase.from('message_threads').select('parent_id, teacher_id').eq('id', request.thread_id).single();
+        const { data: thread } = await supabase
+          .from('message_threads')
+          .select('parent_id, teacher_id')
+          .eq('id', request.thread_id)
+          .single();
         if (thread) {
           if (thread.parent_id) userIds.push(thread.parent_id);
           if (thread.teacher_id) userIds.push(thread.teacher_id);
         }
       }
       break;
+
     case 'new_announcement':
       if (request.preschool_id) {
-        // Get all parents in the preschool
-        const { data: parents } = await supabase.from('profiles').select('id').eq('preschool_id', request.preschool_id).eq('role', 'parent').eq('is_active', true);
+        const { data: parents } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('preschool_id', request.preschool_id)
+          .eq('role', 'parent')
+          .eq('is_active', true);
         if (parents) {
-          userIds.push(...parents.map((p)=>p.id));
+          userIds.push(...parents.map((p: { id: string }) => p.id));
         }
       }
       break;
+
     case 'homework_graded':
       if (request.student_id) {
-        // Get parent/guardian of the student
-        const { data: student } = await supabase.from('students').select('parent_id, guardian_id').eq('id', request.student_id).single();
+        const { data: student } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id')
+          .eq('id', request.student_id)
+          .single();
         if (student) {
           if (student.parent_id) userIds.push(student.parent_id);
           if (student.guardian_id) userIds.push(student.guardian_id);
         }
       }
       break;
+
     case 'assignment_due_soon':
       if (request.assignment_id) {
-        // Get all parents of students who have this assignment
-        const { data: assignment } = await supabase.from('homework_assignments').select('class_id, preschool_id').eq('id', request.assignment_id).single();
+        const { data: assignment } = await supabase
+          .from('homework_assignments')
+          .select('class_id, preschool_id')
+          .eq('id', request.assignment_id)
+          .single();
+
         if (assignment) {
-          const { data: students } = await supabase.from('students').select('parent_id, guardian_id').eq('class_id', assignment.class_id).eq('is_active', true);
+          const { data: students } = await supabase
+            .from('students')
+            .select('parent_id, guardian_id')
+            .eq('class_id', assignment.class_id)
+            .eq('is_active', true);
+
           if (students) {
-            students.forEach((student)=>{
+            students.forEach((student: { parent_id?: string; guardian_id?: string }) => {
               if (student.parent_id) userIds.push(student.parent_id);
               if (student.guardian_id) userIds.push(student.guardian_id);
             });
@@ -408,93 +568,113 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         }
       }
       break;
-    // Progress report events
+
     case 'report_submitted_for_review':
       if (request.preschool_id) {
-        // Notify all principals in the preschool
-        const { data: principals } = await supabase.from('profiles').select('id').eq('preschool_id', request.preschool_id).in('role', [
-          'principal',
-          'principal_admin'
-        ]).eq('is_active', true);
+        const { data: principals } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('preschool_id', request.preschool_id)
+          .in('role', ['principal', 'principal_admin'])
+          .eq('is_active', true);
         if (principals) {
-          userIds.push(...principals.map((p)=>p.id));
+          userIds.push(...principals.map((p: { id: string }) => p.id));
         }
       }
       break;
+
     case 'report_approved':
     case 'report_rejected':
       if (request.report_id) {
-        // Get the teacher who created the report
-        const { data: report } = await supabase.from('progress_reports').select('teacher_id').eq('id', request.report_id).single();
+        const { data: report } = await supabase
+          .from('progress_reports')
+          .select('teacher_id')
+          .eq('id', request.report_id)
+          .single();
         if (report?.teacher_id) {
           userIds.push(report.teacher_id);
         }
       }
       break;
-    // Invoice events
+
     case 'new_invoice':
     case 'invoice_sent':
     case 'overdue_reminder':
     case 'payment_confirmed':
     case 'invoice_viewed':
       if (request.invoice_id) {
-        // Get invoice details to find recipients
-        const { data: invoice } = await supabase.from('invoices').select('preschool_id, created_by, bill_to_email, student_id').eq('id', request.invoice_id).single();
+        const { data: invoice } = await supabase
+          .from('invoices')
+          .select('preschool_id, created_by, bill_to_email, student_id')
+          .eq('id', request.invoice_id)
+          .single();
+
         if (invoice) {
-          // Add creator (staff member) for status changes and payments
-          if (invoice.created_by && [
-            'invoice_sent',
-            'payment_confirmed',
-            'invoice_viewed'
-          ].includes(request.event_type)) {
+          if (invoice.created_by && ['invoice_sent', 'payment_confirmed', 'invoice_viewed'].includes(request.event_type)) {
             userIds.push(invoice.created_by);
           }
-          // Add parents/guardians based on student or bill_to_email
+
           if (invoice.student_id) {
-            const { data: student } = await supabase.from('students').select('parent_id, guardian_id').eq('id', invoice.student_id).single();
+            const { data: student } = await supabase
+              .from('students')
+              .select('parent_id, guardian_id')
+              .eq('id', invoice.student_id)
+              .single();
             if (student) {
               if (student.parent_id) userIds.push(student.parent_id);
               if (student.guardian_id) userIds.push(student.guardian_id);
             }
           } else if (invoice.bill_to_email) {
-            // Try to find user by bill_to_email
-            const { data: billToUser } = await supabase.from('profiles').select('id').eq('email', invoice.bill_to_email).eq('preschool_id', invoice.preschool_id).single();
+            const { data: billToUser } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', invoice.bill_to_email)
+              .eq('preschool_id', invoice.preschool_id)
+              .single();
             if (billToUser) {
               userIds.push(billToUser.id);
             }
           }
-          // Add principals for digest notifications (if enabled in their preferences)
+
           if (invoice.preschool_id) {
-            const { data: principals } = await supabase.from('profiles').select('id').eq('preschool_id', invoice.preschool_id).in('role', [
-              'principal',
-              'principal_admin'
-            ]).eq('is_active', true);
+            const { data: principals } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('preschool_id', invoice.preschool_id)
+              .in('role', ['principal', 'principal_admin'])
+              .eq('is_active', true);
             if (principals) {
-              userIds.push(...principals.map((p)=>p.id));
+              userIds.push(...principals.map((p: { id: string }) => p.id));
             }
           }
         }
       }
       break;
   }
-  // Remove duplicates
-  return [
-    ...new Set(userIds.filter(Boolean))
-  ];
+
+  return [...new Set(userIds.filter(Boolean))];
 }
+
 /**
  * Get notification context for template rendering
- */ async function getNotificationContext(request) {
-  const context = {};
+ */
+async function getNotificationContext(request: NotificationRequest): Promise<NotificationContext> {
+  const context: NotificationContext = {};
+
   try {
-    switch(request.event_type){
+    switch (request.event_type) {
       case 'new_message':
         if (request.message_id) {
-          const { data: message } = await supabase.from('messages').select(`
+          const { data: message } = await supabase
+            .from('messages')
+            .select(`
               *,
               sender:sender_id(first_name, last_name),
               thread:message_threads(*)
-            `).eq('id', request.message_id).single();
+            `)
+            .eq('id', request.message_id)
+            .single();
+
           if (message) {
             context.sender_name = message.sender ? `${message.sender.first_name} ${message.sender.last_name}` : 'Unknown';
             context.thread_id = message.thread_id;
@@ -503,10 +683,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           }
         }
         break;
+
       case 'new_announcement':
         if (request.announcement_id) {
-          // Use 'announcements' table (not 'principal_announcements' which doesn't exist)
-          const { data: announcement } = await supabase.from('announcements').select('title, content, priority').eq('id', request.announcement_id).single();
+          const { data: announcement } = await supabase
+            .from('announcements')
+            .select('title, content, priority')
+            .eq('id', request.announcement_id)
+            .single();
+
           if (announcement) {
             context.announcement_title = announcement.title;
             context.announcement_preview = announcement.content?.substring(0, 100);
@@ -515,9 +700,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           }
         }
         break;
+
       case 'homework_graded':
         if (request.assignment_id) {
-          const { data: assignment } = await supabase.from('homework_assignments').select('title, subject').eq('id', request.assignment_id).single();
+          const { data: assignment } = await supabase
+            .from('homework_assignments')
+            .select('title, subject')
+            .eq('id', request.assignment_id)
+            .single();
+
           if (assignment) {
             context.assignment_title = assignment.title;
             context.subject = assignment.subject;
@@ -525,105 +716,134 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           }
         }
         if (request.student_id) {
-          const { data: student } = await supabase.from('students').select('first_name, last_name').eq('id', request.student_id).single();
+          const { data: student } = await supabase
+            .from('students')
+            .select('first_name, last_name')
+            .eq('id', request.student_id)
+            .single();
+
           if (student) {
             context.student_name = `${student.first_name} ${student.last_name}`;
             context.student_id = request.student_id;
           }
         }
         break;
-      case 'assignment_due_soon':
-        {
-          if (request.assignment_id) {
-            const { data: assignment } = await supabase.from('homework_assignments').select('title, due_date, subject').eq('id', request.assignment_id).single();
-            if (assignment) {
-              context.assignment_title = assignment.title;
-              context.subject = assignment.subject;
-              context.assignment_id = request.assignment_id;
-              // Calculate due text
-              const dueDate = new Date(assignment.due_date);
-              const now = new Date();
-              const diffHours = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60));
-              if (diffHours <= 24) {
-                context.due_text = diffHours <= 1 ? 'in 1 hour' : `in ${diffHours} hours`;
-              } else {
-                const diffDays = Math.ceil(diffHours / 24);
-                context.due_text = diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
-              }
+
+      case 'assignment_due_soon': {
+        if (request.assignment_id) {
+          const { data: assignment } = await supabase
+            .from('homework_assignments')
+            .select('title, due_date, subject')
+            .eq('id', request.assignment_id)
+            .single();
+
+          if (assignment) {
+            context.assignment_title = assignment.title;
+            context.subject = assignment.subject;
+            context.assignment_id = request.assignment_id;
+
+            const dueDate = new Date(assignment.due_date);
+            const now = new Date();
+            const diffHours = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+            if (diffHours <= 24) {
+              context.due_text = diffHours <= 1 ? 'in 1 hour' : `in ${diffHours} hours`;
+            } else {
+              const diffDays = Math.ceil(diffHours / 24);
+              context.due_text = diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
             }
           }
-          break;
         }
-      case 'subscription_created':
-        {
-          if (request.preschool_id) {
-            const { data: school } = await supabase.from('preschools').select('name').eq('id', request.preschool_id).single();
-            if (school) context.school_name = school.name;
-          }
-          context.plan_tier = request.plan_tier;
-          break;
+        break;
+      }
+
+      case 'subscription_created': {
+        if (request.preschool_id) {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', request.preschool_id)
+            .single();
+          if (school) context.school_name = school.name;
         }
-      case 'payment_success':
-        {
-          if (request.preschool_id) {
-            const { data: school } = await supabase.from('preschools').select('name').eq('id', request.preschool_id).single();
-            if (school) context.school_name = school.name;
-          }
-          context.plan_tier = request.plan_tier;
-          context.amount = request.custom_payload?.amount;
-          break;
+        context.plan_tier = request.plan_tier;
+        break;
+      }
+
+      case 'payment_success': {
+        if (request.preschool_id) {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', request.preschool_id)
+            .single();
+          if (school) context.school_name = school.name;
         }
-      case 'payment_required':
-        {
-          context.subscription_id = request.subscription_id;
-          context.plan_tier = request.plan_tier;
-          context.payment_url = request.custom_payload?.payment_url;
-          context.amount = request.custom_payload?.amount;
-          context.message = request.custom_payload?.message;
-          break;
-        }
-      case 'subscription_pending_payment':
-        {
-          context.subscription_id = request.subscription_id;
-          context.plan_name = request.custom_payload?.plan_name;
-          context.action_required = request.custom_payload?.action_required;
-          context.payment_deadline = request.custom_payload?.payment_deadline;
-          break;
-        }
+        context.plan_tier = request.plan_tier;
+        context.amount = request.custom_payload?.amount as number | undefined;
+        break;
+      }
+
+      case 'payment_required': {
+        context.subscription_id = request.subscription_id;
+        context.plan_tier = request.plan_tier;
+        context.payment_url = request.custom_payload?.payment_url as string | undefined;
+        context.amount = request.custom_payload?.amount as number | undefined;
+        context.message = request.custom_payload?.message as string | undefined;
+        break;
+      }
+
+      case 'subscription_pending_payment': {
+        context.subscription_id = request.subscription_id;
+        context.plan_name = request.custom_payload?.plan_name as string | undefined;
+        context.action_required = request.custom_payload?.action_required as string | undefined;
+        context.payment_deadline = request.custom_payload?.payment_deadline as string | undefined;
+        break;
+      }
+
       case 'trial_started':
       case 'trial_ending':
-      case 'trial_ended':
-        {
-          if (request.preschool_id) {
-            const { data: school } = await supabase.from('preschools').select('name').eq('id', request.preschool_id).single();
-            if (school) context.school_name = school.name;
-          }
-          context.plan_tier = request.plan_tier;
-          if (request.custom_payload?.trial_end_date) {
-            const end = new Date(request.custom_payload.trial_end_date);
-            const now = new Date();
-            const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            context.trial_end_text = diffDays <= 0 ? 'today' : diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
-          }
-          break;
+      case 'trial_ended': {
+        if (request.preschool_id) {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', request.preschool_id)
+            .single();
+          if (school) context.school_name = school.name;
         }
-      case 'seat_request_created':
-        {
-          context.requester_email = request.custom_payload?.requester_email;
-          break;
+        context.plan_tier = request.plan_tier;
+        if (request.custom_payload?.trial_end_date) {
+          const end = new Date(request.custom_payload.trial_end_date as string);
+          const now = new Date();
+          const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          context.trial_end_text = diffDays <= 0 ? 'today' : diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
         }
+        break;
+      }
+
+      case 'seat_request_created': {
+        context.requester_email = request.custom_payload?.requester_email as string | undefined;
+        break;
+      }
+
       case 'seat_request_approved':
         break;
-      // Progress report events
+
       case 'report_submitted_for_review':
       case 'report_approved':
       case 'report_rejected':
         if (request.report_id) {
-          const { data: report } = await supabase.from('progress_reports').select(`
+          const { data: report } = await supabase
+            .from('progress_reports')
+            .select(`
               id,
               student:students(first_name, last_name),
               teacher:teacher_id(first_name, last_name)
-            `).eq('id', request.report_id).single();
+            `)
+            .eq('id', request.report_id)
+            .single();
+
           if (report) {
             context.report_id = report.id;
             if (report.student) {
@@ -639,14 +859,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           }
         }
         break;
-      // Invoice events
+
       case 'new_invoice':
       case 'invoice_sent':
       case 'overdue_reminder':
       case 'payment_confirmed':
       case 'invoice_viewed':
         if (request.invoice_id) {
-          const { data: invoice } = await supabase.from('invoices').select(`
+          const { data: invoice } = await supabase
+            .from('invoices')
+            .select(`
               id,
               invoice_number,
               total_amount,
@@ -654,20 +876,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
               status,
               student:students(first_name, last_name),
               preschool:preschools(name)
-            `).eq('id', request.invoice_id).single();
+            `)
+            .eq('id', request.invoice_id)
+            .single();
+
           if (invoice) {
             context.invoice_id = invoice.id;
             context.invoice_number = invoice.invoice_number;
             context.total_amount = invoice.total_amount;
             context.due_date = invoice.due_date;
             context.status = invoice.status;
+
             if (invoice.student) {
               context.student_name = `${invoice.student.first_name} ${invoice.student.last_name}`;
             }
             if (invoice.preschool) {
               context.school_name = invoice.preschool.name;
             }
-            // Calculate overdue days for reminders
+
             if (request.event_type === 'overdue_reminder' && invoice.due_date) {
               const dueDate = new Date(invoice.due_date);
               const now = new Date();
@@ -677,7 +903,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
           }
         }
         break;
-      // Incoming call - context is passed directly from trigger
+
       case 'incoming_call':
         context.call_id = request.call_id;
         context.caller_id = request.caller_id;
@@ -689,22 +915,44 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   } catch (error) {
     console.error('Error getting notification context:', error);
   }
+
   return context;
 }
+
+interface ExpoNotificationPayload {
+  to: string[];
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+  sound?: string | null;
+  badge?: number;
+  priority?: string;
+  channelId?: string;
+  ttl?: number;
+  _contentAvailable?: boolean;
+  categoryId?: string;
+}
+
+interface ExpoResult {
+  success?: boolean;
+  data?: { id?: string };
+  error?: string;
+}
+
 /**
  * Send push notification via Expo
- */ async function sendExpoNotification(notification) {
+ */
+async function sendExpoNotification(notification: ExpoNotificationPayload): Promise<ExpoResult> {
   if (!EXPO_ACCESS_TOKEN) {
     console.warn('Expo access token not configured, skipping push notification');
-    return {
-      success: false,
-      error: 'No Expo access token configured'
-    };
+    return { success: false, error: 'No Expo access token configured' };
   }
+
   console.log('Sending Expo notification:', {
     recipients: notification.to.length,
     title: notification.title
   });
+
   try {
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
@@ -714,11 +962,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       },
       body: JSON.stringify(notification)
     });
+
     if (!response.ok) {
       const error = await response.text();
       console.error('Expo push notification error:', error);
       throw new Error(`Expo API error: ${response.status} ${error}`);
     }
+
     const result = await response.json();
     console.log('Expo notification sent successfully:', result);
     return result;
@@ -727,11 +977,18 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     throw error;
   }
 }
+
 /**
  * Record notification in database
- */ async function recordNotification(userIds, template, request, expoResult) {
+ */
+async function recordNotification(
+  userIds: string[],
+  template: NotificationTemplate,
+  request: NotificationRequest,
+  expoResult?: ExpoResult
+): Promise<void> {
   try {
-    for (const userId of userIds){
+    for (const userId of userIds) {
       await supabase.from('push_notifications').insert({
         recipient_user_id: userId,
         title: template.title,
@@ -747,45 +1004,57 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     console.error('Error recording notification:', error);
   }
 }
+
 /**
  * Track analytics events for notifications
- */ async function trackAnalyticsEvent(eventName, properties) {
+ */
+async function trackAnalyticsEvent(eventName: string, properties: Record<string, unknown>): Promise<void> {
   try {
     console.log(`Analytics: ${eventName}`, properties);
-  // This could be enhanced to send to a real analytics service
   } catch (error) {
     console.error('Error tracking analytics event:', error);
   }
 }
+
 /**
  * Enhanced email sending with signature support
- */ async function sendEnhancedEmailNotification(userIds, subject, body, eventType) {
+ */
+async function sendEnhancedEmailNotification(
+  userIds: string[],
+  subject: string,
+  body: string,
+  _eventType: string
+): Promise<void> {
   const emails = await getEmailsForUsers(userIds);
   if (emails.length === 0) return;
-  // Get signatures for users who have them enabled
-  const emailsWithSignatures = [];
-  for(let i = 0; i < Math.min(userIds.length, emails.length); i++){
+
+  const emailsWithSignatures: Array<{ email: string; signature: string | null }> = [];
+  for (let i = 0; i < Math.min(userIds.length, emails.length); i++) {
     const userId = userIds[i];
     const email = emails[i];
     const signature = await getUserSignature(userId);
-    emailsWithSignatures.push({
-      email,
-      signature
-    });
+    emailsWithSignatures.push({ email, signature });
   }
-  // For now, send to all emails with signature from first user (if any)
-  const firstSignature = emailsWithSignatures.find((e)=>e.signature)?.signature;
+
+  const firstSignature = emailsWithSignatures.find((e) => e.signature)?.signature;
   const emailHtml = `<p>${body}</p>${firstSignature ? `<br><img src="${firstSignature}" alt="Signature" style="max-width: 200px; height: auto;">` : ''}`;
+
   await sendEmailNotification(emails, subject, emailHtml, body);
 }
+
 /**
  * Track notification engagement event
- */ async function trackNotificationEvent(userIds, request) {
+ */
+async function trackNotificationEvent(userIds: string[], request: NotificationRequest): Promise<void> {
   try {
-    for (const userId of userIds){
-      // Best-effort analytics; safe to skip if table not present
+    for (const userId of userIds) {
       try {
-        const { data: profile } = await supabase.from('profiles').select('preschool_id').eq('id', userId).single();
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('preschool_id')
+          .eq('id', userId)
+          .single();
+
         if (profile) {
           await supabase.from('parent_engagement_events').insert({
             preschool_id: profile.preschool_id,
@@ -803,17 +1072,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
             }
           });
         }
-      } catch (_) {
-      // ignore
+      } catch {
+        // ignore
       }
     }
   } catch (error) {
     console.error('Error tracking notification event:', error);
   }
 }
+
 /**
  * Filter users based on their notification preferences for invoice events
- */ async function filterUsersByPreferences(userIds, eventType, channel = 'email') {
+ */
+async function filterUsersByPreferences(
+  userIds: string[],
+  eventType: string,
+  channel: string = 'email'
+): Promise<string[]> {
   if (![
     'new_invoice',
     'invoice_sent',
@@ -823,19 +1098,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     'payment_required',
     'subscription_pending_payment'
   ].includes(eventType)) {
-    return userIds // No filtering for non-invoice events
-    ;
+    return userIds;
   }
-  const filteredUsers = [];
+
+  const filteredUsers: string[] = [];
+
   try {
-    const { data: profiles } = await supabase.from('profiles').select('id, invoice_notification_preferences').in('id', userIds);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, invoice_notification_preferences')
+      .in('id', userIds);
+
     if (profiles) {
-      for (const profile of profiles){
+      for (const profile of profiles) {
         const prefs = profile.invoice_notification_preferences || {};
-        // Check if channel is enabled globally
         const channelEnabled = prefs.channels?.[channel] !== false;
-        // Check if event is enabled for the channel
         const eventEnabled = prefs.events?.[eventType]?.[channel] !== false;
+
         if (channelEnabled && eventEnabled) {
           filteredUsers.push(profile.id);
         }
@@ -843,219 +1122,195 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     }
   } catch (error) {
     console.error('Error filtering users by preferences:', error);
-    return userIds // Return all users if filtering fails
-    ;
+    return userIds;
   }
+
   return filteredUsers;
 }
+
 /**
  * Get signature for a user if they have email_include_signature enabled
- */ async function getUserSignature(userId) {
+ */
+async function getUserSignature(userId: string): Promise<string | null> {
   try {
-    const { data: profile } = await supabase.from('profiles').select('invoice_notification_preferences, signature_public_id').eq('id', userId).single();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('invoice_notification_preferences, signature_public_id')
+      .eq('id', userId)
+      .single();
+
     if (profile?.invoice_notification_preferences?.email_include_signature && profile.signature_public_id) {
-      // Generate signed URL for signature
-      const { data: signedUrlData } = await supabase.storage.from('signatures').createSignedUrl(profile.signature_public_id, 3600) // 1 hour expiry
-      ;
+      const { data: signedUrlData } = await supabase.storage
+        .from('signatures')
+        .createSignedUrl(profile.signature_public_id, 3600);
+
       return signedUrlData?.signedUrl || null;
     }
   } catch (error) {
     console.error('Error getting user signature:', error);
   }
+
   return null;
 }
+
 /**
  * Main notification dispatch handler
- */ async function dispatchNotification(request) {
+ */
+async function dispatchNotification(request: Request): Promise<Response> {
   try {
-    const notificationRequest = await request.json();
+    const notificationRequest: NotificationRequest = await request.json();
     console.log('Processing notification request:', notificationRequest);
+
     // Handle test notifications
     if (notificationRequest.test) {
       const targetUserId = notificationRequest.target_user_id;
       if (!targetUserId) {
-        return new Response(JSON.stringify({
-          error: 'target_user_id required for test notifications'
-        }), {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        return new Response(
+          JSON.stringify({ error: 'target_user_id required for test notifications' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
-      // Get test context (simplified)
-      const context = {
+
+      const context: NotificationContext = {
         invoice_number: 'TEST-001',
         invoice_id: 'test-invoice-id',
         total_amount: 150.00
       };
+
       const template = getNotificationTemplate(notificationRequest.event_type, context);
-      // Apply template override
+
       if (notificationRequest.template_override) {
         Object.assign(template, notificationRequest.template_override);
       }
-      // Send test notification based on channel
+
       const channel = notificationRequest.channel || 'email';
+
       if (channel === 'email') {
-        const emails = await getEmailsForUsers([
-          targetUserId
-        ]);
+        const emails = await getEmailsForUsers([targetUserId]);
         if (emails.length > 0) {
           const signature = await getUserSignature(targetUserId);
           const emailHtml = `<p>${template.body}</p>${signature ? `<br><img src="${signature}" alt="Signature" style="max-width: 200px; height: auto;">` : ''}`;
           await sendEmailNotification(emails, `[TEST] ${template.title}`, emailHtml, template.body);
         }
       } else {
-        // For push notifications in test mode
-        const pushTokens = await getPushTokensForUsers([
-          targetUserId
-        ]);
+        const pushTokens = await getPushTokensForUsers([targetUserId]);
         if (pushTokens.length > 0) {
           await sendExpoNotification({
-            to: pushTokens.map((t)=>t.expo_push_token),
+            to: pushTokens.map((t) => t.expo_push_token),
             title: `[TEST] ${template.title}`,
             body: template.body,
             data: template.data
           });
         }
       }
-      return new Response(JSON.stringify({
-        success: true,
-        test: true,
-        event_type: notificationRequest.event_type,
-        channel: channel,
-        recipients: 1
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          test: true,
+          event_type: notificationRequest.event_type,
+          channel: channel,
+          recipients: 1
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    // Get users to notify
+
     const userIds = await getUsersToNotify(notificationRequest);
+
     if (userIds.length === 0) {
-      // Track skipped notifications
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'no_recipients',
         count: 0
       });
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'No users to notify',
-        recipients: 0
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'No users to notify', recipients: 0 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    // Filter users by preferences for invoice events
+
     const filteredUserIds = await filterUsersByPreferences(userIds, notificationRequest.event_type, 'email');
+
     if (filteredUserIds.length === 0) {
-      // Track skipped notifications due to preferences
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'disabled_by_preferences',
         count: userIds.length
       });
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'All users have disabled notifications for this event',
-        recipients: 0,
-        original_recipients: userIds.length
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'All users have disabled notifications for this event',
+          recipients: 0,
+          original_recipients: userIds.length
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    // Get push tokens for filtered users
+
     const pushTokens = await getPushTokensForUsers(filteredUserIds);
+
     if (pushTokens.length === 0 && !notificationRequest.include_email) {
-      // Track skipped notifications
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'no_push_tokens',
         count: filteredUserIds.length
       });
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'No push tokens found for users',
-        recipients: 0
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'No push tokens found for users', recipients: 0 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    // Get notification context
+
     const context = await getNotificationContext(notificationRequest);
-    // Get notification template
     let template = getNotificationTemplate(notificationRequest.event_type, context);
-    // Apply template overrides
+
     if (notificationRequest.template_override) {
-      template = {
-        ...template,
-        ...notificationRequest.template_override
-      };
+      template = { ...template, ...notificationRequest.template_override };
     }
-    // Prepare Expo notification
-    // IMPORTANT: Include user_id in data for multi-account notification routing
-    const enhancedData = {
-      ...template.data || {}
-    };
-    // For multi-recipient notifications, we need to send individual notifications
-    // so each notification has the correct target user_id
-    const expoNotifications = pushTokens.map((tokenInfo)=>({
-        to: [
-          tokenInfo.expo_push_token
-        ],
-        title: template.title,
-        body: template.body,
-        data: {
-          ...enhancedData,
-          user_id: tokenInfo.user_id,
-          recipient_id: tokenInfo.user_id,
-          target_user_id: tokenInfo.user_id
-        },
-        sound: template.sound,
-        badge: template.badge,
-        priority: template.priority,
-        channelId: template.channelId,
-        ttl: 86400,
-        // Special options for incoming calls - triggers background handler
-        ...template._contentAvailable && {
-          _contentAvailable: true
-        },
-        ...template.categoryId && {
-          categoryId: template.categoryId
-        }
-      }));
-    // Send notifications
-    let expoResults = [];
+
+    const enhancedData = { ...template.data || {} };
+
+    const expoNotifications: ExpoNotificationPayload[] = pushTokens.map((tokenInfo) => ({
+      to: [tokenInfo.expo_push_token],
+      title: template.title,
+      body: template.body,
+      data: {
+        ...enhancedData,
+        user_id: tokenInfo.user_id,
+        recipient_id: tokenInfo.user_id,
+        target_user_id: tokenInfo.user_id
+      },
+      sound: template.sound,
+      badge: template.badge,
+      priority: template.priority,
+      channelId: template.channelId,
+      ttl: 86400,
+      ...(template._contentAvailable && { _contentAvailable: true }),
+      ...(template.categoryId && { categoryId: template.categoryId })
+    }));
+
+    const expoResults: ExpoResult[] = [];
+
     if (notificationRequest.send_immediately !== false) {
-      for (const notification of expoNotifications){
+      for (const notification of expoNotifications) {
         try {
           const result = await sendExpoNotification(notification);
           expoResults.push(result);
         } catch (error) {
           console.error('Failed to send notification to:', notification.to[0], error);
-          expoResults.push({
-            success: false,
-            error: String(error)
-          });
+          expoResults.push({ success: false, error: String(error) });
         }
       }
     }
-    // Record notification in database (use first result for compatibility)
+
     const expoResult = expoResults.length > 0 ? expoResults[0] : undefined;
     await recordNotification(filteredUserIds, template, notificationRequest, expoResult);
-    // Send email notifications for invoice events or when explicitly requested
+
     const isInvoiceEvent = [
       'new_invoice',
       'invoice_sent',
@@ -1065,14 +1320,20 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       'payment_required',
       'subscription_pending_payment'
     ].includes(notificationRequest.event_type);
+
     if (isInvoiceEvent || notificationRequest.include_email) {
       try {
-        await sendEnhancedEmailNotification(filteredUserIds, template.title, template.body, notificationRequest.event_type);
+        await sendEnhancedEmailNotification(
+          filteredUserIds,
+          template.title,
+          template.body,
+          notificationRequest.event_type
+        );
       } catch (emailError) {
         console.error('Error sending email notifications:', emailError);
       }
     }
-    // Track successful notifications
+
     await trackAnalyticsEvent('edudash.notifications.sent', {
       event_type: notificationRequest.event_type,
       channel: isInvoiceEvent ? 'email' : 'push',
@@ -1080,158 +1341,159 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       success_count: pushTokens.length + (isInvoiceEvent ? filteredUserIds.length : 0),
       failure_count: 0
     });
-    // Track engagement event
+
     await trackNotificationEvent(filteredUserIds, notificationRequest);
+
     console.log(`Notification dispatched to ${pushTokens.length} devices and ${filteredUserIds.length} email recipients`);
-    return new Response(JSON.stringify({
-      success: true,
-      recipients: pushTokens.length,
-      email_recipients: isInvoiceEvent ? filteredUserIds.length : 0,
-      user_count: filteredUserIds.length,
-      original_user_count: userIds.length,
-      event_type: notificationRequest.event_type,
-      expo_result: expoResult,
-      sent_immediately: notificationRequest.send_immediately !== false,
-      preferences_filtered: userIds.length - filteredUserIds.length
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        recipients: pushTokens.length,
+        email_recipients: isInvoiceEvent ? filteredUserIds.length : 0,
+        user_count: filteredUserIds.length,
+        original_user_count: userIds.length,
+        event_type: notificationRequest.event_type,
+        expo_result: expoResult,
+        sent_immediately: notificationRequest.send_immediately !== false,
+        preferences_filtered: userIds.length - filteredUserIds.length
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('Error dispatching notification:', error);
-    return new Response(JSON.stringify({
-      error: 'Failed to dispatch notification',
-      details: error.message
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return new Response(
+      JSON.stringify({
+        error: 'Failed to dispatch notification',
+        details: (error as Error).message
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
+
+interface DatabaseTriggerPayload {
+  record: Record<string, unknown>;
+  old_record?: Record<string, unknown>;
+  type: string;
+  table: string;
+}
+
 /**
  * Handle database triggers for automatic notifications
- */ async function handleDatabaseTrigger(request) {
+ */
+async function handleDatabaseTrigger(request: Request): Promise<Response> {
   try {
-    const { record, old_record, type, table } = await request.json();
-    console.log('Processing database trigger:', {
-      type,
-      table,
-      record_id: record?.id
-    });
-    let notificationRequest = null;
-    // Handle different table triggers
-    switch(table){
+    const { record, old_record, type, table }: DatabaseTriggerPayload = await request.json();
+    console.log('Processing database trigger:', { type, table, record_id: record?.id });
+
+    let notificationRequest: NotificationRequest | null = null;
+
+    switch (table) {
       case 'messages':
         if (type === 'INSERT') {
           notificationRequest = {
             event_type: 'new_message',
-            thread_id: record.thread_id,
-            message_id: record.id,
+            thread_id: record.thread_id as string,
+            message_id: record.id as string,
             send_immediately: true
           };
         }
         break;
-      case 'announcements': // Note: was 'principal_announcements' but table is named 'announcements'
+
+      case 'announcements':
         if (type === 'INSERT' && record.is_published) {
           notificationRequest = {
             event_type: 'new_announcement',
-            preschool_id: record.preschool_id,
-            announcement_id: record.id,
+            preschool_id: record.preschool_id as string,
+            announcement_id: record.id as string,
             send_immediately: true
           };
         }
         break;
+
       case 'homework_submissions':
         if (type === 'UPDATE' && record.status === 'graded' && old_record?.status !== 'graded') {
           notificationRequest = {
             event_type: 'homework_graded',
-            student_id: record.student_id,
-            assignment_id: record.assignment_id,
+            student_id: record.student_id as string,
+            assignment_id: record.assignment_id as string,
             send_immediately: true
           };
         }
         break;
+
       default:
-        return new Response(JSON.stringify({
-          success: true,
-          skipped: true
-        }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+        return new Response(
+          JSON.stringify({ success: true, skipped: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
     }
+
     if (!notificationRequest) {
-      return new Response(JSON.stringify({
-        success: true,
-        skipped: true
-      }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      return new Response(
+        JSON.stringify({ success: true, skipped: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-    // Process the notification request
-    return await dispatchNotification(new Request('http://localhost', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(notificationRequest)
-    }));
+
+    return await dispatchNotification(
+      new Request('http://localhost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notificationRequest)
+      })
+    );
   } catch (error) {
     console.error('Error processing database trigger:', error);
-    return new Response(JSON.stringify({
-      error: 'Failed to process database trigger',
-      details: error.message
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return new Response(
+      JSON.stringify({
+        error: 'Failed to process database trigger',
+        details: (error as Error).message
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
+
 /**
  * Handle scheduled notifications (e.g., assignment reminders)
- */ async function handleScheduledNotifications(request) {
+ */
+async function handleScheduledNotifications(_request: Request): Promise<Response> {
   try {
     console.log('Running scheduled notification check');
+
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    // Trial ending soon notifications (next 24h)
+
     let trialsNotified = 0;
+
     try {
-      const { data: trials } = await supabase.from('subscriptions').select('id, school_id, plan_id, trial_end_date, status').not('trial_end_date', 'is', null).gte('trial_end_date', now.toISOString()).lte('trial_end_date', tomorrow.toISOString()).eq('status', 'active');
+      const { data: trials } = await supabase
+        .from('subscriptions')
+        .select('id, school_id, plan_id, trial_end_date, status')
+        .not('trial_end_date', 'is', null)
+        .gte('trial_end_date', now.toISOString())
+        .lte('trial_end_date', tomorrow.toISOString())
+        .eq('status', 'active');
+
       if (trials) {
-        for (const sub of trials){
+        for (const sub of trials) {
           try {
-            const response = await dispatchNotification(new Request('http://localhost', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                event_type: 'trial_ending',
-                preschool_id: sub.school_id,
-                plan_tier: sub.plan_id,
-                role_targets: [
-                  'principal',
-                  'principal_admin',
-                  'superadmin'
-                ],
-                include_email: true,
-                custom_payload: {
-                  trial_end_date: sub.trial_end_date
-                }
+            const response = await dispatchNotification(
+              new Request('http://localhost', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event_type: 'trial_ending',
+                  preschool_id: sub.school_id,
+                  plan_tier: sub.plan_id,
+                  role_targets: ['principal', 'principal_admin', 'superadmin'],
+                  include_email: true,
+                  custom_payload: { trial_end_date: sub.trial_end_date }
+                })
               })
-            }));
+            );
             const result = await response.json();
             if (result.success) trialsNotified += result.recipients || 0;
           } catch (e) {
@@ -1242,24 +1504,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     } catch (e) {
       console.error('Trial ending query failed', e);
     }
-    // Get assignments due tomorrow
-    const { data: dueSoonAssignments } = await supabase.from('homework_assignments').select('id, title, due_date, class_id, preschool_id').gte('due_date', now.toISOString()).lte('due_date', tomorrow.toISOString()).eq('is_active', true);
+
+    const { data: dueSoonAssignments } = await supabase
+      .from('homework_assignments')
+      .select('id, title, due_date, class_id, preschool_id')
+      .gte('due_date', now.toISOString())
+      .lte('due_date', tomorrow.toISOString())
+      .eq('is_active', true);
+
     let notificationsSent = 0;
+
     if (dueSoonAssignments) {
-      for (const assignment of dueSoonAssignments){
+      for (const assignment of dueSoonAssignments) {
         try {
-          const response = await dispatchNotification(new Request('http://localhost', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              event_type: 'assignment_due_soon',
-              assignment_id: assignment.id,
-              preschool_id: assignment.preschool_id,
-              send_immediately: true
+          const response = await dispatchNotification(
+            new Request('http://localhost', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event_type: 'assignment_due_soon',
+                assignment_id: assignment.id,
+                preschool_id: assignment.preschool_id,
+                send_immediately: true
+              })
             })
-          }));
+          );
           const result = await response.json();
           if (result.success) {
             notificationsSent += result.recipients || 0;
@@ -1269,39 +1538,38 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         }
       }
     }
-    return new Response(JSON.stringify({
-      success: true,
-      assignments_checked: dueSoonAssignments?.length || 0,
-      notifications_sent: notificationsSent
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        assignments_checked: dueSoonAssignments?.length || 0,
+        notifications_sent: notificationsSent,
+        trials_notified: trialsNotified
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('Error handling scheduled notifications:', error);
-    return new Response(JSON.stringify({
-      error: 'Failed to handle scheduled notifications',
-      details: error.message
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    return new Response(
+      JSON.stringify({
+        error: 'Failed to handle scheduled notifications',
+        details: (error as Error).message
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
+
 /**
  * Main request handler
- */ async function handleRequest(request) {
+ */
+async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
+
   if (request.method !== 'POST') {
-    return new Response('Method Not Allowed', {
-      status: 405
-    });
+    return new Response('Method Not Allowed', { status: 405 });
   }
-  // Handle different endpoints
+
   if (url.pathname.includes('trigger')) {
     return await handleDatabaseTrigger(request);
   } else if (url.pathname.includes('scheduled')) {
@@ -1310,24 +1578,36 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     return await dispatchNotification(request);
   }
 }
+
 // Optional email support via Resend
-async function getEmailsForUsers(userIds) {
+async function getEmailsForUsers(userIds: string[]): Promise<string[]> {
   try {
-    const { data } = await supabase.from('profiles').select('id,email').in('id', userIds);
-    return (data || []).map((r)=>r.email).filter(Boolean);
+    const { data } = await supabase
+      .from('profiles')
+      .select('id,email')
+      .in('id', userIds);
+    return (data || []).map((r: { email?: string }) => r.email).filter(Boolean) as string[];
   } catch (e) {
     console.error('Failed to fetch emails for users', e);
     return [];
   }
 }
-async function sendEmailNotification(to, subject, html, text) {
+
+async function sendEmailNotification(
+  to: string[],
+  subject: string,
+  html?: string,
+  text?: string
+): Promise<void> {
   try {
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
     const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'EduDash Pro <no-reply@edudashpro.org.za>';
+
     if (!RESEND_API_KEY) {
       console.warn('RESEND_API_KEY not configured; skipping email send');
       return;
     }
+
     const payload = {
       from: EMAIL_FROM,
       to,
@@ -1335,6 +1615,7 @@ async function sendEmailNotification(to, subject, html, text) {
       html: html || undefined,
       text: text || undefined
     };
+
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -1343,6 +1624,7 @@ async function sendEmailNotification(to, subject, html, text) {
       },
       body: JSON.stringify(payload)
     });
+
     if (!res.ok) {
       console.error('Resend API error', await res.text());
     }
@@ -1350,55 +1632,36 @@ async function sendEmailNotification(to, subject, html, text) {
     console.error('Email send failed', e);
   }
 }
-// Extend dispatcher to optionally send email
-async function maybeSendEmail(userIds, request, template) {
-  if (!request.include_email) return;
-  try {
-    const emails = await getEmailsForUsers(userIds);
-    if (emails.length === 0) return;
-    const subject = request.email_template_override?.subject || template.title;
-    const text = request.email_template_override?.text || template.body;
-    const html = request.email_template_override?.html || `<p>${template.body}</p>`;
-    await sendEmailNotification(emails, subject, html, text);
-  } catch (e) {
-    console.error('maybeSendEmail failed', e);
-  }
-}
-// Patch dispatchNotification to call maybeSendEmail after push
+
 // CORS configuration
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': Deno.env.get('CORS_ALLOW_ORIGIN') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Vary': 'Origin'
 };
+
 // Start HTTP server with CORS handling and route dispatch
-serve(async (req)=>{
-  // Handle CORS preflight
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders
-    });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
+
   try {
     const res = await handleRequest(req);
-    // Ensure CORS headers are present on all responses
     res.headers.set('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
     res.headers.set('Access-Control-Allow-Headers', corsHeaders['Access-Control-Allow-Headers']);
     res.headers.set('Access-Control-Allow-Methods', corsHeaders['Access-Control-Allow-Methods']);
     res.headers.set('Vary', 'Origin');
     return res;
   } catch (error) {
-    const res = new Response(JSON.stringify({
-      error: 'Internal Server Error',
-      details: error?.message || String(error)
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    const res = new Response(
+      JSON.stringify({
+        error: 'Internal Server Error',
+        details: (error as Error)?.message || String(error)
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
     res.headers.set('Access-Control-Allow-Origin', corsHeaders['Access-Control-Allow-Origin']);
     res.headers.set('Access-Control-Allow-Headers', corsHeaders['Access-Control-Allow-Headers']);
     res.headers.set('Access-Control-Allow-Methods', corsHeaders['Access-Control-Allow-Methods']);
