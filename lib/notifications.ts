@@ -4,6 +4,7 @@ import * as Application from 'expo-application'
 import * as Localization from 'expo-localization'
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // Get project ID from EAS config (matches extra.eas.projectId in app.json)
 // This ensures push tokens are registered for the correct Expo project
@@ -12,6 +13,37 @@ const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230
 // Token version - increment this to force all users to re-register tokens
 // This is useful when the project ID changes or token format updates
 const TOKEN_VERSION = 2
+
+// Storage key for stable device ID (shared with lib/calls/setupPushNotifications.ts)
+const DEVICE_ID_STORAGE_KEY = '@edudash_device_id'
+
+/**
+ * Get or create a stable device ID that persists across app restarts.
+ * This ensures consistency between notification registrations.
+ */
+async function getStableDeviceId(): Promise<string> {
+  try {
+    // First try to get from storage
+    const storedId = await AsyncStorage.getItem(DEVICE_ID_STORAGE_KEY)
+    if (storedId) {
+      return storedId
+    }
+    
+    // Generate a new stable ID using available device identifiers
+    const baseId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const deviceId = `device_${baseId}`
+    
+    // Store for future use
+    await AsyncStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId)
+    console.log('[Push Registration] Generated new stable device ID:', deviceId)
+    
+    return deviceId
+  } catch (error) {
+    // Fallback if storage fails - use a consistent but session-based ID
+    console.warn('[Push Registration] Failed to get/store device ID:', error)
+    return `device_${Constants.deviceId || Constants.sessionId || Platform.OS}-fallback`
+  }
+}
 
 // NOTE: Notification handler is configured in lib/NotificationService.ts
 // to ensure message notifications show as banners (WhatsApp-style)
@@ -136,12 +168,15 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
       return { status: 'skipped', reason: 'no_user' }
     }
 
+    // Get a stable device ID that persists across app restarts
+    // This ensures consistency between notification registrations and avoids conflicts
+    const stableDeviceId = await getStableDeviceId()
+    console.log('[Push Registration] Using stable device ID:', stableDeviceId)
+
     // Get device metadata
     console.log('[Push Registration] Getting device metadata...')
     const rawLanguageTag = Localization.getLocales?.()?.[0]?.languageTag || 'en'
     console.log('[Push Registration] Raw language tag:', rawLanguageTag)
-    // Generate a simple device identifier since Application methods vary by Expo version
-    const installationId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const deviceMetadata = {
       platform: Platform.OS,
       brand: Device.brand,
@@ -151,13 +186,13 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
       appBuild: Constants.expoConfig?.runtimeVersion,
       locale: rawLanguageTag.split('-')[0].toLowerCase(),
       timezone: Localization.getCalendars?.()?.[0]?.timeZone || 'UTC',
-      installationId,
+      installationId: stableDeviceId,
     }
     
     // Validate and normalize language for database constraint
     const supportedLanguages = ['en', 'af', 'zu', 'st'];
     const normalizedLanguage = supportedLanguages.includes(deviceMetadata.locale) ? deviceMetadata.locale : 'en';
-    console.log('[Push Registration] Device metadata:', { installationId, platform: Platform.OS, model: Device.modelName, locale: deviceMetadata.locale, normalizedLanguage })
+    console.log('[Push Registration] Device metadata:', { stableDeviceId, platform: Platform.OS, model: Device.modelName, locale: deviceMetadata.locale, normalizedLanguage })
 
     // Get push token
     if (__DEV__) console.log('[Push Registration] Getting push token...')
@@ -168,7 +203,8 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
     }
     if (__DEV__) console.log('[Push Registration] Got push token')
 
-    // Upsert to database
+    // Upsert to database - use stable device ID for both device_id and device_installation_id
+    // to prevent conflicts between different registration paths
     console.log('[Push Registration] Saving to database...')
     const { error } = await supabase
       .from('push_devices')
@@ -177,7 +213,8 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
         expo_push_token: token,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         is_active: true,
-        device_installation_id: installationId,
+        device_id: stableDeviceId,
+        device_installation_id: stableDeviceId,
         device_metadata: {
           ...deviceMetadata,
           // Store token version and project ID for refresh detection
@@ -223,13 +260,14 @@ export async function deregisterPushDevice(supabase: any, user: any): Promise<vo
   try {
     if (Platform.OS === 'web' || !Device.isDevice) return
     
-    const installationId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Use the same stable device ID as registration to ensure we deregister the correct device
+    const stableDeviceId = await getStableDeviceId()
     
     await supabase
       .from('push_devices')
       .update({ is_active: false, revoked_at: new Date().toISOString() })
       .eq('user_id', user.id)
-      .eq('device_installation_id', installationId)
+      .eq('device_installation_id', stableDeviceId)
   } catch (error) {
     console.debug('Push device deregistration failed:', error)
   }
@@ -259,7 +297,8 @@ export async function forceRefreshPushToken(supabase: any, user: any): Promise<b
       return false
     }
 
-    const installationId = Constants.deviceId || Constants.sessionId || `${Platform.OS}-${Date.now()}`
+    // Use stable device ID for consistency
+    const stableDeviceId = await getStableDeviceId()
     
     // Force update the token in database
     const { error } = await supabase
@@ -269,7 +308,8 @@ export async function forceRefreshPushToken(supabase: any, user: any): Promise<b
         expo_push_token: newToken,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         is_active: true,
-        device_installation_id: installationId,
+        device_id: stableDeviceId,
+        device_installation_id: stableDeviceId,
         device_metadata: {
           platform: Platform.OS,
           brand: Device.brand,
@@ -308,19 +348,15 @@ export async function checkAndRefreshTokenIfNeeded(supabase: any, user: any): Pr
       return false
     }
 
-    const installationId = Constants.deviceId || Constants.sessionId
-    if (!installationId) {
-      // No stable device ID, just register fresh
-      await registerPushDevice(supabase, user)
-      return true
-    }
+    // Use stable device ID for consistent lookups
+    const stableDeviceId = await getStableDeviceId()
 
     // Check current stored token metadata
     const { data: existingDevice } = await supabase
       .from('push_devices')
       .select('device_metadata, expo_push_token')
       .eq('user_id', user.id)
-      .eq('device_installation_id', installationId)
+      .eq('device_installation_id', stableDeviceId)
       .eq('is_active', true)
       .single()
 

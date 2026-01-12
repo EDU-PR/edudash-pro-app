@@ -41,25 +41,29 @@ interface Student {
 }
 
 export default function MyClassScreen() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedClassIndex, setSelectedClassIndex] = useState(0);
 
   const organizationId = profile?.preschool_id || profile?.organization_id;
-  const teacherId = profile?.id;
+  // Use user.id (auth user ID) as teacher_id since classes.teacher_id references auth.users(id)
+  const teacherId = user?.id || profile?.id;
 
-  // Fetch teacher's assigned class
+  // Fetch all of teacher's assigned classes
   const { 
-    data: myClass, 
+    data: myClasses, 
     isLoading: classLoading, 
     refetch: refetchClass,
     error: classError 
-  } = useQuery<ClassInfo | null>({
-    queryKey: ['my-class', teacherId, organizationId],
+  } = useQuery<ClassInfo[]>({
+    queryKey: ['my-classes', teacherId, organizationId],
     queryFn: async () => {
-      if (!teacherId || !organizationId) return null;
+      if (!teacherId || !organizationId) return [];
+      
+      console.log('[MyClass] Fetching classes for teacher:', teacherId, 'org:', organizationId);
       
       const { data, error } = await assertSupabase()
         .from('classes')
@@ -67,16 +71,21 @@ export default function MyClassScreen() {
         .eq('teacher_id', teacherId)
         .eq('preschool_id', organizationId)
         .eq('active', true)
-        .maybeSingle();
+        .order('name', { ascending: true });
 
       if (error) {
-        console.error('Error fetching class:', error);
+        console.error('[MyClass] Error fetching classes:', error);
         throw error;
       }
-      return data;
+      
+      console.log('[MyClass] Found classes:', data?.length || 0);
+      return data || [];
     },
     enabled: !!teacherId && !!organizationId,
   });
+
+  // Get currently selected class
+  const myClass = myClasses && myClasses.length > 0 ? myClasses[selectedClassIndex] : null;
 
   // Fetch students in teacher's class
   const { 
@@ -141,6 +150,27 @@ export default function MyClassScreen() {
       fontSize: 24,
       fontWeight: '700',
       color: isDark ? '#ffffff' : '#0f172a',
+    },
+    classSelector: {
+      marginBottom: 16,
+    },
+    classSelectorItem: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
+      marginRight: 8,
+    },
+    classSelectorItemActive: {
+      backgroundColor: theme.primary,
+    },
+    classSelectorText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: isDark ? '#94a3b8' : '#64748b',
+    },
+    classSelectorTextActive: {
+      color: '#ffffff',
     },
     classCard: {
       backgroundColor: isDark ? '#1e293b' : '#ffffff',
@@ -366,8 +396,37 @@ export default function MyClassScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color={isDark ? '#ffffff' : '#0f172a'} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('teacher.my_class', { defaultValue: 'My Class' })}</Text>
+          <Text style={styles.headerTitle}>
+            {myClasses && myClasses.length > 1 
+              ? t('teacher.my_classes', { defaultValue: 'My Classes' })
+              : t('teacher.my_class', { defaultValue: 'My Class' })}
+          </Text>
         </View>
+
+        {/* Class Selector (if multiple classes) */}
+        {myClasses && myClasses.length > 1 && (
+          <View style={styles.classSelector}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {myClasses.map((cls, index) => (
+                <TouchableOpacity
+                  key={cls.id}
+                  style={[
+                    styles.classSelectorItem,
+                    selectedClassIndex === index && styles.classSelectorItemActive,
+                  ]}
+                  onPress={() => setSelectedClassIndex(index)}
+                >
+                  <Text style={[
+                    styles.classSelectorText,
+                    selectedClassIndex === index && styles.classSelectorTextActive,
+                  ]}>
+                    {cls.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Class Info Card */}
         <View style={styles.classCard}>
