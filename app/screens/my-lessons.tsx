@@ -154,10 +154,22 @@ export default function MyLessonsScreen() {
   }, []);
 
   const handleViewLesson = useCallback((lesson: any) => {
-    router.push({
-      pathname: '/screens/lesson-detail',
-      params: { lessonId: lesson.id },
-    });
+    // Check if this is an AI-generated lesson with content that should use the lesson viewer
+    if (lesson.is_ai_generated && lesson.content) {
+      router.push({
+        pathname: '/screens/lesson-viewer',
+        params: { 
+          lessonId: lesson.id,
+          subject: lesson.subject || 'General',
+          grade: lesson.age_group || 'Preschool'
+        },
+      });
+    } else {
+      router.push({
+        pathname: '/screens/lesson-detail',
+        params: { lessonId: lesson.id },
+      });
+    }
   }, []);
 
   const handleDeleteLesson = useCallback(async (lessonId: string) => {

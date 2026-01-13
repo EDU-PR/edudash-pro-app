@@ -21,6 +21,75 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { assertSupabase } from '@/lib/supabase';
+
+// Helper functions to extract content sections from markdown text
+const extractSection = (content: string, sectionTitle: string): string[] => {
+  const regex = new RegExp(`### ${sectionTitle}[\s\S]*?(?=###|$)`, 'i');
+  const match = content.match(regex);
+  if (!match) return [];
+  
+  const section = match[0];
+  const lines = section.split('\n')
+    .slice(1) // Remove the header line
+    .filter(line => line.trim())
+    .map(line => line.replace(/^[-•*]\s*/, '').trim())
+    .filter(line => line.length > 0);
+  
+  return lines;
+};
+
+const extractObjectives = (content: string): string[] => {
+  return extractSection(content, 'Learning Objectives');
+};
+
+const extractActivities = (content: string): Array<{
+  name: string;
+  duration: string;
+  description: string;
+  materials?: string[];
+}> => {
+  const activitiesText = extractSection(content, 'Main Activity');
+  if (activitiesText.length === 0) {
+    // Try alternative section names
+    const alternativeActivities = extractSection(content, 'Activities') || 
+                                 extractSection(content, 'Circle Time');
+    return alternativeActivities.map((activity, index) => ({
+      name: `Activity ${index + 1}`,
+      duration: '10 minutes',
+      description: activity,
+    }));
+  }
+  
+  return activitiesText.map((activity, index) => ({
+    name: `Activity ${index + 1}`,
+    duration: '15 minutes',
+    description: activity,
+  }));
+};
+
+const extractResources = (content: string): string[] => {
+  return extractSection(content, 'Materials Needed') || 
+         extractSection(content, 'Resources') || 
+         ['Basic classroom materials'];
+};
+
+const extractAssessments = (content: string): string[] => {
+  return extractSection(content, 'Assessment Ideas') || 
+         extractSection(content, 'Assessment') || 
+         ['Observation and informal assessment'];
+};
+
+const extractDifferentiation = (content: string): string => {
+  const diff = extractSection(content, 'Differentiation Tips');
+  return diff.join(' ') || 'Provide support and extensions as needed for individual learners.';
+};
+
+const extractExtensions = (content: string): string[] => {
+  return extractSection(content, 'Extensions') || 
+         extractSection(content, 'Take-Home Activity') || 
+         [];
+};
 
 interface LessonPlan {
   id: string;
@@ -62,26 +131,61 @@ export default function LessonViewer() {
         return;
       }
 
+      // First try to load lesson from database
+      try {
+        const { data: lessonData, error } = await assertSupabase()
+          .from('lessons')
+          .select('*')
+          .eq('id', params.lessonId)
+          .single();
+
+        if (error) {
+          console.warn('[LessonViewer] Database query error:', error);
+          throw error;
+        }
+
+        if (lessonData) {
+          // Convert database lesson to LessonPlan format
+          const lessonPlan: LessonPlan = {
+            id: lessonData.id,
+            title: lessonData.title || 'Untitled Lesson',
+            subject: params.subject as string || lessonData.subject || 'General Education',
+            grade: params.grade as string || lessonData.age_group || 'Preschool', 
+            duration: `${lessonData.duration_minutes || 30} minutes`,
+            objectives: lessonData.content ? extractObjectives(lessonData.content) : ['Explore and learn through play'],
+            activities: lessonData.content ? extractActivities(lessonData.content) : [{
+              name: 'Learning Activity',
+              duration: '15 minutes',
+              description: lessonData.description || 'Engaging educational activity',
+            }],
+            resources: lessonData.content ? extractResources(lessonData.content) : ['Basic classroom materials'],
+            assessments: lessonData.content ? extractAssessments(lessonData.content) : ['Observation and informal assessment'],
+            differentiation: lessonData.content ? extractDifferentiation(lessonData.content) : 'Provide support and extensions as needed for individual learners.',
+            extensions: lessonData.content ? extractExtensions(lessonData.content) : [],
+            createdBy: 'DashAI',
+            createdAt: lessonData.created_at
+          };
+          
+          setLesson(lessonPlan);
+          setLoading(false);
+          return;
+        } else {
+          console.warn('[LessonViewer] No lesson data found in database');
+        }
+      } catch (error) {
+        console.error('[LessonViewer] Failed to load from database:', error);
+        // Fall through to other methods
+      }
+
+      // Try to get lesson from Dash memory as fallback
       let dash;
       try {
-        // Dynamic import to avoid circular dependency
         const module = await import('@/services/dash-ai/DashAICompat');
         const DashClass = (module as any).DashAIAssistant || (module as any).default;
         if (DashClass && DashClass.getInstance) {
           dash = DashClass.getInstance();
           await dash.initialize();
-        } else {
-          dash = null;
-        }
-      } catch (error) {
-        console.error('[LessonViewer] Failed to get DashAI instance:', error);
-        // Continue with fallback lesson data
-        dash = null;
-      }
-
-      // Try to get lesson from Dash memory
-      if (dash) {
-        try {
+          
           const memoryItems = await dash.getAllMemoryItems();
           const lessonMemory = memoryItems.find(item => 
             item.key === `generated_lesson_${params.lessonId}`
@@ -92,9 +196,9 @@ export default function LessonViewer() {
             setLoading(false);
             return;
           }
-        } catch (error) {
-          console.error('[LessonViewer] Failed to load from memory:', error);
         }
+      } catch (error) {
+        console.error('[LessonViewer] Failed to get DashAI instance:', error);
       }
       
       {
