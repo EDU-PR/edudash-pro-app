@@ -161,7 +161,7 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
         { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/teacher-dashboard' },
         { id: 'students', label: 'Students', icon: 'people', route: '/screens/student-management' },
         { id: 'classes', label: 'Classes', icon: 'school', route: '/screens/class-teacher-management' },
-        { id: 'lessons', label: 'My Lessons', icon: 'book', route: '/screens/create-lesson' },
+        { id: 'lessons', label: 'My Lessons', icon: 'book', route: '/screens/my-lessons' },
         { id: 'assign', label: 'Assign Lessons', icon: 'paper-plane', route: '/screens/assign-lesson' },
         { id: 'activities', label: 'Activities', icon: 'game-controller', route: '/screens/aftercare-activities' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-message-list' },
