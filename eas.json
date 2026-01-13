@@ -161,6 +161,25 @@
         "EAS_PROJECT_ID": "ab7c9230-2f47-4bfa-b4f4-4ae516a334bc",
         "EXPO_PUBLIC_ENABLE_OTA_UPDATES": "true"
       }
+    },
+    "dash-v": {
+      "extends": "production",
+      "android": {
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
+      },
+      "env": {
+        "EAS_PROJECT_ID": "dash-v",
+        "EXPO_PUBLIC_ENABLE_OTA_UPDATES": "true"
+      }
+    },
+    "dash-v-apk": {
+      "extends": "production",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EAS_PROJECT_ID": "dash-v",
+        "EXPO_PUBLIC_ENABLE_OTA_UPDATES": "true"
+      }
     }
   },
   "submit": {
