@@ -334,12 +334,12 @@ export default function LessonDetailScreen() {
               <View 
                 style={[
                   styles.progressFill, 
-                  { backgroundColor: theme.primary, width: `${progress.progress_percentage}%` }
+                  { backgroundColor: theme.primary, width: `${progress.progress_percentage || 0}%` }
                 ]} 
               />
             </View>
             <Text style={[styles.progressText, { color: theme.textSecondary }]}>
-              {progress.progress_percentage}% complete • Status: {progress.status.replace('_', ' ')}
+              {progress.progress_percentage || 0}% complete • Status: {(progress.status || 'not_started').replace('_', ' ')}
             </Text>
           </View>
         )}
