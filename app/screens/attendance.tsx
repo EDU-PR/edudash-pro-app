@@ -54,7 +54,7 @@ export default function AttendanceScreen() {
         .from('classes')
         .select('id, name, grade_level')
         .eq('preschool_id', schoolId)
-        .eq('is_active', true)
+        .eq('active', true)
         .order('name')
       if (error) throw error
       return (data || []) as { id: string; name: string; grade_level?: string }[]
