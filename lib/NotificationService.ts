@@ -180,24 +180,42 @@ class NotificationService {
       // Get device installation ID for upsert conflict key
       const deviceInstallationId = Constants.deviceId || Constants.sessionId || 'unknown';
 
+      const deviceData = {
+        user_id: userId,
+        expo_push_token: this.pushToken,
+        platform: Platform.OS as 'ios' | 'android' | 'web',
+        device_installation_id: deviceInstallationId,
+        device_metadata: deviceInfo,
+        is_active: true,
+        fcm_token: this.fcmToken || null,
+        updated_at: new Date().toISOString(),
+      };
+
       // Upsert push token in database with correct column names
-      const { error } = await assertSupabase()
+      let { error } = await assertSupabase()
         .from('push_devices')
-        .upsert(
-          {
-            user_id: userId,
-            expo_push_token: this.pushToken,
-            platform: Platform.OS as 'ios' | 'android' | 'web',
-            device_installation_id: deviceInstallationId,
-            device_metadata: deviceInfo,
-            is_active: true,
-            fcm_token: this.fcmToken || null,
-            updated_at: new Date().toISOString(),
-          },
-          { 
-            onConflict: 'user_id,device_installation_id',
-          }
-        );
+        .upsert(deviceData, { 
+          onConflict: 'user_id,device_installation_id',
+        });
+
+      // Handle 409 conflict - try delete + insert as fallback
+      if (error && (error.code === '23505' || error.message?.includes('409') || error.message?.includes('conflict'))) {
+        console.log('[NotificationService] Conflict detected, trying delete + insert fallback...');
+        
+        // Delete existing record for this user+device
+        await assertSupabase()
+          .from('push_devices')
+          .delete()
+          .eq('user_id', userId)
+          .eq('device_installation_id', deviceInstallationId);
+        
+        // Insert fresh record
+        const insertResult = await assertSupabase()
+          .from('push_devices')
+          .insert(deviceData);
+        
+        error = insertResult.error;
+      }
 
       if (error) {
         console.error('Failed to save push token:', error);
