@@ -142,6 +142,25 @@
         "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-2808416461095370~5255516826",
         "EXPO_PUBLIC_ADMOB_IOS_APP_ID": "ca-app-pub-3940256099942544~1458002511"
       }
+    },
+    "legacy-playstore": {
+      "extends": "production",
+      "android": {
+        "buildType": "app-bundle",
+        "gradleCommand": ":app:bundleRelease"
+      },
+      "env": {
+        "EAS_PROJECT_ID": "ab7c9230-2f47-4bfa-b4f4-4ae516a334bc",
+        "EXPO_PUBLIC_ENABLE_OTA_UPDATES": "true"
+      }
+    },
+    "legacy-apk": {
+      "extends": "production",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EAS_PROJECT_ID": "ab7c9230-2f47-4bfa-b4f4-4ae516a334bc",
+        "EXPO_PUBLIC_ENABLE_OTA_UPDATES": "true"
+      }
     }
   },
   "submit": {

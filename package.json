@@ -45,6 +45,7 @@
   "scripts": {
     "postinstall": "patch-package",
     "docs:policy:check": "node ./scripts/docs-policy-check.js",
+    "switch-to": "./scripts/switch-expo-project.sh",
     "eas:project": "./scripts/switch-eas-project.sh",
     "eas:old": "./scripts/switch-eas-project.sh old",
     "eas:new": "./scripts/switch-eas-project.sh new",

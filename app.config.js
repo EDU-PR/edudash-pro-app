@@ -30,15 +30,22 @@ require('dotenv').config();
 // EAS Project ID configuration
 // Use aliases like: EAS_PROJECT_ID=playstore npx eas build ...
 const EAS_PROJECTS = {
-  // Default project (dash-t account)
-  default: { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t', slug: 'edudashpro' },
-  // Aliases for easy switching
+  // Default project (k1ng-devops account) - CURRENT ACTIVE
+  default: { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
+  // k1ng-devops project (primary for Play Store builds)
+  'k1ng': { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
+  'k1ng-devops': { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
+  // dash-t account (legacy)
   'dash-t': { id: 'd3bb7cfc-56c8-4266-be3a-9892dab09c0c', owner: 'dash-t', slug: 'edudashpro' },
+  // dash-ts-organization (main Play Store)
+  'main': { id: 'ae5db83e-e6fb-4a32-9973-e3ed5f8047ce', owner: 'dash-ts-organization', slug: 'comedudashproapp' },
+  // dash-pro legacy project  
+  'legacy': { id: 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc', owner: 'dash-pro', slug: 'edudashpro' },
+  // mark-1 project (dash-pro)
+  'mark1': { id: '253b1057-8489-44cf-b0e3-c3c10319a298', owner: 'dash-pro', slug: 'mark-1' },
   // edudashproplay-store org - EduPro-Final project (has build quota)
   'playstore': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
   'edupro-final': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
-  // king-prod account (set ID via env var)
-  'king-prod': { id: process.env.EAS_PROJECT_ID_KINGPROD || '', owner: 'king-prod', slug: 'edudashpro' },
 };
 
 // Resolve project config from environment or use default
