@@ -59,9 +59,9 @@ ALT_PROJECT_ID="ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
 ALT_PACKAGE="com.edudashpro.app"
 ALT_UPDATE_URL="https://u.expo.dev/ae5db83e-e6fb-4a32-9973-e3ed5f8047ce"
 
-# Project 4: MARK1 (mark-1 project)
-MARK1_OWNER="dash-pro"
-MARK1_SLUG="mark-1"
+# Project 4: MARK1 (edudashpro account - com.edudashpro.app)
+MARK1_OWNER="edudashpro"
+MARK1_SLUG="edudashpro"
 MARK1_PROJECT_ID="253b1057-8489-44cf-b0e3-c3c10319a298"
 MARK1_PACKAGE="com.edudashpro.app"
 MARK1_UPDATE_URL="https://u.expo.dev/253b1057-8489-44cf-b0e3-c3c10319a298"

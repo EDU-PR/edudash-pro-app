@@ -41,11 +41,14 @@ const EAS_PROJECTS = {
   'main': { id: 'ae5db83e-e6fb-4a32-9973-e3ed5f8047ce', owner: 'dash-ts-organization', slug: 'comedudashproapp' },
   // dash-pro legacy project  
   'legacy': { id: 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc', owner: 'dash-pro', slug: 'edudashpro' },
-  // mark-1 project (dash-pro)
-  'mark1': { id: '253b1057-8489-44cf-b0e3-c3c10319a298', owner: 'dash-pro', slug: 'mark-1' },
+  // mark-1 project (edudashpro account)
+  'mark1': { id: '253b1057-8489-44cf-b0e3-c3c10319a298', owner: 'edudashpro', slug: 'edudashpro' },
   // edudashproplay-store org - EduPro-Final project (has build quota)
   'playstore': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
   'edupro-final': { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
+  // dash-v project (edudash-v account) - NEW
+  'dash-v': { id: '4b4481c9-152c-4cb1-920a-feec24c063ad', owner: 'edudash-v', slug: 'dash-v' },
+  'edudash-v': { id: '4b4481c9-152c-4cb1-920a-feec24c063ad', owner: 'edudash-v', slug: 'dash-v' },
 };
 
 // Resolve project config from environment or use default
