@@ -9,9 +9,10 @@ import { track } from '@/lib/analytics'
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function AttendanceScreen() {
-  const { profile } = require('@/contexts/AuthContext') as any
+  const { profile } = useAuth()
   const hasActiveSeat = profile?.hasActiveSeat?.() || profile?.seat_status === 'active'
   const canManageClasses = hasActiveSeat || (!!profile?.hasCapability && profile.hasCapability('manage_classes' as any))
   const { theme } = useTheme()
