@@ -27,7 +27,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
-import { WeeklyReportDetail } from '../../components/reports/WeeklyReportDetail';
+import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
 import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
 
 interface WeeklyReport {
