@@ -33,19 +33,38 @@ if (!isWeb) {
   }
 }
 
+// Default theme fallback to prevent crashes if ThemeContext fails
+const DEFAULT_THEME = {
+  text: '#1a1a2e',
+  textSecondary: '#6b7280',
+  background: '#ffffff',
+  cardBackground: '#f3f4f6',
+  surface: '#f3f4f6',
+  primary: '#6366F1',
+  onPrimary: '#ffffff',
+  border: '#e5e7eb',
+  success: '#10b981',
+};
+
 export default function LessonDetailScreen() {
-  const { theme } = useTheme();
-  const { lessonId } = useLocalSearchParams();
+  // Use theme with fallback
+  const themeContext = useTheme();
+  const theme = themeContext?.theme || DEFAULT_THEME;
+  
+  const params = useLocalSearchParams();
+  const lessonId = typeof params?.lessonId === 'string' ? params.lessonId : Array.isArray(params?.lessonId) ? params.lessonId[0] : null;
+  
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [progress, setProgress] = useState<LessonProgress | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const lessonsService = LessonsService;
 
-  // Markdown styles for AI-generated content
+  // Markdown styles for AI-generated content - with null safety
   const markdownStyles = useMemo(() => ({
     body: {
-      color: theme.text,
+      color: theme?.text || '#1a1a2e',
       fontSize: 15,
       lineHeight: 24,
     },
@@ -57,14 +76,14 @@ export default function LessonDetailScreen() {
       marginBottom: 10,
     },
     heading2: {
-      color: theme.primary,
+      color: theme?.primary || '#6366F1',
       fontSize: 18,
       fontWeight: '600' as const,
       marginTop: 16,
       marginBottom: 8,
     },
     heading3: {
-      color: theme.text,
+      color: theme?.text || '#1a1a2e',
       fontSize: 16,
       fontWeight: '600' as const,
       marginTop: 12,
@@ -72,11 +91,11 @@ export default function LessonDetailScreen() {
     },
     paragraph: {
       marginBottom: 10,
-      color: theme.text,
+      color: theme?.text || '#1a1a2e',
     },
     strong: {
       fontWeight: '700' as const,
-      color: theme.text,
+      color: theme?.text || '#1a1a2e',
     },
     em: {
       fontStyle: 'italic' as const,
@@ -91,24 +110,24 @@ export default function LessonDetailScreen() {
     },
     list_item: {
       marginBottom: 6,
-      color: theme.text,
+      color: theme?.text || '#1a1a2e',
     },
     code_inline: {
-      backgroundColor: theme.surface || theme.cardBackground,
+      backgroundColor: theme?.surface || theme?.cardBackground || '#f3f4f6',
       padding: 3,
       borderRadius: 4,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
       fontSize: 13,
-      color: theme.primary,
+      color: theme?.primary || '#6366F1',
     },
     fence: {
-      backgroundColor: theme.surface || theme.cardBackground,
+      backgroundColor: theme?.surface || theme?.cardBackground || '#f3f4f6',
       padding: 12,
       borderRadius: 8,
       marginVertical: 10,
     },
     blockquote: {
-      backgroundColor: theme.surface || theme.cardBackground,
+      backgroundColor: theme?.surface || theme?.cardBackground || '#f3f4f6',
       borderLeftColor: '#FF6B6B',
       borderLeftWidth: 4,
       paddingLeft: 12,
@@ -117,40 +136,49 @@ export default function LessonDetailScreen() {
       marginVertical: 10,
     },
     hr: {
-      backgroundColor: theme.border,
+      backgroundColor: theme?.border || '#e5e7eb',
       height: 1,
       marginVertical: 16,
     },
-  }), [theme]);
+  }), [theme?.text, theme?.primary, theme?.surface, theme?.cardBackground, theme?.border]);
 
   useEffect(() => {
     loadLessonData();
   }, [lessonId]);
 
   const loadLessonData = async () => {
-    if (!lessonId || typeof lessonId !== 'string') {
+    if (!lessonId) {
       setLoading(false);
+      setError('No lesson ID provided');
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
       
       // Load lesson data
       const lessonData = await lessonsService.getLessonById(lessonId);
       if (lessonData) {
         setLesson(lessonData);
         
-        // Load progress data
-        const progressData = await lessonsService.getUserLessonProgress(lessonId);
-        if (progressData) {
-          setProgress(progressData);
-          setIsBookmarked(!!progressData.bookmarked_at);
+        // Load progress data (may fail gracefully if table doesn't exist)
+        try {
+          const progressData = await lessonsService.getUserLessonProgress(lessonId);
+          if (progressData) {
+            setProgress(progressData);
+            setIsBookmarked(!!progressData.bookmarked_at);
+          }
+        } catch (progressError) {
+          console.warn('[LessonDetail] Could not load progress:', progressError);
+          // Progress is optional - don't fail the whole screen
         }
+      } else {
+        setError('Lesson not found');
       }
-    } catch (error) {
-      console.error('Error loading lesson data:', error);
-      Alert.alert('Error', 'Failed to load lesson details. Please try again.');
+    } catch (err) {
+      console.error('[LessonDetail] Error loading lesson data:', err);
+      setError('Failed to load lesson details');
     } finally {
       setLoading(false);
     }
@@ -220,29 +248,38 @@ export default function LessonDetailScreen() {
     );
   }
 
+  if (error) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={theme.textSecondary} />
+          <Text style={[styles.errorTitle, { color: theme.text }]}>Oops!</Text>
+          <Text style={[styles.errorDescription, { color: theme.textSecondary }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[styles.backToHubButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="library-outline" size={20} color={theme.onPrimary} />
+            <Text style={[styles.backToHubText, { color: theme.onPrimary }]}>
+              Back to Lessons Hub
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (!lesson) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            Lesson Not Found
-          </Text>
-        </View>
-        
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.textSecondary} />
           <Text style={[styles.errorTitle, { color: theme.text }]}>Lesson Not Found</Text>
           <Text style={[styles.errorDescription, { color: theme.textSecondary }]}>
             The lesson you're looking for could not be found. It may have been removed or the link may be incorrect.
           </Text>
-          
           <TouchableOpacity
             style={[styles.backToHubButton, { backgroundColor: theme.primary }]}
             onPress={() => router.back()}
