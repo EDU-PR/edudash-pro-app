@@ -272,16 +272,27 @@ export const PushNotificationTester: React.FC = () => {
 
       addTestResult('🔄 Saving token to database...');
 
+      // Get stable device ID for consistent conflict resolution
+      const Constants = require('expo-constants').default;
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      let deviceInstallationId = await AsyncStorage.getItem('@edudash_device_id');
+      if (!deviceInstallationId) {
+        deviceInstallationId = `device_${Constants.deviceId || Constants.sessionId || Platform.OS}-${Date.now()}`;
+        await AsyncStorage.setItem('@edudash_device_id', deviceInstallationId);
+      }
+
       const { error } = await assertSupabase()
         .from('push_devices')
         .upsert({
           user_id: user.id,
           expo_push_token: notificationStatus.expoPushToken,
-          device_type: Platform.OS,
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
           is_active: true,
-          last_used_at: new Date().toISOString(),
+          device_id: deviceInstallationId,
+          device_installation_id: deviceInstallationId,
+          last_seen_at: new Date().toISOString(),
         }, {
-          onConflict: 'user_id,expo_push_token'
+          onConflict: 'user_id,device_installation_id'
         });
 
       if (error) {

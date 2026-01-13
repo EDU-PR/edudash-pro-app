@@ -116,27 +116,48 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
     // Get a stable device ID that persists across app restarts
     const deviceId = await getStableDeviceId();
     
-    const { error: deviceError } = await supabase
+    const deviceData = {
+      user_id: userId,
+      expo_push_token: token,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      is_active: true,
+      device_id: deviceId,
+      device_installation_id: deviceId, // Use same ID for both columns
+      device_metadata: {
+        brand: Device?.brand,
+        model: Device?.modelName,
+        osVersion: Device?.osVersion,
+        appVersion: Constants.expoConfig?.version,
+        expo_project_id: EXPO_PROJECT_ID,
+        updated_for_calls: true,
+      },
+      last_seen_at: new Date().toISOString(),
+    };
+
+    let { error: deviceError } = await supabase
       .from('push_devices')
-      .upsert({
-        user_id: userId,
-        expo_push_token: token,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        is_active: true,
-        device_id: deviceId,
-        device_installation_id: deviceId, // Use same ID for both columns
-        device_metadata: {
-          brand: Device?.brand,
-          model: Device?.modelName,
-          osVersion: Device?.osVersion,
-          appVersion: Constants.expoConfig?.version,
-          expo_project_id: EXPO_PROJECT_ID,
-          updated_for_calls: true,
-        },
-        last_seen_at: new Date().toISOString(),
-      }, {
+      .upsert(deviceData, {
         onConflict: 'user_id,device_installation_id' // Match unique index push_devices_user_device_unique
       });
+
+    // Handle 409 conflict - try delete + insert as fallback
+    if (deviceError && (deviceError.code === '23505' || deviceError.message?.includes('409') || deviceError.message?.includes('conflict'))) {
+      console.log('[PushNotifications] Conflict detected, trying delete + insert fallback...');
+      
+      // Delete existing record for this user+device
+      await supabase
+        .from('push_devices')
+        .delete()
+        .eq('user_id', userId)
+        .eq('device_installation_id', deviceId);
+      
+      // Insert fresh record
+      const insertResult = await supabase
+        .from('push_devices')
+        .insert(deviceData);
+      
+      deviceError = insertResult.error;
+    }
 
     if (deviceError) {
       console.error('[PushNotifications] Failed to save token to push_devices:', deviceError);

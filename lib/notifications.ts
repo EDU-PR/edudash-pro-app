@@ -206,27 +206,49 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
     // Upsert to database - use stable device ID for both device_id and device_installation_id
     // to prevent conflicts between different registration paths
     console.log('[Push Registration] Saving to database...')
-    const { error } = await supabase
+    
+    const deviceData = {
+      user_id: user.id,
+      expo_push_token: token,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      is_active: true,
+      device_id: stableDeviceId,
+      device_installation_id: stableDeviceId,
+      device_metadata: {
+        ...deviceMetadata,
+        // Store token version and project ID for refresh detection
+        token_version: TOKEN_VERSION,
+        expo_project_id: EXPO_PROJECT_ID,
+      },
+      language: normalizedLanguage,
+      timezone: deviceMetadata.timezone,
+      last_seen_at: new Date().toISOString(),
+    };
+
+    let { error } = await supabase
       .from('push_devices')
-      .upsert({
-        user_id: user.id,
-        expo_push_token: token,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        is_active: true,
-        device_id: stableDeviceId,
-        device_installation_id: stableDeviceId,
-        device_metadata: {
-          ...deviceMetadata,
-          // Store token version and project ID for refresh detection
-          token_version: TOKEN_VERSION,
-          expo_project_id: EXPO_PROJECT_ID,
-        },
-        language: normalizedLanguage,
-        timezone: deviceMetadata.timezone,
-        last_seen_at: new Date().toISOString(),
-      }, {
+      .upsert(deviceData, {
         onConflict: 'user_id,device_installation_id'
       })
+
+    // Handle 409 conflict - try delete + insert as fallback
+    if (error && (error.code === '23505' || error.message?.includes('409') || error.message?.includes('conflict'))) {
+      console.log('[Push Registration] Conflict detected, trying delete + insert fallback...');
+      
+      // Delete existing record for this user+device
+      await supabase
+        .from('push_devices')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('device_installation_id', stableDeviceId);
+      
+      // Insert fresh record
+      const insertResult = await supabase
+        .from('push_devices')
+        .insert(deviceData);
+      
+      error = insertResult.error;
+    }
 
     if (error) {
       console.error('[Push Registration] Database error:', error)
