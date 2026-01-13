@@ -27,7 +27,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
-import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
+// TODO: Re-enable after build - WeeklyReportDetail component causing EAS build issues
+// import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
 import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
 
 interface WeeklyReport {
@@ -308,11 +309,23 @@ export default function ParentWeeklyReportScreen() {
             </Text>
           </View>
         ) : report ? (
+          /* TODO: Re-enable WeeklyReportDetail after build
           <WeeklyReportDetail
             report={report}
             studentName={selectedStudentData ? `${selectedStudentData.first_name} ${selectedStudentData.last_name}` : 'Your Child'}
             theme={theme}
           />
+          */
+          <View style={[styles.noReportCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="checkmark-circle" size={60} color={theme.success || '#10B981'} />
+            <Text style={[styles.noReportTitle, { color: theme.text }]}>
+              Report Available
+            </Text>
+            <Text style={[styles.noReportSubtitle, { color: theme.textSecondary }]}>
+              Weekly report for {selectedStudentData ? selectedStudentData.first_name : 'your child'} is ready.{'\n'}
+              Full report details coming in the next update!
+            </Text>
+          </View>
         ) : (
           <View style={[styles.noReportCard, { backgroundColor: theme.card }]}>
             <Ionicons name="calendar-outline" size={60} color={theme.textTertiary} />
