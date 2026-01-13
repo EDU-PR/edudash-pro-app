@@ -254,7 +254,7 @@ export default function PreschoolLessonGeneratorScreen() {
     const topicStr = topic.trim() || 'age-appropriate activity';
     const isSTEMSubject = selectedSubject === 'ai' || selectedSubject === 'robotics' || selectedSubject === 'computer_literacy';
     
-    let prompt = `You are an expert early childhood educator creating a preschool lesson plan.
+    let prompt = `You are a highly experienced early childhood educator and curriculum specialist creating an engaging, developmentally appropriate preschool lesson plan. Your expertise spans child development, educational psychology, and hands-on learning methodologies.
 
 **LESSON REQUIREMENTS:**
 - Topic: ${topicStr}
@@ -262,117 +262,16 @@ export default function PreschoolLessonGeneratorScreen() {
 - Age Group: ${ageLabel} (ages ${ageRange})
 - Duration: ${duration} minutes
 - Language: ${language === 'af' ? 'Afrikaans' : language === 'zu' ? 'Zulu' : language === 'st' ? 'Sesotho' : 'English'}
-${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Artificial Intelligence concepts' : selectedSubject === 'robotics' ? 'Robotics and basic programming' : 'Computer Literacy and digital skills'}` : ''}
+${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate Artificial Intelligence concepts through play and discovery' : selectedSubject === 'robotics' ? 'Robotics and sequencing through movement and simple programming' : 'Digital literacy and computer basics for young learners'}` : ''}
 
-**IMPORTANT GUIDELINES FOR PRESCHOOL:**
-- Use simple, age-appropriate language
-- Include hands-on, sensory activities
-- Keep instructions short and clear
-- Add movement breaks and transitions
-- Include songs or rhymes when appropriate
-- Consider attention spans (${selectedAgeGroup === 'toddlers' ? '2-5 minutes per activity' : selectedAgeGroup === 'preschool' ? '5-10 minutes per activity' : '10-15 minutes per activity'})
-- Use visual aids and concrete materials
-- Include social interaction opportunities
-${selectedSubject === 'ai' ? `
-**AI-SPECIFIC GUIDELINES:**
-- Introduce AI as "smart helpers" or "learning machines"
-- Use simple analogies (like teaching a robot to recognize shapes)
-- Focus on pattern recognition through games
-- Include activities like sorting, matching, and predicting
-- Emphasize that AI learns from examples (like children do)
-- Keep concepts concrete and visual` : ''}
-${selectedSubject === 'robotics' ? `
-**ROBOTICS-SPECIFIC GUIDELINES:**
-- Introduce robots as helpers and friends
-- Focus on movement sequences (forward, backward, turn left/right)
-- Use simple programming concepts through physical movement
-- Include activities like "programming" a friend to move
-- Emphasize sequencing and following instructions
-- Use building blocks or simple robot toys if available` : ''}
-${selectedSubject === 'computer_literacy' ? `
-**COMPUTER LITERACY-SPECIFIC GUIDELINES:**
-- Introduce basic computer parts (screen, keyboard, mouse)
-- Focus on mouse control through simple games
-- Teach keyboard basics (finding letters, numbers)
-- Include online safety basics (asking before clicking)
-- Use age-appropriate apps and games
-- Emphasize taking breaks and screen time limits` : ''}
-
-**FORMAT YOUR RESPONSE AS:**
-
-## 📚 LESSON PLAN: [Title]
-
-### Learning Objectives
-- [3-4 age-appropriate objectives]
-
-### Materials Needed
-- [List all materials, keep simple and accessible]
-
-### Circle Time (Opening)
-[5-minute engaging introduction with song or story]
-
-### Main Activity
-[Step-by-step instructions with time estimates]
-
-### Movement Break
-[2-3 minute physical activity related to theme]
-
-### Closure
-[Wrap-up activity and preview of take-home activity]
-
----`;
+**CRITICAL GUIDELINES FOR HIGH-QUALITY PRESCHOOL LESSONS:**\n\n**Age-Appropriate Design:**\n- Use simple, concrete language and concepts children can understand\n- Design activities that match developmental milestones for ages ${ageRange}\n- Consider attention spans: ${selectedAgeGroup === 'toddlers' ? '2-5 minutes per activity with frequent transitions' : selectedAgeGroup === 'preschool' ? '5-10 minutes per activity with engaging variety' : selectedAgeGroup === 'prek' ? '10-15 minutes per activity with structured progression' : '10-20 minutes per activity with clear objectives'}\n- Include multiple learning modalities (visual, auditory, kinesthetic, tactile)\n\n**Engagement & Learning:**\n- Start with a captivating hook or story element to grab attention\n- Include hands-on, sensory-rich activities that children can touch, see, and manipulate\n- Incorporate movement, songs, or rhymes to maintain engagement\n- Use repetition and reinforcement of key concepts throughout\n- Add social interaction opportunities for peer learning\n- Include reflection and discussion moments\n\n**Practical Implementation:**\n- Provide clear, step-by-step instructions teachers can easily follow\n- Specify exact materials needed with common classroom alternatives\n- Include timing estimates for each activity section\n- Add smooth transitions between activities with clear cues\n- Consider classroom management tips for group activities\n- Include adaptations for different learning needs and abilities\n${selectedSubject === 'ai' ? `\n**AI-SPECIFIC GUIDELINES:**\n- Introduce AI as "smart helpers" or "learning machines"\n- Use simple analogies (like teaching a robot to recognize shapes)\n- Focus on pattern recognition through games\n- Include activities like sorting, matching, and predicting\n- Emphasize that AI learns from examples (like children do)\n- Keep concepts concrete and visual` : ''}${selectedSubject === 'robotics' ? `\n**ROBOTICS-SPECIFIC GUIDELINES:**\n- Introduce robots as helpers and friends\n- Focus on movement sequences (forward, backward, turn left/right)\n- Use simple programming concepts through physical movement\n- Include activities like "programming" a friend to move\n- Emphasize sequencing and following instructions\n- Use building blocks or simple robot toys if available` : ''}${selectedSubject === 'computer_literacy' ? `\n**COMPUTER LITERACY-SPECIFIC GUIDELINES:**\n- Introduce basic computer parts (screen, keyboard, mouse)\n- Focus on mouse control through simple games\n- Teach keyboard basics (finding letters, numbers)\n- Include online safety basics (asking before clicking)\n- Use age-appropriate apps and games\n- Emphasize taking breaks and screen time limits` : ''}\n\n**FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:**\n\n## 📚 LESSON PLAN: [Create an engaging, descriptive title related to ${topicStr}]\n\n### Learning Objectives\n- [List 3-4 specific, measurable learning objectives that children will achieve]\n- [Focus on skills like: identifying, naming, sorting, creating, demonstrating, etc.]\n- [Ensure objectives match the ${ageRange} age group developmental stage]\n\n### Materials Needed\n**Primary Materials:**\n- [List 5-8 essential materials with specific quantities when relevant]\n- [Include both purchased and DIY/recyclable options]\n\n**Optional Extensions:**\n- [2-3 additional materials for extended activities]\n\n### Opening Circle Time (${Math.floor(duration * 0.15)} minutes)\n**Hook Activity:**\n- [Captivating opening - story, song, mystery box, or dramatic element]\n- [Clear connection to the lesson topic]\n- [Engagement questions to activate prior knowledge]\n\n### Main Learning Activities (${Math.floor(duration * 0.6)} minutes)\n**Activity 1: [Descriptive Name] (${Math.floor(duration * 0.3)} minutes)**\n- **Setup:** [Brief preparation instructions]\n- **Instructions:** [Step-by-step process with 3-5 clear steps]\n- **Teacher Facilitation:** [Specific questions and prompts to guide learning]\n- **Learning Check:** [How to assess children are understanding]\n\n**Activity 2: [Descriptive Name] (${Math.floor(duration * 0.3)} minutes)**\n- **Setup:** [Brief preparation instructions]\n- **Instructions:** [Step-by-step process with 3-5 clear steps]\n- **Teacher Facilitation:** [Specific questions and prompts to guide learning]\n- **Learning Check:** [How to assess children are understanding]\n\n### Movement & Transition (${Math.floor(duration * 0.1)} minutes)\n- [Physical activity that reinforces learning concepts]\n- [Clear transition cues and instructions]\n- [Connection between movement and lesson theme]\n\n### Closing & Reflection (${Math.floor(duration * 0.15)} minutes)\n- [Review key concepts learned]\n- [Children share what they discovered or created]\n- [Preview of take-home activity or next steps]\n- [Closing song or ritual]\n\n---`;
 
     if (includeInsights) {
-      prompt += `
-
-## 🔍 TEACHER INSIGHTS
-
-Now provide helpful teaching insights:
-
-### Developmental Focus
-- What skills are being developed
-- Milestones this activity targets
-
-### Differentiation Tips
-- How to simplify for struggling learners
-- How to extend for advanced learners
-
-### Common Challenges
-- Typical issues and solutions
-- Behavior management tips
-
-### Assessment Ideas
-- Informal ways to check understanding
-- Observation checklist items
-
----`;
+      prompt += `\n\n## 🔍 TEACHER INSIGHTS\n\nNow provide helpful teaching insights:\n\n### Developmental Focus\n- What skills are being developed\n- Milestones this activity targets\n\n### Differentiation Tips\n- How to simplify for struggling learners\n- How to extend for advanced learners\n\n### Common Challenges\n- Typical issues and solutions\n- Behavior management tips\n\n### Assessment Ideas\n- Informal ways to check understanding\n- Observation checklist items\n\n---`;
     }
 
     if (includeHomework) {
-      prompt += `
-
-## 🏠 TAKE-HOME ACTIVITY (Homework)
-
-Create a simple take-home activity for parents:
-
-### Activity Name
-[Fun, engaging name]
-
-### Parent Instructions
-[Clear, simple instructions parents can follow]
-[Maximum 3-4 steps]
-
-### Materials at Home
-[Only common household items]
-
-### Learning Connection
-[Brief explanation of what child is learning]
-
-### Conversation Starters
-[3 questions parents can ask their child about the activity]
-
-### Photo Opportunity
-[Suggest a photo moment to share with teacher]`;
+      prompt += `\n\n## 🏠 TAKE-HOME ACTIVITY (Homework)\n\nCreate a simple take-home activity for parents:\n\n### Activity Name\n[Fun, engaging name]\n\n### Parent Instructions\n[Clear, simple instructions parents can follow]\n[Maximum 3-4 steps]\n\n### Materials at Home\n[Only common household items]\n\n### Learning Connection\n[Brief explanation of what child is learning]\n\n### Conversation Starters\n[3 questions parents can ask their child about the activity]\n\n### Photo Opportunity\n[Suggest a photo moment to share with teacher]`;
     }
 
     return prompt;

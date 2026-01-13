@@ -228,9 +228,18 @@ export default function AttendanceScreen() {
             </View>
           )}
 
-          <TouchableOpacity onPress={onSubmit} disabled={!classId || submitting || !schoolId} style={[styles.submitBtn, (!classId || submitting || !schoolId) && styles.dim]}>
-            {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Submit Attendance</Text>}
-          </TouchableOpacity>
+          <View style={{ gap: 12 }}>
+            <TouchableOpacity onPress={onSubmit} disabled={!classId || submitting || !schoolId} style={[styles.submitBtn, (!classId || submitting || !schoolId) && styles.dim]}>
+              {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Submit Attendance</Text>}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              onPress={() => router.push('/screens/attendance-history')} 
+              style={[styles.historyBtn, { backgroundColor: palette.surface, borderColor: palette.primary }]}
+            >
+              <Text style={[styles.historyText, { color: palette.primary }]}>View Attendance History</Text>
+            </TouchableOpacity>
+          </View>
             </>
           )}
         </ScrollView>
@@ -260,6 +269,8 @@ const styles = StyleSheet.create({
   empty: { color: '#9CA3AF' },
   submitBtn: { backgroundColor: '#00f5ff', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   submitText: { color: '#000', fontWeight: '800' },
+  historyBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 2 },
+  historyText: { fontWeight: '700' },
   dim: { opacity: 0.6 },
 })
 
