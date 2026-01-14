@@ -377,15 +377,31 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
       setProgress(100);
       setProgressMessage('Complete!');
 
-      // Parse sections from generated content
-      const lessonMatch = content.match(/## 📚 LESSON PLAN[\s\S]*?(?=## 🔍 TEACHER INSIGHTS|## 🏠 TAKE-HOME|$)/);
-      const insightsMatch = content.match(/## 🔍 TEACHER INSIGHTS[\s\S]*?(?=## 🏠 TAKE-HOME|$)/);
-      const homeworkMatch = content.match(/## 🏠 TAKE-HOME ACTIVITY[\s\S]*$/);
+      // Debug: Log raw content for troubleshooting
+      console.log('[PreschoolLessonGenerator] Raw content length:', content.length);
+      console.log('[PreschoolLessonGenerator] Content preview:', content.substring(0, 200));
+
+      // Parse sections from generated content with more flexible matching
+      // Match lesson plan section (various emoji/heading variations)
+      const lessonMatch = content.match(/##\s*📚?\s*LESSON\s*PLAN[\s\S]*?(?=##\s*🔍?\s*TEACHER|##\s*🏠?\s*TAKE[-\s]?HOME|$)/i);
+      const insightsMatch = content.match(/##\s*🔍?\s*TEACHER\s*INSIGHTS[\s\S]*?(?=##\s*🏠?\s*TAKE[-\s]?HOME|$)/i);
+      const homeworkMatch = content.match(/##\s*🏠?\s*TAKE[-\s]?HOME[\s\S]*$/i);
+
+      // Fallback: If no structured sections found, treat entire content as lesson
+      const parsedLesson = lessonMatch ? lessonMatch[0].trim() : content.trim();
+      const parsedInsights = insightsMatch ? insightsMatch[0].trim() : '';
+      const parsedHomework = homeworkMatch ? homeworkMatch[0].trim() : '';
+
+      console.log('[PreschoolLessonGenerator] Parsed sections:', {
+        lessonLength: parsedLesson.length,
+        insightsLength: parsedInsights.length,
+        homeworkLength: parsedHomework.length,
+      });
 
       setGenerated({
-        lesson: lessonMatch ? lessonMatch[0].trim() : content,
-        insights: insightsMatch ? insightsMatch[0].trim() : '',
-        homework: homeworkMatch ? homeworkMatch[0].trim() : '',
+        lesson: parsedLesson || 'Lesson content could not be parsed. Please try generating again.',
+        insights: parsedInsights,
+        homework: parsedHomework,
       });
 
       // Track usage
@@ -809,20 +825,35 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
             </View>
 
             {/* Content */}
-            <ScrollView style={styles.contentScroll}>
-              {Markdown ? (
-                <Markdown style={markdownStyles}>
-                  {activeTab === 'lesson' ? generated.lesson :
-                   activeTab === 'insights' ? generated.insights :
-                   generated.homework}
-                </Markdown>
-              ) : (
-                <Text style={[styles.generatedText, { color: palette.text }]}>
-                  {activeTab === 'lesson' && generated.lesson}
-                  {activeTab === 'insights' && generated.insights}
-                  {activeTab === 'homework' && generated.homework}
-                </Text>
-              )}
+            <ScrollView style={styles.contentScroll} nestedScrollEnabled>
+              {(() => {
+                const content = activeTab === 'lesson' ? generated.lesson :
+                               activeTab === 'insights' ? generated.insights :
+                               generated.homework;
+                
+                // Debug: ensure content exists
+                if (!content || !content.trim()) {
+                  return (
+                    <Text style={[styles.generatedText, { color: palette.textSec }]}>
+                      No content available for this section. Please try generating again.
+                    </Text>
+                  );
+                }
+                
+                if (Markdown) {
+                  return (
+                    <Markdown style={markdownStyles}>
+                      {content}
+                    </Markdown>
+                  );
+                }
+                
+                return (
+                  <Text style={[styles.generatedText, { color: palette.text }]}>
+                    {content}
+                  </Text>
+                );
+              })()}
             </ScrollView>
 
             {/* Actions */}
@@ -982,7 +1013,13 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#FF6B6B' },
   tabText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   tabTextActive: { color: '#FFF' },
-  contentScroll: { backgroundColor: '#F9FAFB', borderRadius: 8, padding: 12 },
+  contentScroll: { 
+    backgroundColor: '#F9FAFB', 
+    borderRadius: 8, 
+    padding: 12,
+    minHeight: 200,
+    maxHeight: 400,
+  },
   generatedText: { fontSize: 14, lineHeight: 22 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   actionButton: {

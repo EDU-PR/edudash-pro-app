@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Share
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -204,6 +205,7 @@ export default function LessonViewer() {
   const { theme, isDark } = useTheme();
   const { profile } = useAuth();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const [lesson, setLesson] = useState<LessonPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -543,7 +545,7 @@ export default function LessonViewer() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <TouchableOpacity
@@ -732,7 +734,7 @@ export default function LessonViewer() {
           </View>
         )}
 
-        <View style={styles.bottomSpacing} />
+        <View style={[styles.bottomSpacing, { height: Math.max(32, insets.bottom + 16) }]} />
       </ScrollView>
     </View>
   );
@@ -780,7 +782,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    paddingTop: 48,
   },
   backIconButton: {
     padding: 8,
