@@ -39,6 +39,14 @@ export interface TeacherRoute {
  */
 export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
   // === LESSONS ===
+  browse_lessons: {
+    path: '/screens/teacher-lessons' as Href,
+    title: 'Browse Lessons',
+    titleKey: 'teacher.browse_lessons',
+    icon: 'albums',
+    color: '#6366F1',
+    category: 'lessons',
+  },
   create_lesson: {
     path: '/screens/preschool-lesson-generator' as Href,
     title: 'Create Lesson',
@@ -151,6 +159,7 @@ export const getRoutesByCategory = (category: TeacherRoute['category']): Teacher
  * Order matters - this is the display order
  */
 export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
+  'browse_lessons',
   'create_lesson',
   'my_lessons',
   'take_attendance',
