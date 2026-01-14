@@ -79,10 +79,22 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       color: '#EC4899',
     },
     {
-      id: 'lessons',
-      title: t('dashboard.assign_lessons', { defaultValue: 'Assign Lessons' }),
+      id: 'browse-lessons',
+      title: t('dashboard.browse_lessons', { defaultValue: 'Browse Lessons' }),
       icon: 'book',
       color: '#F59E0B',
+    },
+    {
+      id: 'create-lesson',
+      title: t('dashboard.create_lesson', { defaultValue: 'Create Lesson' }),
+      icon: 'add-circle',
+      color: '#10B981',
+    },
+    {
+      id: 'assign-lessons',
+      title: t('dashboard.assign_lessons', { defaultValue: 'Assign Lessons' }),
+      icon: 'paper-plane',
+      color: '#8B5CF6',
     },
     {
       id: 'reports',
@@ -181,7 +193,13 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       case 'activities':
         router.push('/screens/aftercare-activities');
         break;
-      case 'lessons':
+      case 'browse-lessons':
+        router.push('/screens/teacher-lessons');
+        break;
+      case 'create-lesson':
+        router.push('/screens/lesson-generator');
+        break;
+      case 'assign-lessons':
         router.push('/screens/assign-lesson');
         break;
       case 'reports':

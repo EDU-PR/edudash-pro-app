@@ -2,6 +2,7 @@
  * Lesson Viewer Screen
  * 
  * Displays AI-generated lesson plans from Dash AI Assistant
+ * Supports preview, PDF export, and assignment for teachers and principals
  */
 
 import React, { useState, useEffect } from 'react';
@@ -18,6 +19,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -114,10 +116,16 @@ interface LessonPlan {
 
 export default function LessonViewer() {
   const { theme, isDark } = useTheme();
+  const { profile } = useAuth();
   const params = useLocalSearchParams();
   const [lesson, setLesson] = useState<LessonPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  
+  // Check if user is principal or teacher (can assign lessons)
+  const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
+  const isTeacher = profile?.role === 'teacher';
+  const canAssign = isPrincipal || isTeacher;
 
   useEffect(() => {
     loadLessonData();
@@ -338,6 +346,58 @@ export default function LessonViewer() {
     }
   };
 
+  const handleAssignLesson = () => {
+    if (!lesson || !params.lessonId) return;
+    router.push({
+      pathname: '/screens/assign-lesson',
+      params: { lessonId: params.lessonId as string },
+    });
+  };
+
+  const handleEditLesson = () => {
+    if (!lesson || !params.lessonId) return;
+    router.push({
+      pathname: '/screens/lesson-edit',
+      params: { lessonId: params.lessonId as string },
+    });
+  };
+
+  const handleShowActions = () => {
+    if (!lesson) return;
+
+    const actions: any[] = [
+      {
+        text: '📤 Assign to Students',
+        onPress: handleAssignLesson,
+      },
+    ];
+
+    if (canAssign) {
+      actions.push({
+        text: '✏️ Edit Lesson',
+        onPress: handleEditLesson,
+      });
+    }
+
+    actions.push(
+      {
+        text: '📄 Generate PDF',
+        onPress: generatePDF,
+      },
+      {
+        text: '📱 Share',
+        onPress: shareLesson,
+      },
+      { text: 'Cancel', style: 'cancel' }
+    );
+
+    Alert.alert(
+      'Lesson Actions',
+      `${lesson.title}`,
+      actions
+    );
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -393,12 +453,32 @@ export default function LessonViewer() {
         </View>
 
         <View style={styles.headerActions}>
+          {/* Actions menu button */}
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={handleShowActions}
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color={theme.text} />
+          </TouchableOpacity>
+          
+          {/* Share button */}
           <TouchableOpacity
             style={styles.headerIconButton}
             onPress={shareLesson}
           >
             <Ionicons name="share-outline" size={20} color={theme.text} />
           </TouchableOpacity>
+          
+          {/* Assign button - visible for teachers/principals */}
+          {canAssign && (
+            <TouchableOpacity
+              style={[styles.assignActionButton, { backgroundColor: '#10B981' }]}
+              onPress={handleAssignLesson}
+            >
+              <Ionicons name="paper-plane" size={16} color="#fff" />
+              <Text style={styles.assignActionButtonText}>Assign</Text>
+            </TouchableOpacity>
+          )}
           
           <TouchableOpacity
             style={[styles.pdfButton, { backgroundColor: theme.primary }]}
@@ -617,6 +697,19 @@ const styles = StyleSheet.create({
   headerIconButton: {
     padding: 8,
     borderRadius: 8,
+  },
+  assignActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  assignActionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   pdfButton: {
     flexDirection: 'row',
