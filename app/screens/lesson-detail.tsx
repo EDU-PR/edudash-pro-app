@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -50,6 +51,7 @@ export default function LessonDetailScreen() {
   // Use theme with fallback
   const themeContext = useTheme();
   const theme = themeContext?.theme || DEFAULT_THEME;
+  const insets = useSafeAreaInsets();
   
   const params = useLocalSearchParams();
   const lessonId = typeof params?.lessonId === 'string' ? params.lessonId : Array.isArray(params?.lessonId) ? params.lessonId[0] : null;
@@ -295,7 +297,7 @@ export default function LessonDetailScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -559,6 +561,9 @@ export default function LessonDetailScreen() {
             </View>
           )}
         </View>
+        
+        {/* Bottom Safe Area Spacing */}
+        <View style={{ height: Math.max(32, insets.bottom + 16) }} />
       </ScrollView>
     </View>
   );
@@ -571,7 +576,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 16,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
