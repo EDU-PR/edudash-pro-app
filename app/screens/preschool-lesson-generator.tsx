@@ -864,11 +864,11 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
             {/* View Saved Lessons Button */}
             <TouchableOpacity
               style={[styles.viewLessonsButton, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}
-              onPress={() => router.push('/screens/my-lessons')}
+              onPress={() => router.push('/screens/teacher-lessons')}
             >
               <Ionicons name="library-outline" size={18} color={theme.primary} />
               <Text style={[styles.viewLessonsButtonText, { color: theme.primary }]}>
-                View My Saved Lessons
+                Browse All Lessons
               </Text>
             </TouchableOpacity>
           </View>
@@ -881,13 +881,13 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
       <SuccessModal
         visible={showSaveSuccessModal}
         title="Lesson Saved!"
-        message="Your lesson has been saved. Would you like to view your lessons?"
-        buttonText="View My Lessons"
+        message="Your lesson has been saved. Would you like to browse your lessons?"
+        buttonText="Browse Lessons"
         secondaryButtonText="Stay Here"
         onSecondaryPress={() => setShowSaveSuccessModal(false)}
         onClose={() => {
           setShowSaveSuccessModal(false);
-          router.push('/screens/my-lessons');
+          router.push('/screens/teacher-lessons');
         }}
         icon="checkmark-circle"
         type="success"

@@ -149,13 +149,13 @@ export default function AILessonGeneratorScreen() {
       if (!res.success) { toast.error(`Save failed: ${res.error || 'Unknown error'}`); return; }
       toast.success(`Lesson saved! View in My Lessons`);
       
-      // Optionally navigate to My Lessons
+      // Optionally navigate to Browse Lessons
       Alert.alert(
         'Lesson Saved!',
-        'Your lesson has been saved. Would you like to view your lessons?',
+        'Your lesson has been saved. Would you like to browse your lessons?',
         [
           { text: 'Stay Here', style: 'cancel' },
-          { text: 'View My Lessons', onPress: () => router.push('/screens/my-lessons') }
+          { text: 'Browse Lessons', onPress: () => router.push('/screens/teacher-lessons') }
         ]
       );
     } catch (e: unknown) { toast.error(`Save error: ${e instanceof Error ? e.message : 'Failed'}`); }

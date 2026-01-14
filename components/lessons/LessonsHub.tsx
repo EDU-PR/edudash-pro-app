@@ -362,7 +362,7 @@ export const LessonsHub = forwardRef<{ handleRefresh: () => void }, LessonsHubPr
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <TouchableOpacity
-            onPress={() => router.push('/screens/my-lessons')}
+            onPress={() => router.push('/screens/teacher-lessons')}
             accessibilityRole="link"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.sectionTitlePressable}
@@ -488,11 +488,11 @@ export const LessonsHub = forwardRef<{ handleRefresh: () => void }, LessonsHubPr
         
         <TouchableOpacity
           style={[styles.quickAction, { backgroundColor: theme.success + '15', borderColor: theme.success + '30', borderWidth: 1 }]}
-          onPress={() => router.push('/screens/my-lessons')}
+          onPress={() => router.push('/screens/teacher-lessons')}
         >
           <Ionicons name="library" size={24} color={theme.success} />
           <Text style={[styles.quickActionText, { color: theme.success }]}>
-            My Saved Lessons
+            Browse Lessons
           </Text>
         </TouchableOpacity>
         
