@@ -55,14 +55,6 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'primary',
     category: 'lessons',
   },
-  my_lessons: {
-    path: '/screens/my-lessons' as Href,
-    title: 'My Lessons',
-    titleKey: 'teacher.my_lessons',
-    icon: 'library',
-    color: '#8B5CF6',
-    category: 'lessons',
-  },
   assign_lesson: {
     path: '/screens/assign-lesson' as Href,
     title: 'Assign Lesson',
@@ -161,7 +153,6 @@ export const getRoutesByCategory = (category: TeacherRoute['category']): Teacher
 export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'browse_lessons',
   'create_lesson',
-  'my_lessons',
   'take_attendance',
   'start_live_lesson',
   'assign_lesson',
