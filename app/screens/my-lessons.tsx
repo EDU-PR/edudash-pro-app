@@ -296,7 +296,18 @@ export default function MyLessonsScreen() {
                 onPress={() => handleViewLesson(item)}
               >
                 <Ionicons name="eye-outline" size={16} color="#FFF" />
-                <Text style={styles.actionButtonText}>View Full</Text>
+                <Text style={styles.actionButtonText}>View</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#F59E0B' }]}
+                onPress={() => router.push({
+                  pathname: '/screens/lesson-edit',
+                  params: { lessonId: item.id },
+                })}
+              >
+                <Ionicons name="create-outline" size={16} color="#FFF" />
+                <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
               
               <TouchableOpacity

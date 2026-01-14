@@ -94,30 +94,99 @@ export default function TeacherLessonsScreen() {
     setRefreshing(false);
   }, [refetch]);
 
+  const handleDeleteLesson = useCallback(async (lesson: TeacherLesson) => {
+    const isOwner = lesson.teacher_id === teacherId;
+    const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
+    
+    if (!isOwner && !isPrincipal) {
+      Alert.alert('Permission Denied', 'You can only delete lessons you created.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Lesson',
+      `Are you sure you want to delete "${lesson.title}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = (await import('@/lib/supabase')).assertSupabase();
+              
+              // Delete any related activities first
+              await supabase.from('lesson_activities').delete().eq('lesson_id', lesson.id);
+              
+              // Delete the lesson
+              const { error } = await supabase.from('lessons').delete().eq('id', lesson.id);
+              
+              if (error) throw error;
+              
+              Alert.alert('Success', 'Lesson deleted successfully');
+              refetch();
+            } catch (error) {
+              console.error('[TeacherLessons] Delete error:', error);
+              Alert.alert('Error', 'Failed to delete lesson');
+            }
+          },
+        },
+      ]
+    );
+  }, [teacherId, profile, refetch]);
+
   const handleLessonPress = useCallback((lesson: TeacherLesson) => {
-    // Show action sheet for lesson options
+    const isOwner = lesson.teacher_id === teacherId;
+    const isPrincipal = profile?.role === 'principal' || profile?.role === 'principal_admin';
+    const canEditDelete = isOwner || isPrincipal;
+
+    // Build action options
+    const actions: any[] = [
+      {
+        text: 'View Lesson',
+        onPress: () => router.push({
+          pathname: '/screens/lesson-viewer',
+          params: { lessonId: lesson.id },
+        }),
+      },
+      {
+        text: 'Assign to Students',
+        onPress: () => router.push({
+          pathname: '/screens/assign-lesson',
+          params: { lessonId: lesson.id },
+        }),
+      },
+    ];
+
+    // Add edit option if user can edit
+    if (canEditDelete) {
+      actions.push({
+        text: '✏️ Edit Lesson',
+        onPress: () => router.push({
+          pathname: '/screens/lesson-edit',
+          params: { lessonId: lesson.id },
+        }),
+      });
+    }
+
+    // Add delete option if user can delete
+    if (canEditDelete) {
+      actions.push({
+        text: '🗑️ Delete Lesson',
+        style: 'destructive',
+        onPress: () => handleDeleteLesson(lesson),
+      });
+    }
+
+    actions.push({ text: 'Cancel', style: 'cancel' });
+
+    // Show action sheet
     Alert.alert(
       lesson.title,
       `${lesson.subject} • ${lesson.duration_minutes || 30} min`,
-      [
-        {
-          text: 'View Lesson',
-          onPress: () => router.push({
-            pathname: '/screens/lesson-viewer',
-            params: { lessonId: lesson.id },
-          }),
-        },
-        {
-          text: 'Assign to Students',
-          onPress: () => router.push({
-            pathname: '/screens/assign-lesson',
-            params: { lessonId: lesson.id },
-          }),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
+      actions
     );
-  }, []);
+  }, [teacherId, profile, handleDeleteLesson]);
 
   const handleAssignLesson = useCallback((lesson: TeacherLesson) => {
     router.push({
