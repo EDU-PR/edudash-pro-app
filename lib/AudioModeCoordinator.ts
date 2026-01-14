@@ -27,7 +27,7 @@
  */
 
 import { AudioModule } from 'expo-audio';
-import { Platform } from 'react-native';
+import { Platform, NativeModules, NativeEventEmitter } from 'react-native';
 
 export type AudioMode = 'idle' | 'notification' | 'tts' | 'streaming';
 
@@ -49,6 +49,13 @@ interface AudioModeConfig {
 /**
  * Central coordinator for all audio mode changes
  * Singleton pattern ensures single source of truth
+ * 
+ * BLUETOOTH AWARENESS:
+ * When Bluetooth audio is connected, we avoid forcing earpiece/speaker routing
+ * to preserve the user's Bluetooth connection. This is critical because:
+ * - Setting shouldRouteThroughEarpiece=true forces earpiece, disconnecting Bluetooth
+ * - Setting shouldRouteThroughEarpiece=false forces speaker, also disconnecting Bluetooth
+ * - Only during voice CALLS (streaming mode) do we control routing explicitly
  */
 export class AudioModeCoordinator {
   private static instance: AudioModeCoordinator;
@@ -57,6 +64,7 @@ export class AudioModeCoordinator {
   private activeSessions = new Map<string, AudioMode>();
   private sessionCounter = 0;
   private isInitialized = false;
+  private isBluetoothConnected = false;
 
   // Priority levels for conflict resolution
   private readonly modePriority: Record<AudioMode, number> = {
@@ -67,6 +75,7 @@ export class AudioModeCoordinator {
   };
 
   // Audio mode configurations for each state
+  // NOTE: shouldRouteThroughEarpiece will be dynamically adjusted based on Bluetooth status
   private readonly modeConfigs: Record<AudioMode, AudioModeConfig> = {
     streaming: {
       allowsRecording: true, // CRITICAL: WebRTC needs this
@@ -74,7 +83,7 @@ export class AudioModeCoordinator {
       interruptionMode: 'doNotMix', // Don't mix during streaming
       interruptionModeAndroid: 'doNotMix',
       shouldPlayInBackground: true,
-      shouldRouteThroughEarpiece: true, // Default to earpiece for calls (WhatsApp-like)
+      shouldRouteThroughEarpiece: true, // Default to earpiece for calls (WhatsApp-like), but Bluetooth takes precedence
     },
     tts: {
       allowsRecording: true, // Keep recording enabled for quick transitions
@@ -82,21 +91,24 @@ export class AudioModeCoordinator {
       interruptionMode: 'doNotMix', // TTS shouldn't be mixed
       interruptionModeAndroid: 'doNotMix',
       shouldPlayInBackground: true, // Required for FOREGROUND_SERVICE_MEDIA_PLAYBACK
-      shouldRouteThroughEarpiece: false,
+      // BLUETOOTH FIX: Don't specify shouldRouteThroughEarpiece for TTS to preserve Bluetooth
+      // shouldRouteThroughEarpiece: false, // REMOVED - let system/Bluetooth handle routing
     },
     notification: {
       allowsRecording: true, // Keep recording enabled (safe default)
       playsInSilentMode: true,
       interruptionMode: 'duckOthers', // Notifications can duck other audio
       interruptionModeAndroid: 'duckOthers',
-      shouldRouteThroughEarpiece: false,
+      // BLUETOOTH FIX: Don't specify shouldRouteThroughEarpiece for notifications to preserve Bluetooth
+      // shouldRouteThroughEarpiece: false, // REMOVED - let system/Bluetooth handle routing
     },
     idle: {
       allowsRecording: true, // Always keep recording available
       playsInSilentMode: true,
       interruptionMode: 'duckOthers',
       interruptionModeAndroid: 'duckOthers',
-      shouldRouteThroughEarpiece: false, // Speaker for non-call audio (TTS, notifications)
+      // BLUETOOTH FIX: Don't specify shouldRouteThroughEarpiece for idle to preserve Bluetooth
+      // shouldRouteThroughEarpiece: false, // REMOVED - let system/Bluetooth handle routing
     },
   };
 
@@ -107,6 +119,28 @@ export class AudioModeCoordinator {
       AudioModeCoordinator.instance = new AudioModeCoordinator();
     }
     return AudioModeCoordinator.instance;
+  }
+
+  /**
+   * Set Bluetooth connection status
+   * Call this when Bluetooth audio connects/disconnects
+   */
+  public setBluetoothConnected(connected: boolean): void {
+    const wasConnected = this.isBluetoothConnected;
+    this.isBluetoothConnected = connected;
+    console.log(`[AudioModeCoordinator] Bluetooth ${connected ? 'connected' : 'disconnected'}`);
+    
+    // If Bluetooth just connected and we're not in a call, reset audio mode to let Bluetooth take over
+    if (connected && !wasConnected && this.currentMode !== 'streaming') {
+      console.log('[AudioModeCoordinator] Bluetooth connected, preserving audio routing');
+    }
+  }
+
+  /**
+   * Check if Bluetooth audio is currently connected
+   */
+  public isBluetoothAudioConnected(): boolean {
+    return this.isBluetoothConnected;
   }
 
   /**

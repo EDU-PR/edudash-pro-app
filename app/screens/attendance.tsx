@@ -9,15 +9,42 @@ import { track } from '@/lib/analytics'
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, usePermissions } from '@/contexts/AuthContext'
 
 export default function AttendanceScreen() {
-  const { profile } = useAuth()
+  const { profile, loading: authLoading, profileLoading } = useAuth()
+  const permissions = usePermissions()
   const hasActiveSeat = profile?.hasActiveSeat?.() || profile?.seat_status === 'active'
   const canManageClasses = hasActiveSeat || (!!profile?.hasCapability && profile.hasCapability('manage_classes' as any))
   const { theme } = useTheme()
   const palette = { background: theme.background, text: theme.text, textSecondary: theme.textSecondary, outline: theme.border, surface: theme.surface, primary: theme.primary }
   
+  // RBAC Guard: Only teachers and principals can access this screen
+  const isTeacher = permissions?.hasRole ? permissions.hasRole('teacher') : profile?.role === 'teacher'
+  const isPrincipal = permissions?.hasRole ? permissions.hasRole('principal') : profile?.role === 'principal' || profile?.role === 'principal_admin'
+  const canAccessAttendance = isTeacher || isPrincipal
+
+  // Redirect non-authorized users
+  const hasRedirectedRef = React.useRef(false)
+  useEffect(() => {
+    if (hasRedirectedRef.current) return
+    if (!authLoading && !profileLoading && profile) {
+      if (!canAccessAttendance) {
+        hasRedirectedRef.current = true
+        console.warn('[Attendance] Access denied for role:', profile.role)
+        track('edudash.attendance.access_denied', {
+          user_id: profile.id,
+          role: profile.role,
+        })
+        Alert.alert(
+          'Access Denied',
+          'Only teachers and principals can access attendance management.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        )
+      }
+    }
+  }, [authLoading, profileLoading, profile, canAccessAttendance])
+
   // Get teacher's school ID
   const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool()
 

@@ -389,6 +389,46 @@ export function useVoiceCallDaily({
 
         if (isCleanedUp) return;
 
+        // Get room name from URL for token generation
+        const actualRoomName = roomUrl.split('/').pop() || `voice-${Date.now()}`;
+
+        // Get meeting token for authentication
+        console.log('[VoiceCallDaily] Getting meeting token for room:', actualRoomName);
+        let meetingToken: string | null = null;
+        try {
+          const tokenResponse = await fetch(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                roomName: actualRoomName,
+                userName: userName,
+                isOwner: isOwner,
+              }),
+            }
+          );
+
+          if (tokenResponse.ok) {
+            const tokenData = await tokenResponse.json();
+            meetingToken = tokenData?.token;
+            console.log('[VoiceCallDaily] ✅ Got meeting token');
+          } else {
+            console.warn('[VoiceCallDaily] Token fetch failed:', await tokenResponse.text());
+          }
+        } catch (tokenError) {
+          console.warn('[VoiceCallDaily] Token fetch error:', tokenError);
+        }
+
+        if (!meetingToken) {
+          console.log('[VoiceCallDaily] ⚠️ Joining without token (room may be public)');
+        }
+
+        if (isCleanedUp) return;
+
         // OPTIMIZATION: Use prewarmed call object if available, otherwise create new one
         console.log('[VoiceCallDaily] Getting Daily call object (prewarmed if available)...');
         const daily = getPrewarmedCallObject(false) || Daily.createCallObject({
@@ -689,9 +729,10 @@ export function useVoiceCallDaily({
 
         // Join the call with explicit audio-only settings
         // CRITICAL: Explicitly disable video to prevent Daily.co from treating this as video call
-        console.log('[VoiceCallDaily] Joining room:', roomUrl);
+        console.log('[VoiceCallDaily] Joining room:', roomUrl, 'with token:', !!meetingToken);
         await daily.join({ 
           url: roomUrl,
+          token: meetingToken || undefined, // Include token for private rooms
           audioSource: true,
           videoSource: false, // Explicitly false for voice-only calls
           // Ensure we receive all participant audio

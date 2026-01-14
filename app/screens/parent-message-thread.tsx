@@ -395,6 +395,59 @@ export default function ParentMessageThreadScreen() {
     }
   }, [threadId, user?.id, sendMessage]);
 
+  // Image attachment handler
+  const handleImageAttach = useCallback(async (uri: string, mimeType: string) => {
+    if (!threadId || !user?.id) return;
+    Vibration.vibrate([0, 30, 50, 30]);
+    
+    const tempMsg: Message = {
+      id: `temp-image-${Date.now()}`,
+      content: '📷 Sending photo...',
+      sender_id: user.id,
+      created_at: new Date().toISOString(),
+      sender: { first_name: 'You', last_name: '' },
+    };
+    setOptimisticMsgs(prev => [...prev, tempMsg]);
+    
+    try {
+      // Get supabase client for image upload
+      const supabase = assertSupabase();
+      
+      // Upload image to Supabase Storage
+      const extension = mimeType.split('/')[1] || 'jpg';
+      const fileName = `${user.id}/${threadId}/${Date.now()}.${extension}`;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('message-attachments')
+        .upload(fileName, blob, { contentType: mimeType });
+        
+      if (uploadError) throw uploadError;
+      
+      // Get public URL for the image
+      const { data: urlData } = supabase.storage
+        .from('message-attachments')
+        .getPublicUrl(fileName);
+        
+      // Send message with image URL embedded in content
+      // Format: [image](url) - this can be parsed by message bubble component
+      const content = `📷 Photo\n[image](${urlData.publicUrl})`;
+      
+      await sendMessage({ 
+        threadId, 
+        content,
+      });
+      
+      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
+      toast.success('Photo sent');
+    } catch (err) {
+      logger.error('ParentThread', 'Image send failed:', err);
+      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
+      toast.error('Failed to send photo.');
+    }
+  }, [threadId, user?.id, sendMessage]);
+
   // Message long press handler
   const handleMessageLongPress = useCallback((msg: Message) => {
     if (Platform.OS !== 'web') {
@@ -665,6 +718,7 @@ export default function ParentMessageThreadScreen() {
         <MessageComposer
           onSend={handleSend}
           onVoiceRecording={handleVoiceRecording}
+          onImageAttach={handleImageAttach}
           sending={sending}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}

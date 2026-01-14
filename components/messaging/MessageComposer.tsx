@@ -3,7 +3,7 @@
  * WhatsApp-style input with emoji, attachments, voice recording, and send
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   TextInput,
@@ -12,9 +12,11 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import { toast } from '@/components/ui/ToastProvider';
 import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
@@ -37,6 +39,7 @@ try {
 interface MessageComposerProps {
   onSend: (text: string) => Promise<void>;
   onVoiceRecording?: (uri: string, duration: number) => Promise<void>;
+  onImageAttach?: (uri: string, mimeType: string) => Promise<void>;
   sending: boolean;
   replyingTo?: Message | null;
   onCancelReply?: () => void;
@@ -49,6 +52,7 @@ interface MessageComposerProps {
 export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   onSend,
   onVoiceRecording,
+  onImageAttach,
   sending,
   replyingTo,
   onCancelReply,
@@ -99,6 +103,76 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   const handleEmojiSelect = (emoji: string) => {
     setText(prev => prev + emoji);
   };
+
+  // Handle camera capture
+  const handleCamera = useCallback(async () => {
+    if (!onImageAttach) {
+      toast.info('Image attachments not supported in this chat', 'Camera');
+      return;
+    }
+    
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please grant camera access to take photos.'
+        );
+        return;
+      }
+      
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+      });
+      
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const mimeType = asset.mimeType || 'image/jpeg';
+        await onImageAttach(asset.uri, mimeType);
+      }
+    } catch (error) {
+      console.error('[MessageComposer] Camera error:', error);
+      toast.error('Failed to take photo. Please try again.', 'Camera');
+    }
+  }, [onImageAttach]);
+
+  // Handle gallery/attachment picker
+  const handleAttachment = useCallback(async () => {
+    if (!onImageAttach) {
+      toast.info('Image attachments not supported in this chat', 'Attachments');
+      return;
+    }
+    
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please grant gallery access to attach images.'
+        );
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+      
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const mimeType = asset.mimeType || 'image/jpeg';
+        await onImageAttach(asset.uri, mimeType);
+      }
+    } catch (error) {
+      console.error('[MessageComposer] Attachment error:', error);
+      toast.error('Failed to pick image. Please try again.', 'Attachments');
+    }
+  }, [onImageAttach]);
 
   return (
     <View style={styles.container}>
@@ -157,7 +231,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
               {!text.trim() && (
                 <TouchableOpacity 
                   style={styles.inlineBtn}
-                  onPress={() => toast.info('Coming soon', 'Camera')}
+                  onPress={handleCamera}
                 >
                   <Ionicons name="camera-outline" size={22} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
@@ -166,7 +240,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
               {/* Attachment button */}
               <TouchableOpacity 
                 style={styles.inlineBtn}
-                onPress={() => toast.info('Coming soon', 'Attachments')}
+                onPress={handleAttachment}
               >
                 <Ionicons name="attach-outline" size={22} color="rgba(255,255,255,0.5)" />
               </TouchableOpacity>

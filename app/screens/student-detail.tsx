@@ -152,16 +152,16 @@ export default function StudentDetailScreen() {
       
       // Get attendance data
       const { data: attendanceData } = await assertSupabase()
-        .from('attendance_records')
-        .select('status, date')
+        .from('attendance')
+        .select('status, attendance_date')
         .eq('student_id', studentId)
-        .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .order('date', { ascending: false });
+        .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+        .order('attendance_date', { ascending: false });
 
       const totalRecords = attendanceData?.length || 0;
       const presentRecords = attendanceData?.filter(a => a.status === 'present').length || 0;
       const attendanceRate = totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
-      const lastAttendance = attendanceData?.[0]?.date;
+      const lastAttendance = attendanceData?.[0]?.attendance_date;
 
       // Get financial data - summary for outstanding fees
       const { data: financialData } = await assertSupabase()

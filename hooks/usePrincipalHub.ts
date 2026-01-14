@@ -345,10 +345,9 @@ export const usePrincipalHub = () => {
           
         // Get recent attendance records for attendance rate
         assertSupabase()
-          .from('attendance_records')
+          .from('attendance')
           .select('status')
-          .eq('preschool_id', preschoolId)
-          .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
           .limit(1000),
           
         // Get preschool capacity info
@@ -566,7 +565,7 @@ export const usePrincipalHub = () => {
           let teacherAttendanceRate = 0;
           if (classIds.length > 0) {
             const { data: teacherAttendanceData } = await assertSupabase()
-              .from('attendance_records')
+              .from('attendance')
               .select('status, student_id')
 .in('student_id', await assertSupabase()
                 .from('students')
@@ -574,7 +573,7 @@ export const usePrincipalHub = () => {
                 .in('class_id', classIds)
                 .then((res: { data: any[] | null }) => (res.data || []).map((s: any) => s.id))
               )
-              .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) || { data: [] };
+              .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) || { data: [] };
               
             if (teacherAttendanceData && teacherAttendanceData.length > 0) {
               const presentCount = teacherAttendanceData.filter((a: any) => a.status === 'present').length;

@@ -101,9 +101,8 @@ export class PrincipalHubService {
       try {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const { data: att } = await assertSupabase()
-          .from('attendance_records')
+          .from('attendance')
           .select('status')
-          .eq('preschool_id', preschoolId)
           .gte('attendance_date', thirtyDaysAgo)
           .limit(5000);
         if (att && att.length > 0) {

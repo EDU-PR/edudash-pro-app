@@ -234,16 +234,20 @@ export default function VoiceMessageBubble({
   useEffect(() => {
     async function configureAudio() {
       try {
+        // BLUETOOTH FIX: Don't specify shouldRouteThroughEarpiece
+        // This allows the system to maintain Bluetooth routing if connected
+        // Previously, setting shouldRouteThroughEarpiece: false would force speaker
+        // and disconnect Bluetooth headsets
         await setAudioModeAsync({
           playsInSilentMode: true,
           shouldPlayInBackground: true,
           interruptionMode: 'doNotMix',
           interruptionModeAndroid: 'doNotMix',
           allowsRecording: false,
-          shouldRouteThroughEarpiece: false,
+          // shouldRouteThroughEarpiece: false, // REMOVED - preserves Bluetooth routing
         });
         if (__DEV__) {
-          console.log('[VoiceMessageBubble] Audio mode configured for background playback');
+          console.log('[VoiceMessageBubble] Audio mode configured (Bluetooth-aware)');
         }
       } catch (err) {
         console.error('[VoiceMessageBubble] Failed to configure audio mode:', err);

@@ -21,6 +21,8 @@ interface VoiceCallControlsProps {
   onToggleSpeaker: () => void;
   onEndCall: () => void;
   onRetry: () => void;
+  /** Optional callback to switch from voice to video call */
+  onSwitchToVideo?: () => void;
 }
 
 export function VoiceCallControls({
@@ -32,8 +34,10 @@ export function VoiceCallControls({
   onToggleSpeaker,
   onEndCall,
   onRetry,
+  onSwitchToVideo,
 }: VoiceCallControlsProps) {
   const showRetryButton = callState === 'failed' || (callState === 'ended' && participantCount === 0);
+  const isConnected = callState === 'connected';
 
   return (
     <View style={styles.controls}>
@@ -73,6 +77,17 @@ export function VoiceCallControls({
         </Text>
       </TouchableOpacity>
 
+      {/* Switch to Video - only show when connected and callback provided */}
+      {isConnected && onSwitchToVideo && (
+        <TouchableOpacity
+          style={[styles.controlButton, styles.videoButton]}
+          onPress={onSwitchToVideo}
+        >
+          <Ionicons name="videocam" size={28} color="#ffffff" />
+          <Text style={styles.controlLabel}>Video</Text>
+        </TouchableOpacity>
+      )}
+
       {/* End Call or Call Again */}
       {showRetryButton ? (
         <TouchableOpacity
@@ -100,8 +115,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    gap: 20,
+    flexWrap: 'wrap',
+    paddingVertical: 16,
   },
   controlButton: {
     alignItems: 'center',
@@ -119,6 +135,9 @@ const styles = StyleSheet.create({
   },
   retryCallButton: {
     backgroundColor: '#10b981',
+  },
+  videoButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.6)',
   },
   controlLabel: {
     color: 'rgba(255, 255, 255, 0.8)',

@@ -520,6 +520,44 @@ export function VideoCallInterface({
 
         if (isCleanedUp) return;
 
+        // Get room name from URL for token generation
+        const actualRoomName = roomUrl.split('/').pop() || `video-${Date.now()}`;
+
+        // Get meeting token for authentication
+        console.log('[VideoCall] Getting meeting token for room:', actualRoomName);
+        const tokenResponse = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              roomName: actualRoomName,
+              userName: userName,
+              isOwner: isOwner,
+            }),
+          }
+        );
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.json();
+          console.warn('[VideoCall] Token fetch failed:', errorData);
+          // Continue without token - room might be public
+        }
+
+        const tokenData = tokenResponse.ok ? await tokenResponse.json() : null;
+        const meetingToken = tokenData?.token;
+
+        if (meetingToken) {
+          console.log('[VideoCall] ✅ Got meeting token');
+        } else {
+          console.log('[VideoCall] ⚠️ Joining without token (room may be public)');
+        }
+
+        if (isCleanedUp) return;
+
         // OPTIMIZATION: Use prewarmed call object if available, otherwise create new one
         console.log('[VideoCall] Getting Daily call object (prewarmed if available)...');
         const daily = getPrewarmedCallObject(true) || Daily.createCallObject({
@@ -590,10 +628,11 @@ export function VideoCallInterface({
           setCallState('failed');
         });
 
-        // Join the call with explicit options
-        console.log('[VideoCall] Joining room:', roomUrl);
+        // Join the call with explicit options (include token if available)
+        console.log('[VideoCall] Joining room:', roomUrl, 'with token:', !!meetingToken);
         await daily.join({
           url: roomUrl,
+          token: meetingToken, // Include token for private rooms
           subscribeToTracksAutomatically: true,
           audioSource: true,
           videoSource: true,
@@ -646,7 +685,7 @@ export function VideoCallInterface({
           if (participants) {
             const remote = Object.entries(participants)
               .filter(([id]) => id !== 'local')
-              .map(([id, p]) => ({ sessionId: id, ...p }));
+              .map(([id, p]) => ({ sessionId: id, ...(p as Record<string, unknown>) })) as DailyParticipant[];
             setRemoteParticipants(remote);
           }
         }, 300);

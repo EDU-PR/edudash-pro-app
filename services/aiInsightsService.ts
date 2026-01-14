@@ -59,11 +59,10 @@ export class AIInsightsService {
   private static async analyzeAttendance(schoolId: string, startDate: Date, endDate: Date): Promise<AIInsight | null> {
     try {
       const { data: attendanceRecords } = await supabase!
-        .from('attendance_records')
+        .from('attendance')
         .select('status, attendance_date')
-        .eq('preschool_id', schoolId)
-        .gte('attendance_date', startDate.toISOString())
-        .lte('attendance_date', endDate.toISOString());
+        .gte('attendance_date', startDate.toISOString().split('T')[0])
+        .lte('attendance_date', endDate.toISOString().split('T')[0]);
       
       if (!attendanceRecords || attendanceRecords.length === 0) return null;
       
@@ -74,11 +73,10 @@ export class AIInsightsService {
       // Get previous week for comparison
       const prevWeekStart = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
       const { data: prevWeekRecords } = await supabase!
-        .from('attendance_records')
+        .from('attendance')
         .select('status')
-        .eq('preschool_id', schoolId)
-        .gte('attendance_date', prevWeekStart.toISOString())
-        .lt('attendance_date', startDate.toISOString());
+        .gte('attendance_date', prevWeekStart.toISOString().split('T')[0])
+        .lt('attendance_date', startDate.toISOString().split('T')[0]);
       
       let trend = 'stable';
       let trendDescription = '';

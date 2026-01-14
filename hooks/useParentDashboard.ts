@@ -161,11 +161,10 @@ export const useParentDashboard = () => {
         let todayAttendanceData: Array<{ student_id: string; status: string }> = [];
         if (childIds.length > 0) {
           const { data: attendanceData } = await supabase
-            .from('attendance_records')
+            .from('attendance')
             .select('student_id, status')
             .in('student_id', childIds)
-            .gte('date', today + 'T00:00:00')
-            .lt('date', today + 'T23:59:59');
+            .eq('attendance_date', today);
           
           todayAttendanceData = attendanceData || [];
         }

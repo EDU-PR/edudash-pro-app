@@ -867,6 +867,25 @@ export function CallProvider({ children }: CallProviderProps) {
     }
   }, [answeringCall, outgoingCall]);
 
+  // Switch from voice to video call
+  const switchToVideoCall = useCallback(() => {
+    if (outgoingCall && outgoingCall.callType === 'voice') {
+      console.log('[CallProvider] Switching from voice to video call');
+      // Update the call type to video - this will cause a re-render
+      // and switch to the video call interface
+      setOutgoingCall({
+        ...outgoingCall,
+        callType: 'video',
+      });
+    } else if (answeringCall && answeringCall.call_type === 'voice') {
+      console.log('[CallProvider] Switching answered voice to video call');
+      setAnsweringCall({
+        ...answeringCall,
+        call_type: 'video',
+      });
+    }
+  }, [outgoingCall, answeringCall]);
+
   // Calculate derived state
   const isCallActive = isCallInterfaceOpen || !!incomingCall;
   // isInActiveCall: true when we have an active call (regardless of UI state)
@@ -926,6 +945,7 @@ export function CallProvider({ children }: CallProviderProps) {
           userName={outgoingCall.userName}
           isOwner={true}
           calleeId={outgoingCall.userId}
+          onSwitchToVideo={switchToVideoCall}
         />
       )}
 
@@ -952,6 +972,7 @@ export function CallProvider({ children }: CallProviderProps) {
           isOwner={false}
           callId={answeringCall.call_id}
           meetingUrl={answeringCall.meeting_url}
+          onSwitchToVideo={switchToVideoCall}
         />
       )}
       

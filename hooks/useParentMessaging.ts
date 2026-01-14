@@ -218,12 +218,32 @@ export const useThreadMessages = (threadId: string | null) => {
     const markAsDelivered = async () => {
       try {
         const client = assertSupabase();
+        
+        // First try the RPC function
         const result = await client.rpc('mark_messages_delivered', {
           p_thread_id: threadId,
           p_user_id: user.id,
         });
-        if (result.data && result.data > 0) {
-          logger.debug('useThreadMessages', `✅ Marked ${result.data} messages as delivered`);
+        
+        if (result.error) {
+          logger.warn('useThreadMessages', 'RPC mark_messages_delivered failed:', result.error.message);
+          
+          // Fallback: Direct update of messages in this thread not sent by current user
+          const { error: directError, data: updatedCount } = await client
+            .from('messages')
+            .update({ delivered_at: new Date().toISOString() })
+            .eq('thread_id', threadId)
+            .neq('sender_id', user.id)
+            .is('delivered_at', null)
+            .select('id');
+          
+          if (directError) {
+            logger.warn('useThreadMessages', 'Direct update also failed:', directError.message);
+          } else {
+            logger.debug('useThreadMessages', `✅ Marked ${updatedCount?.length || 0} messages as delivered via direct update`);
+          }
+        } else if (result.data && result.data > 0) {
+          logger.debug('useThreadMessages', `✅ Marked ${result.data} messages as delivered via RPC`);
         }
       } catch (err) {
         logger.warn('useThreadMessages', 'Failed to mark messages as delivered:', err);

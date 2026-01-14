@@ -64,13 +64,32 @@ export function usePresence(
     
     try {
       const supabase = assertSupabase();
-      const { error } = await supabase.rpc('upsert_user_presence', {
+      const { data, error } = await supabase.rpc('upsert_user_presence', {
         p_user_id: userId,
         p_status: status,
       });
       
       if (error) {
-        console.warn('[usePresence] Failed to update presence:', error.message);
+        console.warn('[usePresence] Failed to update presence:', error.message, error.code);
+        // If RPC fails, try direct upsert as fallback
+        if (error.code === 'PGRST202' || error.message.includes('function') || error.message.includes('not found')) {
+          console.log('[usePresence] RPC not found, trying direct upsert...');
+          const { error: directError } = await supabase
+            .from('user_presence')
+            .upsert({
+              user_id: userId,
+              status: status,
+              last_seen_at: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+          
+          if (directError) {
+            console.warn('[usePresence] Direct upsert failed:', directError.message);
+          } else {
+            console.log('[usePresence] Direct upsert succeeded for status:', status);
+          }
+        }
+      } else {
+        console.log('[usePresence] Presence updated via RPC:', status, 'result:', data);
       }
     } catch (err) {
       console.warn('[usePresence] Error updating presence:', err);
