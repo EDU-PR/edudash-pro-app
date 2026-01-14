@@ -110,17 +110,14 @@ export function usePrincipalAnalytics() {
           .eq('preschool_id', school.id),
         // Attendance (current month)
         supabase
-          .from('attendance_records')
+          .from('attendance')
           .select('status, attendance_date')
-          .eq('preschool_id', school.id)
           .gte('attendance_date', monthStart),
         // Today's attendance
         supabase
-          .from('attendance_records')
+          .from('attendance')
           .select('status')
-          .eq('preschool_id', school.id)
-          .gte('attendance_date', today + 'T00:00:00')
-          .lt('attendance_date', today + 'T23:59:59'),
+          .eq('attendance_date', today),
         // Monthly revenue
         supabase
           .from('financial_transactions')

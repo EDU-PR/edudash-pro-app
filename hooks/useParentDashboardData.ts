@@ -98,7 +98,7 @@ export function useParentDashboardData() {
       let todayAttendance: 'present' | 'absent' | 'late' | 'unknown' = 'unknown';
       try {
         const { data: attendanceData } = await client
-          .from('attendance_records')
+          .from('attendance')
           .select('status')
           .eq('student_id', studentId)
           .eq('attendance_date', today)
@@ -201,7 +201,7 @@ export function useParentDashboardData() {
 
           try {
             const { data: latestAtt } = await client
-              .from('attendance_records')
+              .from('attendance')
               .select('status, attendance_date, created_at')
               .eq('student_id', child.id)
               .order('attendance_date', { ascending: false })
@@ -212,7 +212,7 @@ export function useParentDashboardData() {
               status = st === 'late' ? 'late' : st === 'absent' ? 'absent' : 'active';
             }
             const { data: windowAtt } = await client
-              .from('attendance_records')
+              .from('attendance')
               .select('status')
               .eq('student_id', child.id)
               .gte('attendance_date', thirtyDaysAgo)

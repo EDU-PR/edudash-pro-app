@@ -43,8 +43,8 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
 
     // Attendance check
     try {
-      const { data: att } = await supabase.from('attendance_records').select('status')
-        .eq('student_id', child.id).eq('preschool_id', child.preschool_id).eq('attendance_date', today).maybeSingle();
+      const { data: att } = await supabase.from('attendance').select('status')
+        .eq('student_id', child.id).eq('attendance_date', today).maybeSingle();
       if (att) {
         const s = String(att.status).toLowerCase();
         metrics.status = ['present', 'absent', 'late'].includes(s) ? (s as 'active' | 'absent' | 'late') : 'active';

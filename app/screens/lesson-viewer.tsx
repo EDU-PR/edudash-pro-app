@@ -25,72 +25,158 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 
-// Helper functions to extract content sections from markdown text
-const extractSection = (content: string, sectionTitle: string): string[] => {
-  const regex = new RegExp(`### ${sectionTitle}[\s\S]*?(?=###|$)`, 'i');
-  const match = content.match(regex);
-  if (!match) return [];
+// Helper to parse content - handles both JSON objects and markdown text
+interface LessonContent {
+  overview?: string;
+  lesson_flow?: Array<{
+    phase: string;
+    duration: string;
+    title: string;
+    instructions?: string;
+    teacher_script?: string;
+    activities?: any[];
+    [key: string]: any;
+  }>;
+  interactive_activities?: Array<{
+    name: string;
+    type: string;
+    description: string;
+  }>;
+  differentiation?: {
+    support?: string;
+    extension?: string;
+  } | string;
+  songs?: Array<{ title: string; lyrics: string }>;
+  [key: string]: any;
+}
+
+const parseContent = (content: any): LessonContent | null => {
+  if (!content) return null;
   
-  const section = match[0];
-  const lines = section.split('\n')
-    .slice(1) // Remove the header line
-    .filter(line => line.trim())
-    .map(line => line.replace(/^[-•*]\s*/, '').trim())
-    .filter(line => line.length > 0);
+  // If it's already an object, return it
+  if (typeof content === 'object' && content !== null) {
+    return content as LessonContent;
+  }
   
-  return lines;
+  // If it's a string, try to parse as JSON
+  if (typeof content === 'string') {
+    try {
+      return JSON.parse(content) as LessonContent;
+    } catch {
+      // Not JSON, return null (markdown handling would go here)
+      return null;
+    }
+  }
+  
+  return null;
 };
 
-const extractObjectives = (content: string): string[] => {
-  return extractSection(content, 'Learning Objectives');
-};
-
-const extractActivities = (content: string): Array<{
+// Extract activities from JSON content
+const extractActivitiesFromContent = (content: LessonContent | null): Array<{
   name: string;
   duration: string;
   description: string;
   materials?: string[];
 }> => {
-  const activitiesText = extractSection(content, 'Main Activity');
-  if (activitiesText.length === 0) {
-    // Try alternative section names
-    const alternativeActivities = extractSection(content, 'Activities') || 
-                                 extractSection(content, 'Circle Time');
-    return alternativeActivities.map((activity, index) => ({
-      name: `Activity ${index + 1}`,
-      duration: '10 minutes',
-      description: activity,
-    }));
+  if (!content) return [];
+  
+  const activities: Array<{ name: string; duration: string; description: string; materials?: string[] }> = [];
+  
+  // Extract from lesson_flow
+  if (content.lesson_flow && Array.isArray(content.lesson_flow)) {
+    content.lesson_flow.forEach((phase) => {
+      // Main phase as activity
+      const description = phase.instructions || phase.teacher_script || '';
+      if (phase.title && description) {
+        activities.push({
+          name: phase.title,
+          duration: phase.duration || '10 minutes',
+          description: description,
+        });
+      }
+      
+      // Nested activities within a phase
+      if (phase.activities && Array.isArray(phase.activities)) {
+        phase.activities.forEach((subActivity: any, idx: number) => {
+          const subDesc = typeof subActivity === 'string' 
+            ? subActivity 
+            : subActivity.action || subActivity.description || subActivity.instructions || JSON.stringify(subActivity);
+          activities.push({
+            name: subActivity.name || subActivity.vowel || subActivity.color || `Activity ${idx + 1}`,
+            duration: subActivity.duration || '5 minutes',
+            description: subDesc,
+          });
+        });
+      }
+    });
   }
   
-  return activitiesText.map((activity, index) => ({
-    name: `Activity ${index + 1}`,
+  // Also include interactive_activities
+  if (content.interactive_activities && Array.isArray(content.interactive_activities)) {
+    content.interactive_activities.forEach((ia) => {
+      activities.push({
+        name: `🎮 ${ia.name}`,
+        duration: '5 minutes',
+        description: `[${ia.type}] ${ia.description}`,
+      });
+    });
+  }
+  
+  return activities.length > 0 ? activities : [{
+    name: 'Learning Activity',
     duration: '15 minutes',
-    description: activity,
-  }));
+    description: content.overview || 'Engaging educational activity',
+  }];
 };
 
-const extractResources = (content: string): string[] => {
-  return extractSection(content, 'Materials Needed') || 
-         extractSection(content, 'Resources') || 
-         ['Basic classroom materials'];
+// Extract differentiation from JSON content
+const extractDifferentiationFromContent = (content: LessonContent | null): string => {
+  if (!content) return 'Provide support and extensions as needed for individual learners.';
+  
+  if (content.differentiation) {
+    if (typeof content.differentiation === 'string') {
+      return content.differentiation;
+    }
+    const diff = content.differentiation;
+    const parts: string[] = [];
+    if (diff.support) parts.push(`Support: ${diff.support}`);
+    if (diff.extension) parts.push(`Extension: ${diff.extension}`);
+    return parts.join('\n') || 'Provide support and extensions as needed for individual learners.';
+  }
+  
+  return 'Provide support and extensions as needed for individual learners.';
 };
 
-const extractAssessments = (content: string): string[] => {
-  return extractSection(content, 'Assessment Ideas') || 
-         extractSection(content, 'Assessment') || 
-         ['Observation and informal assessment'];
+// Extract resources from content or materials_needed
+const extractResourcesFromContent = (content: LessonContent | null, materialsNeeded?: string[]): string[] => {
+  if (materialsNeeded && Array.isArray(materialsNeeded) && materialsNeeded.length > 0) {
+    return materialsNeeded;
+  }
+  
+  if (content?.materials || content?.resources) {
+    const items = content.materials || content.resources;
+    if (Array.isArray(items)) return items;
+  }
+  
+  return ['Basic classroom materials'];
 };
 
-const extractDifferentiation = (content: string): string => {
-  const diff = extractSection(content, 'Differentiation Tips');
-  return diff.join(' ') || 'Provide support and extensions as needed for individual learners.';
-};
-
-const extractExtensions = (content: string): string[] => {
-  return extractSection(content, 'Extensions') || 
-         extractSection(content, 'Take-Home Activity') || 
-         [];
+// Legacy markdown extraction for older content
+const extractSection = (content: string, sectionTitle: string): string[] => {
+  if (typeof content !== 'string') return [];
+  
+  const regex = new RegExp(`### ${sectionTitle}[\\s\\S]*?(?=###|$)`, 'i');
+  const match = content.match(regex);
+  if (!match) return [];
+  
+  const section = match[0];
+  const lines = section.split('\n')
+    .slice(1)
+    .filter(line => line.trim())
+    .map(line => line.replace(/^[-•*]\s*/, '').trim())
+    .filter(line => line.length > 0);
+  
+  return lines;
 };
 
 interface LessonPlan {
@@ -153,6 +239,28 @@ export default function LessonViewer() {
         }
 
         if (lessonData) {
+          // Parse the JSON content
+          const parsedContent = parseContent(lessonData.content);
+          
+          // Get objectives - prefer top-level array, fallback to content
+          let objectives: string[] = [];
+          if (lessonData.objectives && Array.isArray(lessonData.objectives) && lessonData.objectives.length > 0) {
+            objectives = lessonData.objectives;
+          } else if (parsedContent) {
+            objectives = ['Engage in learning activities', 'Develop key skills'];
+          } else {
+            objectives = ['Explore and learn through play'];
+          }
+          
+          // Get activities from parsed content
+          const activities = extractActivitiesFromContent(parsedContent);
+          
+          // Get resources - prefer materials_needed column
+          const resources = extractResourcesFromContent(parsedContent, lessonData.materials_needed);
+          
+          // Get differentiation
+          const differentiation = extractDifferentiationFromContent(parsedContent);
+          
           // Convert database lesson to LessonPlan format
           const lessonPlan: LessonPlan = {
             id: lessonData.id,
@@ -160,19 +268,21 @@ export default function LessonViewer() {
             subject: params.subject as string || lessonData.subject || 'General Education',
             grade: params.grade as string || lessonData.age_group || 'Preschool', 
             duration: `${lessonData.duration_minutes || 30} minutes`,
-            objectives: lessonData.content ? extractObjectives(lessonData.content) : ['Explore and learn through play'],
-            activities: lessonData.content ? extractActivities(lessonData.content) : [{
+            objectives: objectives,
+            activities: activities.length > 0 ? activities : [{
               name: 'Learning Activity',
               duration: '15 minutes',
               description: lessonData.description || 'Engaging educational activity',
             }],
-            resources: lessonData.content ? extractResources(lessonData.content) : ['Basic classroom materials'],
-            assessments: lessonData.content ? extractAssessments(lessonData.content) : ['Observation and informal assessment'],
-            differentiation: lessonData.content ? extractDifferentiation(lessonData.content) : 'Provide support and extensions as needed for individual learners.',
-            extensions: lessonData.content ? extractExtensions(lessonData.content) : [],
+            resources: resources,
+            assessments: ['Observation during activities', 'Informal assessment through participation', 'Portfolio collection of student work'],
+            differentiation: differentiation,
+            extensions: [],
             createdBy: 'DashAI',
             createdAt: lessonData.created_at
           };
+          
+          console.log('[LessonViewer] Loaded lesson:', lessonPlan.title, 'with', lessonPlan.activities.length, 'activities');
           
           setLesson(lessonPlan);
           setLoading(false);

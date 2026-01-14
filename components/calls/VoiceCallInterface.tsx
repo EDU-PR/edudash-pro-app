@@ -45,6 +45,7 @@ import { VoiceCallHeader } from './VoiceCallHeader';
 import { VoiceCallInfo } from './VoiceCallInfo';
 import { VoiceCallError } from './VoiceCallError';
 import { VoiceCallMinimized } from './VoiceCallMinimized';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -58,6 +59,8 @@ interface VoiceCallInterfaceProps {
   callId?: string;
   meetingUrl?: string;
   onCallStateChange?: (state: CallState) => void;
+  /** Optional callback to switch from voice to video call */
+  onSwitchToVideo?: () => void;
 }
 
 export function VoiceCallInterface({
@@ -70,7 +73,11 @@ export function VoiceCallInterface({
   callId,
   meetingUrl,
   onCallStateChange,
+  onSwitchToVideo,
 }: VoiceCallInterfaceProps) {
+  // Safe area insets for bottom navigation bar
+  const insets = useSafeAreaInsets();
+  
   // State management
   const state = useVoiceCallState({
     isOpen,
@@ -223,7 +230,7 @@ export function VoiceCallInterface({
   return (
     <Animated.View style={[styles.container, { opacity: state.fadeAnim }]}>
       <BlurView intensity={90} style={styles.blurView} tint="dark">
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) }]}>
           {/* Header */}
           <VoiceCallHeader onMinimize={handleMinimize} />
 
@@ -249,6 +256,7 @@ export function VoiceCallInterface({
             onToggleSpeaker={audio.toggleSpeaker}
             onEndCall={daily.endCall}
             onRetry={handleRetry}
+            onSwitchToVideo={onSwitchToVideo}
           />
         </View>
       </BlurView>

@@ -101,6 +101,8 @@ export class DashVoiceService {
       }
 
       // Set audio mode using expo-audio AudioModule
+      // BLUETOOTH FIX: Don't specify shouldRouteThroughEarpiece for non-call audio
+      // This allows the system to maintain Bluetooth routing if connected
       if (Platform.OS === 'ios') {
         await AudioModule.setAudioModeAsync({
           allowsRecording: true,
@@ -109,10 +111,10 @@ export class DashVoiceService {
       } else if (Platform.OS === 'android') {
         await AudioModule.setAudioModeAsync({
           interruptionModeAndroid: 'duckOthers',
-          shouldRouteThroughEarpiece: false,
+          // shouldRouteThroughEarpiece: false, // REMOVED - preserves Bluetooth routing
         });
       }
-      console.log('[DashVoice] Audio initialized successfully');
+      console.log('[DashVoice] Audio initialized successfully (Bluetooth-aware)');
     } catch (error) {
       console.error('[DashVoice] Audio initialization failed:', error);
     }

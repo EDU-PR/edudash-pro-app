@@ -157,10 +157,9 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
       let todayAttendance: 'present' | 'absent' | 'late' | 'unknown' = 'unknown';
       try {
         const { data: attendanceData, error: attendanceError } = await supabase
-          .from('attendance_records')
+          .from('attendance')
           .select('status, attendance_date')
           .eq('student_id', childId)
-          .eq('preschool_id', studentData.preschool_id)
           .eq('attendance_date', today)
           .maybeSingle();
 
@@ -171,7 +170,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
             : 'unknown';
         }
       } catch (err) {
-        // Silently handle - attendance_records table may not exist yet
+        // Silently handle - attendance table may not exist yet
       }
 
       // Upcoming events (next 7 days)

@@ -152,6 +152,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'view_homework':
         router.push('/screens/homework');
         break;
+      case 'assigned_lessons':
+        router.push('/screens/parent-assigned-lessons');
+        break;
       case 'check_attendance':
         // Parents go to read-only attendance view, not teacher attendance management
         router.push('/screens/parent-attendance');
@@ -276,6 +279,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   // Quick actions - enhanced with parent-friendly labels
   const quickActions = useMemo(() => [
     { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
+    { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
     { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
     { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
     { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },

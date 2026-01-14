@@ -764,6 +764,44 @@ export function WhatsAppStyleVideoCall({
 
         if (isCleanedUp) return;
 
+        // Get room name from URL for token generation
+        const actualRoomName = roomUrl.split('/').pop() || `video-${Date.now()}`;
+
+        // Get meeting token for authentication
+        console.log('[VideoCall] Getting meeting token for room:', actualRoomName);
+        const tokenResponse = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/daily-token`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              roomName: actualRoomName,
+              userName: userName,
+              isOwner: isOwner,
+            }),
+          }
+        );
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.json();
+          console.warn('[VideoCall] Token fetch failed:', errorData);
+          // Continue without token - room might be public
+        }
+
+        const tokenData = tokenResponse.ok ? await tokenResponse.json() : null;
+        const meetingToken = tokenData?.token;
+
+        if (meetingToken) {
+          console.log('[VideoCall] ✅ Got meeting token');
+        } else {
+          console.log('[VideoCall] ⚠️ Joining without token (room may be public)');
+        }
+
+        if (isCleanedUp) return;
+
         // Create Daily call object
         const daily = Daily.createCallObject({
           audioSource: true,
@@ -992,6 +1030,7 @@ export function WhatsAppStyleVideoCall({
 
         await daily.join({ 
           url: roomUrl,
+          token: meetingToken, // Include token for private rooms
           subscribeToTracksAutomatically: true,
           audioSource: true,
           videoSource: true,

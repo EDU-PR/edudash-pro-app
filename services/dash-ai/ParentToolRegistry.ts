@@ -82,10 +82,10 @@ export class ParentToolRegistry extends DashToolRegistry {
           // Get attendance if requested
           if (args.include_attendance) {
             const daysBack = args.days_back || 30;
-            const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+            const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
             const { data: attendance } = await client
-              .from('attendance_records')
+              .from('attendance')
               .select('attendance_date, status')
               .eq('student_id', args.student_id)
               .gte('attendance_date', startDate)

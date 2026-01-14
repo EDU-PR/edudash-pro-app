@@ -5,7 +5,7 @@
  * Allows filtering by date, class, and student
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,8 @@ import { Stack, router } from 'expo-router';
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTeacherSchool } from '@/hooks/useTeacherSchool';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, usePermissions } from '@/contexts/AuthContext';
+import { track } from '@/lib/analytics';
 
 interface AttendanceRecord {
   id: string;
@@ -47,9 +48,36 @@ interface AttendanceStats {
 }
 
 export default function AttendanceHistoryScreen() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading, profileLoading } = useAuth();
+  const permissions = usePermissions();
   const { theme } = useTheme();
   const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool();
+  
+  // RBAC Guard: Only teachers and principals can access this screen
+  const isTeacher = permissions?.hasRole ? permissions.hasRole('teacher') : profile?.role === 'teacher';
+  const isPrincipal = permissions?.hasRole ? permissions.hasRole('principal') : profile?.role === 'principal' || profile?.role === 'principal_admin';
+  const canAccessAttendance = isTeacher || isPrincipal;
+
+  // Redirect non-authorized users
+  const hasRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (hasRedirectedRef.current) return;
+    if (!authLoading && !profileLoading && profile) {
+      if (!canAccessAttendance) {
+        hasRedirectedRef.current = true;
+        console.warn('[AttendanceHistory] Access denied for role:', profile.role);
+        track('edudash.attendance_history.access_denied', {
+          user_id: profile.id,
+          role: profile.role,
+        });
+        Alert.alert(
+          'Access Denied',
+          'Only teachers and principals can view attendance history.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
+    }
+  }, [authLoading, profileLoading, profile, canAccessAttendance]);
   
   const palette = {
     background: theme.background,
