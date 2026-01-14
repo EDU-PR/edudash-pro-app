@@ -55,6 +55,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'primary',
     category: 'lessons',
   },
+  edit_lesson: {
+    path: '/screens/lesson-edit' as Href,
+    title: 'Edit Lesson',
+    titleKey: 'teacher.edit_lesson',
+    icon: 'create',
+    color: '#F59E0B',
+    category: 'lessons',
+  },
   assign_lesson: {
     path: '/screens/assign-lesson' as Href,
     title: 'Assign Lesson',

@@ -957,6 +957,142 @@ export class LessonsService implements ILessonsService {
   }
 
   /**
+   * Update lesson metadata
+   * Teachers can update their own lessons, principals can update any lesson in their org
+   */
+  async updateLesson(
+    lessonId: string,
+    updates: {
+      title?: string;
+      description?: string;
+      subject?: string;
+      duration_minutes?: number;
+      age_group?: string;
+      objectives?: string[];
+      materials_needed?: string[];
+      status?: 'draft' | 'active' | 'published' | 'archived';
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('[LessonsService] Updating lesson:', lessonId, updates);
+      
+      const { data, error } = await this.supabase
+        .from('lessons')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', lessonId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[LessonsService] Error updating lesson:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[LessonsService] Lesson updated successfully:', data?.title);
+      return { success: true };
+    } catch (error) {
+      console.error('[LessonsService] Error in updateLesson:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Delete a lesson
+   * Teachers can delete their own lessons, principals can delete any lesson in their org
+   */
+  async deleteLesson(lessonId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('[LessonsService] Deleting lesson:', lessonId);
+      
+      // First, delete any related activities
+      const { error: activitiesError } = await this.supabase
+        .from('lesson_activities')
+        .delete()
+        .eq('lesson_id', lessonId);
+
+      if (activitiesError) {
+        console.warn('[LessonsService] Warning: Could not delete activities:', activitiesError.message);
+        // Continue with lesson deletion anyway
+      }
+
+      // Delete the lesson
+      const { error } = await this.supabase
+        .from('lessons')
+        .delete()
+        .eq('id', lessonId);
+
+      if (error) {
+        console.error('[LessonsService] Error deleting lesson:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[LessonsService] Lesson deleted successfully');
+      return { success: true };
+    } catch (error) {
+      console.error('[LessonsService] Error in deleteLesson:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Duplicate a lesson (create a copy)
+   */
+  async duplicateLesson(
+    lessonId: string,
+    teacherId: string,
+    preschoolId: string
+  ): Promise<{ success: boolean; newLessonId?: string; error?: string }> {
+    try {
+      console.log('[LessonsService] Duplicating lesson:', lessonId);
+      
+      // Get the original lesson (raw DB data)
+      const { data: original, error: fetchError } = await this.supabase
+        .from('lessons')
+        .select('*')
+        .eq('id', lessonId)
+        .single();
+
+      if (fetchError || !original) {
+        return { success: false, error: 'Original lesson not found' };
+      }
+
+      // Create a copy with new IDs
+      const { data, error } = await this.supabase
+        .from('lessons')
+        .insert({
+          title: `${original.title} (Copy)`,
+          description: original.description,
+          content: original.content,
+          subject: original.subject,
+          duration_minutes: original.duration_minutes,
+          age_group: original.age_group,
+          objectives: original.objectives,
+          materials_needed: original.materials_needed,
+          teacher_id: teacherId,
+          preschool_id: preschoolId,
+          status: 'draft',
+          is_ai_generated: original.is_ai_generated,
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('[LessonsService] Error duplicating lesson:', error);
+        return { success: false, error: error.message };
+      }
+
+      console.log('[LessonsService] Lesson duplicated successfully:', data?.id);
+      return { success: true, newLessonId: data?.id };
+    } catch (error) {
+      console.error('[LessonsService] Error in duplicateLesson:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
    * Dispose method for cleanup
    */
   dispose(): void {
