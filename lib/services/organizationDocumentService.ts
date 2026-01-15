@@ -251,7 +251,7 @@ export class OrganizationDocumentService {
         // Convert base64 to ArrayBuffer using safe utility (atob is not available in React Native)
         const { base64ToUint8Array } = await import('@/lib/utils/base64');
         const byteArray = base64ToUint8Array(base64);
-        fileContent = byteArray.buffer;
+        fileContent = byteArray.buffer as ArrayBuffer;
       }
 
       // Optional encryption

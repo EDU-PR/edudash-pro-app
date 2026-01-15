@@ -898,11 +898,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  markAsPaidButton: {
-    borderColor: '#10B981',
-    backgroundColor: '#10B98110',
-    marginBottom: 12,
-  },
   noPopContainer: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -24,7 +24,7 @@ const FILTERS = [
 ];
 
 export default function AnnouncementsScreen() {
-  const { colors } = useTheme();
+  const { theme, colors } = useTheme();
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('all');
   const [modalVisible, setModalVisible] = useState(false);
@@ -54,7 +54,7 @@ export default function AnnouncementsScreen() {
   const renderAnnouncement = ({ item }: { item: Announcement }) => {
     const typeConfig = getTypeConfig(item.type);
     return (
-      <View style={[styles.announcementCard, { backgroundColor: colors.card }]}>
+      <View style={[styles.announcementCard, { backgroundColor: theme.card }]}>
         {item.isPinned && (
           <View style={[styles.pinnedBadge, { backgroundColor: colors.primary + '20' }]}>
             <Ionicons name="pin" size={12} color={colors.primary} />
@@ -105,7 +105,7 @@ export default function AnnouncementsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.container}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <View style={[styles.header, { backgroundColor: theme.card }]}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -124,7 +124,7 @@ export default function AnnouncementsScreen() {
             {FILTERS.map(filter => (
               <TouchableOpacity
                 key={filter.id}
-                style={[styles.filterChip, { backgroundColor: activeFilter === filter.id ? colors.primary : colors.card, borderColor: activeFilter === filter.id ? colors.primary : colors.border }]}
+                style={[styles.filterChip, { backgroundColor: activeFilter === filter.id ? colors.primary : theme.card, borderColor: activeFilter === filter.id ? colors.primary : colors.border }]}
                 onPress={() => setActiveFilter(filter.id)}
               >
                 <Text style={[styles.filterText, { color: activeFilter === filter.id ? '#fff' : colors.text }]}>{filter.label}</Text>
@@ -154,7 +154,7 @@ export default function AnnouncementsScreen() {
         {/* Create Modal */}
         <Modal visible={modalVisible} animationType="slide" transparent>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: colors.text }]}>New Announcement</Text>
                 <TouchableOpacity onPress={() => setModalVisible(false)}>

@@ -86,7 +86,7 @@ export const validatePOPFile = async (
       }
     }
     
-    const fileSize = fileInfo.size || 0;
+    const fileSize = (fileInfo as any).size || 0;
     
     // Get MIME type from file extension or metadata
     let fileType = '';

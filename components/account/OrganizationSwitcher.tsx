@@ -38,7 +38,7 @@ export interface UserOrganization {
   isActive?: boolean;
 }
 
-interface OrganizationSwitcherProps {
+export interface OrganizationSwitcherProps {
   /** Whether the modal is visible */
   visible: boolean;
   /** Callback when modal is closed */

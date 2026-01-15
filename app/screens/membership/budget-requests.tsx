@@ -34,7 +34,7 @@ export default function BudgetRequestsScreen() {
     if (!formData.amount || parseFloat(formData.amount) <= 0) return Alert.alert('Error', 'Please enter a valid amount');
 
     try {
-      await submitRequest({ title: formData.title, description: formData.description, amount: parseFloat(formData.amount), category: formData.category, submitted_by: 'Youth President' });
+      await submitRequest({ title: formData.title, description: formData.description, amount: parseFloat(formData.amount), category: formData.category });
       setShowModal(false);
       setFormData({ title: '', description: '', amount: '', category: 'Events' });
       Alert.alert('Success', 'Budget request submitted successfully');

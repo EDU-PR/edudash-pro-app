@@ -15,6 +15,7 @@ import { log, warn, debug, error as logError } from '@/lib/debug';
 
 // Core role definitions with hierarchy (higher number = more permissions)
 export const ROLES = {
+  student: { level: 0, name: 'student', display: 'Student/Learner' },
   parent: { level: 1, name: 'parent', display: 'Parent' },
   teacher: { level: 2, name: 'teacher', display: 'Teacher' },
   principal: { level: 3, name: 'principal', display: 'Principal' },
@@ -120,6 +121,14 @@ export type Capability = keyof typeof CAPABILITIES;
 
 // Role-based capability mapping
 const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
+  student: [
+    // Core access for students
+    'view_dashboard',
+    'access_mobile_app',
+    'view_progress',
+    'view_announcements',
+    'receive_push_notifications',
+  ],
   parent: [
     // Core access
     'view_dashboard',

@@ -29,6 +29,7 @@ export interface ActiveCall {
   caller_name?: string;
   meeting_url?: string;
   started_at: string;
+  ended_at?: string;
 }
 
 export interface CallSignalPayload {

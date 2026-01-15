@@ -240,10 +240,10 @@ export function CallProvider({ children }: CallProviderProps) {
           .from('active_calls')
           .select('status, ended_at')
           .eq('call_id', pendingCall.call_id)
-          .single();
+          .maybeSingle();
         
-        if (statusError) {
-          console.log('[CallProvider] Call not found in database (may have been deleted):', statusError.message);
+        if (statusError || !callStatus) {
+          console.log('[CallProvider] Call not found in database (may have been deleted):', statusError?.message);
           return;
         }
         
@@ -292,14 +292,14 @@ export function CallProvider({ children }: CallProviderProps) {
   }, [callsEnabled, checkPendingCall]);
 
   // Refs for stable callback references in notification listeners
+  // These refs hold the latest callback values and are updated after callbacks are defined
   const incomingCallRef = React.useRef(incomingCall);
   incomingCallRef.current = incomingCall;
   
-  const answerCallRef = React.useRef(answerCall);
-  answerCallRef.current = answerCall;
+  // Initialize callback refs with undefined - they're set after callbacks are defined below
+  const answerCallRef = React.useRef<() => void>(() => {});
   
-  const rejectCallRef = React.useRef(rejectCall);
-  rejectCallRef.current = rejectCall;
+  const rejectCallRef = React.useRef<() => Promise<void>>(async () => {});
   
   // Additional refs for notification received listener
   const answeringCallRef = React.useRef(answeringCall);
@@ -315,7 +315,7 @@ export function CallProvider({ children }: CallProviderProps) {
   setIncomingCallRef.current = setIncomingCall;
 
   // Ref for endCall to use in notification event listeners
-  const endCallRef = React.useRef<() => Promise<void>>();
+  const endCallRef = React.useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Listen for notification action button presses from foreground service
   // (End Call / Mute buttons on the ongoing call notification)
@@ -400,7 +400,7 @@ export function CallProvider({ children }: CallProviderProps) {
             .from('active_calls')
             .select('*')
             .eq('call_id', callId)
-            .single();
+            .maybeSingle();
           
           if (call) {
             // Fetch caller name
@@ -408,7 +408,7 @@ export function CallProvider({ children }: CallProviderProps) {
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', call.caller_id)
-              .single();
+              .maybeSingle();
             
             const callerName = profile
               ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
@@ -476,10 +476,10 @@ export function CallProvider({ children }: CallProviderProps) {
           .from('active_calls')
           .select('status, ended_at')
           .eq('call_id', data.call_id)
-          .single();
+          .maybeSingle();
         
-        if (callRecord && (callRecord.status === 'ended' || callRecord.ended_at)) {
-          console.log('[CallProvider] Ignoring notification - call already ended:', data.call_id);
+        if (!callRecord || callRecord.status === 'ended' || callRecord.ended_at) {
+          console.log('[CallProvider] Ignoring notification - call not found or already ended:', data.call_id);
           return;
         }
       } catch (err) {
@@ -552,7 +552,7 @@ export function CallProvider({ children }: CallProviderProps) {
                 .from('active_calls')
                 .select('*')
                 .eq('call_id', call.call_id)
-                .single();
+                .maybeSingle();
 
               if (fullCall?.meeting_url) {
                 meetingUrl = fullCall.meeting_url;
@@ -564,7 +564,7 @@ export function CallProvider({ children }: CallProviderProps) {
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', call.caller_id)
-              .single();
+              .maybeSingle();
 
             const callerName = profile
               ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
@@ -781,6 +781,9 @@ export function CallProvider({ children }: CallProviderProps) {
     setCallState('connecting');
   }, [incomingCall]);
 
+  // Keep ref updated with latest answerCall function for notification handlers
+  answerCallRef.current = answerCall;
+
   // Reject incoming call
   const rejectCall = useCallback(async () => {
     if (!incomingCall) return;
@@ -803,6 +806,9 @@ export function CallProvider({ children }: CallProviderProps) {
     setIncomingCall(null);
     setCallState('idle');
   }, [incomingCall]);
+
+  // Keep ref updated with latest rejectCall function for notification handlers
+  rejectCallRef.current = rejectCall;
 
   // End current call
   const endCall = useCallback(async () => {
@@ -827,6 +833,7 @@ export function CallProvider({ children }: CallProviderProps) {
 
     // Also update outgoing call if it exists
     if (outgoingCall?.userId) {
+      // Use maybeSingle() instead of single() to avoid 406 error when no rows found
       const { data: callRecord } = await getSupabase()
         .from('active_calls')
         .select('call_id')
@@ -835,7 +842,7 @@ export function CallProvider({ children }: CallProviderProps) {
         .eq('status', 'ringing')
         .order('started_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (callRecord?.call_id) {
         await getSupabase()

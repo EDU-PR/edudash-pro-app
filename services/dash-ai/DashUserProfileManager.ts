@@ -324,6 +324,19 @@ export class DashUserProfileManager {
   }
 
   /**
+   * Get personality settings from user profile
+   * Returns settings like strict_language_mode
+   */
+  public getPersonality(): { strict_language_mode?: boolean } | null {
+    if (!this.userProfile?.preferences) {
+      return null;
+    }
+    return {
+      strict_language_mode: (this.userProfile.preferences as any).strict_language_mode,
+    };
+  }
+
+  /**
    * Dispose and clean up resources
    */
   public dispose(): void {

@@ -659,7 +659,7 @@ export const DailyCallInterface = ({
         .from('profiles')
         .select('first_name, last_name')
         .eq('id', currentUserId)
-        .single();
+        .maybeSingle();
       
       const callerName = callerProfile 
         ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
@@ -759,11 +759,12 @@ export const DailyCallInterface = ({
     
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       // Try fetching from active_calls first
+      // Use maybeSingle() to avoid 406 error when call doesn't exist
       const { data: callData } = await supabase
         .from('active_calls')
         .select('meeting_url')
         .eq('call_id', callId)
-        .single();
+        .maybeSingle();
       
       if (callData?.meeting_url) {
         console.log('[P2P Call] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');

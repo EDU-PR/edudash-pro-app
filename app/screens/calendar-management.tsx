@@ -246,14 +246,51 @@ export default function CalendarManagementScreen() {
           .eq('id', editingEvent.id);
         
         if (error) throw error;
+        
+        // Send update notification if notifications enabled
+        if (formData.send_notifications) {
+          try {
+            await supabase.functions.invoke('notifications-dispatcher', {
+              body: {
+                event_type: 'school_event_updated',
+                event_id: editingEvent.id,
+                preschool_id: orgId,
+                target_audience: formData.target_audience,
+              }
+            });
+          } catch (notifyError) {
+            console.error('Failed to send event notification:', notifyError);
+          }
+        }
+        
         Alert.alert('Success', 'Event updated successfully');
       } else {
         // Create new event
-        const { error } = await supabase
+        const { data: newEvent, error } = await supabase
           .from('school_events')
-          .insert(eventData);
+          .insert(eventData)
+          .select()
+          .single();
         
         if (error) throw error;
+        
+        // Send notification for new event if notifications enabled
+        if (formData.send_notifications && newEvent) {
+          try {
+            await supabase.functions.invoke('notifications-dispatcher', {
+              body: {
+                event_type: 'school_event_created',
+                event_id: newEvent.id,
+                preschool_id: orgId,
+                target_audience: formData.target_audience,
+              }
+            });
+            console.log('✅ Event notification sent to target audience');
+          } catch (notifyError) {
+            console.error('Failed to send event notification:', notifyError);
+          }
+        }
+        
         Alert.alert('Success', 'Event created successfully');
       }
 

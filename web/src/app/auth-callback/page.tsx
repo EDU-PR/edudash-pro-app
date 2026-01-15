@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 /**
  * Auth Callback Page
@@ -297,7 +298,7 @@ function AuthCallbackContent() {
             >
               Go to Sign In
             </a>
-            <a 
+            <Link 
               href="/"
               style={{
                 padding: '12px 24px',
@@ -309,7 +310,7 @@ function AuthCallbackContent() {
               }}
             >
               Go Home
-            </a>
+            </Link>
           </div>
         </>
       )}

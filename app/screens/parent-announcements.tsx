@@ -49,7 +49,7 @@ export default function ParentAnnouncementsScreen() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
 
   // Fetch announcements
-  const { data: announcements = [], isLoading, refetch, isRefreshing } = useQuery({
+  const { data: announcements = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['parent-announcements', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -531,7 +531,7 @@ export default function ParentAnnouncementsScreen() {
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl
-                refreshing={isRefreshing}
+                refreshing={isFetching && !isLoading}
                 onRefresh={() => refetch()}
                 tintColor={theme.primary}
               />

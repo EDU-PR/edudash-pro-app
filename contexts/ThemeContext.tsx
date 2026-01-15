@@ -106,6 +106,9 @@ export interface ThemeColors {
   chartQuaternary: string;
   chartQuinary: string;
   
+  // Card variant colors
+  cardSecondary: string;
+  
   // Notification colors
   notificationBackground: string;
   notificationText: string;
@@ -243,6 +246,9 @@ const lightTheme: ThemeColors = {
   chartQuaternary: '#F59E0B',
   chartQuinary: '#8B5CF6',
   
+  // Card variant colors
+  cardSecondary: '#F3F4F6',
+  
   // Notification colors
   notificationBackground: '#ECEFF1',
   notificationText: '#111827',
@@ -378,6 +384,9 @@ const darkTheme: ThemeColors = {
   chartTertiary: '#34D399',
   chartQuaternary: '#FCD34D',
   chartQuinary: '#A78BFA',
+  
+  // Card variant colors
+  cardSecondary: '#334155',
   
   // Notification colors
   notificationBackground: '#334155',

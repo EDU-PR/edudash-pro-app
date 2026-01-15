@@ -74,6 +74,9 @@ export default function FeeManagementScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  
+  // Create styles early to use in all render paths
+  const styles = createStyles(theme);
 
   // State
   const [fees, setFees] = useState<FeeStructure[]>([]);
@@ -378,8 +381,6 @@ export default function FeeManagementScreen() {
       </View>
     );
   }
-
-  const styles = createStyles(theme);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

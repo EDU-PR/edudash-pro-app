@@ -35,7 +35,7 @@ export const useStudentPOPUploads = (studentId: string, limit = 10) => {
  */
 export const useMyPOPUploads = (filters: POPUploadFilters = {}) => {
   return useQuery({
-    queryKey: POP_QUERY_KEYS.list(filters),
+    queryKey: POP_QUERY_KEYS.list(filters as Record<string, unknown>),
     queryFn: async (): Promise<POPUpload[]> => {
       let query = supabase
         .from('pop_uploads')

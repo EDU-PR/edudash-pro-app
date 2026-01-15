@@ -35,7 +35,7 @@ export default function PrincipalYearPlannerScreen() {
   const { profile, user } = useAuth();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const styles = createStyles(theme, insets);
+  const styles = createStyles(theme, insets.top, insets.bottom);
   
   const orgId = extractOrganizationId(profile);
   

@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { assertSupabase } from '@/lib/supabase';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
@@ -54,6 +55,16 @@ try {
   InCallManager = require('react-native-incall-manager').default;
 } catch (error) {
   console.warn('[VideoCall] InCallManager not available:', error);
+}
+
+// Ringback sound asset - loaded at module level
+// Used as fallback when InCallManager ringback doesn't play
+let RINGBACK_SOUND: any = null;
+try {
+  RINGBACK_SOUND = require('@/assets/sounds/ringback.mp3');
+  console.log('[VideoCall] ✅ Ringback sound loaded');
+} catch (error) {
+  console.warn('[VideoCall] ❌ Failed to load ringback sound:', error);
 }
 
 // Note: Daily.co React Native SDK is conditionally imported
@@ -132,6 +143,9 @@ export function WhatsAppStyleVideoCall({
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ringingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioSessionRef = useRef<AudioModeSession | null>(null);
+  // Custom ringback via expo-audio (fallback when InCallManager ringback fails)
+  const ringbackPlayerRef = useRef<AudioPlayer | null>(null);
+  const ringbackStartedRef = useRef(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const controlsAnim = useRef(new Animated.Value(1)).current;
   
@@ -406,6 +420,18 @@ export function WhatsAppStyleVideoCall({
       }
     }
     
+    // Stop custom ringback
+    if (ringbackPlayerRef.current) {
+      try {
+        ringbackPlayerRef.current.pause();
+        ringbackPlayerRef.current.remove();
+      } catch (err) {
+        // Ignore errors
+      }
+      ringbackPlayerRef.current = null;
+      ringbackStartedRef.current = false;
+    }
+    
     // Stop InCallManager
     if (InCallManager) {
       try {
@@ -542,66 +568,137 @@ export function WhatsAppStyleVideoCall({
     };
   }, [callState, isSpeakerOn]);
 
-  // InCallManager: Start ringback for caller, stop when connected
-  useEffect(() => {
-    if (!InCallManager) return;
+  /**
+   * Play custom ringback using expo-audio
+   * This is a fallback when InCallManager's ringback doesn't work properly
+   */
+  const playCustomRingback = useCallback(async () => {
+    if (ringbackStartedRef.current || !RINGBACK_SOUND) {
+      console.log('[VideoCall] Ringback already playing or sound not loaded');
+      return;
+    }
+    
+    try {
+      console.log('[VideoCall] 🔊 Starting custom ringback via expo-audio');
+      
+      // Set audio mode to allow playback through earpiece
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+        allowsRecording: true,
+        shouldPlayInBackground: true,
+        shouldRouteThroughEarpiece: true, // Route to earpiece like a phone call
+      });
+      
+      // Create and play the ringback sound
+      const player = createAudioPlayer(RINGBACK_SOUND);
+      player.loop = true;
+      player.volume = 1.0;
+      player.play();
+      
+      ringbackPlayerRef.current = player;
+      ringbackStartedRef.current = true;
+      console.log('[VideoCall] ✅ Custom ringback playing');
+      
+      // Haptic feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    } catch (error) {
+      console.error('[VideoCall] ❌ Failed to start custom ringback:', error);
+    }
+  }, []);
 
+  /**
+   * Stop custom ringback
+   */
+  const stopCustomRingback = useCallback(() => {
+    if (ringbackPlayerRef.current) {
+      try {
+        ringbackPlayerRef.current.pause();
+        ringbackPlayerRef.current.remove();
+      } catch (e) {
+        // Ignore errors
+      }
+      ringbackPlayerRef.current = null;
+    }
+    ringbackStartedRef.current = false;
+  }, []);
+
+  // InCallManager: Start ringback for caller, stop when connected
+  // Also plays custom ringback via expo-audio as fallback
+  useEffect(() => {
     if (callState === 'connecting' || callState === 'ringing') {
       // Start audio with ringback for caller
       if (isOwner) {
-        try {
-          // CRITICAL: Set earpiece BEFORE starting to prevent any speaker routing
-          InCallManager.setForceSpeakerphoneOn(false);
-          
-          // Use 'audio' media type to default to earpiece
-          InCallManager.start({ 
-            media: 'audio', // NOT 'video' - this defaults to earpiece
-            auto: false,
-            ringback: '_DEFAULT_' // System default ringback tone
-          });
-          
-          // Immediately re-enforce earpiece after start
-          InCallManager.setForceSpeakerphoneOn(false);
-          setIsSpeakerOn(false);
-          InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager with system ringback for caller (earpiece)');
-        } catch (err) {
-          console.warn('[VideoCall] Failed to start InCallManager:', err);
+        // Try InCallManager first
+        if (InCallManager) {
+          try {
+            // CRITICAL: Set earpiece BEFORE starting to prevent any speaker routing
+            InCallManager.setForceSpeakerphoneOn(false);
+            
+            // Use 'audio' media type to default to earpiece
+            InCallManager.start({ 
+              media: 'audio', // NOT 'video' - this defaults to earpiece
+              auto: false,
+              ringback: '_DEFAULT_' // System default ringback tone
+            });
+            
+            // Immediately re-enforce earpiece after start
+            InCallManager.setForceSpeakerphoneOn(false);
+            setIsSpeakerOn(false);
+            InCallManager.setKeepScreenOn(true);
+            console.log('[VideoCall] Started InCallManager with system ringback for caller (earpiece)');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to start InCallManager:', err);
+          }
         }
+        
+        // CRITICAL: Also play custom ringback via expo-audio as fallback
+        // InCallManager's ringback is known to have issues on some Android devices
+        playCustomRingback();
       } else {
-        // Callee: no ringback
-        try {
-          InCallManager.setForceSpeakerphoneOn(false);
-          InCallManager.start({ 
-            media: 'audio', // NOT 'video' - this defaults to earpiece
-            auto: false,
-            ringback: ''
-          });
-          InCallManager.setForceSpeakerphoneOn(false);
-          setIsSpeakerOn(false);
-          InCallManager.setKeepScreenOn(true);
-          console.log('[VideoCall] Started InCallManager for callee (no ringback, earpiece)');
-        } catch (err) {
-          console.warn('[VideoCall] Failed to start InCallManager:', err);
+        // Callee: no ringback needed
+        if (InCallManager) {
+          try {
+            InCallManager.setForceSpeakerphoneOn(false);
+            InCallManager.start({ 
+              media: 'audio', // NOT 'video' - this defaults to earpiece
+              auto: false,
+              ringback: ''
+            });
+            InCallManager.setForceSpeakerphoneOn(false);
+            setIsSpeakerOn(false);
+            InCallManager.setKeepScreenOn(true);
+            console.log('[VideoCall] Started InCallManager for callee (no ringback, earpiece)');
+          } catch (err) {
+            console.warn('[VideoCall] Failed to start InCallManager:', err);
+          }
         }
       }
     } else if (callState === 'connected') {
-      // Stop ringback when connected
-      try {
-        if (isOwner) {
-          InCallManager.stopRingback();
+      // Stop both InCallManager and custom ringback when connected
+      stopCustomRingback();
+      
+      if (InCallManager) {
+        try {
+          if (isOwner) {
+            InCallManager.stopRingback();
+          }
+          // Apply current speaker state (earpiece by default, unless user toggled)
+          InCallManager.setForceSpeakerphoneOn(isSpeakerOn);
+          console.log('[VideoCall] Stopped ringback - call connected, audio on:', isSpeakerOn ? 'speaker' : 'earpiece');
+        } catch (err) {
+          console.warn('[VideoCall] Failed to stop ringback:', err);
         }
-        // Apply current speaker state (earpiece by default, unless user toggled)
-        InCallManager.setForceSpeakerphoneOn(isSpeakerOn);
-        console.log('[VideoCall] Stopped ringback - call connected, audio on:', isSpeakerOn ? 'speaker' : 'earpiece');
-      } catch (err) {
-        console.warn('[VideoCall] Failed to stop ringback:', err);
       }
+    } else if (callState === 'ended' || callState === 'failed') {
+      // Stop ringback on call end
+      stopCustomRingback();
     }
 
     return () => {
-      // Cleanup on unmount or state change
-      if (callState === 'ended' || callState === 'failed') {
+      // Cleanup on unmount
+      stopCustomRingback();
+      if (InCallManager) {
         try {
           InCallManager.stopRingback();
           InCallManager.stop();
@@ -610,7 +707,7 @@ export function WhatsAppStyleVideoCall({
         }
       }
     };
-  }, [callState, isOwner, isSpeakerOn]);
+  }, [callState, isOwner, isSpeakerOn, playCustomRingback, stopCustomRingback]);
 
   // Initialize call
   useEffect(() => {
@@ -689,7 +786,7 @@ export function WhatsAppStyleVideoCall({
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
             const callerName = callerProfile
               ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'
@@ -706,29 +803,20 @@ export function WhatsAppStyleVideoCall({
             });
 
             // CRITICAL: Send push notification to wake callee's app when backgrounded
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
               body: JSON.stringify({
+                event_type: 'incoming_call',
                 user_ids: [calleeId],
-                title: '📹 Incoming Video Call',
-                body: `${callerName} is video calling...`,
-                data: {
-                  type: 'incoming_call',
-                  call_id: newCallId,
-                  caller_id: user.id,
-                  caller_name: callerName,
-                  call_type: 'video',
-                  meeting_url: roomUrl,
-                },
-                sound: 'default',
-                priority: 'high',
-                channelId: 'incoming-calls',
-                categoryId: 'incoming_call',
-                ttl: 30,
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'video',
+                meeting_url: roomUrl,
               }),
             }).then(res => {
               if (res.ok) {

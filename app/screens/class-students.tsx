@@ -107,7 +107,15 @@ export default function ClassStudentsScreen() {
 
       if (studentsError) throw studentsError;
 
-      const transformedStudents: Student[] = (studentsData || []).map((s: any) => ({
+      // Deduplicate by student ID (safeguard against data issues)
+      const seenIds = new Set<string>();
+      const uniqueStudentsData = (studentsData || []).filter((s: any) => {
+        if (seenIds.has(s.id)) return false;
+        seenIds.add(s.id);
+        return true;
+      });
+
+      const transformedStudents: Student[] = uniqueStudentsData.map((s: any) => ({
         id: s.id,
         first_name: s.first_name,
         last_name: s.last_name,

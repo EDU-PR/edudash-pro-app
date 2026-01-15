@@ -68,14 +68,19 @@ export default function DashOrb({
   // Rate limiter for commands (10 requests per minute)
   const rateLimiter = useRef(new RateLimiter(10, 60000)).current;
   
-  // Voice TTS integration
-  const { speak, stop: stopSpeaking, isSpeaking } = Platform.OS !== 'web' ? useVoiceTTS() : { speak: async () => {}, stop: async () => {}, isSpeaking: false };
+  // Voice TTS integration - always call the hook, conditionally use the result
+  const voiceTTS = useVoiceTTS();
+  const { speak, stop: stopSpeaking, isSpeaking } = Platform.OS !== 'web' 
+    ? voiceTTS 
+    : { speak: async () => {}, stop: async () => {}, isSpeaking: false };
   
   // Voice input integration - useVoiceRecorder returns [state, actions, audioLevel] tuple
-  const voiceRecorderResult = Platform.OS !== 'web' ? useVoiceRecorder() : null;
+  const voiceRecorderHookResult = useVoiceRecorder();
+  const voiceRecorderResult = Platform.OS !== 'web' ? voiceRecorderHookResult : null;
   const voiceRecorderState = voiceRecorderResult ? voiceRecorderResult[0] : null;
   const voiceRecorderActions = voiceRecorderResult ? voiceRecorderResult[1] : null;
-  const voiceSTT = Platform.OS !== 'web' ? useVoiceSTT() : null;
+  const voiceSTTHookResult = useVoiceSTT();
+  const voiceSTT = Platform.OS !== 'web' ? voiceSTTHookResult : null;
   
   // Wake word detection
   const wakeWord = useWakeWord({

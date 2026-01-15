@@ -13,7 +13,6 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Animated,
 } from 'react-native';
@@ -28,6 +27,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { MemberType, MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { getDashboardRoute } from '@/lib/memberRegistrationUtils';
 import { useEffect } from 'react';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -53,6 +53,8 @@ interface JoinFormData {
   last_name: string;
   email: string;
   phone: string;
+  password: string;
+  confirm_password: string;
   member_type: MemberType;
 }
 
@@ -72,12 +74,43 @@ export default function JoinByCodeScreen() {
     last_name: '',
     email: '',
     phone: '',
+    password: '',
+    confirm_password: '',
     member_type: 'learner',
   });
+  
+  // Password visibility toggles
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Animation for success
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+
+  // Alert modal state
+  interface AlertState {
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    buttons: AlertButton[];
+  }
+  
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
 
   // Auto-verify invite code from URL params
   useEffect(() => {
@@ -328,19 +361,46 @@ export default function JoinByCodeScreen() {
 
   const handleJoin = async () => {
     if (!formData.first_name || !formData.last_name) {
-      Alert.alert('Required', 'Please enter your full name');
+      showAlert('Required', 'Please enter your full name', 'warning');
       return;
     }
     if (!formData.email || !formData.email.includes('@')) {
-      Alert.alert('Required', 'Please enter a valid email address');
+      showAlert('Required', 'Please enter a valid email address', 'warning');
       return;
     }
     if (!formData.phone) {
-      Alert.alert('Required', 'Please enter your phone number');
+      showAlert('Required', 'Please enter your phone number', 'warning');
       return;
     }
+    
+    // Password validation
+    if (!formData.password) {
+      showAlert('Required', 'Please create a password', 'warning');
+      return;
+    }
+    if (formData.password.length < 8) {
+      showAlert('Invalid Password', 'Password must be at least 8 characters long', 'error');
+      return;
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      showAlert('Invalid Password', 'Password must contain at least one uppercase letter', 'error');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      showAlert('Invalid Password', 'Password must contain at least one lowercase letter', 'error');
+      return;
+    }
+    if (!/[0-9]/.test(formData.password)) {
+      showAlert('Invalid Password', 'Password must contain at least one number', 'error');
+      return;
+    }
+    if (formData.password !== formData.confirm_password) {
+      showAlert('Password Mismatch', 'Passwords do not match', 'error');
+      return;
+    }
+    
     if (!orgInfo) {
-      Alert.alert('Error', 'Please verify your invite code first');
+      showAlert('Error', 'Please verify your invite code first', 'error');
       return;
     }
     
@@ -350,14 +410,14 @@ export default function JoinByCodeScreen() {
       const supabase = assertSupabase();
       let { data: { user } } = await supabase.auth.getUser();
       
-      // If user is not authenticated and invite has temp password, auto-create account
-      if (!user && orgInfo.temp_password) {
-        console.log('[JoinByCode] Creating account with temporary password for invite code');
+      // If user is not authenticated, create account with user-provided password
+      if (!user) {
+        console.log('[JoinByCode] Creating account with user-provided password');
         
-        // Create auth account with temporary password
+        // Create auth account with user's chosen password
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email.trim().toLowerCase(),
-          password: orgInfo.temp_password,
+          password: formData.password,
           options: {
             data: {
               first_name: formData.first_name.trim(),
@@ -373,9 +433,10 @@ export default function JoinByCodeScreen() {
           
           // If user already exists, prompt them to sign in
           if (signUpError.message.includes('already registered') || signUpError.message.includes('already exists')) {
-            Alert.alert(
+            showAlert(
               'Account Exists',
               'An account with this email already exists. Please sign in and try joining again.',
+              'warning',
               [
                 { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
                 { text: 'Cancel', style: 'cancel' }
@@ -394,21 +455,9 @@ export default function JoinByCodeScreen() {
         
         user = signUpData.user;
         console.log('[JoinByCode] Account created successfully:', user.id);
-      }
-      
-      // If still no user, require authentication
-      if (!user) {
-        Alert.alert(
-          'Sign In Required', 
-          'Please sign in or create an account to join.\n\nIf this invite code includes a temporary password, it will be shown after account creation.',
-          [
-            { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') },
-            { text: 'Sign Up', onPress: () => router.push('/(auth)/sign-up') },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-        setIsSubmitting(false);
-        return;
+        
+        // Wait for user to be committed to auth.users (timing issue fix)
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Generate member number
@@ -458,7 +507,7 @@ export default function JoinByCodeScreen() {
       
       // Handle existing member case
       if (rpcResult.action === 'existing') {
-        Alert.alert('Already a Member', 'You are already a member of this organization.');
+        showAlert('Already a Member', 'You are already a member of this organization.', 'info');
         return;
       }
       
@@ -479,31 +528,14 @@ export default function JoinByCodeScreen() {
           .eq('code', inviteCode.toUpperCase());
       }
       
-      // Show success message with temporary password if applicable
-      let successMessage = `You've successfully joined ${orgInfo.region || orgInfo.name}!\n\nYour Member Number: ${memberNumber}`;
+      // Show success message with next steps
+      const successMessage = `You've successfully joined ${orgInfo.region || orgInfo.name}!\n\nYour Member Number: ${memberNumber}\n\n📧 Check your email for a confirmation link to verify your account.`;
       
-      if (orgInfo.temp_password) {
-        successMessage += `\n\n🔑 Temporary Password: ${orgInfo.temp_password}\n\n⚠️ IMPORTANT: Please save this password! You'll need it to login. Change it after your first login for security.`;
-      }
-      
-      Alert.alert(
+      showAlert(
         'Welcome to Soil of Africa! 🎉',
         successMessage,
+        'success',
         [
-          ...(orgInfo.temp_password ? [{
-            text: 'Copy Password',
-            onPress: async () => {
-              try {
-                const Clipboard = require('expo-clipboard');
-                if (Clipboard?.setStringAsync) {
-                  await Clipboard.setStringAsync(orgInfo.temp_password!);
-                  Alert.alert('Copied', 'Temporary password copied to clipboard');
-                }
-              } catch (error) {
-                console.error('[JoinByCode] Failed to copy password:', error);
-              }
-            }
-          }] : []),
           { 
             text: 'Continue', 
             onPress: () => {
@@ -517,7 +549,7 @@ export default function JoinByCodeScreen() {
       );
     } catch (error) {
       console.error('[JoinByCode] Error joining:', error);
-      Alert.alert('Error', 'Failed to complete registration. Please try again.');
+      showAlert('Error', 'Failed to complete registration. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -601,7 +633,7 @@ export default function JoinByCodeScreen() {
                   styles.verifyButton,
                   { backgroundColor: inviteCode.length >= 5 ? theme.primary : theme.border }
                 ]}
-                onPress={verifyCode}
+                onPress={() => verifyCode()}
                 disabled={isVerifying || inviteCode.length < 5}
               >
                 {isVerifying ? (
@@ -725,6 +757,96 @@ export default function JoinByCodeScreen() {
                   />
                 </View>
 
+                {/* Password Section */}
+                <View style={[styles.passwordSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <View style={styles.passwordSectionHeader}>
+                    <Ionicons name="lock-closed" size={18} color={theme.primary} />
+                    <Text style={[styles.passwordSectionTitle, { color: theme.text }]}>Create Your Password</Text>
+                  </View>
+                  <Text style={[styles.passwordHint, { color: theme.textSecondary }]}>
+                    Must be at least 8 characters with uppercase, lowercase, and a number
+                  </Text>
+                  
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Password *</Text>
+                    <View style={[styles.passwordInputContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                      <TextInput
+                        style={[styles.passwordInput, { color: theme.text }]}
+                        placeholder="Create a strong password"
+                        placeholderTextColor={theme.textSecondary}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        value={formData.password}
+                        onChangeText={(v) => updateField('password', v)}
+                      />
+                      <TouchableOpacity 
+                        style={styles.eyeButton}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <Ionicons name={showPassword ? "eye-off" : "eye"} size={22} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                    {/* Password strength indicator */}
+                    {formData.password.length > 0 && (
+                      <View style={styles.passwordStrength}>
+                        {formData.password.length >= 8 && /[A-Z]/.test(formData.password) && /[a-z]/.test(formData.password) && /[0-9]/.test(formData.password) ? (
+                          <View style={styles.strengthRow}>
+                            <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
+                            <Text style={{ color: '#22C55E', fontSize: 12, marginLeft: 4 }}>Strong password</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.strengthRow}>
+                            <Ionicons name="alert-circle" size={14} color="#F59E0B" />
+                            <Text style={{ color: '#F59E0B', fontSize: 12, marginLeft: 4 }}>
+                              {formData.password.length < 8 ? 'At least 8 characters' : 
+                               !/[A-Z]/.test(formData.password) ? 'Add uppercase letter' :
+                               !/[a-z]/.test(formData.password) ? 'Add lowercase letter' :
+                               'Add a number'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Confirm Password *</Text>
+                    <View style={[styles.passwordInputContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                      <TextInput
+                        style={[styles.passwordInput, { color: theme.text }]}
+                        placeholder="Re-enter your password"
+                        placeholderTextColor={theme.textSecondary}
+                        secureTextEntry={!showConfirmPassword}
+                        autoCapitalize="none"
+                        value={formData.confirm_password}
+                        onChangeText={(v) => updateField('confirm_password', v)}
+                      />
+                      <TouchableOpacity 
+                        style={styles.eyeButton}
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={22} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                    {/* Password match indicator */}
+                    {formData.confirm_password.length > 0 && (
+                      <View style={styles.passwordStrength}>
+                        {formData.password === formData.confirm_password ? (
+                          <View style={styles.strengthRow}>
+                            <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
+                            <Text style={{ color: '#22C55E', fontSize: 12, marginLeft: 4 }}>Passwords match</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.strengthRow}>
+                            <Ionicons name="close-circle" size={14} color="#EF4444" />
+                            <Text style={{ color: '#EF4444', fontSize: 12, marginLeft: 4 }}>Passwords do not match</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                </View>
+
                 {/* Member Type Selection */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Join as *</Text>
@@ -755,21 +877,6 @@ export default function JoinByCodeScreen() {
                   </View>
                 </View>
               </View>
-
-              {/* Temporary Password Notice */}
-              {orgInfo.temp_password && (
-                <View style={[styles.passwordNotice, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
-                  <Ionicons name="lock-closed" size={20} color={theme.primary} />
-                  <View style={styles.passwordNoticeContent}>
-                    <Text style={[styles.passwordNoticeTitle, { color: theme.primary }]}>
-                      Temporary Password Included
-                    </Text>
-                    <Text style={[styles.passwordNoticeText, { color: theme.textSecondary }]}>
-                      After joining, you'll receive a temporary password to login. Please save it and change it after your first login.
-                    </Text>
-                  </View>
-                </View>
-              )}
 
               {/* Terms */}
               <View style={[styles.termsBox, { backgroundColor: theme.surface }]}>
@@ -816,6 +923,16 @@ export default function JoinByCodeScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </SafeAreaView>
   );
 }
@@ -1024,6 +1141,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
     borderWidth: 1,
+  },
+  
+  // Password Section
+  passwordSection: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  passwordSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  passwordSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  passwordHint: {
+    fontSize: 12,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 15,
+  },
+  eyeButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  passwordStrength: {
+    marginTop: 6,
+  },
+  strengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   
   // Type Options

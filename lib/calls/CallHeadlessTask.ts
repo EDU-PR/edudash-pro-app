@@ -41,7 +41,7 @@ export interface IncomingCallData {
   caller_id: string;
   caller_name: string;
   call_type: 'voice' | 'video';
-  meeting_url: string;
+  meeting_url?: string;
 }
 
 /**

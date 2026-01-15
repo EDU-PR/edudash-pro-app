@@ -710,4 +710,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    borderRadius: 14,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
 });

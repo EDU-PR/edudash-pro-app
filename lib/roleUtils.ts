@@ -2,7 +2,7 @@
  * Role utility functions for consistent role checking across the application
  */
 
-export type UserRole = 'parent' | 'teacher' | 'principal' | 'principal_admin' | 'super_admin';
+export type UserRole = 'student' | 'parent' | 'teacher' | 'principal' | 'principal_admin' | 'super_admin';
 
 /**
  * Check if a user has super admin privileges
