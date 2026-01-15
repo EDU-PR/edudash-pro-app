@@ -143,20 +143,41 @@ export const VoiceCallInterface = ({
 
     const playRingback = async () => {
       if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+        console.log('[VoiceCall] 🔊 Attempting to play ringback tone...', { callState, isOwner });
+        
         try {
+          // Try RingtoneService first (uses user preferences)
           const { default: RingtoneService } = await import('@/lib/services/ringtoneService');
           const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
           if (isMounted && audio) {
             ringbackAudioRef.current = audio;
+            console.log('[VoiceCall] ✅ Ringback playing via RingtoneService');
+            return;
           }
         } catch (err) {
-          console.warn('[VoiceCall] Could not play ringback:', err);
+          console.warn('[VoiceCall] RingtoneService failed:', err);
+        }
+        
+        // Fallback: Direct audio element
+        if (isMounted) {
+          console.log('[VoiceCall] 🔄 Trying fallback ringback audio...');
+          try {
+            const fallbackAudio = new Audio('/sounds/ringback.mp3');
+            fallbackAudio.loop = true;
+            fallbackAudio.volume = 0.8;
+            await fallbackAudio.play();
+            ringbackAudioRef.current = fallbackAudio;
+            console.log('[VoiceCall] ✅ Ringback playing via fallback');
+          } catch (fallbackErr) {
+            console.error('[VoiceCall] ❌ All ringback attempts failed:', fallbackErr);
+          }
         }
       }
     };
 
     const stopRingback = () => {
       if (ringbackAudioRef.current) {
+        console.log('[VoiceCall] 🔇 Stopping ringback tone');
         try {
           ringbackAudioRef.current.pause();
           ringbackAudioRef.current.currentTime = 0;
