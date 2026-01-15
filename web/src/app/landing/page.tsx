@@ -43,7 +43,7 @@ function LandingInner() {
         const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
 
         // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
-        let redirectTo = searchParams.get("redirect_to") || "";
+        const redirectTo = searchParams.get("redirect_to") || "";
         let preservedInviteCode = inviteCode;
         if (redirectTo) {
           try {

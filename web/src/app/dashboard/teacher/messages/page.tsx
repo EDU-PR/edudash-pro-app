@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Plus, Sparkles, Reply, X } from 'lucide-react';
+import { MessageCircle, Search, Send, Smile, Paperclip, Mic, Loader2, ArrowLeft, MoreVertical, Phone, Video, Image as ImageIcon, Camera, Plus, Sparkles, Reply, X, Users } from 'lucide-react';
 import { useBodyScrollLock } from '@/lib/hooks/useBodyScrollLock';
 import { ChatMessageBubble, type ChatMessage } from '@/components/messaging/ChatMessageBubble';
 import { useComposerEnhancements, EMOJI_OPTIONS } from '@/lib/messaging/useComposerEnhancements';
@@ -17,6 +17,7 @@ import { MessageOptionsMenu } from '@/components/messaging/MessageOptionsMenu';
 import { MessageActionsMenu } from '@/components/messaging/MessageActionsMenu';
 import { NewChatModal } from '@/components/messaging/NewChatModal';
 import { InviteContactModal } from '@/components/messaging/InviteContactModal';
+import { CreateGroupModal } from '@/components/messaging/CreateGroupModal';
 import { DashAIAvatar } from '@/components/dash/DashAIAvatar';
 import { TypingIndicatorBubble } from '@/components/messaging/TypingIndicatorBubble';
 import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOverlay';
@@ -361,6 +362,7 @@ function TeacherMessagesPage() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showQuickCallModal, setShowQuickCallModal] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
 
   // Dash AI state
   const [dashAIMessages, setDashAIMessages] = useState<ChatMessage[]>([]);
@@ -1487,6 +1489,25 @@ function TeacherMessagesPage() {
                 </span>
               )}
               <button
+                onClick={() => setShowCreateGroupModal(true)}
+                title="Create Group"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(34, 197, 94, 0.3)',
+                }}
+              >
+                <Users size={18} />
+              </button>
+              <button
                 onClick={() => setShowNewChatModal(true)}
                 style={{
                   width: 36,
@@ -2371,6 +2392,20 @@ function TeacherMessagesPage() {
           onClose={() => setShowInviteModal(false)}
           inviterName={profile?.firstName || 'A teacher'}
           preschoolName={profile?.preschoolName}
+        />
+        
+        {/* Create Group Modal */}
+        <CreateGroupModal
+          isOpen={showCreateGroupModal}
+          onClose={() => setShowCreateGroupModal(false)}
+          onGroupCreated={(threadId) => {
+            // Navigate to the new group thread
+            setSelectedThreadId(threadId);
+            fetchThreads();
+          }}
+          preschoolId={profile?.preschoolId}
+          userId={userId}
+          userRole={profile?.role || undefined}
         />
         
         {/* Quick Call Modal */}

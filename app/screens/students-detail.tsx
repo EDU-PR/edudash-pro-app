@@ -31,6 +31,16 @@ import { CacheIndicator } from '@/components/ui/CacheIndicator';
 import { EmptyStudentsState } from '@/components/ui/EmptyState';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+
+// Alert modal state interface
+interface AlertState {
+  visible: boolean;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  buttons: AlertButton[];
+}
 
 interface Student {
   id: string;
@@ -82,6 +92,27 @@ export default function StudentsDetailScreen() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);  
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  // Alert modal state
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
+
+  // State for delete confirmation
+  const [pendingDeleteStudent, setPendingDeleteStudent] = useState<{ id: string; name: string } | null>(null);
+  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<{ id: string; name: string } | null>(null);
 
   const [filters, setFilters] = useState<FilterOptions>({
     grade: [],
@@ -365,7 +396,7 @@ const canEditStudent = (_student: Student): boolean => {
 
   const handleEditStudent = (student: Student) => {
     if (!canEditStudent(student)) {
-      Alert.alert('Access Denied', 'You do not have permission to edit student information.');
+      showAlert('Access Denied', 'You do not have permission to edit student information.', 'error');
       return;
     }
     
@@ -375,96 +406,116 @@ const canEditStudent = (_student: Student): boolean => {
 
   const handleDeleteStudent = async (studentId: string, studentName: string) => {
     if (!canManageStudent()) {
-      Alert.alert('Access Denied', 'Only principals can delete students.');
+      showAlert('Access Denied', 'Only principals can delete students.', 'error');
       return;
     }
 
-    Alert.alert(
-      'Delete Student',
+    setPendingDeleteStudent({ id: studentId, name: studentName });
+    showAlert(
+      'Remove Student',
       `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n• Mark the student as inactive\n• Keep historical records\n• Notify the parent (if applicable)`,
+      'warning',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setPendingDeleteStudent(null) },
         {
           text: 'Remove Student',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = assertSupabase();
-              
-              // Update student to inactive (soft delete)
-              const { error: updateError } = await supabase
-                .from('students')
-                .update({ 
-                  is_active: false, 
-                  status: 'inactive',
-                  updated_at: new Date().toISOString() 
-                })
-                .eq('id', studentId);
-              
-              if (updateError) {
-                throw updateError;
-              }
-              
-              // Remove from local state
-              setStudents(prev => prev.filter(s => s.id !== studentId));
-              
-              Alert.alert('Success', `${studentName} has been removed from the active students list.`);
-            } catch (error: any) {
-              console.error('Error deleting student:', error);
-              Alert.alert('Error', error.message || 'Failed to remove student. Please try again.');
-            }
-          }
+          onPress: () => confirmDeleteStudent(studentId, studentName),
         }
       ]
     );
+  };
+
+  // Actual delete operation after confirmation
+  const confirmDeleteStudent = async (studentId: string, studentName: string) => {
+    try {
+      const supabase = assertSupabase();
+      
+      // Update student to inactive (soft delete)
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({ 
+          is_active: false, 
+          status: 'inactive',
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', studentId);
+      
+      if (updateError) {
+        throw updateError;
+      }
+      
+      // Remove from local state
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      
+      setPendingDeleteStudent(null);
+      showAlert('Success', `${studentName} has been removed from the active students list.`, 'success');
+    } catch (error: any) {
+      console.error('Error deleting student:', error);
+      setPendingDeleteStudent(null);
+      showAlert('Error', error.message || 'Failed to remove student. Please try again.', 'error');
+    }
   };
 
   // Permanently delete student (for principals only - use with caution)
   const handlePermanentDelete = async (studentId: string, studentName: string) => {
     if (!canManageStudent()) {
-      Alert.alert('Access Denied', 'Only principals can permanently delete students.');
+      showAlert('Access Denied', 'Only principals can permanently delete students.', 'error');
       return;
     }
 
-    Alert.alert(
+    setPendingPermanentDelete({ id: studentId, name: studentName });
+    showAlert(
       '⚠️ Permanent Delete',
       `This will PERMANENTLY delete ${studentName} and all associated records.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`,
+      'error',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setPendingPermanentDelete(null) },
         {
           text: 'Delete Permanently',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = assertSupabase();
-              
-              // Permanently delete student
-              const { error: deleteError } = await supabase
-                .from('students')
-                .delete()
-                .eq('id', studentId);
-              
-              if (deleteError) {
-                throw deleteError;
-              }
-              
-              // Remove from local state
-              setStudents(prev => prev.filter(s => s.id !== studentId));
-              
-              Alert.alert('Deleted', `${studentName} has been permanently deleted.`);
-            } catch (error: any) {
-              console.error('Error permanently deleting student:', error);
-              Alert.alert('Error', error.message || 'Failed to delete student. Please try again.');
-            }
-          }
+          onPress: () => confirmPermanentDelete(studentId, studentName),
         }
       ]
     );
   };
 
+  // Actual permanent delete operation after confirmation
+  const confirmPermanentDelete = async (studentId: string, studentName: string) => {
+    try {
+      const supabase = assertSupabase();
+      
+      // First update any registration_requests to remove the reference
+      await supabase
+        .from('registration_requests')
+        .update({ edudash_student_id: null })
+        .eq('edudash_student_id', studentId);
+      
+      // Permanently delete student
+      const { error: deleteError } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+      
+      if (deleteError) {
+        throw deleteError;
+      }
+      
+      // Remove from local state
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      
+      setPendingPermanentDelete(null);
+      showAlert('Deleted', `${studentName} has been permanently deleted.`, 'success');
+    } catch (error: any) {
+      console.error('Error permanently deleting student:', error);
+      setPendingPermanentDelete(null);
+      showAlert('Error', error.message || 'Failed to delete student. Please try again.', 'error');
+    }
+  };
+
   const toggleStudentStatus = (studentId: string, currentStatus: string) => {
     if (!canManageStudent()) {
-      Alert.alert('Access Denied', 'Only principals can change student status.');
+      showAlert('Access Denied', 'Only principals can change student status.', 'error');
       return;
     }
 
@@ -896,6 +947,16 @@ const canEditStudent = (_student: Student): boolean => {
 
       {/* Student Detail Modal */}
       {renderStudentDetailModal()}
+
+      {/* Alert Modal */}
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </View>
   );
 }

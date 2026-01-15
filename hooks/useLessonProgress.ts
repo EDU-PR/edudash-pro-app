@@ -143,11 +143,12 @@ export function useLessonProgress(options: {
       // Build progress details
       const progressDetails: LessonProgressDetail[] = (assignments || []).map(a => {
         const completion = completions?.find(c => c.assignment_id === a.id);
+        const lessonData = Array.isArray(a.lesson) ? a.lesson[0] : a.lesson;
         return {
           assignmentId: a.id,
           lessonId: a.lesson_id,
-          lessonTitle: a.lesson?.title || 'Unknown Lesson',
-          lessonSubject: a.lesson?.subject || 'general',
+          lessonTitle: lessonData?.title || 'Unknown Lesson',
+          lessonSubject: lessonData?.subject || 'general',
           assignedAt: a.assigned_at,
           dueDate: a.due_date,
           status: a.status as any,
@@ -160,7 +161,8 @@ export function useLessonProgress(options: {
       // Calculate summary
       const subjectCounts: Record<string, number> = {};
       (assignments || []).forEach(a => {
-        const subject = a.lesson?.subject || 'general';
+        const lessonData = Array.isArray(a.lesson) ? a.lesson[0] : a.lesson;
+        const subject = lessonData?.subject || 'general';
         subjectCounts[subject] = (subjectCounts[subject] || 0) + 1;
       });
       

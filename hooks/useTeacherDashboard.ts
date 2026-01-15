@@ -177,10 +177,14 @@ export const useTeacherDashboard = () => {
               .maybeSingle();
             
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:170',message:'After subscription query',data:{hasSubscription:!!subscription,subscriptionTier:subscription?.subscription_plans?.tier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:170',message:'After subscription query',data:{hasSubscription:!!subscription,subscriptionTier:(subscription?.subscription_plans as any)?.[0]?.tier || (subscription?.subscription_plans as any)?.tier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
             // #endregion
-            if (subscription?.subscription_plans?.tier) {
-              schoolTier = subscription.subscription_plans.tier as any;
+            // Handle subscription_plans as either array or object
+            const subscriptionPlan = Array.isArray(subscription?.subscription_plans) 
+              ? subscription?.subscription_plans[0] 
+              : subscription?.subscription_plans;
+            if (subscriptionPlan?.tier) {
+              schoolTier = subscriptionPlan.tier as any;
               log('🎓 School tier from subscription:', schoolTier);
               // #region agent log
               fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useTeacherDashboard.ts:172',message:'Tier set from subscription',data:{schoolTier},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'T2'})}).catch(()=>{});
@@ -230,9 +234,10 @@ export const useTeacherDashboard = () => {
             grade_level,
             room_number,
             preschool_id,
-            students(id, first_name, last_name)
+            students(id, first_name, last_name, is_active)
           `)
-          .eq('teacher_id', teacherId);
+          .eq('teacher_id', teacherId)
+          .eq('active', true);
         
         // Only filter by preschool_id if we have one
         if (schoolIdToUse) {
@@ -247,10 +252,19 @@ export const useTeacherDashboard = () => {
         
         log('📚 Classes fetched:', { teacherId, schoolIdToUse, classCount: classesData?.length || 0 });
 
-        // Get today's attendance for all teacher's students
+        // Get today's attendance for all teacher's students (only active students)
+        // Deduplicate student IDs in case of data issues
         const today = new Date().toISOString().split('T')[0];
+        const seenStudentIds = new Set<string>();
         const allStudentIds = classesData?.flatMap(cls => 
-          (cls.students as Array<{ id: string }>)?.map((s) => s.id) || []
+          ((cls.students as Array<{ id: string; is_active?: boolean }>) || [])
+            .filter((s) => s.is_active !== false)
+            .filter((s) => {
+              if (seenStudentIds.has(s.id)) return false;
+              seenStudentIds.add(s.id);
+              return true;
+            })
+            .map((s) => s.id)
         ) || [];
         
         let todayAttendanceData: Array<{ student_id: string; status: string }> = [];
@@ -265,7 +279,15 @@ export const useTeacherDashboard = () => {
         }
 
         const myClasses = (classesData || []).map((classItem: Record<string, unknown>) => {
-          const classStudents = (classItem.students as Array<{ id: string }>) || [];
+          // Filter to only active students and deduplicate by ID
+          const seenIds = new Set<string>();
+          const classStudents = ((classItem.students as Array<{ id: string; is_active?: boolean }>) || [])
+            .filter((s) => s.is_active !== false)
+            .filter((s) => {
+              if (seenIds.has(s.id)) return false;
+              seenIds.add(s.id);
+              return true;
+            });
           const classStudentIds = classStudents.map((s) => s.id);
           const classAttendance = todayAttendanceData.filter(a => 
             classStudentIds.includes(a.student_id)

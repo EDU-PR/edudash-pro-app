@@ -103,14 +103,18 @@ function NativeVideoPlayer({
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasCompletedRef = useRef(false);
 
-  // Create video player with expo-video hook (only called on native)
-  const player = useVideoPlayer ? useVideoPlayer(videoUrl, (p: any) => {
+  // Create video player with expo-video hook
+  // Note: NativeVideoPlayer is only rendered when useVideoPlayer is available
+  const playerCallback = useCallback((p: any) => {
     p.loop = false;
     p.timeUpdateEventInterval = 1;
     if (autoplay) {
       p.play();
     }
-  }) : null;
+  }, [autoplay]);
+  
+  // useVideoPlayer is guaranteed to be available when NativeVideoPlayer is rendered
+  const player = useVideoPlayer!(videoUrl, playerCallback);
 
   // Listen for player status changes
   useEffect(() => {
@@ -320,7 +324,8 @@ function NativeVideoPlayer({
 
 export function CourseVideoPlayer(props: CourseVideoPlayerProps) {
   // Use web video player on web, native player on mobile
-  if (Platform.OS === 'web') {
+  // Fall back to web player if expo-video is not available
+  if (Platform.OS === 'web' || !useVideoPlayer) {
     return <WebVideoPlayer {...props} />;
   }
 

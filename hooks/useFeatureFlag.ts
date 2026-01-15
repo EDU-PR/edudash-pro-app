@@ -136,7 +136,10 @@ export function FeatureGate({
   flag: FeatureFlag;
   children: React.ReactNode;
   fallback?: React.ReactNode;
-}) {
+}): React.ReactElement {
   const isEnabled = useFeatureFlag(flag);
-  return <>{isEnabled ? children : fallback}</>;
+  if (isEnabled) {
+    return React.createElement(React.Fragment, null, children);
+  }
+  return React.createElement(React.Fragment, null, fallback);
 }

@@ -186,6 +186,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     ));
   }, []);
 
+  // Check if user has TTS/voice features
+  // Note: 'trial' users DO have TTS access (aligned with Edge Function tier list)
+  const hasTTSAccess = useCallback(() => {
+    const freeTiers = ['free', ''];
+    const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
+    return !freeTiers.includes(currentTier);
+  }, [tier]);
+
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
     if (!dashInstance) return;
@@ -552,14 +560,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       console.error('Failed to remove attachment:', error);
     }
   }, []);
-
-  // Check if user has TTS/voice features
-  // Note: 'trial' users DO have TTS access (aligned with Edge Function tier list)
-  const hasTTSAccess = useCallback(() => {
-    const freeTiers = ['free', ''];
-    const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
-    return !freeTiers.includes(currentTier);
-  }, [tier]);
 
   // Stop voice recording
   const stopVoiceRecording = useCallback(async () => {

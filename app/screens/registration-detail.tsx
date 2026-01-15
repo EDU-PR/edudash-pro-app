@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -96,6 +97,31 @@ export default function RegistrationDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Alert modal state
+  interface AlertState {
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    buttons: AlertButton[];
+  }
+
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
 
   // Check if registration can be approved (needs POP)
   const canApprove = (reg: Registration): boolean => {
@@ -164,14 +190,15 @@ export default function RegistrationDetailScreen() {
 
         if (inAppData) {
           // Transform to Registration interface
+          const parentData = Array.isArray(inAppData.parent) ? inAppData.parent[0] : inAppData.parent;
           const transformed: Registration = {
             id: inAppData.id,
             organization_id: inAppData.preschool_id,
-            guardian_name: inAppData.parent 
-              ? `${inAppData.parent.first_name || ''} ${inAppData.parent.last_name || ''}`.trim() 
+            guardian_name: parentData 
+              ? `${parentData.first_name || ''} ${parentData.last_name || ''}`.trim() 
               : 'Parent',
-            guardian_email: inAppData.parent?.email || '',
-            guardian_phone: inAppData.parent?.phone || '',
+            guardian_email: parentData?.email || '',
+            guardian_phone: parentData?.phone || '',
             student_first_name: inAppData.child_first_name,
             student_last_name: inAppData.child_last_name,
             student_dob: inAppData.child_birth_date,
@@ -186,9 +213,9 @@ export default function RegistrationDetailScreen() {
             created_at: inAppData.created_at,
             // In-app registrations don't have these fields
             proof_of_payment_url: undefined,
-            id_document_url: undefined,
-            birth_certificate_url: undefined,
-            immunization_record_url: undefined,
+            guardian_id_document_url: undefined,
+            student_birth_certificate_url: undefined,
+            student_clinic_card_url: undefined,
           };
           setRegistration(transformed);
           setLoading(false);
@@ -295,14 +322,17 @@ export default function RegistrationDetailScreen() {
   const handleApprove = async () => {
     if (!registration) return;
     
-    Alert.alert(
+    showAlert(
       'Approve Registration',
       `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?\n\nThis will:\n• Create parent account\n• Create student profile\n• Send welcome email`,
+      'info',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Approve',
+          style: 'default',
           onPress: async () => {
+            hideAlert();
             setProcessing(true);
             try {
               const supabase = assertSupabase();
@@ -324,20 +354,22 @@ export default function RegistrationDetailScreen() {
               });
 
               if (syncError) {
-                Alert.alert(
+                showAlert(
                   'Partial Success',
                   'Registration approved, but account creation may have failed. Please contact admin.',
+                  'warning',
                   [{ text: 'OK', onPress: () => router.back() }]
                 );
               } else {
-                Alert.alert(
+                showAlert(
                   'Success',
                   '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
+                  'success',
                   [{ text: 'OK', onPress: () => router.back() }]
                 );
               }
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to approve registration');
+              showAlert('Error', err.message || 'Failed to approve registration', 'error');
             } finally {
               setProcessing(false);
             }
@@ -351,63 +383,93 @@ export default function RegistrationDetailScreen() {
   const handleReject = () => {
     if (!registration) return;
     
-    Alert.prompt(
-      'Reject Registration',
-      `Enter reason for rejecting ${registration.student_first_name}'s registration:`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async (reason?: string) => {
-            if (!reason?.trim()) {
-              Alert.alert('Error', 'Please provide a rejection reason');
-              return;
-            }
-
-            setProcessing(true);
-            try {
-              const supabase = assertSupabase();
-              
-              const { error } = await supabase
-                .from('registration_requests')
-                .update({
-                  status: 'rejected',
-                  reviewed_by: user?.email,
-                  reviewed_date: new Date().toISOString(),
-                  rejection_reason: reason,
-                })
-                .eq('id', registration.id);
-
-              if (error) throw error;
-
-              Alert.alert('Rejected', 'Registration has been rejected.', [
-                { text: 'OK', onPress: () => router.back() }
-              ]);
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to reject registration');
-            } finally {
-              setProcessing(false);
-            }
+    // Alert.prompt is iOS-only, so we use it conditionally
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Reject Registration',
+        `Enter reason for rejecting ${registration.student_first_name}'s registration:`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reject',
+            style: 'destructive',
+            onPress: async (reason?: string) => {
+              if (!reason?.trim()) {
+                showAlert('Error', 'Please provide a rejection reason', 'error');
+                return;
+              }
+              await processRejection(reason);
+            },
           },
-        },
-      ],
-      'plain-text'
-    );
+        ],
+        'plain-text'
+      );
+    } else {
+      // Android fallback - show confirmation first
+      showAlert(
+        'Reject Registration',
+        `Are you sure you want to reject ${registration.student_first_name}'s registration?`,
+        'warning',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reject',
+            style: 'destructive',
+            onPress: async () => {
+              hideAlert();
+              await processRejection('Rejected by principal');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  // Process the rejection
+  const processRejection = async (reason: string) => {
+    if (!registration) return;
+    
+    setProcessing(true);
+    try {
+      const supabase = assertSupabase();
+      
+      const { error } = await supabase
+        .from('registration_requests')
+        .update({
+          status: 'rejected',
+          reviewed_by: user?.email,
+          reviewed_date: new Date().toISOString(),
+          rejection_reason: reason,
+        })
+        .eq('id', registration.id);
+
+      if (error) throw error;
+
+      showAlert('Rejected', 'Registration has been rejected.', 'info', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+    } catch (err: any) {
+      showAlert('Error', err.message || 'Failed to reject registration', 'error');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   // Verify payment
   const handleVerifyPayment = async () => {
     if (!registration) return;
     
-    Alert.alert(
+    showAlert(
       'Verify Payment',
       'Confirm that the payment has been received and verified?',
+      'info',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Verify',
+          style: 'default',
           onPress: async () => {
+            hideAlert();
             setProcessing(true);
             try {
               const supabase = assertSupabase();
@@ -428,9 +490,9 @@ export default function RegistrationDetailScreen() {
                 registration_fee_paid: true,
               } : null);
               
-              Alert.alert('Success', 'Payment has been verified');
+              showAlert('Success', 'Payment has been verified', 'success');
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to verify payment');
+              showAlert('Error', err.message || 'Failed to verify payment', 'error');
             } finally {
               setProcessing(false);
             }
@@ -819,6 +881,16 @@ export default function RegistrationDetailScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Alert Modal */}
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </View>
   );
 }

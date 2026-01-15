@@ -3,6 +3,7 @@
  * 
  * Shows attendance records that teachers have marked previously
  * Allows filtering by date, class, and student
+ * Includes print/export functionality for attendance registers
  */
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -14,11 +15,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -28,6 +32,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTeacherSchool } from '@/hooks/useTeacherSchool';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { track } from '@/lib/analytics';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 interface AttendanceRecord {
   id: string;
@@ -47,11 +52,37 @@ interface AttendanceStats {
   late_count?: number;
 }
 
+// Alert modal state interface
+interface AlertState {
+  visible: boolean;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  buttons: AlertButton[];
+}
+
 export default function AttendanceHistoryScreen() {
   const { profile, loading: authLoading, profileLoading } = useAuth();
   const permissions = usePermissions();
   const { theme } = useTheme();
   const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool();
+  
+  // Alert modal state
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
   
   // RBAC Guard: Only teachers and principals can access this screen
   const isTeacher = permissions?.hasRole ? permissions.hasRole('teacher') : profile?.role === 'teacher';
@@ -70,9 +101,10 @@ export default function AttendanceHistoryScreen() {
           user_id: profile.id,
           role: profile.role,
         });
-        Alert.alert(
+        showAlert(
           'Access Denied',
           'Only teachers and principals can view attendance history.',
+          'error',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
@@ -93,6 +125,8 @@ export default function AttendanceHistoryScreen() {
 
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     // Set today as default date
@@ -106,6 +140,18 @@ export default function AttendanceHistoryScreen() {
     queryFn: async () => {
       if (!schoolId) return { records: [], stats: null };
 
+      // First get all students in this school
+      const { data: schoolStudents } = await assertSupabase()
+        .from('students')
+        .select('id')
+        .eq('preschool_id', schoolId);
+      
+      const studentIds = schoolStudents?.map(s => s.id) || [];
+      
+      if (studentIds.length === 0) {
+        return { records: [], stats: { total_records: 0, present_count: 0, absent_count: 0, late_count: 0 } };
+      }
+
       let query = assertSupabase()
         .from('attendance')
         .select(`
@@ -118,12 +164,13 @@ export default function AttendanceHistoryScreen() {
           students!attendance_student_id_fkey (
             first_name,
             last_name,
+            class_id,
             classes!students_class_id_fkey (
               name
             )
           )
         `)
-        .eq('students.preschool_id', schoolId)
+        .in('student_id', studentIds)
         .order('attendance_date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -131,15 +178,11 @@ export default function AttendanceHistoryScreen() {
         query = query.eq('attendance_date', selectedDate);
       }
 
-      if (selectedClass !== 'all') {
-        query = query.eq('students.class_id', selectedClass);
-      }
-
       const { data, error } = await query;
       
       if (error) throw error;
 
-      const records: AttendanceRecord[] = (data || []).map((record: any) => ({
+      let records: AttendanceRecord[] = (data || []).map((record: any) => ({
         id: record.id,
         attendance_date: record.attendance_date,
         student_id: record.student_id,
@@ -150,7 +193,13 @@ export default function AttendanceHistoryScreen() {
           ? `${record.students.first_name} ${record.students.last_name}`
           : 'Unknown Student',
         class_name: record.students?.classes?.name || 'No Class',
+        class_id: record.students?.class_id,
       }));
+
+      // Filter by class if selected
+      if (selectedClass !== 'all') {
+        records = records.filter(r => (r as any).class_id === selectedClass);
+      }
 
       // Calculate stats for the selected date/filters
       const stats: AttendanceStats = {
@@ -194,6 +243,169 @@ export default function AttendanceHistoryScreen() {
   };
 
   const { refreshing, onRefreshHandler } = useSimplePullToRefresh(handleRefresh, 'attendance_history');
+
+  // Date picker handler
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (date) {
+      setSelectedDate(date.toISOString().slice(0, 10));
+    }
+  };
+
+  // Navigate date forward/backward
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const current = selectedDate ? new Date(selectedDate) : new Date();
+    const newDate = new Date(current);
+    newDate.setDate(current.getDate() + (direction === 'next' ? 1 : -1));
+    setSelectedDate(newDate.toISOString().slice(0, 10));
+  };
+
+  // Generate and print/share attendance register
+  const handlePrintRegister = async () => {
+    const records = attendanceQuery.data?.records || [];
+    const stats = attendanceQuery.data?.stats;
+    
+    if (records.length === 0) {
+      showAlert('No Records', 'There are no attendance records to print for the selected date and filters.', 'warning');
+      return;
+    }
+
+    setIsPrinting(true);
+    try {
+      // Group records by class
+      const classesList = Array.from(new Set(records.map(r => r.class_name))).sort();
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Attendance Register</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+              .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #333; padding-bottom: 16px; }
+              .header h1 { font-size: 24px; margin-bottom: 8px; }
+              .header p { color: #666; font-size: 14px; }
+              .summary { display: flex; justify-content: space-around; margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px; }
+              .summary-item { text-align: center; }
+              .summary-value { font-size: 24px; font-weight: bold; }
+              .summary-label { font-size: 12px; color: #666; }
+              .summary-present { color: #10B981; }
+              .summary-absent { color: #EF4444; }
+              .summary-late { color: #F59E0B; }
+              .class-section { margin-bottom: 24px; }
+              .class-header { background: #333; color: white; padding: 8px 12px; font-weight: bold; margin-bottom: 8px; border-radius: 4px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+              th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+              th { background: #f0f0f0; font-weight: bold; }
+              .status-present { background: #D1FAE5; color: #065F46; }
+              .status-absent { background: #FEE2E2; color: #991B1B; }
+              .status-late { background: #FEF3C7; color: #92400E; }
+              .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+              @media print {
+                body { padding: 0; }
+                .summary { break-inside: avoid; }
+                .class-section { break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>📋 Attendance Register</h1>
+              <p>${schoolName || 'School'}</p>
+              <p><strong>Date:</strong> ${selectedDate ? format(new Date(selectedDate), 'EEEE, MMMM d, yyyy') : 'All Dates'}</p>
+              ${selectedClass !== 'all' ? `<p><strong>Class:</strong> ${classesList[0] || 'N/A'}</p>` : ''}
+            </div>
+
+            <div class="summary">
+              <div class="summary-item">
+                <div class="summary-value">${stats?.total_records || 0}</div>
+                <div class="summary-label">Total Students</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-value summary-present">${stats?.present_count || 0}</div>
+                <div class="summary-label">Present</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-value summary-absent">${stats?.absent_count || 0}</div>
+                <div class="summary-label">Absent</div>
+              </div>
+              ${(stats?.late_count || 0) > 0 ? `
+              <div class="summary-item">
+                <div class="summary-value summary-late">${stats?.late_count || 0}</div>
+                <div class="summary-label">Late</div>
+              </div>` : ''}
+            </div>
+
+            ${classesList.map(className => {
+              const classRecords = records.filter(r => r.class_name === className);
+              return `
+              <div class="class-section">
+                <div class="class-header">${className}</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Student Name</th>
+                      <th>Status</th>
+                      <th>Time Recorded</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${classRecords.map((record, idx) => `
+                      <tr>
+                        <td>${idx + 1}</td>
+                        <td>${record.student_name}</td>
+                        <td class="status-${record.status}">
+                          ${record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                        </td>
+                        <td>${format(new Date(record.created_at), 'HH:mm')}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              `;
+            }).join('')}
+
+            <div class="footer">
+              <p>Generated by EduDash Pro • ${format(new Date(), 'MMMM d, yyyy \'at\' HH:mm')}</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Generate PDF
+      const { uri } = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+
+      track('edudash.attendance_history.print', {
+        records_count: records.length,
+        date: selectedDate,
+        class_filter: selectedClass,
+      });
+
+      // Share the PDF
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Attendance Register',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        showAlert('PDF Generated', 'The attendance register has been generated successfully.', 'success');
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      showAlert('Print Error', 'Failed to generate the attendance register. Please try again.', 'error');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   const renderAttendanceRecord = ({ item }: { item: AttendanceRecord }) => {
     const statusColor = item.status === 'present' 
@@ -279,22 +491,104 @@ export default function AttendanceHistoryScreen() {
       
       {/* Filter Controls */}
       <View style={[styles.filtersCard, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
-        <Text style={[styles.filterTitle, { color: palette.text }]}>Filters</Text>
+        <View style={styles.filterHeaderRow}>
+          <Text style={[styles.filterTitle, { color: palette.text }]}>Filters</Text>
+          
+          {/* Print Button */}
+          <TouchableOpacity
+            style={[styles.printButton, { backgroundColor: palette.primary }]}
+            onPress={handlePrintRegister}
+            disabled={isPrinting}
+          >
+            {isPrinting ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="print-outline" size={18} color="#FFF" />
+                <Text style={styles.printButtonText}>Print</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
         
-        {/* Date Selection */}
+        {/* Date Selection with navigation */}
         <View style={styles.filterRow}>
           <Text style={[styles.filterLabel, { color: palette.textSecondary }]}>Date:</Text>
-          <TouchableOpacity 
-            style={[styles.filterButton, { borderColor: palette.outline }]}
+          <View style={styles.dateNavContainer}>
+            <TouchableOpacity
+              style={[styles.dateNavButton, { borderColor: palette.outline }]}
+              onPress={() => navigateDate('prev')}
+            >
+              <Ionicons name="chevron-back" size={20} color={palette.primary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, styles.dateFilterButton, { borderColor: palette.outline }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={16} color={palette.primary} />
+              <Text style={[styles.filterButtonText, { color: palette.text }]}>
+                {selectedDate ? format(new Date(selectedDate), 'EEE, MMM d, yyyy') : 'Select Date'}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.dateNavButton, { borderColor: palette.outline }]}
+              onPress={() => navigateDate('next')}
+            >
+              <Ionicons name="chevron-forward" size={20} color={palette.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Quick date selection */}
+        <View style={styles.quickDateContainer}>
+          <TouchableOpacity
+            style={[
+              styles.quickDateChip,
+              selectedDate === new Date().toISOString().slice(0, 10) && { backgroundColor: palette.primary + '20', borderColor: palette.primary },
+              { borderColor: palette.outline }
+            ]}
+            onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+          >
+            <Text style={[
+              styles.quickDateText,
+              selectedDate === new Date().toISOString().slice(0, 10) && { color: palette.primary },
+              { color: palette.text }
+            ]}>Today</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.quickDateChip,
+              selectedDate === new Date(Date.now() - 86400000).toISOString().slice(0, 10) && { backgroundColor: palette.primary + '20', borderColor: palette.primary },
+              { borderColor: palette.outline }
+            ]}
             onPress={() => {
-              // You can implement a date picker here
-              Alert.alert('Date Selection', 'Date picker would be implemented here');
+              const yesterday = new Date(Date.now() - 86400000);
+              setSelectedDate(yesterday.toISOString().slice(0, 10));
             }}
           >
-            <Ionicons name="calendar-outline" size={16} color={palette.primary} />
-            <Text style={[styles.filterButtonText, { color: palette.text }]}>
-              {selectedDate ? format(new Date(selectedDate), 'MMM d, yyyy') : 'Select Date'}
-            </Text>
+            <Text style={[
+              styles.quickDateText,
+              selectedDate === new Date(Date.now() - 86400000).toISOString().slice(0, 10) && { color: palette.primary },
+              { color: palette.text }
+            ]}>Yesterday</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.quickDateChip,
+              !selectedDate && { backgroundColor: palette.primary + '20', borderColor: palette.primary },
+              { borderColor: palette.outline }
+            ]}
+            onPress={() => setSelectedDate('')}
+          >
+            <Text style={[
+              styles.quickDateText,
+              !selectedDate && { color: palette.primary },
+              { color: palette.text }
+            ]}>All Dates</Text>
           </TouchableOpacity>
         </View>
         
@@ -425,6 +719,28 @@ export default function AttendanceHistoryScreen() {
           <Ionicons name="add-circle" size={28} color="#FFF" />
         </TouchableOpacity>
       </SafeAreaView>
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={selectedDate ? new Date(selectedDate) : new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleDateChange}
+          maximumDate={new Date()}
+          themeVariant="dark"
+        />
+      )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </View>
   );
 }
@@ -587,6 +903,64 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 16,
+  },
+  
+  // Filter Header with Print Button
+  filterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  printButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  printButtonText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  
+  // Date Navigation
+  dateNavContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateNavButton: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateFilterButton: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  
+  // Quick Date Selection
+  quickDateContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickDateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderRadius: 16,
+  },
+  quickDateText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   
   // FAB

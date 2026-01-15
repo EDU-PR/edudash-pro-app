@@ -101,13 +101,23 @@ export default function MyClassScreen() {
         .from('students')
         .select('id, first_name, last_name, grade, avatar_url')
         .eq('class_id', myClass.id)
+        .eq('is_active', true)
         .order('first_name', { ascending: true });
 
       if (error) {
         console.error('Error fetching students:', error);
         throw error;
       }
-      return data || [];
+      
+      // Deduplicate by student ID (safeguard against data issues)
+      const seenIds = new Set<string>();
+      const uniqueStudents = (data || []).filter((s: { id: string }) => {
+        if (seenIds.has(s.id)) return false;
+        seenIds.add(s.id);
+        return true;
+      });
+      
+      return uniqueStudents;
     },
     enabled: !!myClass?.id,
   });

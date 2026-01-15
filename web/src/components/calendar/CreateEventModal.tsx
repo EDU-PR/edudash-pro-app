@@ -94,11 +94,22 @@ export function CreateEventModal({ preschoolId, onClose, onEventCreated }: Creat
 
       if (insertError) throw insertError;
 
-      // Send notification if enabled
-      if (formData.send_notification) {
-        await supabase.functions.invoke('send-event-notification', {
-          body: { eventId: data.id, preschoolId },
-        });
+      // Send notification if enabled - using notifications-dispatcher
+      if (formData.send_notification && data) {
+        try {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: { 
+              event_type: 'school_event_created',
+              event_id: data.id, 
+              preschool_id: preschoolId,
+              target_audience: formData.target_audience,
+            },
+          });
+          console.log('✅ Event notification sent');
+        } catch (notifyError) {
+          console.error('Failed to send event notification:', notifyError);
+          // Don't fail the whole operation if notification fails
+        }
       }
 
       onEventCreated(data);

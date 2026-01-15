@@ -140,7 +140,7 @@ export const TeacherDocumentsService = {
       const base64 = await FileSystem.readAsStringAsync(params.localUri, { encoding: 'base64' })
       const { base64ToUint8Array } = await import('@/lib/utils/base64')
       const byteArray = base64ToUint8Array(base64)
-      const blob = new Blob([byteArray], { type: params.mimeType || 'application/octet-stream' })
+      const blob = new Blob([byteArray as BlobPart], { type: params.mimeType || 'application/octet-stream' })
 
       const { error: upErr } = await assertSupabase().storage.from(TEACHER_DOCS_BUCKET).upload(path, blob, {
         contentType: params.mimeType || 'application/octet-stream',

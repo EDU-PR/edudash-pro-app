@@ -44,7 +44,7 @@ export function useTenantSlug(userId: string | undefined): TenantSlugResult {
         .maybeSingle();
 
       // Get preschool ID from profile
-      let preschoolId = prof?.preschool_id || prof?.organization_id as string | undefined;
+      const preschoolId = prof?.preschool_id || prof?.organization_id as string | undefined;
 
       if (preschoolId) {
         const { data: school } = await supabase

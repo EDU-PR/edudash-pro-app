@@ -397,13 +397,6 @@ export default function SuperAdminDevOpsScreen() {
       <DashOrb 
         position="bottom-right"
         size={56}
-        suggestions={[
-          'Build Android APK',
-          'Check build status',
-          'Search for useAuth in code',
-          'Show recent commits',
-          'Deploy OTA update',
-        ]}
         onCommandExecuted={(cmd, result) => {
           track('dash_orb_command', { command: cmd });
         }}

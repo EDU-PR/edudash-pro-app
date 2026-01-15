@@ -177,7 +177,7 @@ export function CallProvider({ children }: CallProviderProps) {
           .from('active_calls')
           .select('*')
           .eq('call_id', callId)
-          .single();
+          .maybeSingle();
         
         if (call && call.status === 'ringing') {
           // Auto-answer the call
@@ -254,11 +254,12 @@ export function CallProvider({ children }: CallProviderProps) {
               
               for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 // Try fetching from active_calls first
+                // Use maybeSingle() to avoid 406 error when call doesn't exist yet
                 const { data: fullCall, error } = await supabase
                   .from('active_calls')
                   .select('*')
                   .eq('call_id', call.call_id)
-                  .single();
+                  .maybeSingle();
                 
                 if (fullCall?.meeting_url) {
                   meetingUrl = fullCall.meeting_url;
@@ -308,7 +309,7 @@ export function CallProvider({ children }: CallProviderProps) {
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', call.caller_id)
-              .single();
+              .maybeSingle();
             
             const callerName = profile 
               ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
@@ -456,7 +457,7 @@ export function CallProvider({ children }: CallProviderProps) {
         .from('active_calls')
         .select('meeting_url')
         .eq('call_id', callId)
-        .single();
+        .maybeSingle();
       
       if (callData?.meeting_url) {
         console.log('[CallProvider] fetchMeetingUrl: Got URL from active_calls (attempt', attempt + 1, ')');

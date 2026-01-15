@@ -58,7 +58,7 @@ export function useAssignedLessons(studentId: string | undefined) {
         .order('assigned_at', { ascending: false });
       
       if (error) throw error;
-      return (data || []) as AssignedLesson[];
+      return (data || []) as unknown as AssignedLesson[];
     },
     enabled: !!studentId,
     staleTime: 30000,

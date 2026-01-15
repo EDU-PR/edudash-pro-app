@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { MessageCircle, Send, Users, CheckCircle, AlertCircle } from 'lucide-react';
+import { MessageCircle, Send, Users, CheckCircle, AlertCircle, Plus } from 'lucide-react';
+import { CreateGroupModal } from '@/components/messaging/CreateGroupModal';
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   
@@ -174,15 +176,31 @@ export default function MessagesPage() {
               Send messages to parents, teachers, and staff
             </p>
           </div>
-          {!showCompose && (
-            <button 
-              className="btn btnPrimary"
-              onClick={() => setShowCompose(true)}
-            >
-              <Send size={18} style={{ marginRight: 8 }} />
-              Compose Message
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 12 }}>
+            {!showCompose && (
+              <>
+                <button 
+                  className="btn"
+                  onClick={() => setShowCreateGroupModal(true)}
+                  style={{
+                    background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                    color: 'white',
+                    border: 'none',
+                  }}
+                >
+                  <Users size={18} style={{ marginRight: 8 }} />
+                  Create Group
+                </button>
+                <button 
+                  className="btn btnPrimary"
+                  onClick={() => setShowCompose(true)}
+                >
+                  <Send size={18} style={{ marginRight: 8 }} />
+                  Compose Message
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {success && (
@@ -336,16 +354,43 @@ export default function MessagesPage() {
             <p style={{ color: 'var(--muted)', marginBottom: 16 }}>
               Start by composing your first message or announcement
             </p>
-            <button 
-              className="btn btnPrimary"
-              onClick={() => setShowCompose(true)}
-            >
-              <Send size={18} style={{ marginRight: 8 }} />
-              Compose Message
-            </button>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button 
+                className="btn"
+                onClick={() => setShowCreateGroupModal(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                  color: 'white',
+                  border: 'none',
+                }}
+              >
+                <Users size={18} style={{ marginRight: 8 }} />
+                Create Group
+              </button>
+              <button 
+                className="btn btnPrimary"
+                onClick={() => setShowCompose(true)}
+              >
+                <Send size={18} style={{ marginRight: 8 }} />
+                Compose Message
+              </button>
+            </div>
           </div>
         )}
       </div>
+      
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => setShowCreateGroupModal(false)}
+        onGroupCreated={(threadId) => {
+          // Navigate to the messaging page with the new thread
+          router.push(`/dashboard/principal/messages?thread=${threadId}`);
+        }}
+        preschoolId={preschoolId}
+        userId={userId}
+        userRole={profile?.role || undefined}
+      />
     </PrincipalShell>
   );
 }

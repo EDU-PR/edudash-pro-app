@@ -52,12 +52,6 @@ interface NotificationContext {
   caller_name?: string;
   call_type?: string;
   meeting_url?: string;
-  // School calendar events
-  event_id?: string;
-  event_title?: string;
-  event_date?: string;
-  event_type?: string;
-  event_location?: string;
 }
 
 // Notification template type
@@ -94,9 +88,6 @@ interface NotificationRequest {
   call_type?: string;
   meeting_url?: string;
   rejection_reason?: string;
-  // School calendar events
-  event_id?: string;
-  target_audience?: string[];
   custom_payload?: Record<string, unknown>;
   template_override?: Partial<NotificationTemplate>;
   send_immediately?: boolean;

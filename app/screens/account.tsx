@@ -509,7 +509,7 @@ export default function AccountScreen() {
       <OrganizationSwitcher
         visible={showOrgSwitcher}
         onClose={() => setShowOrgSwitcher(false)}
-        onOrganizationChanged={() => {
+        onOrganizationSwitched={() => {
           setShowOrgSwitcher(false);
           load(); // Refresh account data
         }}

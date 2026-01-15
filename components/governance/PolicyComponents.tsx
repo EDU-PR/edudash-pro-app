@@ -69,7 +69,7 @@ export function PolicyCard({ policy, theme, onPress }: PolicyCardProps) {
 }
 
 interface PoliciesSectionProps {
-  policies: Policy[];
+  policies: (Policy | { id: string; title?: string; category?: string; lastUpdated?: string; status?: 'active' | 'under-review' | 'draft' })[];
   theme: any;
   onPolicyPress: (policy: Policy) => void;
   onAddPress: () => void;
@@ -134,7 +134,7 @@ export function PoliciesSection({ policies, theme, onPolicyPress, onAddPress, lo
       {policies.map((policy) => (
         <PolicyCard
           key={policy.id}
-          policy={policy}
+          policy={policy as Policy}
           theme={theme}
           onPress={onPolicyPress}
         />

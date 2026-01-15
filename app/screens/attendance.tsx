@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { assertSupabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -10,6 +10,16 @@ import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
 import { useAuth, usePermissions } from '@/contexts/AuthContext'
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal'
+
+// Alert modal state interface
+interface AlertState {
+  visible: boolean;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  buttons: AlertButton[];
+}
 
 export default function AttendanceScreen() {
   const { profile, loading: authLoading, profileLoading } = useAuth()
@@ -19,6 +29,23 @@ export default function AttendanceScreen() {
   const { theme } = useTheme()
   const palette = { background: theme.background, text: theme.text, textSecondary: theme.textSecondary, outline: theme.border, surface: theme.surface, primary: theme.primary }
   
+  // Alert modal state
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
+
   // RBAC Guard: Only teachers and principals can access this screen
   const isTeacher = permissions?.hasRole ? permissions.hasRole('teacher') : profile?.role === 'teacher'
   const isPrincipal = permissions?.hasRole ? permissions.hasRole('principal') : profile?.role === 'principal' || profile?.role === 'principal_admin'
@@ -36,9 +63,10 @@ export default function AttendanceScreen() {
           user_id: profile.id,
           role: profile.role,
         })
-        Alert.alert(
+        showAlert(
           'Access Denied',
           'Only teachers and principals can access attendance management.',
+          'error',
           [{ text: 'OK', onPress: () => router.back() }]
         )
       }
@@ -50,7 +78,8 @@ export default function AttendanceScreen() {
 
   const [classId, setClassId] = useState<string | null>(null)
   const [today, setToday] = useState<string>('')
-  const [presentMap, setPresentMap] = useState<Record<string, boolean>>({})
+  // Status map: 'present' | 'absent' | 'late'
+  const [statusMap, setStatusMap] = useState<Record<string, 'present' | 'absent' | 'late'>>({})
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -73,16 +102,23 @@ export default function AttendanceScreen() {
   const { refreshing, onRefreshHandler } = useSimplePullToRefresh(handleRefresh, 'attendance')
 
   // Fetch classes filtered by teacher's school
+  // Teachers only see their own classes, principals see all
   const classesQuery = useQuery({
-    queryKey: ['teacher_classes_for_attendance', schoolId],
+    queryKey: ['teacher_classes_for_attendance', schoolId, profile?.id, isPrincipal],
     queryFn: async () => {
       if (!schoolId) return []
-      const { data, error } = await assertSupabase()
+      let query = assertSupabase()
         .from('classes')
         .select('id, name, grade_level')
         .eq('preschool_id', schoolId)
         .eq('active', true)
-        .order('name')
+      
+      // If teacher (not principal), only show their assigned classes
+      if (isTeacher && !isPrincipal && profile?.id) {
+        query = query.eq('teacher_id', profile.id)
+      }
+      
+      const { data, error } = await query.order('name')
       if (error) throw error
       return (data || []) as { id: string; name: string; grade_level?: string }[]
     },
@@ -97,39 +133,53 @@ export default function AttendanceScreen() {
       if (!schoolId) return []
       let q = assertSupabase()
         .from('students')
-        .select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)')
+        .select('id,first_name,last_name,class_id,is_active')
         .eq('preschool_id', schoolId)
         .eq('is_active', true)
       if (classId) q = q.eq('class_id', classId)
       const { data, error } = await q.order('first_name')
       if (error) throw error
-      const arr = (data || []) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
+      
+      // Deduplicate by student ID (safeguard against data issues)
+      const seenIds = new Set<string>()
+      const uniqueArr = (data || []).filter((s: { id: string }) => {
+        if (seenIds.has(s.id)) return false
+        seenIds.add(s.id)
+        return true
+      }) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
+      
       // Default all to present
-      const next: Record<string, boolean> = {}
-      for (const s of arr) next[s.id] = true
-      setPresentMap(next)
-      return arr
+      const next: Record<string, 'present' | 'absent' | 'late'> = {}
+      for (const s of uniqueArr) next[s.id] = 'present'
+      setStatusMap(next)
+      return uniqueArr
     },
     enabled: !!classId && !!schoolId,
   })
 
-  const toggleStudent = (sid: string) => {
-    setPresentMap(prev => ({ ...prev, [sid]: !prev[sid] }))
+  const cycleStatus = (sid: string) => {
+    setStatusMap(prev => {
+      const current = prev[sid] || 'present'
+      // Cycle: present -> late -> absent -> present
+      const nextStatus = current === 'present' ? 'late' : current === 'late' ? 'absent' : 'present'
+      return { ...prev, [sid]: nextStatus }
+    })
   }
 
-  const markAll = (value: boolean) => {
-    setPresentMap(prev => {
-      const next: Record<string, boolean> = {}
+  const markAll = (value: 'present' | 'absent' | 'late') => {
+    setStatusMap(prev => {
+      const next: Record<string, 'present' | 'absent' | 'late'> = {}
       Object.keys(prev).forEach(k => { next[k] = value })
       return next
     })
   }
 
   const onSubmit = async () => {
-    if (!classId) { Alert.alert('Select class', 'Please select a class first.'); return }
+    if (!classId) { showAlert('Select class', 'Please select a class first.', 'warning'); return }
     const students = studentsQuery.data || []
-    const entries = students.map(s => ({ student_id: s.id, present: !!presentMap[s.id] }))
-    const presentCount = entries.filter(e => e.present).length
+    const entries = students.map(s => ({ student_id: s.id, status: statusMap[s.id] || 'present' }))
+    const presentCount = entries.filter(e => e.status === 'present').length
+    const lateCount = entries.filter(e => e.status === 'late').length
 
     setSubmitting(true)
     try {
@@ -139,18 +189,19 @@ export default function AttendanceScreen() {
         const authUserId = auth?.user?.id || null
         await assertSupabase().from('attendance').insert(entries.map(e => ({
           student_id: e.student_id,
-          status: e.present ? 'present' : 'absent',
+          status: e.status,
           attendance_date: today,
           recorded_by: authUserId,
         })) as any)
       } catch { /* noop */ void 0; }
 
-      track('edudash.attendance.submit', { classId, presentCount, total: entries.length, date: today })
-      Alert.alert('Attendance recorded', `Marked ${presentCount}/${entries.length} present for ${today}.`, [
+      track('edudash.attendance.submit', { classId, presentCount, lateCount, total: entries.length, date: today })
+      showAlert('Attendance recorded', `Marked ${presentCount} present, ${lateCount} late, ${entries.length - presentCount - lateCount} absent for ${today}.`, 'success', [
+        { text: 'View History', onPress: () => router.push('/screens/attendance-history') },
         { text: 'Done', onPress: () => router.back() },
       ])
     } catch (e: any) {
-      Alert.alert('Failed', e?.message || 'Could not submit attendance.')
+      showAlert('Failed', e?.message || 'Could not submit attendance.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -224,31 +275,41 @@ export default function AttendanceScreen() {
             <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
               <View style={styles.rowBetween}>
                 <Text style={styles.cardTitle}>Students</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity onPress={() => markAll(true)} style={[styles.smallBtn, { backgroundColor: '#16a34a' }]}>
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <TouchableOpacity onPress={() => markAll('present')} style={[styles.smallBtn, { backgroundColor: '#16a34a' }]}>
                     <Text style={styles.smallBtnText}>All present</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => markAll(false)} style={[styles.smallBtn, { backgroundColor: '#ef4444' }]}>
-                    <Text style={styles.smallBtnText}>Clear</Text>
+                  <TouchableOpacity onPress={() => markAll('late')} style={[styles.smallBtn, { backgroundColor: '#f59e0b' }]}>
+                    <Text style={styles.smallBtnText}>All late</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => markAll('absent')} style={[styles.smallBtn, { backgroundColor: '#ef4444' }]}>
+                    <Text style={styles.smallBtnText}>All absent</Text>
                   </TouchableOpacity>
                 </View>
               </View>
+              
+              <Text style={styles.hint}>Tap a student to cycle: Present → Late → Absent</Text>
 
               {studentsQuery.isLoading ? (
                 <ActivityIndicator color={palette.primary} />
               ) : (
                 <View style={{ gap: 8 }}>
                   {students.length === 0 ? (
-                    <Text style={styles.empty}>No students found.</Text>
+                    <Text style={styles.empty}>No students found in this class.</Text>
                   ) : (
-                    students.map(s => (
-                      <TouchableOpacity key={s.id} style={[styles.studentRow, { borderColor: palette.outline }]} onPress={() => toggleStudent(s.id)}>
-                        <Text style={styles.studentName}>{s.first_name} {s.last_name}</Text>
-                        <View style={[styles.badge, presentMap[s.id] ? styles.badgePresent : styles.badgeAbsent]}>
-                          <Text style={styles.badgeText}>{presentMap[s.id] ? 'Present' : 'Absent'}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))
+                    students.map(s => {
+                      const status = statusMap[s.id] || 'present'
+                      const badgeStyle = status === 'present' ? styles.badgePresent : status === 'late' ? styles.badgeLate : styles.badgeAbsent
+                      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1)
+                      return (
+                        <TouchableOpacity key={s.id} style={[styles.studentRow, { borderColor: palette.outline }]} onPress={() => cycleStatus(s.id)}>
+                          <Text style={styles.studentName}>{s.first_name} {s.last_name}</Text>
+                          <View style={[styles.badge, badgeStyle]}>
+                            <Text style={styles.badgeText}>{statusLabel}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })
                   )}
                 </View>
               )}
@@ -271,6 +332,14 @@ export default function AttendanceScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </View>
   )
 }
@@ -284,13 +353,15 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#00f5ff', borderColor: '#00f5ff' },
   chipText: { color: '#9CA3AF', fontWeight: '700' },
   chipTextActive: { color: '#000' },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
   smallBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  smallBtnText: { color: '#fff', fontWeight: '700' },
+  smallBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  hint: { color: '#9CA3AF', fontSize: 12, fontStyle: 'italic', marginTop: 4 },
   studentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 10, padding: 10 },
-  studentName: { color: '#fff' },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  studentName: { color: '#fff', flex: 1 },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, minWidth: 70, alignItems: 'center' },
   badgePresent: { backgroundColor: '#16a34a' },
+  badgeLate: { backgroundColor: '#f59e0b' },
   badgeAbsent: { backgroundColor: '#ef4444' },
   badgeText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   empty: { color: '#9CA3AF' },

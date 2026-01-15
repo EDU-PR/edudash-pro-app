@@ -55,13 +55,22 @@ export default function AssignHomeworkScreen() {
       if (!schoolId) return []
       let q = assertSupabase()
         .from('students')
-        .select('id,first_name,last_name,class_id,is_active,age_groups!students_age_group_id_fkey(*)')
+        .select('id,first_name,last_name,class_id,is_active')
         .eq('preschool_id', schoolId)
         .eq('is_active', true)
       if (classId) q = q.eq('class_id', classId)
       const { data, error } = await q.order('first_name')
       if (error) throw error
-      return (data || []) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
+      
+      // Deduplicate by student ID (safeguard against data issues)
+      const seenIds = new Set<string>()
+      const uniqueStudents = (data || []).filter((s: { id: string }) => {
+        if (seenIds.has(s.id)) return false
+        seenIds.add(s.id)
+        return true
+      })
+      
+      return uniqueStudents as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
     },
     enabled: mode === 'students' && !!schoolId,
     staleTime: 60_000,

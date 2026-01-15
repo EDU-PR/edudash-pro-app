@@ -46,7 +46,7 @@ export function QuickCallModal({
         .from('profiles')
         .select('role')
         .eq('id', currentUserId)
-        .single();
+        .maybeSingle();
 
       // Determine allowed roles based on current user's role
       let allowedRoles: string[];

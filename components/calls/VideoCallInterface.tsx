@@ -444,7 +444,7 @@ export function VideoCallInterface({
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
             const callerName = callerProfile
               ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() ||
@@ -462,29 +462,20 @@ export function VideoCallInterface({
             });
 
             // CRITICAL: Send push notification to wake callee's app when backgrounded
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
               body: JSON.stringify({
+                event_type: 'incoming_call',
                 user_ids: [calleeId],
-                title: '📹 Incoming Video Call',
-                body: `${callerName} is video calling...`,
-                data: {
-                  type: 'incoming_call',
-                  call_id: newCallId,
-                  caller_id: user.id,
-                  caller_name: callerName,
-                  call_type: 'video',
-                  meeting_url: roomUrl,
-                },
-                sound: 'default',
-                priority: 'high',
-                channelId: 'incoming-calls',
-                categoryId: 'incoming_call',
-                ttl: 30,
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'video',
+                meeting_url: roomUrl,
               }),
             }).then(res => {
               if (res.ok) {
@@ -685,7 +676,7 @@ export function VideoCallInterface({
           if (participants) {
             const remote = Object.entries(participants)
               .filter(([id]) => id !== 'local')
-              .map(([id, p]) => ({ sessionId: id, ...(p as Record<string, unknown>) })) as DailyParticipant[];
+              .map(([id, p]) => ({ sessionId: id, ...(p as Record<string, unknown>) })) as unknown as DailyParticipant[];
             setRemoteParticipants(remote);
           }
         }, 300);

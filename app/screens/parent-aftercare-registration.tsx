@@ -25,7 +25,7 @@ export default function ParentAftercareRegistrationScreen() {
   const [parentFirstName, setParentFirstName] = useState(profile?.first_name || '');
   const [parentLastName, setParentLastName] = useState(profile?.last_name || '');
   const [parentEmail, setParentEmail] = useState(profile?.email || '');
-  const [parentPhone, setParentPhone] = useState(profile?.phone || '');
+  const [parentPhone, setParentPhone] = useState((profile as any)?.phone || '');
   const [parentIdNumber, setParentIdNumber] = useState('');
 
   // Child Details
@@ -292,9 +292,9 @@ export default function ParentAftercareRegistrationScreen() {
       const { data: existingRegistrations, error: checkError } = await supabase
         .from('aftercare_registrations')
         .select('id, status, created_at')
-        .eq('parent_email', formData.parentEmail.trim())
-        .eq('child_first_name', formData.childFirstName.trim())
-        .eq('child_last_name', formData.childLastName.trim())
+        .eq('parent_email', parentEmail.trim())
+        .eq('child_first_name', childFirstName.trim())
+        .eq('child_last_name', childLastName.trim())
         .eq('preschool_id', COMMUNITY_SCHOOL_ID)
         .neq('status', 'cancelled');
       
@@ -311,7 +311,7 @@ export default function ParentAftercareRegistrationScreen() {
             'A registration for this child already exists. Please contact the school if you need to update your registration.',
             [{ text: 'OK' }]
           );
-          setIsSubmitting(false);
+          setLoading(false);
           return;
         }
       }

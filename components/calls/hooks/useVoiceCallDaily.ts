@@ -256,7 +256,7 @@ export function useVoiceCallDaily({
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', user.id)
-              .single() : Promise.resolve({ data: null, error: null })
+              .maybeSingle() : Promise.resolve({ data: null, error: null })
           ]);
 
           if (!roomResponse.ok) {
@@ -325,42 +325,33 @@ export function useVoiceCallDaily({
               console.warn('[VoiceCallDaily] FCM call failed:', err);
             });
 
-            // ALSO send Expo push notification (for when app is in background, not killed)
-            // This provides the visible notification banner
-            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-expo-push`, {
+            // Send push notification via notifications-dispatcher
+            // This provides the visible notification banner and wakes the app
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
               body: JSON.stringify({
+                event_type: 'incoming_call',
                 user_ids: [calleeId],
-                title: '📞 Incoming Call',
-                body: `${callerName} is calling...`,
-                data: {
-                  type: 'incoming_call',
-                  call_id: newCallId,
-                  caller_id: user.id,
-                  caller_name: callerName,
-                  call_type: 'voice',
-                  meeting_url: roomUrl,
-                },
-                sound: 'default',
-                priority: 'high',
-                channelId: 'incoming-calls',
-                categoryId: 'incoming_call',
-                ttl: 30, // Call times out after 30 seconds
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'voice',
+                meeting_url: roomUrl,
               }),
             }).then(res => {
               if (res.ok) {
-                console.log('[VoiceCallDaily] ✅ Expo push notification sent to callee');
+                console.log('[VoiceCallDaily] ✅ Push notification sent to callee');
               } else {
                 res.text().then(text => {
-                  console.warn('[VoiceCallDaily] Expo push notification failed:', text);
+                  console.warn('[VoiceCallDaily] Push notification failed:', text);
                 });
               }
             }).catch(err => {
-              console.warn('[VoiceCallDaily] Failed to send Expo push notification:', err);
+              console.warn('[VoiceCallDaily] Failed to send push notification:', err);
             });
 
             // NOTE: CallKeep removed - library broken with Expo SDK 54+ (duplicate method exports)

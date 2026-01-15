@@ -130,7 +130,7 @@ export interface UserProfile {
   full_name?: string; // Computed field: first_name + last_name
   avatar_url?: string;
   date_of_birth?: string;
-  seat_status?: 'active' | 'inactive' | 'pending';
+  seat_status?: 'active' | 'inactive' | 'pending' | 'revoked';
   capabilities?: string[];
   created_at?: string;
   last_login_at?: string;
@@ -605,7 +605,7 @@ export async function signInWithSession(
       const { data: existing } = await withTimeout(
         assertSupabase().auth.getSession(),
         2000,
-        { data: { session: null } }
+        { data: { session: null }, error: null }
       );
       const existingEmail = existing?.session?.user?.email?.toLowerCase();
       if (existing?.session && existingEmail && existingEmail !== wantedEmail) {

@@ -94,3 +94,69 @@ export async function notifySubscriptionPendingPayment(preschool_id: string, sub
     include_push: true,
   })
 }
+
+// ============================================================================
+// School Calendar Event Notifications
+// ============================================================================
+
+export type TargetAudience = 'all' | 'parents' | 'teachers' | 'students';
+
+/**
+ * Notify target audience about a new school event
+ */
+export async function notifySchoolEventCreated(
+  event_id: string, 
+  preschool_id: string, 
+  target_audience: TargetAudience[] = ['all']
+) {
+  return dispatch('school_event_created', {
+    event_id,
+    preschool_id,
+    target_audience,
+  })
+}
+
+/**
+ * Notify target audience about an updated school event
+ */
+export async function notifySchoolEventUpdated(
+  event_id: string, 
+  preschool_id: string, 
+  target_audience: TargetAudience[] = ['all']
+) {
+  return dispatch('school_event_updated', {
+    event_id,
+    preschool_id,
+    target_audience,
+  })
+}
+
+/**
+ * Notify target audience about a cancelled school event
+ */
+export async function notifySchoolEventCancelled(
+  event_id: string, 
+  preschool_id: string, 
+  target_audience: TargetAudience[] = ['all']
+) {
+  return dispatch('school_event_cancelled', {
+    event_id,
+    preschool_id,
+    target_audience,
+  })
+}
+
+/**
+ * Send reminder notification for upcoming school event
+ */
+export async function notifySchoolEventReminder(
+  event_id: string, 
+  preschool_id: string, 
+  target_audience: TargetAudience[] = ['all']
+) {
+  return dispatch('school_event_reminder', {
+    event_id,
+    preschool_id,
+    target_audience,
+  })
+}

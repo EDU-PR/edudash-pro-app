@@ -45,7 +45,7 @@ export default function MembershipSettingsScreen() {
   // Get member type to determine if user is youth president
   const memberType = (profile as any)?.organization_membership?.member_type;
   const isYouthPresident = memberType === 'youth_president';
-  const isNationalAdmin = profile?.role === 'national_admin' || memberType === 'president' || memberType === 'secretary_general';
+  const isNationalAdmin = (profile?.role as string) === 'national_admin' || memberType === 'president' || memberType === 'secretary_general';
   
   const [refreshing, setRefreshing] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);

@@ -238,7 +238,7 @@ export const VoiceCallInterface = ({
               .from('profiles')
               .select('first_name, last_name')
               .eq('id', userId)
-              .single();
+              .maybeSingle();
 
             const callerName = callerProfile
               ? `${callerProfile.first_name || ''} ${callerProfile.last_name || ''}`.trim() || 'Someone'

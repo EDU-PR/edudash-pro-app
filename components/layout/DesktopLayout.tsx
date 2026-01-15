@@ -11,7 +11,7 @@ import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
-  role?: 'principal' | 'teacher' | 'parent' | 'super_admin';
+  role?: 'principal' | 'teacher' | 'parent' | 'super_admin' | 'student';
   title?: string; // Custom title for mobile header (overrides tenant slug)
   showBackButton?: boolean; // Show back button instead of hamburger menu
 }
