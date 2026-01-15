@@ -154,22 +154,44 @@ export const DailyCallInterface = ({
   // Uses user's custom ringtone preferences
   useEffect(() => {
     if ((callState === 'ringing' || callState === 'connecting') && !isIncoming) {
+      console.log('[P2P Call] 🔊 Attempting to play ringback tone...', { callState, isIncoming });
+      
       // Play custom ringback - this is what the caller hears (KRING-KRING)
       const playRingback = async () => {
         try {
           // Use RingtoneService to play user's selected ringback
           const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
-          ringbackAudioRef.current = audio;
-          console.log('[P2P Call] Custom ringback tone playing');
+          if (audio) {
+            ringbackAudioRef.current = audio;
+            console.log('[P2P Call] ✅ Ringback playing via RingtoneService');
+            return;
+          }
         } catch (err) {
-          console.warn('[P2P Call] Ringback autoplay blocked, will retry:', err);
-          // Retry after a short delay
+          console.warn('[P2P Call] RingtoneService failed:', err);
+        }
+        
+        // Fallback: Direct audio element
+        console.log('[P2P Call] 🔄 Trying fallback ringback audio...');
+        try {
+          const fallbackAudio = new Audio('/sounds/ringback.mp3');
+          fallbackAudio.loop = true;
+          fallbackAudio.volume = 0.8;
+          await fallbackAudio.play();
+          ringbackAudioRef.current = fallbackAudio;
+          console.log('[P2P Call] ✅ Ringback playing via fallback');
+        } catch (fallbackErr) {
+          console.error('[P2P Call] ❌ All ringback attempts failed:', fallbackErr);
+          // Last resort: retry with delay (for autoplay policy)
           setTimeout(async () => {
             try {
-              const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
-              ringbackAudioRef.current = audio;
+              const retryAudio = new Audio('/sounds/ringback.mp3');
+              retryAudio.loop = true;
+              retryAudio.volume = 0.8;
+              await retryAudio.play();
+              ringbackAudioRef.current = retryAudio;
+              console.log('[P2P Call] ✅ Ringback playing via delayed retry');
             } catch (retryErr) {
-              console.error('[P2P Call] Failed to play ringback:', retryErr);
+              console.error('[P2P Call] ❌ Delayed retry also failed:', retryErr);
             }
           }, 500);
         }
@@ -178,9 +200,9 @@ export const DailyCallInterface = ({
     } else {
       // Stop ringback using service
       if (ringbackAudioRef.current) {
+        console.log('[P2P Call] 🔇 Stopping ringback tone');
         RingtoneService.stopRingtone(ringbackAudioRef.current);
         ringbackAudioRef.current = null;
-        console.log('[P2P Call] Ringback tone stopped');
       }
     }
 

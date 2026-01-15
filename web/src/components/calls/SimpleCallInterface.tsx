@@ -105,21 +105,44 @@ export const SimpleCallInterface = ({
 
   // Play ringback tone when connecting (for callers)
   useEffect(() => {
+    const playRingback = async () => {
+      if (callState === 'connecting' && isOwner) {
+        console.log('[SimpleCall] 🔊 Attempting to play ringback tone...');
+        
+        try {
+          // Try RingtoneService first (uses user preferences)
+          const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
+          if (audio) {
+            ringbackAudioRef.current = audio;
+            console.log('[SimpleCall] ✅ Ringback playing via RingtoneService');
+            return;
+          }
+        } catch (err) {
+          console.warn('[SimpleCall] RingtoneService failed:', err);
+        }
+        
+        // Fallback: Direct audio element
+        console.log('[SimpleCall] 🔄 Trying fallback ringback audio...');
+        try {
+          const fallbackAudio = new Audio('/sounds/ringback.mp3');
+          fallbackAudio.loop = true;
+          fallbackAudio.volume = 0.8;
+          await fallbackAudio.play();
+          ringbackAudioRef.current = fallbackAudio;
+          console.log('[SimpleCall] ✅ Ringback playing via fallback');
+        } catch (fallbackErr) {
+          console.error('[SimpleCall] ❌ All ringback attempts failed:', fallbackErr);
+        }
+      }
+    };
+    
     if (callState === 'connecting' && isOwner) {
-      // Play ringback tone
-      RingtoneService.playRingtone('outgoing', { loop: true })
-        .then(audio => {
-          ringbackAudioRef.current = audio;
-          console.log('[SimpleCall] Playing ringback tone...');
-        })
-        .catch(err => {
-          console.warn('[SimpleCall] Could not play ringback:', err);
-        });
+      playRingback();
     } else if (callState !== 'connecting' && ringbackAudioRef.current) {
       // Stop ringback when connected or failed
+      console.log('[SimpleCall] 🔇 Stopping ringback tone');
       RingtoneService.stopRingtone(ringbackAudioRef.current);
       ringbackAudioRef.current = null;
-      console.log('[SimpleCall] Stopped ringback tone');
     }
 
     return () => {

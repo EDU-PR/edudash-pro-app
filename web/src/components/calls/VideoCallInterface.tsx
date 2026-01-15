@@ -151,20 +151,41 @@ export const VideoCallInterface = ({
 
     const playRingback = async () => {
       if ((callState === 'connecting' || callState === 'ringing') && isOwner) {
+        console.log('[VideoCall] 🔊 Attempting to play ringback tone...', { callState, isOwner });
+        
         try {
+          // Try RingtoneService first (uses user preferences)
           const { default: RingtoneService } = await import('@/lib/services/ringtoneService');
           const audio = await RingtoneService.playRingtone('outgoing', { loop: true });
           if (isMounted && audio) {
             ringbackAudioRef.current = audio;
+            console.log('[VideoCall] ✅ Ringback playing via RingtoneService');
+            return;
           }
         } catch (err) {
-          console.warn('[VideoCall] Could not play ringback:', err);
+          console.warn('[VideoCall] RingtoneService failed:', err);
+        }
+        
+        // Fallback: Direct audio element
+        if (isMounted) {
+          console.log('[VideoCall] 🔄 Trying fallback ringback audio...');
+          try {
+            const fallbackAudio = new Audio('/sounds/ringback.mp3');
+            fallbackAudio.loop = true;
+            fallbackAudio.volume = 0.8;
+            await fallbackAudio.play();
+            ringbackAudioRef.current = fallbackAudio;
+            console.log('[VideoCall] ✅ Ringback playing via fallback');
+          } catch (fallbackErr) {
+            console.error('[VideoCall] ❌ All ringback attempts failed:', fallbackErr);
+          }
         }
       }
     };
 
     const stopRingback = () => {
       if (ringbackAudioRef.current) {
+        console.log('[VideoCall] 🔇 Stopping ringback tone');
         try {
           ringbackAudioRef.current.pause();
           ringbackAudioRef.current.currentTime = 0;

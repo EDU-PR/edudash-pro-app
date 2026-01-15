@@ -206,10 +206,29 @@ export class RingtoneService {
     options?: { loop?: boolean }
   ): Promise<HTMLAudioElement | null> {
     try {
+      console.log(`[RingtoneService] 🔊 Playing ${type} ringtone...`);
+      
       const prefs = await this.getRingtonePreferences();
+      console.log(`[RingtoneService] Preferences:`, { 
+        type: type === 'incoming' ? prefs.incomingRingtone : prefs.outgoingRingback,
+        volume: type === 'incoming' ? prefs.incomingVolume : prefs.outgoingVolume 
+      });
+      
       const audio = await this.preloadRingtone(type);
       
-      if (!audio) return null;
+      if (!audio) {
+        console.warn('[RingtoneService] No audio element from preload, creating fallback');
+        // Create a fallback audio element with default sound
+        const fallbackUrl = type === 'incoming' ? '/sounds/ringtone.mp3' : '/sounds/ringback.mp3';
+        const fallbackAudio = new Audio(fallbackUrl);
+        fallbackAudio.preload = 'auto';
+        fallbackAudio.volume = type === 'incoming' ? prefs.incomingVolume : prefs.outgoingVolume;
+        fallbackAudio.loop = options?.loop ?? false;
+        
+        await fallbackAudio.play();
+        console.log('[RingtoneService] ✅ Fallback audio playing');
+        return fallbackAudio;
+      }
 
       audio.loop = options?.loop ?? false;
       audio.currentTime = 0;
@@ -226,9 +245,10 @@ export class RingtoneService {
       }
 
       await audio.play();
+      console.log(`[RingtoneService] ✅ ${type} ringtone playing successfully`);
       return audio;
     } catch (error) {
-      console.error('Failed to play ringtone:', error);
+      console.error(`[RingtoneService] ❌ Failed to play ${type} ringtone:`, error);
       return null;
     }
   }
