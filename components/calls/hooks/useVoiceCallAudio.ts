@@ -106,95 +106,77 @@ export function useVoiceCallAudio({
     console.log('[VoiceCallAudio] 🔊 playCustomRingback called', {
       attempt: retryAttempt + 1,
       hasAsset: !!RINGBACK_SOUND,
+      assetType: typeof RINGBACK_SOUND,
       loadError: RINGBACK_LOAD_ERROR,
       hasInCallManager: !!InCallManager,
+      isSpeakerEnabled,
     });
     
-    // Check if sound file is loaded
-    if (!RINGBACK_SOUND) {
-      console.error('[VoiceCallAudio] ❌ Ringback sound not loaded - cannot play');
-      // Try fallback to InCallManager system ringback as last resort
-      if (InCallManager && retryAttempt >= 2) {
-        try {
-          console.log('[VoiceCallAudio] 🔄 Falling back to InCallManager system ringback');
-          InCallManager.startRingback('_DEFAULT_');
-          ringbackStartedRef.current = true;
-          console.log('[VoiceCallAudio] ✅ InCallManager fallback ringback started');
-        } catch (e) {
-          console.error('[VoiceCallAudio] System ringback fallback failed:', e);
-        }
+    const MAX_RETRIES = 3;
+    const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000);
+    
+    // STRATEGY: Try InCallManager ringback first (most reliable for calls)
+    // Then fall back to expo-audio if that fails
+    
+    // Method 1: InCallManager system ringback (preferred for call audio)
+    if (InCallManager) {
+      try {
+        // CRITICAL: Set audio routing BEFORE starting ringback
+        InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
+        
+        console.log('[VoiceCallAudio] 🔊 Starting InCallManager ringback...');
+        InCallManager.startRingback('_DEFAULT_');
+        ringbackStartedRef.current = true;
+        console.log('[VoiceCallAudio] ✅ InCallManager ringback started');
+        
+        // Give haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        return;
+      } catch (e) {
+        console.warn('[VoiceCallAudio] InCallManager ringback failed:', e);
       }
+    }
+    
+    // Method 2: expo-audio player (fallback)
+    if (!RINGBACK_SOUND) {
+      console.error('[VoiceCallAudio] ❌ No ringback sound available');
       return;
     }
     
-    const MAX_RETRIES = 3;
-    const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000); // 500ms, 1s, 2s
-    
     try {
-      console.log(`[VoiceCallAudio] 🔊 Starting ringback via expo-audio (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
-      console.log('[VoiceCallAudio] Sound asset:', typeof RINGBACK_SOUND, RINGBACK_SOUND);
+      console.log(`[VoiceCallAudio] 🔊 Trying expo-audio ringback (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
       
-      // CRITICAL: Set audio mode to route through earpiece BEFORE creating player
-      // expo-audio's shouldRouteThroughEarpiece is the key setting for Android
+      // Set audio mode
       await setAudioModeAsync({
         playsInSilentMode: true,
         interruptionMode: 'doNotMix',
-        allowsRecording: true, // Needed for calls
+        allowsRecording: true,
         shouldPlayInBackground: true,
-        // ANDROID SPECIFIC: Route through earpiece for phone-like experience
-        shouldRouteThroughEarpiece: !isSpeakerEnabled, // Use speaker setting
+        shouldRouteThroughEarpiece: !isSpeakerEnabled,
       });
-      console.log('[VoiceCallAudio] ✅ Audio mode set, creating player...');
       
-      // Also enforce via InCallManager for extra reliability
-      if (InCallManager) {
-        InCallManager.setForceSpeakerphoneOn(false);
-      }
-      
-      // Create and play the ringback sound using expo-audio
       const player = createAudioPlayer(RINGBACK_SOUND);
-      console.log('[VoiceCallAudio] ✅ Audio player created:', player);
-      
-      player.loop = true; // Loop until call connects
+      player.loop = true;
       player.volume = 1.0;
-      
-      // Start playback
-      console.log('[VoiceCallAudio] 🎵 Starting playback...');
       player.play();
       
-      // Verify playback started by checking after a short delay
       await new Promise(resolve => setTimeout(resolve, 200));
       
       ringbackPlayerRef.current = player;
       ringbackStartedRef.current = true;
-      ringbackRetryCountRef.current = 0;
-      console.log('[VoiceCallAudio] ✅ Ringback playback started successfully');
+      console.log('[VoiceCallAudio] ✅ expo-audio ringback started');
       
-      // Give haptic feedback to indicate call is ringing
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       
     } catch (error) {
-      console.error(`[VoiceCallAudio] ❌ Failed to start ringback (attempt ${retryAttempt + 1}):`, error);
+      console.error(`[VoiceCallAudio] ❌ expo-audio ringback failed (attempt ${retryAttempt + 1}):`, error);
       ringbackStartedRef.current = false;
       
-      // Retry with exponential backoff
       if (retryAttempt < MAX_RETRIES - 1) {
         console.log(`[VoiceCallAudio] 🔄 Retrying in ${retryDelay}ms...`);
         ringbackRetryTimeoutRef.current = setTimeout(() => {
           playCustomRingback(retryAttempt + 1);
         }, retryDelay);
-      } else {
-        console.error('[VoiceCallAudio] ❌ All ringback retry attempts failed');
-        // Final fallback: try system ringback
-        if (InCallManager) {
-          try {
-            InCallManager.startRingback('_DEFAULT_');
-            ringbackStartedRef.current = true;
-            console.log('[VoiceCallAudio] ✅ Fell back to system ringback');
-          } catch (e) {
-            console.error('[VoiceCallAudio] System ringback fallback failed:', e);
-          }
-        }
       }
     }
   }, [isSpeakerEnabled]);
