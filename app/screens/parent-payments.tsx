@@ -28,6 +28,7 @@ import {
   PaymentHistoryList,
   POPUploadSection,
   PaymentUploadModal,
+  PendingDocumentsCard,
 } from '@/components/payments';
 
 export default function ParentPaymentsScreen() {
@@ -155,6 +156,14 @@ export default function ParentPaymentsScreen() {
         {/* Registration Fee */}
         {selectedChild && (
           <RegistrationCard child={selectedChild} theme={theme} />
+        )}
+
+        {/* Pending Documents - Shows if any documents are missing */}
+        {selectedChild && (
+          <PendingDocumentsCard
+            studentId={selectedChild.id}
+            theme={theme}
+          />
         )}
 
         {/* Tab Navigation */}

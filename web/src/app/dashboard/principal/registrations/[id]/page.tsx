@@ -208,13 +208,31 @@ export default function RegistrationDetailPage() {
 
       if (error) throw error;
 
-      // Also update students table if exists
-      await supabase
+      // Also update students table if exists - parent dashboard reads from students table
+      console.log('[VerifyPayment] Updating students table for:', {
+        preschool_id: registration.organization_id,
+        first_name: registration.student_first_name,
+        last_name: registration.student_last_name,
+      });
+      
+      const { data: studentData, error: studentError } = await supabase
         .from('students')
         .update(updateData)
         .eq('preschool_id', registration.organization_id)
         .ilike('first_name', registration.student_first_name)
-        .ilike('last_name', registration.student_last_name);
+        .ilike('last_name', registration.student_last_name)
+        .select();
+
+      if (studentError) {
+        console.error('[VerifyPayment] Error updating students table:', studentError);
+      } else if (!studentData || studentData.length === 0) {
+        console.warn('[VerifyPayment] No matching student found in students table. Payment verified in registration_requests only.');
+        alert(`Payment ${verify ? 'verified' : 'verification removed'}!\n\n⚠️ Note: No matching student record found. The parent's dashboard may not reflect this change until the student record is synced.`);
+        await fetchRegistration();
+        return;
+      } else {
+        console.log('[VerifyPayment] Successfully updated', studentData.length, 'student(s):', studentData);
+      }
 
       alert(`Payment ${verify ? 'verified' : 'verification removed'}!`);
       await fetchRegistration();

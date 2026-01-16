@@ -593,18 +593,28 @@ export function useRegistrations(): UseRegistrationsReturn {
                 let parentId: string | null = null;
                 const { data: existingParent } = await supabase
                   .from('profiles')
-                  .select('id')
+                  .select('id, organization_id, preschool_id')
                   .eq('email', regData.guardian_email)
                   .maybeSingle();
 
                 if (existingParent) {
                   parentId = existingParent.id;
-                  // Update parent's organization if not set
-                  await supabase
-                    .from('profiles')
-                    .update({ organization_id: regData.organization_id })
-                    .eq('id', parentId)
-                    .is('organization_id', null);
+                  // ALWAYS update parent's organization to match registration
+                  // This fixes cases where parent was created with placeholder org
+                  const needsOrgUpdate = !existingParent.organization_id || 
+                    existingParent.organization_id !== regData.organization_id ||
+                    existingParent.preschool_id !== regData.organization_id;
+                  
+                  if (needsOrgUpdate) {
+                    console.log(`[Approve] Updating parent ${parentId} org from ${existingParent.organization_id} to ${regData.organization_id}`);
+                    await supabase
+                      .from('profiles')
+                      .update({ 
+                        organization_id: regData.organization_id,
+                        preschool_id: regData.organization_id 
+                      })
+                      .eq('id', parentId);
+                  }
                 }
 
                 // Generate student_id code
@@ -851,6 +861,45 @@ export function useRegistrations(): UseRegistrationsReturn {
 
               if (error) throw error;
 
+              // ALSO update the students table so parent dashboard reflects correct payment status
+              // Parent dashboard reads from students table, not registration_requests
+              const studentUpdateData: any = {
+                payment_verified: verify,
+                payment_date: verify ? new Date().toISOString() : null,
+              };
+              if (verify) {
+                studentUpdateData.registration_fee_paid = true;
+              }
+              
+              // Update student by matching preschool + name (organization_id maps to preschool_id)
+              console.log('[VerifyPayment] Updating students table for:', {
+                preschool_id: registration.organization_id,
+                first_name: registration.student_first_name,
+                last_name: registration.student_last_name,
+              });
+              
+              const { data: studentData, error: studentError } = await supabase
+                .from('students')
+                .update(studentUpdateData)
+                .eq('preschool_id', registration.organization_id)
+                .ilike('first_name', registration.student_first_name)
+                .ilike('last_name', registration.student_last_name)
+                .select();
+
+              if (studentError) {
+                console.error('[VerifyPayment] Error updating students table:', studentError);
+              } else if (!studentData || studentData.length === 0) {
+                console.warn('[VerifyPayment] No matching student found in students table');
+                Alert.alert(
+                  'Partial Success', 
+                  `Payment ${verify ? 'verified' : 'verification removed'} in registration records.\n\nNote: No matching student record found. The parent's dashboard may not reflect this change until the student is synced.`
+                );
+                fetchRegistrations();
+                return;
+              } else {
+                console.log('[VerifyPayment] Successfully updated', studentData.length, 'student(s)');
+              }
+
               Alert.alert('Success', `Payment ${verify ? 'verified' : 'verification removed'}`);
               fetchRegistrations();
             } catch (err: any) {
@@ -898,16 +947,6 @@ export function useRegistrations(): UseRegistrationsReturn {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-    <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">💰 Registration Payment Reminder</h1>
-    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.95); font-size: 16px;">${schoolName}</p>
-  </div>
-  
-  <div style="max-width: 600px; margin: 0 auto; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="padding: 30px 20px;">
-      <p style="margin: 0 0 20px 0; font-size: 16px; color: #333;">Dear ${registration.guardian_name},</p>
-      
       <p style="margin: 0 0 20px 0; font-size: 15px; color: #555; line-height: 1.6;">
         This is a friendly reminder that we have not yet received proof of payment for <strong>${registration.student_first_name} ${registration.student_last_name}'s</strong> registration at ${schoolName}.
       </p>

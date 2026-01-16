@@ -139,6 +139,12 @@ interface RegistrationCardProps {
 
 export function RegistrationCard({ child, theme }: RegistrationCardProps) {
   const styles = createStyles(theme);
+  
+  // Determine payment status display
+  // payment_verified = school has confirmed payment receipt
+  // registration_fee_paid = parent has indicated they paid (POP uploaded)
+  const isFullyVerified = child.payment_verified;
+  const isPaidAwaitingVerification = child.registration_fee_paid && !child.payment_verified;
 
   return (
     <View style={styles.registrationCard}>
@@ -149,15 +155,20 @@ export function RegistrationCard({ child, theme }: RegistrationCardProps) {
       <Text style={styles.registrationAmount}>
         {formatCurrency(child.registration_fee_amount || 0)}
       </Text>
-      {child.registration_fee_paid ? (
+      {isFullyVerified ? (
         <View style={styles.paidBadge}>
           <Ionicons name="checkmark-circle" size={14} color="#22c55e" />
           <Text style={styles.paidText}>Paid & Verified</Text>
         </View>
+      ) : isPaidAwaitingVerification ? (
+        <View style={[styles.unpaidBadge, { backgroundColor: '#3b82f620' }]}>
+          <Ionicons name="hourglass-outline" size={14} color="#3b82f6" />
+          <Text style={[styles.unpaidText, { color: '#3b82f6' }]}>Awaiting Verification</Text>
+        </View>
       ) : (
         <View style={styles.unpaidBadge}>
           <Ionicons name="time-outline" size={14} color="#fbbf24" />
-          <Text style={styles.unpaidText}>Pending</Text>
+          <Text style={styles.unpaidText}>Payment Pending</Text>
         </View>
       )}
     </View>

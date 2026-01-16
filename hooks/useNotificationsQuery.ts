@@ -107,33 +107,50 @@ async function fetchNotifications(userId: string): Promise<Notification[]> {
   
   // 3. Fetch missed calls
   try {
+    // Note: active_calls table doesn't have foreign keys to profiles,
+    // so we fetch calls first, then separately fetch caller profiles
     const { data: calls } = await client
       .from('active_calls')
-      .select('*, caller:profiles!caller_id(first_name, last_name)')
+      .select('*')
       .eq('callee_id', userId)
       .or('status.eq.missed,and(status.eq.ended,duration_seconds.is.null),and(status.eq.ended,duration_seconds.eq.0)')
       .order('started_at', { ascending: false })
       .limit(10);
     
-    calls?.forEach((call: any) => {
-      const callerName = call.caller 
-        ? `${call.caller.first_name} ${call.caller.last_name}`.trim()
-        : 'Unknown';
-      const notifId = `call-${call.call_id}`;
+    if (calls?.length) {
+      // Fetch caller profiles separately
+      const callerIds = [...new Set(calls.map((c: any) => c.caller_id))];
+      const { data: callerProfiles } = await client
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', callerIds);
       
-      if (!isNotificationCleared(notifId, call.started_at, clearedIds, clearedBeforeDate)) {
-        notifications.push({
-          id: notifId,
-          type: 'call',
-          title: `Missed ${call.call_type || 'voice'} call`,
-          body: `You missed a ${call.call_type || 'voice'} call from ${callerName}`,
-          data: { callerId: call.caller_id, callType: call.call_type },
-          read: readIds.has(notifId),
-          created_at: call.started_at,
-          sender_name: callerName,
-        });
-      }
-    });
+      const profileMap = new Map(
+        (callerProfiles || []).map((p: any) => [
+          p.id,
+          `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'
+        ])
+      );
+      
+      calls.forEach((call: any) => {
+        // Use caller_name from call record if available, otherwise look up profile
+        const callerName = call.caller_name || profileMap.get(call.caller_id) || 'Unknown';
+        const notifId = `call-${call.call_id}`;
+        
+        if (!isNotificationCleared(notifId, call.started_at, clearedIds, clearedBeforeDate)) {
+          notifications.push({
+            id: notifId,
+            type: 'call',
+            title: `Missed ${call.call_type || 'voice'} call`,
+            body: `You missed a ${call.call_type || 'voice'} call from ${callerName}`,
+            data: { callerId: call.caller_id, callType: call.call_type },
+            read: readIds.has(notifId),
+            created_at: call.started_at,
+            sender_name: callerName,
+          });
+        }
+      });
+    }
   } catch (e) {
     console.log('[useNotificationsQuery] Error fetching calls:', e);
   }

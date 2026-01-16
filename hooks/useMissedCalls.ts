@@ -136,12 +136,11 @@ export const useRecentMissedCalls = (limit: number = 5) => {
       const client = assertSupabase();
       
       try {
+        // Note: active_calls table doesn't have foreign keys to profiles,
+        // so we fetch calls first, then separately fetch caller profiles
         const { data: calls, error } = await client
           .from('active_calls')
-          .select(`
-            *,
-            caller:profiles!active_calls_caller_id_fkey(id, first_name, last_name)
-          `)
+          .select('*')
           .eq('callee_id', user.id)
           .in('status', ['missed', 'ended'])
           .order('started_at', { ascending: false })
@@ -161,11 +160,26 @@ export const useRecentMissedCalls = (limit: number = 5) => {
           (call.status === 'ended' && (call.duration_seconds === null || call.duration_seconds === 0))
         ).slice(0, limit);
         
+        if (missedCalls.length === 0) return [];
+        
+        // Fetch caller profiles separately
+        const callerIds = [...new Set(missedCalls.map(c => c.caller_id))];
+        const { data: callerProfiles } = await client
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', callerIds);
+        
+        const profileMap = new Map(
+          (callerProfiles || []).map(p => [
+            p.id,
+            `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'
+          ])
+        );
+        
         return missedCalls.map(call => ({
           id: call.id,
-          callerName: call.caller 
-            ? `${call.caller.first_name || ''} ${call.caller.last_name || ''}`.trim() || 'Unknown'
-            : 'Unknown',
+          // Use caller_name from call record if available, otherwise look up profile
+          callerName: call.caller_name || profileMap.get(call.caller_id) || 'Unknown',
           callType: call.call_type,
           startedAt: call.started_at,
         })) ?? [];
