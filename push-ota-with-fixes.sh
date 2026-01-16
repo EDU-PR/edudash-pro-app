@@ -10,6 +10,10 @@ if [ -f ~/.nvm/nvm.sh ]; then
   nvm use 20
 fi
 
+# CRITICAL: Increase Node.js memory limit to prevent heap out of memory errors
+# Metro bundler needs more memory for large React Native apps
+export NODE_OPTIONS="--max-old-space-size=8192"
+
 # Default message
 MESSAGE="${1:-OTA Update}"
 
