@@ -6,6 +6,84 @@ import { usePathname } from 'expo-router';
 import { assertSupabase, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import Constants from 'expo-constants';
+
+// Get Supabase URL from environment
+const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
+
+/**
+ * Helper function to send push notification to message recipient
+ * Calls notifications-dispatcher Edge Function
+ */
+async function sendMessagePushNotification(params: {
+  threadId: string;
+  messageId: string;
+  senderId: string;
+  senderName: string;
+  messageContent: string;
+  recipientIds: string[];
+}) {
+  const { threadId, messageId, senderId, senderName, messageContent, recipientIds } = params;
+  
+  // Don't send notification to yourself
+  const recipientsExcludingSender = recipientIds.filter(id => id !== senderId);
+  if (recipientsExcludingSender.length === 0) return;
+  
+  try {
+    const client = assertSupabase();
+    const { data: { session } } = await client.auth.getSession();
+    
+    if (!session?.access_token) {
+      logger.warn('sendMessagePushNotification', 'No session, skipping push notification');
+      return;
+    }
+    
+    // Truncate message for notification preview
+    const truncatedBody = messageContent.length > 100 
+      ? messageContent.substring(0, 97) + '...' 
+      : messageContent;
+    
+    // Call notifications-dispatcher Edge Function
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event_type: 'new_message',
+        user_ids: recipientsExcludingSender,
+        thread_id: threadId,
+        message_id: messageId,
+        send_immediately: true,
+        template_override: {
+          title: `💬 ${senderName}`,
+          body: truncatedBody,
+          data: {
+            type: 'message',
+            thread_id: threadId,
+            message_id: messageId,
+            sender_id: senderId,
+            sender_name: senderName,
+            screen: 'messages',
+          },
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.warn('sendMessagePushNotification', 'Edge function error:', response.status, errorText);
+      return;
+    }
+    
+    const result = await response.json();
+    logger.debug('sendMessagePushNotification', '✅ Push notification sent:', result);
+  } catch (error) {
+    // Don't fail message send if notification fails
+    logger.warn('sendMessagePushNotification', 'Failed to send push notification:', error);
+  }
+}
 
 // Types (shared with parent messaging)
 export interface MessageThread {
@@ -402,9 +480,39 @@ export const useTeacherSendMessage = () => {
       
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: async (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['teacher', 'messages', variables.threadId] });
       queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+      
+      // Fetch recipient IDs
+      const client = assertSupabase();
+      const { data: participants } = await client
+        .from('message_participants')
+        .select('user_id')
+        .eq('thread_id', variables.threadId);
+
+      const recipientIds = participants?.map((p: any) => p.user_id) || [];
+
+      // Fetch sender profile
+      const { data: senderProfile } = await client
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', user?.id)
+        .single();
+
+      const senderName = senderProfile 
+        ? `${senderProfile.first_name || ''} ${senderProfile.last_name || ''}`.trim() || 'Teacher'
+        : 'Teacher';
+
+      // Send push notification to recipient
+      await sendMessagePushNotification({
+        threadId: variables.threadId,
+        messageId: data.id,
+        senderId: user?.id || '',
+        senderName,
+        messageContent: data.content,
+        recipientIds,
+      });
     },
   });
 };

@@ -29,6 +29,35 @@ import type { CallType } from './types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// CRITICAL: Preload ringtone at module level for instant playback
+// This ensures the audio is ready when an incoming call arrives
+let RINGTONE_ASSET: any = null;
+let RINGTONE_LOAD_ERROR: string | null = null;
+try {
+  RINGTONE_ASSET = require('@/assets/sounds/ringtone.mp3');
+  console.log('[IncomingCall] ✅ Ringtone asset loaded at module level');
+} catch (error) {
+  RINGTONE_LOAD_ERROR = String(error);
+  console.error('[IncomingCall] ❌ Failed to load ringtone asset:', error);
+  // Try fallback
+  try {
+    RINGTONE_ASSET = require('@/assets/sounds/notification.wav');
+    RINGTONE_LOAD_ERROR = null;
+    console.log('[IncomingCall] ✅ Fallback notification sound loaded');
+  } catch (e2) {
+    console.error('[IncomingCall] ❌ Fallback also failed:', e2);
+  }
+}
+
+// InCallManager for system ringtone
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager').default;
+  console.log('[IncomingCall] ✅ InCallManager available');
+} catch {
+  console.warn('[IncomingCall] ⚠️ InCallManager not available');
+}
+
 interface WhatsAppStyleIncomingCallProps {
   callerName: string;
   callerPhoto?: string | null;
@@ -146,82 +175,153 @@ export function WhatsAppStyleIncomingCall({
     // DO NOT stop for background state - we want the phone to keep ringing!
     if (!isVisible || isConnecting) {
       if (soundRef.current) {
-        soundRef.current.pause();
-        soundRef.current.remove();
+        try {
+          soundRef.current.pause();
+          soundRef.current.remove();
+        } catch (e) {
+          console.warn('[IncomingCall] Error stopping sound:', e);
+        }
         soundRef.current = null;
+      }
+      // Stop system ringtone if started
+      if (InCallManager) {
+        try {
+          InCallManager.stopRingtone();
+        } catch {
+          // Ignore
+        }
       }
       Vibration.cancel();
       return;
     }
 
-    // WhatsApp-style vibration pattern
+    console.log('[IncomingCall] 🔔 Starting ringtone and vibration');
+    console.log('[IncomingCall] Asset status:', {
+      hasAsset: !!RINGTONE_ASSET,
+      loadError: RINGTONE_LOAD_ERROR,
+      hasInCallManager: !!InCallManager,
+    });
+
+    // WhatsApp-style vibration pattern - start immediately
     const vibrationPattern = Platform.OS === 'android' 
       ? [0, 400, 200, 400, 1000] 
       : [400, 200, 400];
     Vibration.vibrate(vibrationPattern, true);
 
-    // Use InCallManager to play system default ringtone
-    const playSystemRingtone = async () => {
-      try {
-        // Import InCallManager for ringtone
-        let InCallManager: any = null;
+    // Play ringtone with multiple fallback strategies
+    let ringtoneStarted = false;
+    let systemRingtoneStarted = false;
+    
+    const playRingtone = async () => {
+      // STRATEGY 1: Try expo-audio with preloaded asset (most reliable)
+      if (RINGTONE_ASSET && !ringtoneStarted) {
         try {
-          InCallManager = require('react-native-incall-manager').default;
-        } catch {
-          console.warn('[IncomingCall] InCallManager not available');
+          console.log('[IncomingCall] 📱 Trying expo-audio with preloaded asset...');
+          
+          // Set audio mode for ringtone - should be loud and through speaker
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+            interruptionMode: 'doNotMix',
+            shouldRouteThroughEarpiece: false, // Ringtone should play through speaker!
+          });
+          
+          const player = createAudioPlayer(RINGTONE_ASSET);
+          player.loop = true;
+          player.volume = 1.0;
+          
+          // Store reference before playing
+          soundRef.current = player;
+          
+          // Start playback
+          player.play();
+          
+          // Verify playback started
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          ringtoneStarted = true;
+          console.log('[IncomingCall] ✅ Expo-audio ringtone playing!');
+        } catch (error) {
+          console.error('[IncomingCall] ❌ Expo-audio failed:', error);
+          soundRef.current = null;
         }
-        
-        if (InCallManager) {
-          // Start ringtone with system default
+      }
+      
+      // STRATEGY 2: Try InCallManager system ringtone (fallback)
+      if (!ringtoneStarted && InCallManager) {
+        try {
+          console.log('[IncomingCall] 📱 Trying InCallManager system ringtone...');
           InCallManager.startRingtone('_DEFAULT_');
-          console.log('[IncomingCall] Playing system default ringtone');
-        } else {
-          // Fallback to custom audio if InCallManager not available
+          systemRingtoneStarted = true;
+          ringtoneStarted = true;
+          console.log('[IncomingCall] ✅ System ringtone started via InCallManager');
+        } catch (error) {
+          console.error('[IncomingCall] ❌ InCallManager ringtone failed:', error);
+        }
+      }
+      
+      // STRATEGY 3: Try reloading asset dynamically (last resort)
+      if (!ringtoneStarted) {
+        try {
+          console.log('[IncomingCall] 📱 Trying dynamic require as last resort...');
+          
           await setAudioModeAsync({
             playsInSilentMode: true,
             shouldPlayInBackground: true,
           });
           
-          let soundFile;
+          // Try loading sound dynamically
+          let soundAsset;
           try {
-            soundFile = require('@/assets/sounds/ringtone.mp3');
+            soundAsset = require('@/assets/sounds/ringtone.mp3');
           } catch {
-            try {
-              soundFile = require('@/assets/sounds/notification.wav');
-            } catch {
-              return;
-            }
+            soundAsset = require('@/assets/sounds/notification.wav');
           }
           
-          const player = createAudioPlayer(soundFile);
+          const player = createAudioPlayer(soundAsset);
           player.loop = true;
           player.volume = 1.0;
           soundRef.current = player;
           player.play();
+          
+          ringtoneStarted = true;
+          console.log('[IncomingCall] ✅ Dynamic require ringtone playing!');
+        } catch (error) {
+          console.error('[IncomingCall] ❌ Dynamic require also failed:', error);
         }
-      } catch (error) {
-        console.warn('[IncomingCall] Failed to play ringtone:', error);
+      }
+      
+      if (!ringtoneStarted) {
+        console.error('[IncomingCall] ❌ ALL RINGTONE METHODS FAILED - only vibration will alert user');
       }
     };
 
-    playSystemRingtone();
+    // Start ringtone (async but don't wait - vibration already running)
+    playRingtone();
 
     return () => {
+      console.log('[IncomingCall] 🔕 Cleanup - stopping ringtone');
+      
       // Stop system ringtone
-      try {
-        const InCallManager = require('react-native-incall-manager').default;
-        InCallManager.stopRingtone();
-        console.log('[IncomingCall] Stopped system ringtone');
-      } catch {
-        // InCallManager not available, no-op
+      if (InCallManager) {
+        try {
+          InCallManager.stopRingtone();
+        } catch {
+          // Ignore
+        }
       }
       
-      // Stop custom audio fallback if used
+      // Stop expo-audio player
       if (soundRef.current) {
-        soundRef.current.pause();
-        soundRef.current.remove();
+        try {
+          soundRef.current.pause();
+          soundRef.current.remove();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
         soundRef.current = null;
       }
+      
       Vibration.cancel();
     };
   }, [isVisible, isConnecting]);

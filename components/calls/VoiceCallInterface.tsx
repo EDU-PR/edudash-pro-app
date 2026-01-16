@@ -100,6 +100,7 @@ export function VoiceCallInterface({
     userName,
     isOwner,
     calleeId,
+    initialCallId: callId,
     isSpeakerEnabled: state.isSpeakerEnabled,
     dailyRef: state.dailyRef,
     callIdRef: state.callIdRef,

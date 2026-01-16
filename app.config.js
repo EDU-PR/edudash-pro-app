@@ -30,9 +30,10 @@ require('dotenv').config();
 // EAS Project ID configuration
 // Use aliases like: EAS_PROJECT_ID=playstore npx eas build ...
 const EAS_PROJECTS = {
-  // Default project (k1ng-devops account) - CURRENT ACTIVE
-  default: { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
-  // k1ng-devops project (primary for Play Store builds)
+  // Default project - EduPro-Final (edudashproplay-store org) - CURRENT ACTIVE for Play Store
+  // Mark_2 1.0.22(27) is published from this project
+  default: { id: 'accd5738-9ee6-434c-a3be-668d9674f541', owner: 'edudashproplay-store', slug: 'edupro-final' },
+  // k1ng-devops project (legacy)
   'k1ng': { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
   'k1ng-devops': { id: '81051af4-2468-4efa-a1f1-03d00f5c5688', owner: 'k1ng-devops', slug: 'edudashpro' },
   // dash-t account (legacy)

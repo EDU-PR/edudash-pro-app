@@ -12,9 +12,19 @@ import {
   StyleSheet,
   Linking,
   Alert,
-  Image,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// Lazy load IntentLauncher - will be null if not available (pre-rebuild)
+// This prevents OTA crashes while still enabling the feature after rebuild
+let IntentLauncher: typeof import('expo-intent-launcher') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  IntentLauncher = require('expo-intent-launcher');
+} catch {
+  console.log('[BankSelectionSheet] expo-intent-launcher not available (needs rebuild)');
+}
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -119,37 +129,74 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
     onClose();
     onBankSelected?.(bank);
     
+    const playStoreWeb = bank.marketUrl;
+    
     try {
-      // On Android, canOpenURL is unreliable for custom schemes even with queries declared
-      // Instead, try to open directly and catch the error
-      
-      // First try: Open via Play Store intent (most reliable on Android)
-      // This opens the app if installed, or shows Play Store page if not
-      const playStoreIntent = `market://details?id=${bank.playStoreId}`;
-      const playStoreWeb = bank.marketUrl;
-      
-      // Try opening the app directly first
-      try {
-        await Linking.openURL(bank.scheme);
-        console.log(`✅ Opened ${bank.name} via scheme: ${bank.scheme}`);
-        return;
-      } catch (schemeError) {
-        console.log(`📱 ${bank.name} scheme failed, trying alternatives...`);
+      if (Platform.OS === 'android' && IntentLauncher) {
+        // On Android, use IntentLauncher to directly open the app by package name
+        // We use the ACTION_MAIN activity action which launches the main activity
+        try {
+          await IntentLauncher.startActivityAsync(
+            'android.intent.action.MAIN',
+            {
+              packageName: bank.playStoreId,
+              category: 'android.intent.category.LAUNCHER',
+            }
+          );
+          console.log(`✅ Opened ${bank.name} via IntentLauncher: ${bank.playStoreId}`);
+          return;
+        } catch (intentError) {
+          console.log(`📱 ${bank.name} IntentLauncher failed:`, intentError);
+          // App is likely not installed, show options
+        }
+      } else if (Platform.OS === 'android') {
+        // IntentLauncher not available (pre-rebuild), try URL scheme fallback
+        try {
+          const canOpen = await Linking.canOpenURL(bank.scheme);
+          if (canOpen) {
+            await Linking.openURL(bank.scheme);
+            console.log(`✅ Opened ${bank.name} via scheme (fallback): ${bank.scheme}`);
+            return;
+          }
+        } catch (schemeError) {
+          console.log(`📱 ${bank.name} scheme fallback failed:`, schemeError);
+        }
+      } else {
+        // On iOS, try the URL scheme
+        try {
+          const canOpen = await Linking.canOpenURL(bank.scheme);
+          if (canOpen) {
+            await Linking.openURL(bank.scheme);
+            console.log(`✅ Opened ${bank.name} via scheme: ${bank.scheme}`);
+            return;
+          }
+        } catch (schemeError) {
+          console.log(`📱 ${bank.name} scheme failed:`, schemeError);
+        }
       }
 
-      // If scheme failed, offer options to user
+      // If app couldn't be opened, ask user what to do
       Alert.alert(
         bank.name,
-        t('payments.open_bank_options', { 
-          defaultValue: `How would you like to open ${bank.name}?` 
+        t('payments.app_not_installed', { 
+          bankName: bank.name,
+          defaultValue: `${bank.name} app doesn't seem to be installed. What would you like to do?` 
         }),
         [
           {
-            text: t('payments.open_app_store', { defaultValue: 'Open in Play Store' }),
+            text: Platform.OS === 'android' 
+              ? t('payments.open_play_store', { defaultValue: 'Open Play Store' })
+              : t('payments.open_app_store', { defaultValue: 'Open App Store' }),
             onPress: async () => {
               try {
-                await Linking.openURL(playStoreIntent);
+                if (Platform.OS === 'android') {
+                  // Use market:// intent for Play Store
+                  await Linking.openURL(`market://details?id=${bank.playStoreId}`);
+                } else {
+                  await Linking.openURL(playStoreWeb);
+                }
               } catch {
+                // Fallback to web URL
                 await Linking.openURL(playStoreWeb);
               }
             },
@@ -164,7 +211,18 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
     } catch (error) {
       console.error('Error opening banking app:', error);
       // Ultimate fallback to website
-      Linking.openURL(bank.fallbackUrl);
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('payments.error_opening_bank', { 
+          defaultValue: 'Could not open the banking app. Opening website instead.' 
+        }),
+        [
+          { 
+            text: t('common.ok', { defaultValue: 'OK' }), 
+            onPress: () => Linking.openURL(bank.fallbackUrl) 
+          }
+        ]
+      );
     }
   };
 

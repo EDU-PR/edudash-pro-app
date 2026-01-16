@@ -27,14 +27,24 @@ try {
   console.warn('[VoiceCallAudio] InCallManager not available:', error);
 }
 
-// Ringback sound asset - use @/ alias for consistent resolution
-// CRITICAL: Must use require() at module level, not inside function
+// CRITICAL: Preload ringback sound at module level for instant playback
+// This ensures the audio is ready when making outgoing calls
 let RINGBACK_SOUND: any = null;
+let RINGBACK_LOAD_ERROR: string | null = null;
 try {
   RINGBACK_SOUND = require('@/assets/sounds/ringback.mp3');
-  console.log('[VoiceCallAudio] ✅ Ringback sound loaded');
+  console.log('[VoiceCallAudio] ✅ Ringback sound loaded at module level');
 } catch (error) {
+  RINGBACK_LOAD_ERROR = String(error);
   console.warn('[VoiceCallAudio] ❌ Failed to load ringback sound:', error);
+  // Try fallback
+  try {
+    RINGBACK_SOUND = require('@/assets/sounds/notification.wav');
+    RINGBACK_LOAD_ERROR = null;
+    console.log('[VoiceCallAudio] ✅ Using notification.wav as ringback fallback');
+  } catch (e2) {
+    console.error('[VoiceCallAudio] ❌ Fallback sound also failed:', e2);
+  }
 }
 
 export interface VoiceCallAudioOptions {
@@ -83,6 +93,13 @@ export function useVoiceCallAudio({
       return;
     }
     
+    console.log('[VoiceCallAudio] 🔊 playCustomRingback called', {
+      attempt: retryAttempt + 1,
+      hasAsset: !!RINGBACK_SOUND,
+      loadError: RINGBACK_LOAD_ERROR,
+      hasInCallManager: !!InCallManager,
+    });
+    
     // Check if sound file is loaded
     if (!RINGBACK_SOUND) {
       console.error('[VoiceCallAudio] ❌ Ringback sound not loaded - cannot play');
@@ -92,6 +109,7 @@ export function useVoiceCallAudio({
           console.log('[VoiceCallAudio] 🔄 Falling back to InCallManager system ringback');
           InCallManager.startRingback('_DEFAULT_');
           ringbackStartedRef.current = true;
+          console.log('[VoiceCallAudio] ✅ InCallManager fallback ringback started');
         } catch (e) {
           console.error('[VoiceCallAudio] System ringback fallback failed:', e);
         }

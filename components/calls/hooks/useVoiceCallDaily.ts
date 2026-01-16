@@ -8,7 +8,7 @@
  * - Call signaling via Supabase
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { AudioModule } from 'expo-audio';
@@ -58,6 +58,8 @@ export interface VoiceCallDailyOptions {
   userName?: string;
   isOwner: boolean;
   calleeId?: string;
+  /** Initial call ID (for callee answering an existing call) */
+  initialCallId?: string | null;
   isSpeakerEnabled: boolean;
   dailyRef: React.MutableRefObject<any>;
   callIdRef: React.MutableRefObject<string | null>;
@@ -84,6 +86,7 @@ export function useVoiceCallDaily({
   userName,
   isOwner,
   calleeId,
+  initialCallId,
   isSpeakerEnabled,
   dailyRef,
   callIdRef,
@@ -99,6 +102,11 @@ export function useVoiceCallDaily({
   
   // Audio mode session ref for cleanup
   const audioSessionRef = useRef<AudioModeSession | null>(null);
+  
+  // CRITICAL: State to trigger realtime subscription when call ID is set
+  // Refs don't cause re-renders, so we need a state variable to trigger the subscription effect
+  // Initialize with initialCallId if provided (callee case)
+  const [activeCallId, setActiveCallId] = useState<string | null>(initialCallId || null);
   
   // Cleanup call resources
   const cleanupCall = useCallback(async () => {
@@ -126,41 +134,68 @@ export function useVoiceCallDaily({
       }
     }
     
-    stopAudio();
+    // Clear active call ID state
+    setActiveCallId(null);
+    
+    // CRITICAL: Must await to ensure audio refs are reset before state changes
+    await stopAudio();
   }, [dailyRef, stopAudio]);
 
-  // Listen for call status changes (other party hung up)
+  // CRITICAL: Sync activeCallId state with initialCallId prop when set (callee case)
+  // This ensures the realtime subscription is set up for both caller and callee
+  // The prop (not ref) is used because props trigger re-renders when changed
   useEffect(() => {
-    if (!callIdRef.current) return;
+    if (initialCallId && !activeCallId) {
+      console.log('[VoiceCallDaily] Syncing activeCallId from prop:', initialCallId);
+      setActiveCallId(initialCallId);
+      // Also update the ref for consistency
+      if (!callIdRef.current) {
+        callIdRef.current = initialCallId;
+      }
+    }
+  }, [initialCallId, activeCallId, callIdRef]);
 
-    const currentCallId = callIdRef.current;
+  // Listen for call status changes (other party hung up or rejected)
+  // CRITICAL: Uses activeCallId STATE (not ref) to properly trigger re-subscription
+  // when the call is created. Refs don't cause re-renders, so we need state.
+  useEffect(() => {
+    if (!activeCallId) {
+      console.log('[VoiceCallDaily] No activeCallId yet, skipping realtime subscription');
+      return;
+    }
 
+    console.log('[VoiceCallDaily] 🔔 Setting up realtime subscription for call:', activeCallId);
+    
     const channel = getSupabase()
-      .channel(`voice-status-${currentCallId}`)
+      .channel(`voice-status-${activeCallId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'active_calls',
-          filter: `call_id=eq.${currentCallId}`,
+          filter: `call_id=eq.${activeCallId}`,
         },
         (payload: { new: { status: string } }) => {
           const newStatus = payload.new?.status;
-          console.log('[VoiceCallDaily] Status changed:', newStatus);
+          console.log('[VoiceCallDaily] 📣 Status changed:', newStatus, 'for call:', activeCallId);
           if (['ended', 'rejected', 'missed'].includes(newStatus)) {
+            console.log('[VoiceCallDaily] Call ended/rejected/missed, cleaning up...');
             cleanupCall();
             setCallState('ended');
             onClose();
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[VoiceCallDaily] Realtime subscription status:', status, 'for call:', activeCallId);
+      });
 
     return () => {
+      console.log('[VoiceCallDaily] Removing realtime subscription for call:', activeCallId);
       getSupabase().removeChannel(channel);
     };
-  }, [callIdRef, cleanupCall, setCallState, onClose]);
+  }, [activeCallId, cleanupCall, setCallState, onClose]);
 
   // OPTIMIZATION: Prewarm call system when UI opens (before user initiates)
   // This pre-creates call object, requests permissions, and validates session
@@ -192,7 +227,8 @@ export function useVoiceCallDaily({
       try {
         // CRITICAL: Clean up previous call FIRST before setting state
         // This ensures audioInitializedRef is reset before the audio effect runs
-        cleanupCall();
+        // Must await to ensure refs are reset synchronously before state changes
+        await cleanupCall();
         
         setCallState('connecting');
         setError(null);
@@ -278,6 +314,9 @@ export function useVoiceCallDaily({
           if (calleeId) {
             const newCallId = uuidv4();
             callIdRef.current = newCallId;
+            // CRITICAL: Also set state to trigger realtime subscription
+            setActiveCallId(newCallId);
+            console.log('[VoiceCallDaily] 📞 Created call ID:', newCallId);
 
             const callerName = profileData.data
               ? `${profileData.data.first_name || ''} ${profileData.data.last_name || ''}`.trim() || 'Someone'

@@ -753,6 +753,52 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         }
       }
       break;
+
+    // School calendar events - notify based on target_audience
+    case 'school_event_created':
+    case 'school_event_updated':
+    case 'school_event_cancelled':
+    case 'school_event_reminder':
+      if (request.preschool_id) {
+        // Get the event to determine target audience
+        let targetAudience = request.target_audience || ['all'];
+        
+        if (request.event_id && !request.target_audience) {
+          const { data: eventData } = await supabase
+            .from('school_events')
+            .select('target_audience')
+            .eq('id', request.event_id)
+            .single();
+          if (eventData?.target_audience) {
+            targetAudience = eventData.target_audience;
+          }
+        }
+
+        // Build role filter based on target audience
+        const targetRoles: string[] = [];
+        if (targetAudience.includes('all')) {
+          targetRoles.push('parent', 'teacher', 'student');
+        } else {
+          if (targetAudience.includes('parents')) targetRoles.push('parent');
+          if (targetAudience.includes('teachers')) targetRoles.push('teacher');
+          if (targetAudience.includes('students')) targetRoles.push('student');
+        }
+
+        if (targetRoles.length > 0) {
+          // Get users based on target roles
+          const { data: users } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('preschool_id', request.preschool_id)
+            .in('role', targetRoles)
+            .eq('is_active', true);
+          
+          if (users) {
+            userIds.push(...users.map((u: { id: string }) => u.id));
+          }
+        }
+      }
+      break;
   }
 
   return [...new Set(userIds.filter(Boolean))];
@@ -1053,6 +1099,59 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
           }
         }
         break;
+
+      // School calendar events
+      case 'school_event_created':
+      case 'school_event_updated':
+      case 'school_event_cancelled':
+      case 'school_event_reminder':
+        if (request.event_id) {
+          const { data: eventData } = await supabase
+            .from('school_events')
+            .select(`
+              id,
+              title,
+              start_date,
+              event_type,
+              location,
+              preschool:preschools(name)
+            `)
+            .eq('id', request.event_id)
+            .single();
+
+          if (eventData) {
+            context.event_id = eventData.id;
+            context.event_title = eventData.title;
+            context.event_type = eventData.event_type;
+            context.event_location = eventData.location;
+            
+            // Format the event date nicely
+            if (eventData.start_date) {
+              const date = new Date(eventData.start_date);
+              const now = new Date();
+              const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+              
+              if (diffDays === 0) {
+                context.event_date = 'today';
+              } else if (diffDays === 1) {
+                context.event_date = 'tomorrow';
+              } else if (diffDays > 0 && diffDays <= 7) {
+                context.event_date = date.toLocaleDateString('en-US', { weekday: 'long' });
+              } else {
+                context.event_date = date.toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+                });
+              }
+            }
+            
+            if (eventData.preschool) {
+              context.school_name = eventData.preschool.name;
+            }
+          }
+        }
+        break;
     }
   } catch (error) {
     console.error('Error getting notification context:', error);
@@ -1122,6 +1221,7 @@ async function sendExpoNotification(notification: ExpoNotificationPayload): Prom
 
 /**
  * Record notification in database
+ * Inserts into both push_notifications (for tracking) and notifications (for in-app UI)
  */
 async function recordNotification(
   userIds: string[],
@@ -1131,6 +1231,7 @@ async function recordNotification(
 ): Promise<void> {
   try {
     for (const userId of userIds) {
+      // 1. Record in push_notifications table (for tracking sent push notifications)
       await supabase.from('push_notifications').insert({
         recipient_user_id: userId,
         title: template.title,
@@ -1141,10 +1242,62 @@ async function recordNotification(
         notification_type: request.event_type,
         preschool_id: request.preschool_id
       });
+      
+      // 2. Record in notifications table (for in-app notification center/web UI)
+      // Map event types to notification types for the UI
+      const notificationType = mapEventTypeToNotificationType(request.event_type);
+      
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: template.title,
+        message: template.body,
+        type: notificationType,
+        is_read: false,
+        metadata: {
+          event_type: request.event_type,
+          data: template.data,
+          category: getNotificationCategory(request.event_type),
+        },
+        action_url: template.data?.url || null,
+        created_at: new Date().toISOString(),
+      }).then(({ error }) => {
+        if (error) {
+          // Table might not exist in some environments, log but don't fail
+          console.warn('Could not insert into notifications table:', error.message);
+        }
+      });
     }
   } catch (error) {
     console.error('Error recording notification:', error);
   }
+}
+
+/**
+ * Map event types to notification UI types
+ */
+function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' | 'success' | 'error' {
+  const warningTypes = ['payment_overdue', 'emergency', 'urgent_announcement'];
+  const successTypes = ['payment_received', 'assignment_graded', 'homework_submitted'];
+  const errorTypes = ['payment_failed', 'registration_rejected'];
+  
+  if (warningTypes.includes(eventType)) return 'warning';
+  if (successTypes.includes(eventType)) return 'success';
+  if (errorTypes.includes(eventType)) return 'error';
+  return 'info';
+}
+
+/**
+ * Get notification category for filtering in the UI
+ */
+function getNotificationCategory(eventType: string): string {
+  const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement'];
+  const homeworkEvents = ['homework_assigned', 'homework_due', 'homework_graded', 'assignment_graded', 'homework_submitted'];
+  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'registration_approved', 'registration_rejected'];
+  
+  if (schoolEvents.includes(eventType)) return 'school';
+  if (homeworkEvents.includes(eventType)) return 'homework';
+  if (systemEvents.includes(eventType)) return 'system';
+  return 'general';
 }
 
 /**

@@ -139,13 +139,30 @@ serve(async (req) => {
     // Step 1: Check if parent account already exists
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('id, email')
+      .select('id, email, organization_id, preschool_id')
       .eq('email', parentEmail)
       .maybeSingle();
 
     if (existingProfile) {
       console.log('[sync-registration] Parent profile already exists:', existingProfile.id);
       parentUserId = existingProfile.id;
+      
+      // ALWAYS update parent's organization to match registration
+      // This fixes cases where parent was created with placeholder org
+      const needsOrgUpdate = !existingProfile.organization_id || 
+        existingProfile.organization_id !== organizationId ||
+        existingProfile.preschool_id !== organizationId;
+      
+      if (needsOrgUpdate) {
+        console.log(`[sync-registration] Updating parent ${parentUserId} org from ${existingProfile.organization_id} to ${organizationId}`);
+        await supabase
+          .from('profiles')
+          .update({ 
+            organization_id: organizationId,
+            preschool_id: organizationId 
+          })
+          .eq('id', parentUserId);
+      }
     } else {
       // Create parent account with generated password
       generatedPassword = generateReadablePassword();
@@ -217,11 +234,25 @@ serve(async (req) => {
 
     if (existingStudent) {
       studentId = existingStudent.id;
-      // Update parent link if needed
+      // Update parent link and payment status from registration
       await supabase
         .from('students')
-        .update({ parent_id: parentUserId, guardian_id: parentUserId })
+        .update({ 
+          parent_id: parentUserId, 
+          guardian_id: parentUserId,
+          // Also update payment status from registration
+          registration_fee_amount: registration.registration_fee_amount || null,
+          registration_fee_paid: registration.registration_fee_paid || false,
+          payment_verified: registration.payment_verified || false,
+          payment_date: registration.payment_date || null,
+        })
         .eq('id', studentId);
+      
+      console.log('[sync-registration] Updated existing student with payment status:', {
+        studentId,
+        registration_fee_paid: registration.registration_fee_paid,
+        payment_verified: registration.payment_verified,
+      });
     } else {
       // Generate student ID code
       const { data: org } = await supabase
@@ -239,7 +270,7 @@ serve(async (req) => {
       
       const studentIdCode = `${orgCode}${year}${String((count || 0) + 1).padStart(4, '0')}`;
 
-      // Create student
+      // Create student with payment status from registration
       const { data: newStudent, error: studentError } = await supabase
         .from('students')
         .insert({
@@ -259,6 +290,11 @@ serve(async (req) => {
           is_active: true,
           status: 'active',
           enrollment_date: new Date().toISOString(),
+          // Carry over payment status from registration so parent dashboard shows correct status
+          registration_fee_amount: registration.registration_fee_amount || null,
+          registration_fee_paid: registration.registration_fee_paid || false,
+          payment_verified: registration.payment_verified || false,
+          payment_date: registration.payment_date || null,
         })
         .select('id')
         .single();
@@ -268,6 +304,10 @@ serve(async (req) => {
       } else {
         studentId = newStudent?.id;
         studentCreated = true;
+        console.log('[sync-registration] Student created with payment status:', {
+          registration_fee_paid: registration.registration_fee_paid,
+          payment_verified: registration.payment_verified,
+        });
       }
     }
 

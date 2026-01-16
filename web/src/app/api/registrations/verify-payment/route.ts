@@ -66,10 +66,12 @@ export async function POST(req: NextRequest) {
         studentUpdateData.registration_fee_paid = true;
       }
 
+      // Use preschool_id (the correct column name in students table)
+      // organization_id from registration maps to preschool_id in students
       const { data: studentData, error: studentError } = await supabase
         .from('students')
         .update(studentUpdateData)
-        .eq('organization_id', registration.organization_id)
+        .eq('preschool_id', registration.organization_id)
         .ilike('first_name', registration.student_first_name)
         .ilike('last_name', registration.student_last_name)
         .select();
