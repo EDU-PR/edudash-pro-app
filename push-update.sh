@@ -3,6 +3,9 @@
 
 set -e
 
+# CRITICAL: Increase Node.js memory limit to prevent heap out of memory errors
+export NODE_OPTIONS="--max-old-space-size=8192"
+
 echo "🚀 Pushing EAS Update to Production Branch..."
 echo ""
 

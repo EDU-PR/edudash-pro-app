@@ -31,19 +31,29 @@ try {
 // This ensures the audio is ready when making outgoing calls
 let RINGBACK_SOUND: any = null;
 let RINGBACK_LOAD_ERROR: string | null = null;
+
+// Try to load ringback sound immediately
 try {
   RINGBACK_SOUND = require('@/assets/sounds/ringback.mp3');
-  console.log('[VoiceCallAudio] ✅ Ringback sound loaded at module level');
+  console.log('[VoiceCallAudio] ✅ Ringback sound loaded:', typeof RINGBACK_SOUND, RINGBACK_SOUND);
 } catch (error) {
   RINGBACK_LOAD_ERROR = String(error);
-  console.warn('[VoiceCallAudio] ❌ Failed to load ringback sound:', error);
-  // Try fallback
+  console.error('[VoiceCallAudio] ❌ Failed to load ringback.mp3:', error);
+  // Try fallback to notification sound
   try {
     RINGBACK_SOUND = require('@/assets/sounds/notification.wav');
     RINGBACK_LOAD_ERROR = null;
     console.log('[VoiceCallAudio] ✅ Using notification.wav as ringback fallback');
   } catch (e2) {
-    console.error('[VoiceCallAudio] ❌ Fallback sound also failed:', e2);
+    console.error('[VoiceCallAudio] ❌ Fallback notification.wav also failed:', e2);
+    // Final fallback - try ringtone
+    try {
+      RINGBACK_SOUND = require('@/assets/sounds/ringtone.mp3');
+      RINGBACK_LOAD_ERROR = null;
+      console.log('[VoiceCallAudio] ✅ Using ringtone.mp3 as final fallback');
+    } catch (e3) {
+      console.error('[VoiceCallAudio] ❌ All sound fallbacks failed:', e3);
+    }
   }
 }
 
@@ -122,6 +132,7 @@ export function useVoiceCallAudio({
     
     try {
       console.log(`[VoiceCallAudio] 🔊 Starting ringback via expo-audio (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
+      console.log('[VoiceCallAudio] Sound asset:', typeof RINGBACK_SOUND, RINGBACK_SOUND);
       
       // CRITICAL: Set audio mode to route through earpiece BEFORE creating player
       // expo-audio's shouldRouteThroughEarpiece is the key setting for Android
@@ -131,9 +142,9 @@ export function useVoiceCallAudio({
         allowsRecording: true, // Needed for calls
         shouldPlayInBackground: true,
         // ANDROID SPECIFIC: Route through earpiece for phone-like experience
-        shouldRouteThroughEarpiece: true, // <-- KEY: Routes to earpiece on Android
+        shouldRouteThroughEarpiece: !isSpeakerEnabled, // Use speaker setting
       });
-      console.log('[VoiceCallAudio] ✅ Audio mode set to earpiece routing');
+      console.log('[VoiceCallAudio] ✅ Audio mode set, creating player...');
       
       // Also enforce via InCallManager for extra reliability
       if (InCallManager) {
@@ -142,19 +153,22 @@ export function useVoiceCallAudio({
       
       // Create and play the ringback sound using expo-audio
       const player = createAudioPlayer(RINGBACK_SOUND);
+      console.log('[VoiceCallAudio] ✅ Audio player created:', player);
+      
       player.loop = true; // Loop until call connects
       player.volume = 1.0;
       
       // Start playback
+      console.log('[VoiceCallAudio] 🎵 Starting playback...');
       player.play();
       
       // Verify playback started by checking after a short delay
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       ringbackPlayerRef.current = player;
       ringbackStartedRef.current = true;
       ringbackRetryCountRef.current = 0;
-      console.log('[VoiceCallAudio] ✅ Ringback playing through earpiece');
+      console.log('[VoiceCallAudio] ✅ Ringback playback started successfully');
       
       // Give haptic feedback to indicate call is ringing
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -183,7 +197,7 @@ export function useVoiceCallAudio({
         }
       }
     }
-  }, []);
+  }, [isSpeakerEnabled]);
 
   /**
    * Stop ringback when call connects or ends
@@ -517,6 +531,32 @@ export function useVoiceCallAudio({
       }
     };
   }, []);
+
+  // CRITICAL: Ensure ringback plays for caller during ringing state
+  // This handles the case where call state transitions from connecting -> ringing
+  // and we need to ensure ringback is playing
+  useEffect(() => {
+    // Only play ringback for caller (isOwner) during connecting or ringing states
+    if (isOwner && (callState === 'connecting' || callState === 'ringing')) {
+      // If ringback isn't already playing, start it
+      if (!ringbackStartedRef.current && !ringbackPlayerRef.current) {
+        console.log('[VoiceCallAudio] 🔊 Triggering ringback for state:', callState);
+        playCustomRingback().catch(err => 
+          console.warn('[VoiceCallAudio] Ringback trigger failed:', err)
+        );
+      }
+    }
+    
+    // Stop ringback when call connects, ends, or fails
+    if (callState === 'connected' || callState === 'ended' || callState === 'failed' || callState === 'idle') {
+      if (ringbackStartedRef.current || ringbackPlayerRef.current) {
+        console.log('[VoiceCallAudio] 🔇 Stopping ringback for state:', callState);
+        stopCustomRingback().catch(err =>
+          console.warn('[VoiceCallAudio] Ringback stop failed:', err)
+        );
+      }
+    }
+  }, [callState, isOwner, playCustomRingback, stopCustomRingback]);
 
   return {
     toggleSpeaker,
