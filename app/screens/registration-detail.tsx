@@ -24,6 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -97,6 +98,7 @@ export default function RegistrationDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [popViewed, setPopViewed] = useState(false); // Track if POP has been viewed
 
   // Alert modal state
   interface AlertState {
@@ -612,7 +614,7 @@ export default function RegistrationDetailScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
       <Stack.Screen 
         options={{ 
           headerShown: false, // We handle our own header with safe area
@@ -783,17 +785,61 @@ export default function RegistrationDetailScreen() {
             <InfoRow icon="pricetag" label="Campaign Applied" value={registration.campaign_applied} />
           )}
           {registration.proof_of_payment_url && (
-            <TouchableOpacity
-              style={[styles.viewProofButton, { backgroundColor: colors.primary }]}
-              onPress={() => openDocument(registration.proof_of_payment_url, 'Proof of Payment')}
-            >
-              <Ionicons name="document-attach" size={20} color="#fff" />
-              <Text style={styles.viewProofText}>View Proof of Payment</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.viewProofButton, 
+                  { backgroundColor: popViewed ? colors.primary : '#F59E0B' }
+                ]}
+                onPress={() => {
+                  setPopViewed(true);
+                  openDocument(registration.proof_of_payment_url, 'Proof of Payment');
+                }}
+              >
+                <Ionicons name="document-attach" size={20} color="#fff" />
+                <Text style={styles.viewProofText}>
+                  {popViewed ? '✓ View Proof of Payment' : '👁 View Proof of Payment'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Verify Payment Button - Only enabled after viewing POP */}
+              {!registration.payment_verified && registration.status === 'pending' && (
+                <TouchableOpacity
+                  style={[
+                    styles.verifyPaymentButton, 
+                    { 
+                      backgroundColor: popViewed ? '#10B981' : '#6B7280',
+                      opacity: popViewed ? 1 : 0.6,
+                    }
+                  ]}
+                  onPress={handleVerifyPayment}
+                  disabled={processing || !popViewed}
+                >
+                  {processing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="shield-checkmark" size={20} color="#fff" />
+                      <Text style={styles.verifyPaymentText}>
+                        {popViewed ? 'Verify Payment' : 'View POP First to Verify'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* Show verified badge if already verified */}
+              {registration.payment_verified && (
+                <View style={[styles.verifiedBadge, { backgroundColor: '#10B98120' }]}>
+                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                  <Text style={styles.verifiedText}>Payment Verified ✓</Text>
+                </View>
+              )}
+            </>
           )}
 
-          {/* Verify Payment Button */}
-          {registration.registration_fee_paid && !registration.payment_verified && registration.status === 'pending' && (
+          {/* Show verify button for non-POP payments (if paid but no POP uploaded) */}
+          {!registration.proof_of_payment_url && registration.registration_fee_paid && !registration.payment_verified && registration.status === 'pending' && (
             <TouchableOpacity
               style={[styles.verifyPaymentButton, { backgroundColor: '#10B981' }]}
               onPress={handleVerifyPayment}
@@ -891,7 +937,7 @@ export default function RegistrationDetailScreen() {
         buttons={alertState.buttons}
         onClose={hideAlert}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1088,6 +1134,20 @@ const styles = StyleSheet.create({
   },
   verifyPaymentText: {
     color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 8,
+  },
+  verifiedText: {
+    color: '#10B981',
     fontSize: 14,
     fontWeight: '600',
   },
