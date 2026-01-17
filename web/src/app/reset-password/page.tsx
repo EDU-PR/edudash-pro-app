@@ -37,7 +37,8 @@ export default function ResetPasswordPage() {
       if (token_hash) params.set('token_hash', token_hash);
       if (token) params.set('token', token);
       if (code) params.set('code', code);
-      if (type) params.set('type', type);
+      // Always set type to recovery for password reset flow
+      params.set('type', type || 'recovery');
       if (access_token) params.set('access_token', access_token);
       if (refresh_token) params.set('refresh_token', refresh_token);
 
@@ -50,11 +51,26 @@ export default function ResetPasswordPage() {
       if (hashRefreshToken) params.set('refresh_token', hashRefreshToken);
 
       const queryString = params.toString();
-      const appUrl = `edudashpro://reset-password${queryString ? `?${queryString}` : ''}`;
       
-      console.log('[ResetPassword] Redirecting to native app:', appUrl);
+      // IMPORTANT: If there's a code or token to exchange, route through auth-callback
+      // auth-callback will handle the code exchange and then redirect to reset-password
+      // If there's already access_token, we can go directly to reset-password
+      const needsCodeExchange = code || token || token_hash;
+      const hasSession = access_token || hashAccessToken;
+      
+      let appUrl: string;
+      if (needsCodeExchange && !hasSession) {
+        // Route through auth-callback to exchange the code first
+        appUrl = `edudashpro:///auth-callback${queryString ? `?${queryString}` : ''}`;
+        console.log('[ResetPassword] Routing through auth-callback for code exchange:', appUrl);
+      } else {
+        // Already has session tokens, go directly to reset-password
+        appUrl = `edudashpro:///reset-password${queryString ? `?${queryString}` : ''}`;
+        console.log('[ResetPassword] Redirecting directly to reset-password:', appUrl);
+      }
       
       // Redirect to native app
+      window.location.href = appUrl;
       window.location.href = appUrl;
       
       // Fallback: If app doesn't open, show error after timeout

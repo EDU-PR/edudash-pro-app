@@ -12,7 +12,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -27,9 +26,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { marketingTokens } from '@/components/marketing/tokens';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export default function ResetPasswordScreen() {
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -69,17 +70,32 @@ export default function ResetPasswordScreen() {
   const handleResetPassword = async () => {
     // Validate passwords
     if (!password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showAlert({
+        title: 'Error',
+        message: 'Please fill in all fields',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert({
+        title: 'Error',
+        message: 'Passwords do not match',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
+      showAlert({
+        title: 'Error',
+        message: 'Password must be at least 8 characters long',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -89,10 +105,12 @@ export default function ResetPasswordScreen() {
     const hasNumber = /[0-9]/.test(password);
 
     if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-      Alert.alert(
-        'Weak Password',
-        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
-      );
+      showAlert({
+        title: 'Weak Password',
+        message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -107,19 +125,26 @@ export default function ResetPasswordScreen() {
         throw error;
       }
 
-      Alert.alert(
-        'Password Updated',
-        'Your password has been successfully updated. You can now sign in with your new password.',
-        [
+      showAlert({
+        title: 'Password Updated',
+        message: 'Your password has been successfully updated. You can now sign in with your new password.',
+        type: 'success',
+        buttons: [
           {
             text: 'Sign In',
+            style: 'default',
             onPress: () => router.replace('/(auth)/sign-in'),
           },
-        ]
-      );
+        ],
+      });
     } catch (e: any) {
       console.error('[ResetPassword] Error:', e);
-      Alert.alert('Error', e?.message || 'Failed to update password. Please try again.');
+      showAlert({
+        title: 'Error',
+        message: e?.message || 'Failed to update password. Please try again.',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     } finally {
       setLoading(false);
     }
@@ -337,6 +362,7 @@ export default function ResetPasswordScreen() {
             </GlassCard>
           </ScrollView>
         </KeyboardAvoidingView>
+        <AlertModal {...alertProps} />
       </SafeAreaView>
     </LinearGradient>
   );

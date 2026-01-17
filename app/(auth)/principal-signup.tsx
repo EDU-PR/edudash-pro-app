@@ -9,7 +9,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -25,6 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -53,6 +53,7 @@ const PLAN_TIERS = [
 export default function PrincipalSignUpScreen() {
   const { theme } = useTheme();
   const flags = getFeatureFlagsSync();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Step state
   const [step, setStep] = useState(1);
@@ -228,16 +229,18 @@ export default function PrincipalSignUpScreen() {
         throw new Error(data.error || 'Registration failed');
       }
 
-      Alert.alert(
-        'Registration Submitted',
-        'Your registration is pending approval. You will receive an email once approved.',
-        [
+      showAlert({
+        title: 'Registration Submitted',
+        message: 'Your registration is pending approval. You will receive an email once approved.',
+        type: 'success',
+        buttons: [
           {
             text: 'OK',
+            style: 'default',
             onPress: () => router.replace('/sign-in'),
           },
-        ]
-      );
+        ],
+      });
     } catch (err: any) {
       console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Please try again.');
@@ -520,6 +523,7 @@ export default function PrincipalSignUpScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </KeyboardAvoidingView>
   );
 }

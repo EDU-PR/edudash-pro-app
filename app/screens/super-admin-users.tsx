@@ -443,7 +443,7 @@ target_user_id: (user as any).auth_user_id,
           onPress: async () => {
             try {
               const { error } = await assertSupabase().auth.resetPasswordForEmail(user.email, {
-                redirectTo: 'https://edudashpro.org.za/landing?flow=recovery',
+                redirectTo: 'https://www.edudashpro.org.za/landing?flow=recovery',
               });
 
               if (error) {

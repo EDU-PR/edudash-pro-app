@@ -1,7 +1,7 @@
 // needs refactor to use AuthContext for sign-in state management
 
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export default function SignIn() {
   const { t } = useTranslation();
@@ -39,6 +40,7 @@ export default function SignIn() {
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricAttempted, setBiometricAttempted] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
+  const { showAlert, alertProps } = useAlertModal();
 
 console.log('[SignIn] Component rendering, theme:', theme);
 
@@ -105,10 +107,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
       setTimeout(() => setSuccessMessage(null), 5000);
     }
     if (searchParams.emailVerificationFailed === 'true') {
-      Alert.alert(
-        t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
-        t('auth.verification_failed_message', { defaultValue: 'Email verification failed. Please try signing in to request a new verification email.' })
-      );
+      showAlert({
+        title: t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
+        message: t('auth.verification_failed_message', { defaultValue: 'Email verification failed. Please try signing in to request a new verification email.' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   }, [searchParams, t]);
 
@@ -148,10 +152,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
         } else if (result.success && !result.sessionRestored) {
           // Biometric succeeded but session couldn't be restored (expired tokens)
           console.log('[SignIn] Biometric succeeded but session not restored:', result.error);
-          Alert.alert(
-            t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
-            result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password to re-enable biometric login.' })
-          );
+          showAlert({
+            title: t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
+            message: result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password to re-enable biometric login.' }),
+            type: 'warning',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
           // Biometric auth failed or was cancelled
           console.log('[SignIn] Biometric auth failed:', result.error);
@@ -204,7 +210,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
 
   const handleSignIn = async () => {
     if (!email || !password) {
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), t('auth.sign_in.enter_email_password', { defaultValue: 'Please enter email and password' }));
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('auth.sign_in.enter_email_password', { defaultValue: 'Please enter email and password' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -221,7 +232,72 @@ console.log('[SignIn] Component rendering, theme:', theme);
         // #region agent log
         console.log('[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
         // #endregion
-        Alert.alert(t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }), res.error);
+        
+        // Check if this is an "email not confirmed" error
+        const errorLower = res.error.toLowerCase();
+        if (errorLower.includes('email not confirmed') || errorLower.includes('email_not_confirmed')) {
+          showAlert({
+            title: t('auth.sign_in.email_not_verified', { defaultValue: 'Email Not Verified' }),
+            message: t('auth.sign_in.email_not_verified_message', { 
+              defaultValue: 'Your email address has not been verified. Please check your inbox for the verification email, or request a new one.' 
+            }),
+            type: 'warning',
+            buttons: [
+              { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              { 
+                text: t('auth.sign_in.resend_verification', { defaultValue: 'Resend Email' }), 
+                style: 'default',
+                onPress: async () => {
+                  try {
+                    const supabase = assertSupabase();
+                    const { error: resendError } = await supabase.auth.resend({
+                      type: 'signup',
+                      email: email.trim(),
+                      options: {
+                        emailRedirectTo: 'https://www.edudashpro.org.za/landing?flow=email-confirm',
+                      }
+                    });
+                    
+                    if (resendError) {
+                      showAlert({
+                        title: t('common.error', { defaultValue: 'Error' }),
+                        message: resendError.message || t('auth.sign_in.resend_failed', { defaultValue: 'Failed to resend verification email. Please try again.' }),
+                        type: 'error',
+                        buttons: [{ text: 'OK', style: 'default' }],
+                      });
+                    } else {
+                      showAlert({
+                        title: t('auth.sign_in.email_sent', { defaultValue: 'Email Sent' }),
+                        message: t('auth.sign_in.verification_email_sent', { 
+                          defaultValue: 'A new verification email has been sent to your inbox. Please check your email and click the verification link.' 
+                        }),
+                        type: 'success',
+                        buttons: [{ text: 'OK', style: 'default' }],
+                      });
+                    }
+                  } catch (e: any) {
+                    console.error('[SignIn] Resend verification error:', e);
+                    showAlert({
+                      title: t('common.error', { defaultValue: 'Error' }),
+                      message: e?.message || t('auth.sign_in.resend_failed', { defaultValue: 'Failed to resend verification email. Please try again.' }),
+                      type: 'error',
+                      buttons: [{ text: 'OK', style: 'default' }],
+                    });
+                  }
+                }
+              }
+            ],
+          });
+          setLoading(false);
+          return;
+        }
+        
+        showAlert({
+          title: t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
+          message: res.error,
+          type: 'error',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         setLoading(false);
         return;
       }
@@ -326,7 +402,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
       console.error('========================');
       
       const msg = _error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' });
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), msg);
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: msg,
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       setLoading(false);
     }
   };
@@ -380,10 +461,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
       }
     } catch (error: any) {
       console.error('[SignIn] Google Sign-In Error:', error);
-      Alert.alert(
-        t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
-        error.message || t('auth.oauth.config_error', { defaultValue: 'Failed to sign in with Google. Please try again.' })
-      );
+      showAlert({
+        title: t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
+        message: error.message || t('auth.oauth.config_error', { defaultValue: 'Failed to sign in with Google. Please try again.' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       setGoogleLoading(false);
     }
   };
@@ -922,6 +1005,9 @@ return (
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      
+      {/* Custom Alert Modal */}
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

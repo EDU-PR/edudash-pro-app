@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, KeyboardAvoidingView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView } from "react-native";
 import { Stack, router } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { marketingTokens } from '@/components/marketing/tokens';
 import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { supabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Get proper redirect URL based on platform
 // For password reset, use the landing page which handles mobile deep-linking properly
@@ -20,10 +21,10 @@ const getRedirectUrl = (path: string) => {
   // For native apps, use the landing page with flow=recovery parameter
   // This allows the web landing page to detect mobile and deep-link back to the app
   if (path === 'reset-password') {
-    return `https://edudashpro.org.za/landing?flow=recovery`;
+    return `https://www.edudashpro.org.za/landing?flow=recovery`;
   }
   // Fallback for other paths
-  return `https://edudashpro.org.za/${path}`;
+  return `https://www.edudashpro.org.za/${path}`;
 };
 
 export default function ForgotPassword() {
@@ -32,13 +33,16 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }), 
-        t('auth.forgot_password.enter_email', { defaultValue: 'Please enter your email address' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('auth.forgot_password.enter_email', { defaultValue: 'Please enter your email address' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -50,22 +54,28 @@ export default function ForgotPassword() {
       });
 
       if (error) {
-        Alert.alert(
-          t('common.error', { defaultValue: 'Error' }), 
-          error.message
-        );
+        showAlert({
+          title: t('common.error', { defaultValue: 'Error' }),
+          message: error.message,
+          type: 'error',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       } else {
         setEmailSent(true);
-        Alert.alert(
-          t('common.success', { defaultValue: 'Success' }), 
-          t('auth.forgot_password.email_sent', { defaultValue: 'Password reset email sent! Check your inbox.' })
-        );
+        showAlert({
+          title: t('common.success', { defaultValue: 'Success' }),
+          message: t('auth.forgot_password.email_sent', { defaultValue: 'Password reset email sent! Check your inbox.' }),
+          type: 'success',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       }
     } catch (error: any) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }), 
-        error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     } finally {
       setLoading(false);
     }
@@ -95,7 +105,7 @@ export default function ForgotPassword() {
     },
     scrollContent: {
       flexGrow: 1,
-      paddingBottom: 40,
+      paddingBottom: Platform.OS === 'web' ? 40 : 100,
       ...(Platform.OS === 'web' && {
         minHeight: '100%',
         justifyContent: 'center',
@@ -206,13 +216,15 @@ export default function ForgotPassword() {
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           <View style={styles.content}>
             <GlassCard style={styles.card}>
@@ -287,6 +299,9 @@ export default function ForgotPassword() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      
+      {/* Custom Alert Modal */}
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
