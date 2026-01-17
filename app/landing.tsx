@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, ActivityIndicator, Text, Platform, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 
@@ -66,6 +67,52 @@ export default function LandingHandler() {
     const run = async () => {
       try {
         const flow = (query.flow || query.type || '').toLowerCase();
+        
+        // PASSWORD RECOVERY: Redirect to web browser for password reset
+        // This avoids complex deep-linking issues - all password resets happen on web
+        if (flow === 'recovery' || query.type === 'recovery') {
+          console.log('[Landing] Password recovery flow detected, redirecting to web browser');
+          setMessage(t('landing.opening_password_reset', { defaultValue: 'Opening password reset...' }));
+          
+          // Build the web URL with all the original params (token_hash, token, etc.)
+          const webParams = new URLSearchParams();
+          Object.entries(query).forEach(([k, v]) => {
+            if (v) webParams.set(k, v);
+          });
+          const webUrl = `https://www.edudashpro.org.za/landing?${webParams.toString()}`;
+          
+          // Open in external browser (not in-app browser) so Supabase can set cookies properly
+          // On native, we want to completely exit to the browser
+          if (!isWeb) {
+            try {
+              // Use Linking.openURL to open in external browser
+              // This ensures the web handles the recovery flow completely
+              await Linking.openURL(webUrl);
+              
+              // After opening the browser, navigate to sign-in so when user returns they're ready
+              setMessage(t('landing.password_reset_in_browser', { 
+                defaultValue: 'Password reset opened in browser. Return here after resetting your password.' 
+              }));
+              setStatus('done');
+              
+              // Navigate to sign-in after a delay (user will complete reset in browser)
+              setTimeout(() => {
+                router.replace('/(auth)/sign-in');
+              }, 2000);
+            } catch (e) {
+              console.error('[Landing] Failed to open browser for password reset:', e);
+              setStatus('error');
+              setMessage(t('landing.browser_open_failed', { 
+                defaultValue: 'Could not open browser. Please try the password reset link from your email again.' 
+              }));
+            }
+            return;
+          }
+          
+          // On web platform, redirect directly
+          window.location.href = webUrl;
+          return;
+        }
         
         // Extract invite code from query params (may come from redirect_to after 303 redirect)
         const inviteCode = query.code || query.invitationCode || '';

@@ -2,10 +2,11 @@
  * Hook for subscription upgrade management
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { createCheckout } from '@/lib/payments';
@@ -14,6 +15,12 @@ import { navigateTo } from '@/lib/navigation/router-utils';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
 import { SubscriptionPlan, UPGRADE_REASONS, DEFAULT_REASON, UpgradeReason } from './types';
 import { takeFirst } from './utils';
+import { 
+  REVENUECAT_CONFIG, 
+  purchaseProduct, 
+  ensureInitialized, 
+  identifyRevenueCatUser 
+} from '@/lib/revenuecat/config';
 
 interface UseSubscriptionUpgradeParams {
   currentTier: string;
@@ -45,6 +52,7 @@ export function useSubscriptionUpgrade({
   feature
 }: UseSubscriptionUpgradeParams): UseSubscriptionUpgradeReturn {
   const { profile } = useAuth();
+  const { refresh: refreshSubscription } = useSubscription();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [annual, setAnnual] = useState(true);
@@ -235,6 +243,97 @@ export function useSubscriptionUpgrade({
       const isIndividualPlan = plan.tier.includes('parent') || profile.role === 'student' || profile.role === 'learner';
       const scope = isIndividualPlan ? 'user' : 'school';
       
+      // For individual plans (parent/student/learner) on mobile, use RevenueCat (Google Play / App Store)
+      if (isIndividualPlan && Platform.OS !== 'web') {
+        try {
+          // CRITICAL: Identify user with RevenueCat before purchase
+          // This ensures the webhook knows which Supabase user made the purchase
+          if (profile?.id) {
+            console.log('[useSubscriptionUpgrade] Identifying user with RevenueCat:', profile.id);
+            await ensureInitialized();
+            await identifyRevenueCatUser(profile.id);
+          } else {
+            throw new Error('User profile not found. Please log in again.');
+          }
+          
+          // Map plan tier to RevenueCat product ID
+          const tierLower = plan.tier.toLowerCase().replace(/-/g, '_');
+          let productId: string;
+          
+          if (tierLower === 'parent_starter' || tierLower === 'starter') {
+            productId = annual 
+              ? REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_ANNUAL 
+              : REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_MONTHLY;
+          } else if (tierLower === 'parent_plus' || tierLower === 'premium' || tierLower === 'pro') {
+            productId = annual 
+              ? REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_ANNUAL 
+              : REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_MONTHLY;
+          } else {
+            throw new Error(`Unknown plan tier for RevenueCat: ${plan.tier}`);
+          }
+          
+          track('revenuecat_purchase_started', {
+            plan_tier: plan.tier,
+            product_id: productId,
+            billing: annual ? 'annual' : 'monthly',
+          });
+          
+          const purchaseResult = await purchaseProduct(productId);
+          
+          if (purchaseResult.success) {
+            track('revenuecat_purchase_success', {
+              plan_tier: plan.tier,
+              product_id: productId,
+            });
+            
+            // SINGLE SOURCE OF TRUTH: Update profiles.subscription_tier
+            // Database trigger automatically syncs to user_ai_tiers and user_ai_usage
+            try {
+              const newTier = tierLower.startsWith('parent_') ? tierLower : `parent_${tierLower}`;
+              console.log('[useSubscriptionUpgrade] Updating profiles.subscription_tier to:', newTier);
+              
+              const { error: profileError } = await assertSupabase()
+                .from('profiles')
+                .update({ subscription_tier: newTier })
+                .eq('id', profile?.id);
+              
+              if (profileError) {
+                console.error('Failed to update profiles.subscription_tier:', profileError);
+              } else {
+                console.log('Successfully updated profiles.subscription_tier to:', newTier);
+              }
+            } catch (dbErr) {
+              console.error('Failed to update tier in DB:', dbErr);
+              // Don't fail - RevenueCat webhook will sync
+            }
+            
+            // Refresh subscription context to update UI immediately
+            refreshSubscription();
+            
+            Alert.alert(
+              'Purchase Successful!',
+              `You are now subscribed to ${plan.name}. Enjoy your premium features!`,
+              [{ text: 'OK', onPress: () => { try { router.back(); } catch { router.replace('/'); } } }]
+            );
+          } else {
+            if (purchaseResult.error?.includes('cancelled')) {
+              track('revenuecat_purchase_cancelled', { plan_tier: plan.tier });
+              // User cancelled - don't show error
+            } else {
+              throw new Error(purchaseResult.error || 'Purchase failed');
+            }
+          }
+          return;
+        } catch (rcError: any) {
+          track('revenuecat_purchase_failed', {
+            plan_tier: plan.tier,
+            error: rcError.message,
+          });
+          throw rcError;
+        }
+      }
+      
+      // For school plans or web, use PayFast checkout
       const result = await createCheckout({
         scope: scope as 'user' | 'school',
         schoolId: scope === 'school' ? profile.organization_id : undefined,
@@ -276,7 +375,7 @@ export function useSubscriptionUpgrade({
     } finally {
       if (screenMounted) setUpgrading(false);
     }
-  }, [plans, profile, annual, currentTier, reasonKey, screenMounted]);
+  }, [plans, profile, annual, currentTier, reasonKey, screenMounted, refreshSubscription]);
 
   return {
     plans,

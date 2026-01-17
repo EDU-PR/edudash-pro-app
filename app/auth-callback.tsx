@@ -143,7 +143,14 @@ export default function AuthCallback() {
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
             if (type === 'recovery') {
-              router.replace('/(auth)/reset-password');
+              // Password reset should happen on web, not in native app
+              // Sign out and redirect to sign-in - user should use web for password reset
+              console.log('[AuthCallback] Recovery type detected - password reset should happen on web');
+              supabase.auth.signOut().then(() => {
+                router.replace('/(auth)/sign-in');
+              }).catch(() => {
+                router.replace('/(auth)/sign-in');
+              });
             } else {
               router.replace('/profiles-gate');
             }
@@ -200,7 +207,14 @@ export default function AuthCallback() {
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
             if (type === 'recovery') {
-              router.replace('/(auth)/reset-password');
+              // Password reset should happen on web, not in native app
+              // Sign out and redirect to sign-in - user should use web for password reset
+              console.log('[AuthCallback] Recovery type detected - password reset should happen on web');
+              supabase.auth.signOut().then(() => {
+                router.replace('/(auth)/sign-in');
+              }).catch(() => {
+                router.replace('/(auth)/sign-in');
+              });
             } else {
               router.replace('/profiles-gate');
             }

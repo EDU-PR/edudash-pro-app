@@ -78,9 +78,12 @@ export default function Index() {
               console.log('[Index] Detected initial deep link, routing to:', target);
               
               // Special handling for auth-related deep links
+              // Password reset should go to web - if we somehow got a reset-password deep link,
+              // redirect user to sign-in (they should use the web for password reset)
               if (path === '/reset-password' || path.includes('reset-password')) {
-                console.log('[Index] Password reset deep link detected');
-                router.replace('/reset-password');
+                console.log('[Index] Password reset deep link detected - password reset should happen on web');
+                // Don't try to handle reset-password natively, go to sign-in
+                router.replace('/(auth)/sign-in');
                 return;
               }
               if (path === '/auth-callback' || path.includes('auth-callback')) {
