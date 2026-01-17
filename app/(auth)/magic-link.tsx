@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, KeyboardAvoidingView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView } from "react-native";
 import { Stack, router } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { marketingTokens } from '@/components/marketing/tokens';
 import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { supabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Get proper redirect URL based on platform
 const getRedirectUrl = (path: string) => {
@@ -23,26 +24,31 @@ const getRedirectUrl = (path: string) => {
 export default function MagicLinkScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
   const handleMagicLink = async () => {
     if (!email) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }), 
-        t('auth.magic_link.enter_email', { defaultValue: 'Please enter your email address' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('auth.magic_link.enter_email', { defaultValue: 'Please enter your email address' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }), 
-        t('auth.magic_link.invalid_email', { defaultValue: 'Please enter a valid email address' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('auth.magic_link.invalid_email', { defaultValue: 'Please enter a valid email address' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -60,24 +66,30 @@ export default function MagicLinkScreen() {
       if (error) {
         // Handle specific errors
         if (error.message.includes('User not found') || error.message.includes('Signups not allowed')) {
-          Alert.alert(
-            t('common.error', { defaultValue: 'Error' }), 
-            t('auth.magic_link.user_not_found', { defaultValue: 'No account found with this email. Please contact your school administrator.' })
-          );
+          showAlert({
+            title: t('common.error', { defaultValue: 'Error' }),
+            message: t('auth.magic_link.user_not_found', { defaultValue: 'No account found with this email. Please contact your school administrator.' }),
+            type: 'error',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
-          Alert.alert(
-            t('common.error', { defaultValue: 'Error' }), 
-            error.message
-          );
+          showAlert({
+            title: t('common.error', { defaultValue: 'Error' }),
+            message: error.message,
+            type: 'error',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         }
       } else {
         setEmailSent(true);
       }
     } catch (error: any) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }), 
-        error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     } finally {
       setLoading(false);
     }
@@ -243,6 +255,7 @@ export default function MagicLinkScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

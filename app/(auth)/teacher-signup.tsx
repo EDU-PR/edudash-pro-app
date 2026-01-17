@@ -9,7 +9,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -25,10 +24,12 @@ import { router, Stack } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export default function TeacherSignUpScreen() {
   const { theme } = useTheme();
   const flags = getFeatureFlagsSync();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -217,16 +218,18 @@ export default function TeacherSignUpScreen() {
         }
       }
 
-      Alert.alert(
-        'Account Created!',
-        'Please check your email to verify your account.',
-        [
+      showAlert({
+        title: 'Account Created!',
+        message: 'Please check your email to verify your account.',
+        type: 'success',
+        buttons: [
           {
             text: 'OK',
+            style: 'default',
             onPress: () => router.replace('/sign-in'),
           },
-        ]
-      );
+        ],
+      });
     } catch (err: any) {
       console.error('Signup error:', err);
       setError(err.message || 'Registration failed. Please try again.');
@@ -424,6 +427,7 @@ export default function TeacherSignUpScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </KeyboardAvoidingView>
   );
 }

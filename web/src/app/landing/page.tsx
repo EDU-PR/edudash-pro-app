@@ -57,7 +57,7 @@ function LandingInner() {
           }
         }
 
-        // PASSWORD RESET - redirect to reset-password page which handles mobile detection
+        // PASSWORD RESET - route through auth-callback for code exchange
         if (flow === "recovery" || searchParams.get("type") === "recovery") {
           setMessage("Redirecting to password reset...");
           setStatus("done");
@@ -69,14 +69,16 @@ function LandingInner() {
           if (code) resetParams.set('code', code);
           resetParams.set('type', 'recovery');
           
-          // For mobile, try deep link first
+          // For mobile, route through auth-callback to exchange code first
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           if (isMobile) {
             setTimeout(() => {
-              tryOpenApp(`reset-password?${resetParams.toString()}`);
+              // IMPORTANT: Route through auth-callback so code is exchanged
+              // auth-callback will redirect to reset-password after setting session
+              tryOpenApp(`auth-callback?${resetParams.toString()}`);
             }, 500);
           } else {
-            // For web, redirect to reset-password page
+            // For web, redirect to reset-password page (it handles session on web)
             setTimeout(() => {
               router.replace(`/reset-password?${resetParams.toString()}`);
             }, 500);
