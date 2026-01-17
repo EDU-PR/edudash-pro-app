@@ -266,9 +266,11 @@ function RootLayoutContent() {
         const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
 
         // Handle reset-password deep links (warm start)
+        // Password reset should happen on web - redirect to sign-in instead
         if (normalized === '/reset-password' || normalized.includes('reset-password')) {
-          console.log('[_layout] Password reset deep link (warm start)');
-          router.replace('/reset-password');
+          console.log('[_layout] Password reset deep link detected - password reset should happen on web');
+          // Don't try to handle reset-password natively, go to sign-in
+          router.replace('/(auth)/sign-in');
           return;
         }
 
