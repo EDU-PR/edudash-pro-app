@@ -22,6 +22,11 @@ import { extractOrganizationId } from '@/lib/tenant/compat';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useOrganizationBranding } from '@/contexts/OrganizationBrandingContext';
 import type { ThemeColors } from '@/contexts/ThemeContext';
+// Ads
+import { useAds } from '@/contexts/AdsContext';
+import SubscriptionAdGate from '@/components/ui/SubscriptionAdGate';
+import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
+import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 
 // Soil of Africa organization ID
 const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
@@ -34,6 +39,7 @@ export default function LearnerDashboard() {
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
   const { tier, ready: subscriptionReady, tierSource } = useSubscription();
+  const { maybeShowInterstitial } = useAds();
   const styles = React.useMemo(() => createStyles(theme, isDark), [theme, isDark]);
   
   // State for mobile nav drawer
@@ -94,6 +100,22 @@ export default function LearnerDashboard() {
   const handleRefresh = () => {
     learnerDashboard.refetchAll();
   };
+
+  // Show interstitial ad after dashboard loads (with delay to not disrupt UX)
+  useEffect(() => {
+    if (isStillLoading || !user) return;
+    
+    // Delay interstitial by 3 seconds after dashboard loads
+    const timer = setTimeout(async () => {
+      try {
+        await maybeShowInterstitial(PLACEMENT_KEYS.INTERSTITIAL_LEARNER_DASHBOARD_ENTER);
+      } catch (error) {
+        console.debug('[LearnerDashboard] Failed to show interstitial ad:', error);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [isStillLoading, user, maybeShowInterstitial]);
 
   // Show loading state while auth/profile is loading
   if (isStillLoading) {
@@ -417,6 +439,15 @@ export default function LearnerDashboard() {
             </View>
           </Card>
         )}
+
+        {/* Banner Ad - Free tier users only */}
+        <SubscriptionAdGate>
+          <AdBannerWithUpgrade 
+            screen="learner_dashboard" 
+            showUpgradeCTA={true} 
+            margin={16}
+          />
+        </SubscriptionAdGate>
       </ScrollView>
       </DashboardWallpaperBackground>
       

@@ -63,6 +63,14 @@ export function isParentRole(userProfile: any): boolean {
 }
 
 /**
+ * Check if user has learner/student role
+ */
+export function isLearnerRole(userProfile: any): boolean {
+  if (!userProfile) return false;
+  return userProfile.role === 'student' || userProfile.role === 'learner';
+}
+
+/**
  * Check if user is a membership/organization user (Soil of Africa, etc.)
  */
 export function isMembershipUser(userProfile: any): boolean {
@@ -77,16 +85,17 @@ export function isMembershipUser(userProfile: any): boolean {
   
   // Check if user's role indicates membership (not parent, teacher, student, etc.)
   const isMembershipRole = userProfile.role && 
-    !['parent', 'teacher', 'student', 'principal', 'super_admin'].includes(userProfile.role);
+    !['parent', 'teacher', 'student', 'learner', 'principal', 'super_admin'].includes(userProfile.role);
   
   return !!(hasOrgMembership || hasMemberType || isMembershipRole);
 }
 
 /**
- * Check if user is eligible for ads (parent OR membership user)
+ * Check if user is eligible for ads (parent, learner, OR membership user)
+ * Note: Teachers and principals are excluded from ads
  */
 export function isAdsEligibleUser(userProfile: any): boolean {
-  return isParentRole(userProfile) || isMembershipUser(userProfile);
+  return isParentRole(userProfile) || isLearnerRole(userProfile) || isMembershipUser(userProfile);
 }
 
 /**
