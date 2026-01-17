@@ -14,7 +14,7 @@ import {
   type EnhancedUserProfile,
   type PermissionChecker
 } from '@/lib/rbac';
-import { initializeSession, signOut } from '@/lib/sessionManager';
+import { initializeSession, signOut, isPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { router } from 'expo-router';
 import { securityAuditor } from '@/lib/security-audit';
 import { initializeVisibilityHandler, destroyVisibilityHandler } from '@/lib/visibilityHandler';
@@ -538,8 +538,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               // Check if this is a password recovery session
               // Multiple checks to ensure we don't route away from reset-password:
-              // 1. recovery_sent_at exists and is recent (within 60 min)
-              // 2. Current URL contains 'reset-password' (fallback check)
+              // 1. Global flag set by reset-password screen (most reliable)
+              // 2. recovery_sent_at exists and is recent (within 60 min)
+              // 3. Current URL contains 'reset-password' (fallback check)
+              const globalRecoveryFlag = isPasswordRecoveryInProgress();
               const recoverySentAt = (s.user as any).recovery_sent_at;
               const isRecoverySession = recoverySentAt && 
                 (Date.now() - new Date(recoverySentAt).getTime()) < 60 * 60 * 1000; // 60 minutes
@@ -557,14 +559,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Ignore URL check errors
               }
               
-              if (isRecoverySession || isOnResetPasswordPage) {
+              if (globalRecoveryFlag || isRecoverySession || isOnResetPasswordPage) {
                 console.log('[AuthContext] Password recovery session detected, skipping auto-routing', {
+                  globalRecoveryFlag,
                   isRecoverySession,
                   isOnResetPasswordPage,
                   recoverySentAt,
                 });
                 // #region agent log
-                console.log('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
+                console.log('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,globalRecoveryFlag,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
                 // #endregion
                 return; // Don't route - user is on reset-password screen
               }

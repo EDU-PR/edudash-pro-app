@@ -4,6 +4,34 @@ import { track, identifyUser } from '@/lib/analytics';
 import { identifyUserForFlags } from '@/lib/featureFlags';
 import { reportError } from '@/lib/monitoring';
 
+// ============================================================================
+// GLOBAL PASSWORD RECOVERY FLAG
+// ============================================================================
+// This flag is set to true when the user is in a password recovery flow.
+// It prevents AuthContext from automatically routing the user away after
+// setting the session tokens. The flag is checked in AuthContext's
+// onAuthStateChange handler for SIGNED_IN events.
+// ============================================================================
+let _isPasswordRecoveryInProgress = false;
+
+/**
+ * Check if a password recovery is currently in progress.
+ * Used by AuthContext to skip auto-routing after session is set.
+ */
+export function isPasswordRecoveryInProgress(): boolean {
+  return _isPasswordRecoveryInProgress;
+}
+
+/**
+ * Set the password recovery flag. Call this BEFORE setting session tokens
+ * for a password recovery flow, and clear it AFTER the password has been
+ * successfully updated.
+ */
+export function setPasswordRecoveryInProgress(value: boolean): void {
+  console.log('[SessionManager] setPasswordRecoveryInProgress:', value);
+  _isPasswordRecoveryInProgress = value;
+}
+
 // Dynamically import SecureStore to avoid web issues
 let SecureStore: any = null;
 try {

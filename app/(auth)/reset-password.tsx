@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
@@ -58,6 +59,12 @@ export default function ResetPasswordScreen() {
         
         if (accessToken && refreshToken) {
           console.log('[ResetPassword] Received tokens from URL, setting session...');
+          
+          // Set the global flag BEFORE calling setSession to prevent AuthContext
+          // from routing away when it receives the SIGNED_IN event
+          setPasswordRecoveryInProgress(true);
+          console.log('[ResetPassword] Set password recovery flag to true');
+          
           const { data, error: setError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -65,6 +72,7 @@ export default function ResetPasswordScreen() {
           
           if (setError) {
             console.error('[ResetPassword] Error setting session from tokens:', setError);
+            setPasswordRecoveryInProgress(false); // Clear flag on error
             setValidSession(false);
             return;
           }
@@ -78,10 +86,14 @@ export default function ResetPasswordScreen() {
         }
         
         // Otherwise, check existing session (set by auth-callback)
+        // Also set flag if we already have a session (might be from a previous navigation)
+        setPasswordRecoveryInProgress(true);
+        
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
           console.error('[ResetPassword] Session error:', error);
+          setPasswordRecoveryInProgress(false);
           setValidSession(false);
           return;
         }
@@ -91,15 +103,23 @@ export default function ResetPasswordScreen() {
           setUserEmail(session.user.email || null);
         } else {
           console.log('[ResetPassword] No session found');
+          setPasswordRecoveryInProgress(false);
           setValidSession(false);
         }
       } catch (e) {
         console.error('[ResetPassword] Error checking session:', e);
+        setPasswordRecoveryInProgress(false);
         setValidSession(false);
       }
     };
 
     checkSession();
+    
+    // Cleanup: clear the flag when component unmounts
+    return () => {
+      console.log('[ResetPassword] Component unmounting, clearing recovery flag');
+      setPasswordRecoveryInProgress(false);
+    };
   }, [searchParams.access_token, searchParams.refresh_token]);
 
   const handleResetPassword = async () => {
@@ -159,6 +179,10 @@ export default function ResetPasswordScreen() {
       if (error) {
         throw error;
       }
+
+      // Clear the recovery flag now that password has been updated
+      setPasswordRecoveryInProgress(false);
+      console.log('[ResetPassword] Password updated, cleared recovery flag');
 
       showAlert({
         title: 'Password Updated',
