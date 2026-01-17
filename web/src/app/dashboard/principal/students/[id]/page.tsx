@@ -240,7 +240,7 @@ export default function StudentDetailPage() {
     setSendingPasswordReset(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(student.profiles.email, {
-        redirectTo: 'https://edudashpro.org.za/reset-password',
+        redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (error) throw error;

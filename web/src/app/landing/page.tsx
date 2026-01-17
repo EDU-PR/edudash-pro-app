@@ -57,6 +57,33 @@ function LandingInner() {
           }
         }
 
+        // PASSWORD RESET - redirect to reset-password page which handles mobile detection
+        if (flow === "recovery" || searchParams.get("type") === "recovery") {
+          setMessage("Redirecting to password reset...");
+          setStatus("done");
+          
+          // Build query string with all relevant params
+          const resetParams = new URLSearchParams();
+          if (tokenHash) resetParams.set('token_hash', tokenHash);
+          const code = searchParams.get("code");
+          if (code) resetParams.set('code', code);
+          resetParams.set('type', 'recovery');
+          
+          // For mobile, try deep link first
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          if (isMobile) {
+            setTimeout(() => {
+              tryOpenApp(`reset-password?${resetParams.toString()}`);
+            }, 500);
+          } else {
+            // For web, redirect to reset-password page
+            setTimeout(() => {
+              router.replace(`/reset-password?${resetParams.toString()}`);
+            }, 500);
+          }
+          return;
+        }
+
         // EMAIL CONFIRMATION
         if ((flow === "email-confirm" || searchParams.get("type") === "email" || searchParams.get("type") === "signup") && tokenHash) {
           setMessage("Verifying your email...");
