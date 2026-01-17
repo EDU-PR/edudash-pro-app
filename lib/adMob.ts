@@ -135,11 +135,50 @@ export async function initializeAdMob(): Promise<boolean> {
   }
 }
 
-// TODO: Implement actual AdMob ad loading when ready for production
-// For now, using stubs to avoid TypeScript errors
+// Interstitial ad instance cache
+let interstitialAd: any = null;
+let rewardedAd: any = null;
 
 /**
- * Show interstitial ad - Stub implementation
+ * Load interstitial ad
+ */
+async function loadInterstitialAd(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  if (Platform.OS !== 'android') return false;
+  
+  try {
+    const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
+    const adUnitId = shouldUseProductionIds() 
+      ? getAdUnitId('interstitial')
+      : TestIds.INTERSTITIAL;
+    
+    interstitialAd = InterstitialAd.createForAdRequest(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    return new Promise((resolve) => {
+      const loadedListener = interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
+        debug('AdMob: Interstitial ad loaded');
+        loadedListener();
+        resolve(true);
+      });
+      
+      const errorListener = interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+        warn('AdMob: Interstitial ad failed to load:', error);
+        errorListener();
+        resolve(false);
+      });
+      
+      interstitialAd.load();
+    });
+  } catch (error) {
+    warn('AdMob: Failed to load interstitial:', error);
+    return false;
+  }
+}
+
+/**
+ * Show interstitial ad - Real implementation using react-native-google-mobile-ads
  */
 export async function showInterstitialAd(): Promise<boolean> {
   const flags = getFeatureFlagsSync();
@@ -149,15 +188,79 @@ export async function showInterstitialAd(): Promise<boolean> {
     return false;
   }
   
-  debug('AdMob Stub: Would show interstitial ad');
-  track('edudash.ads.interstitial_stub_shown', {
-    platform: Platform.OS,
-  });
-  return false; // Stub returns false for now
+  // Skip on non-Android platforms
+  if (Platform.OS === 'web') return false;
+  if (Platform.OS !== 'android') return false;
+  
+  try {
+    const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
+    const adUnitId = shouldUseProductionIds() 
+      ? getAdUnitId('interstitial')
+      : TestIds.INTERSTITIAL;
+    
+    const ad = InterstitialAd.createForAdRequest(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      
+      const loadedListener = ad.addAdEventListener(AdEventType.LOADED, () => {
+        debug('AdMob: Interstitial loaded, showing...');
+        ad.show();
+      });
+      
+      const closedListener = ad.addAdEventListener(AdEventType.CLOSED, () => {
+        debug('AdMob: Interstitial closed');
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(true);
+        }
+      });
+      
+      const errorListener = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+        warn('AdMob: Interstitial error:', error);
+        track('edudash.ads.interstitial_error', {
+          platform: Platform.OS,
+          error: error?.message || 'Unknown error',
+        });
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(false);
+        }
+      });
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(false);
+        }
+      }, 10000);
+      
+      ad.load();
+    });
+  } catch (error) {
+    warn('AdMob: Failed to show interstitial:', error);
+    track('edudash.ads.interstitial_error', {
+      platform: Platform.OS,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return false;
+  }
 }
 
 /**
- * Show rewarded ad - Stub implementation
+ * Show rewarded ad - Real implementation using react-native-google-mobile-ads
  */
 export async function showRewardedAd(): Promise<{
   shown: boolean;
@@ -171,11 +274,96 @@ export async function showRewardedAd(): Promise<{
     return { shown: false, rewarded: false };
   }
   
-  debug('AdMob Stub: Would show rewarded ad');
-  track('edudash.ads.rewarded_stub_shown', {
-    platform: Platform.OS,
-  });
-  return { shown: false, rewarded: false }; // Stub returns false for now
+  // Skip on non-Android platforms
+  if (Platform.OS === 'web') return { shown: false, rewarded: false };
+  if (Platform.OS !== 'android') return { shown: false, rewarded: false };
+  
+  try {
+    const { RewardedAd, RewardedAdEventType, TestIds } = require('react-native-google-mobile-ads');
+    const adUnitId = shouldUseProductionIds() 
+      ? getAdUnitId('rewarded')
+      : TestIds.REWARDED;
+    
+    const ad = RewardedAd.createForAdRequest(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let earnedReward: { type: string; amount: number } | undefined;
+      
+      const loadedListener = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+        debug('AdMob: Rewarded ad loaded, showing...');
+        ad.show();
+      });
+      
+      const earnedListener = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward: any) => {
+        debug('AdMob: Reward earned:', reward);
+        earnedReward = {
+          type: reward.type || 'coins',
+          amount: reward.amount || 1,
+        };
+        track('edudash.ads.rewarded_earned', {
+          platform: Platform.OS,
+          reward_type: earnedReward.type,
+          reward_amount: earnedReward.amount,
+        });
+      });
+      
+      const closedListener = ad.addAdEventListener('closed', () => {
+        debug('AdMob: Rewarded ad closed');
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          earnedListener();
+          closedListener();
+          errorListener();
+          resolve({ 
+            shown: true, 
+            rewarded: !!earnedReward,
+            reward: earnedReward,
+          });
+        }
+      });
+      
+      const errorListener = ad.addAdEventListener('error', (error: any) => {
+        warn('AdMob: Rewarded ad error:', error);
+        track('edudash.ads.rewarded_error', {
+          platform: Platform.OS,
+          error: error?.message || 'Unknown error',
+        });
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          earnedListener();
+          closedListener();
+          errorListener();
+          resolve({ shown: false, rewarded: false });
+        }
+      });
+      
+      // Timeout after 15 seconds
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          earnedListener();
+          closedListener();
+          errorListener();
+          resolve({ shown: false, rewarded: false });
+        }
+      }, 15000);
+      
+      ad.load();
+    });
+  } catch (error) {
+    warn('AdMob: Failed to show rewarded ad:', error);
+    track('edudash.ads.rewarded_error', {
+      platform: Platform.OS,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return { shown: false, rewarded: false };
+  }
 }
 
 /**

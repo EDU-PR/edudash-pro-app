@@ -39,7 +39,8 @@ function LandingInner() {
     const run = async () => {
       try {
         const flow = (searchParams.get("flow") || searchParams.get("type") || "").toLowerCase();
-        const tokenHash = searchParams.get("token_hash") || searchParams.get("token") || "";
+        const tokenHash = searchParams.get("token_hash") || "";
+        const token = searchParams.get("token") || ""; // PKCE token (starts with pkce_)
         const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
 
         // IMPORTANT: Extract tokens from hash fragment (Supabase puts session tokens here after /verify)
@@ -49,7 +50,14 @@ function LandingInner() {
         const refreshToken = hashParams.get("refresh_token") || "";
         const hashType = hashParams.get("type") || "";
         
-        console.log("[Landing] Hash params:", { accessToken: !!accessToken, refreshToken: !!refreshToken, hashType });
+        console.log("[Landing] Params:", { 
+          flow, 
+          tokenHash: !!tokenHash, 
+          token: token ? `${token.substring(0, 10)}...` : null,
+          accessToken: !!accessToken, 
+          refreshToken: !!refreshToken, 
+          hashType 
+        });
 
         // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
         const redirectTo = searchParams.get("redirect_to") || "";
@@ -66,17 +74,19 @@ function LandingInner() {
           }
         }
 
-        // PASSWORD RESET - handle both query param flow and hash fragment tokens
-        // Supabase redirects with tokens in hash: #access_token=...&refresh_token=...&type=recovery
+        // PASSWORD RESET - handle PKCE tokens, hash fragment tokens, and legacy token_hash
+        // Supabase PKCE flow: redirects with ?token=pkce_xxx&type=recovery
+        // Supabase legacy flow: redirects with #access_token=...&refresh_token=...&type=recovery
         if (flow === "recovery" || searchParams.get("type") === "recovery" || hashType === "recovery") {
-          setMessage("Redirecting to password reset...");
-          setStatus("done");
+          setMessage("Processing password reset...");
           
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           
-          // If we have access tokens from hash, the session is already established by Supabase
+          // CASE 1: We have access tokens from hash fragment (session already established)
           if (accessToken && refreshToken) {
             console.log("[Landing] Have tokens from hash, setting session...");
+            setStatus("done");
+            setMessage("Redirecting to password reset...");
             
             // Set the session on web first (so it's available if user stays on web)
             try {
@@ -113,31 +123,131 @@ function LandingInner() {
             return;
           }
           
-          // Fallback: No tokens yet, try to pass code/token_hash for exchange
-          const resetParams = new URLSearchParams();
-          if (tokenHash) resetParams.set('token_hash', tokenHash);
-          const code = searchParams.get("code");
-          if (code) resetParams.set('code', code);
-          resetParams.set('type', 'recovery');
-          
-          if (isMobile) {
-            setTimeout(() => {
-              // Route through auth-callback to exchange code
-              tryOpenApp(`auth-callback?${resetParams.toString()}`);
-            }, 500);
-          } else {
-            setTimeout(() => {
-              router.replace(`/reset-password?${resetParams.toString()}`);
-            }, 500);
+          // CASE 2: PKCE token (starts with pkce_) - need to exchange via verifyOtp
+          if (token && token.startsWith('pkce_')) {
+            console.log("[Landing] Have PKCE token, exchanging...");
+            setMessage("Verifying password reset link...");
+            
+            try {
+              // Exchange PKCE token for session
+              const { data, error: verifyError } = await supabase.auth.verifyOtp({
+                token_hash: token,
+                type: 'recovery',
+              });
+              
+              if (verifyError) {
+                console.error("[Landing] PKCE token exchange failed:", verifyError);
+                setStatus("error");
+                setMessage(verifyError.message || "Invalid or expired reset link. Please request a new one.");
+                return;
+              }
+              
+              if (!data.session) {
+                console.error("[Landing] PKCE exchange succeeded but no session");
+                setStatus("error");
+                setMessage("Reset link verified but session creation failed. Please try again.");
+                return;
+              }
+              
+              console.log("[Landing] PKCE token exchanged successfully for:", data.session.user?.email);
+              setStatus("done");
+              setMessage("Redirecting to password reset...");
+              
+              if (isMobile) {
+                // Pass the new session tokens to native app
+                const resetParams = new URLSearchParams();
+                resetParams.set('access_token', data.session.access_token);
+                resetParams.set('refresh_token', data.session.refresh_token);
+                resetParams.set('type', 'recovery');
+                
+                setTimeout(() => {
+                  tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
+                }, 500);
+              } else {
+                // For web, redirect to reset-password page (session is now active)
+                setTimeout(() => {
+                  router.replace('/reset-password');
+                }, 500);
+              }
+              return;
+            } catch (e) {
+              console.error("[Landing] PKCE token exchange error:", e);
+              setStatus("error");
+              setMessage("Failed to verify reset link. Please request a new one.");
+              return;
+            }
           }
+          
+          // CASE 3: Legacy token_hash - exchange via verifyOtp
+          if (tokenHash) {
+            console.log("[Landing] Have token_hash, exchanging...");
+            setMessage("Verifying password reset link...");
+            
+            try {
+              const { data, error: verifyError } = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: 'recovery',
+              });
+              
+              if (verifyError) {
+                console.error("[Landing] Token hash exchange failed:", verifyError);
+                setStatus("error");
+                setMessage(verifyError.message || "Invalid or expired reset link.");
+                return;
+              }
+              
+              if (!data.session) {
+                setStatus("error");
+                setMessage("Reset link verified but session creation failed.");
+                return;
+              }
+              
+              console.log("[Landing] Token hash exchanged successfully for:", data.session.user?.email);
+              setStatus("done");
+              setMessage("Redirecting to password reset...");
+              
+              if (isMobile) {
+                const resetParams = new URLSearchParams();
+                resetParams.set('access_token', data.session.access_token);
+                resetParams.set('refresh_token', data.session.refresh_token);
+                resetParams.set('type', 'recovery');
+                
+                setTimeout(() => {
+                  tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
+                }, 500);
+              } else {
+                setTimeout(() => {
+                  router.replace('/reset-password');
+                }, 500);
+              }
+              return;
+            } catch (e) {
+              console.error("[Landing] Token hash exchange error:", e);
+              setStatus("error");
+              setMessage("Failed to verify reset link.");
+              return;
+            }
+          }
+          
+          // CASE 4: No token found - show error
+          console.log("[Landing] No valid token found for recovery");
+          setStatus("error");
+          setMessage("Invalid password reset link. Please request a new one.");
           return;
         }
 
-        // EMAIL CONFIRMATION
-        if ((flow === "email-confirm" || searchParams.get("type") === "email" || searchParams.get("type") === "signup") && tokenHash) {
+        // EMAIL CONFIRMATION - handle both PKCE tokens and legacy token_hash
+        if ((flow === "email-confirm" || searchParams.get("type") === "email" || searchParams.get("type") === "signup")) {
+          const emailToken = token || tokenHash;
+          if (!emailToken) {
+            setStatus("error");
+            setMessage("Invalid email verification link.");
+            return;
+          }
+          
           setMessage("Verifying your email...");
           try {
-            const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "email" });
+            const { error } = await supabase.auth.verifyOtp({ token_hash: emailToken, type: "email" });
             if (error) throw error;
             
             // Sign out on web so user signs in fresh in the app
