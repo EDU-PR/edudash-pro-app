@@ -15,80 +15,22 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [validSession, setValidSession] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Detect if user is on mobile and redirect to native app
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    // Detect if user is on mobile (for redirect after success)
+    const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent
     );
+    setIsMobile(mobile);
 
-    if (isMobile) {
-      // Get all URL parameters to pass to native app
-      const searchParams = new URLSearchParams(window.location.search);
-      const token_hash = searchParams.get('token_hash');
-      const token = searchParams.get('token');
-      const code = searchParams.get('code');
-      const type = searchParams.get('type');
-      const access_token = searchParams.get('access_token');
-      const refresh_token = searchParams.get('refresh_token');
-
-      // Build deep link URL for native app
-      const params = new URLSearchParams();
-      if (token_hash) params.set('token_hash', token_hash);
-      if (token) params.set('token', token);
-      if (code) params.set('code', code);
-      // Always set type to recovery for password reset flow
-      params.set('type', type || 'recovery');
-      if (access_token) params.set('access_token', access_token);
-      if (refresh_token) params.set('refresh_token', refresh_token);
-
-      // Also check hash fragment
-      const hashParams = new URLSearchParams(window.location.hash.slice(1));
-      const hashAccessToken = hashParams.get('access_token');
-      const hashRefreshToken = hashParams.get('refresh_token');
-      
-      if (hashAccessToken) params.set('access_token', hashAccessToken);
-      if (hashRefreshToken) params.set('refresh_token', hashRefreshToken);
-
-      const queryString = params.toString();
-      
-      // IMPORTANT: If there's a code or token to exchange, route through auth-callback
-      // auth-callback will handle the code exchange and then redirect to reset-password
-      // If there's already access_token, we can go directly to reset-password
-      const needsCodeExchange = code || token || token_hash;
-      const hasSession = access_token || hashAccessToken;
-      
-      let appUrl: string;
-      if (needsCodeExchange && !hasSession) {
-        // Route through auth-callback to exchange the code first
-        appUrl = `edudashpro:///auth-callback${queryString ? `?${queryString}` : ''}`;
-        console.log('[ResetPassword] Routing through auth-callback for code exchange:', appUrl);
-      } else {
-        // Already has session tokens, go directly to reset-password
-        appUrl = `edudashpro:///reset-password${queryString ? `?${queryString}` : ''}`;
-        console.log('[ResetPassword] Redirecting directly to reset-password:', appUrl);
-      }
-      
-      // Redirect to native app
-      window.location.href = appUrl;
-      window.location.href = appUrl;
-      
-      // Fallback: If app doesn't open, show error after timeout
-      setTimeout(() => {
-        setError('Unable to open the EduDash Pro app. Please make sure the app is installed and try again.');
-      }, 2000);
-      
-      return;
-    }
-
-    // Web user - check session and process normally
+    // ALL users (mobile and web) handle password reset on web
+    // This avoids complex deep-linking issues with token exchange
     const checkSession = async () => {
       const supabase = createClient();
       
-      // First, try to exchange the code from URL if present
-      // This happens automatically with detectSessionInUrl: true in the client config
-      
       // Small delay to allow URL session detection to complete
+      // Supabase client automatically handles code exchange from URL
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -140,9 +82,17 @@ export default function ResetPasswordPage() {
 
     setSuccess(true);
     
-    // Redirect to sign-in after 3 seconds
+    // Sign out after password change (user needs to sign in with new password)
+    await supabase.auth.signOut();
+    
+    // Redirect after 3 seconds
     setTimeout(() => {
-      router.push("/sign-in");
+      if (isMobile) {
+        // Redirect mobile users back to native app sign-in
+        window.location.href = 'edudashpro:///(auth)/sign-in?password_reset=success';
+      } else {
+        router.push("/sign-in");
+      }
     }, 3000);
   }
 
@@ -214,8 +164,30 @@ export default function ResetPasswordPage() {
               <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
               <h2 style={{ color: "#fff", fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Password Reset Successful!</h2>
               <p style={{ color: "#9CA3AF", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-                Your password has been successfully reset. Redirecting you to sign in...
+                Your password has been successfully reset. 
+                {isMobile 
+                  ? " Redirecting you back to the app..." 
+                  : " Redirecting you to sign in..."}
               </p>
+              {isMobile && (
+                <div style={{ marginTop: 16 }}>
+                  <a 
+                    href="edudashpro:///(auth)/sign-in?password_reset=success"
+                    style={{
+                      display: "inline-block",
+                      padding: "12px 24px",
+                      background: "linear-gradient(135deg, #00f5ff 0%, #0088cc 100%)",
+                      color: "#000",
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    Open EduDash Pro App
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>

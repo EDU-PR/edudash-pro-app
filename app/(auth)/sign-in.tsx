@@ -106,6 +106,11 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // Auto-dismiss after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
     }
+    if (searchParams.password_reset === 'success') {
+      setSuccessMessage(t('auth.password_reset_success', { defaultValue: 'Password reset successfully! You can now sign in with your new password.' }));
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+    }
     if (searchParams.emailVerificationFailed === 'true') {
       showAlert({
         title: t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
