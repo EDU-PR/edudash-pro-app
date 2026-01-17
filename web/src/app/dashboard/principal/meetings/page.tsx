@@ -65,7 +65,21 @@ export default function MeetingsPage() {
   const preschoolId = profile?.preschoolId;
   const preschoolName = profile?.preschoolName;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    meeting_type: string;
+    meeting_date: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes: number;
+    location: string;
+    is_virtual: boolean;
+    virtual_link: string;
+    invited_roles: string[];
+    agenda_items: { title: string; duration_minutes?: number }[];
+    status: Meeting['status'];
+  }>({
     title: '',
     description: '',
     meeting_type: 'staff',
@@ -76,9 +90,9 @@ export default function MeetingsPage() {
     location: '',
     is_virtual: false,
     virtual_link: '',
-    invited_roles: ['teacher'] as string[],
-    agenda_items: [] as { title: string; duration_minutes?: number }[],
-    status: 'scheduled' as const,
+    invited_roles: ['teacher'],
+    agenda_items: [],
+    status: 'scheduled',
   });
 
   const [newAgendaItem, setNewAgendaItem] = useState('');

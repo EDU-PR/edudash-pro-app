@@ -27,10 +27,16 @@ import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { marketingTokens } from '@/components/marketing/tokens';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { useLocalSearchParams } from 'expo-router';
 
 export default function ResetPasswordScreen() {
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
+  const searchParams = useLocalSearchParams<{
+    access_token?: string;
+    refresh_token?: string;
+    type?: string;
+  }>();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,10 +46,38 @@ export default function ResetPasswordScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Check if user has a valid recovery session
+  // Also handle tokens passed directly from the landing page
   useEffect(() => {
     const checkSession = async () => {
       try {
         const supabase = assertSupabase();
+        
+        // First, check if we have tokens passed from the landing page
+        const accessToken = searchParams.access_token;
+        const refreshToken = searchParams.refresh_token;
+        
+        if (accessToken && refreshToken) {
+          console.log('[ResetPassword] Received tokens from URL, setting session...');
+          const { data, error: setError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (setError) {
+            console.error('[ResetPassword] Error setting session from tokens:', setError);
+            setValidSession(false);
+            return;
+          }
+          
+          if (data.session && data.user) {
+            console.log('[ResetPassword] Session set successfully for:', data.user.email);
+            setValidSession(true);
+            setUserEmail(data.user.email || null);
+            return;
+          }
+        }
+        
+        // Otherwise, check existing session (set by auth-callback)
         const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
@@ -56,6 +90,7 @@ export default function ResetPasswordScreen() {
           setValidSession(true);
           setUserEmail(session.user.email || null);
         } else {
+          console.log('[ResetPassword] No session found');
           setValidSession(false);
         }
       } catch (e) {
@@ -65,7 +100,7 @@ export default function ResetPasswordScreen() {
     };
 
     checkSession();
-  }, []);
+  }, [searchParams.access_token, searchParams.refresh_token]);
 
   const handleResetPassword = async () => {
     // Validate passwords

@@ -42,6 +42,15 @@ function LandingInner() {
         const tokenHash = searchParams.get("token_hash") || searchParams.get("token") || "";
         const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
 
+        // IMPORTANT: Extract tokens from hash fragment (Supabase puts session tokens here after /verify)
+        // Example: #access_token=...&refresh_token=...&type=recovery
+        const hashParams = new URLSearchParams(window.location.hash.slice(1));
+        const accessToken = hashParams.get("access_token") || "";
+        const refreshToken = hashParams.get("refresh_token") || "";
+        const hashType = hashParams.get("type") || "";
+        
+        console.log("[Landing] Hash params:", { accessToken: !!accessToken, refreshToken: !!refreshToken, hashType });
+
         // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
         const redirectTo = searchParams.get("redirect_to") || "";
         let preservedInviteCode = inviteCode;
@@ -57,28 +66,66 @@ function LandingInner() {
           }
         }
 
-        // PASSWORD RESET - route through auth-callback for code exchange
-        if (flow === "recovery" || searchParams.get("type") === "recovery") {
+        // PASSWORD RESET - handle both query param flow and hash fragment tokens
+        // Supabase redirects with tokens in hash: #access_token=...&refresh_token=...&type=recovery
+        if (flow === "recovery" || searchParams.get("type") === "recovery" || hashType === "recovery") {
           setMessage("Redirecting to password reset...");
           setStatus("done");
           
-          // Build query string with all relevant params
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          
+          // If we have access tokens from hash, the session is already established by Supabase
+          if (accessToken && refreshToken) {
+            console.log("[Landing] Have tokens from hash, setting session...");
+            
+            // Set the session on web first (so it's available if user stays on web)
+            try {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (error) {
+                console.error("[Landing] Error setting session:", error);
+              } else {
+                console.log("[Landing] Session set successfully");
+              }
+            } catch (e) {
+              console.error("[Landing] Error setting session:", e);
+            }
+            
+            if (isMobile) {
+              // Pass tokens to native app - it will use setSession to restore
+              const resetParams = new URLSearchParams();
+              resetParams.set('access_token', accessToken);
+              resetParams.set('refresh_token', refreshToken);
+              resetParams.set('type', 'recovery');
+              
+              setTimeout(() => {
+                // Go directly to reset-password since we have tokens
+                tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
+              }, 500);
+            } else {
+              // For web, redirect to reset-password page
+              setTimeout(() => {
+                router.replace('/reset-password');
+              }, 500);
+            }
+            return;
+          }
+          
+          // Fallback: No tokens yet, try to pass code/token_hash for exchange
           const resetParams = new URLSearchParams();
           if (tokenHash) resetParams.set('token_hash', tokenHash);
           const code = searchParams.get("code");
           if (code) resetParams.set('code', code);
           resetParams.set('type', 'recovery');
           
-          // For mobile, route through auth-callback to exchange code first
-          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           if (isMobile) {
             setTimeout(() => {
-              // IMPORTANT: Route through auth-callback so code is exchanged
-              // auth-callback will redirect to reset-password after setting session
+              // Route through auth-callback to exchange code
               tryOpenApp(`auth-callback?${resetParams.toString()}`);
             }, 500);
           } else {
-            // For web, redirect to reset-password page (it handles session on web)
             setTimeout(() => {
               router.replace(`/reset-password?${resetParams.toString()}`);
             }, 500);
