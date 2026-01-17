@@ -536,6 +536,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 role: enhancedProfile?.role,
               });
 
+              // Check if this is a password recovery session
+              // Multiple checks to ensure we don't route away from reset-password:
+              // 1. recovery_sent_at exists and is recent (within 60 min)
+              // 2. Current URL contains 'reset-password' (fallback check)
+              const recoverySentAt = (s.user as any).recovery_sent_at;
+              const isRecoverySession = recoverySentAt && 
+                (Date.now() - new Date(recoverySentAt).getTime()) < 60 * 60 * 1000; // 60 minutes
+              
+              // Also check current URL path as a fallback (works on both web and native)
+              let isOnResetPasswordPage = false;
+              try {
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                  isOnResetPasswordPage = window.location.pathname.includes('reset-password');
+                } else {
+                  // For native, check the navigation state (expo-router provides this)
+                  // We can't easily get the current route here, so rely on recovery_sent_at
+                }
+              } catch {
+                // Ignore URL check errors
+              }
+              
+              if (isRecoverySession || isOnResetPasswordPage) {
+                console.log('[AuthContext] Password recovery session detected, skipping auto-routing', {
+                  isRecoverySession,
+                  isOnResetPasswordPage,
+                  recoverySentAt,
+                });
+                // #region agent log
+                console.log('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
+                // #endregion
+                return; // Don't route - user is on reset-password screen
+              }
+
               // Route user after successful sign in
               try {
                 // #region agent log
