@@ -826,24 +826,40 @@ export async function signOut(): Promise<void> {
       sessionRefreshTimer = null;
     }
 
+    // Clear stored data FIRST to prevent any race conditions with getSession() calls
+    // This is critical for preventing sign-in freeze after sign-out
+    console.log('[SessionManager] Clearing stored session data first...');
+    await clearStoredData();
+
     // Attempt Supabase sign-out with timeout protection (2 seconds max)
+    // Use 'local' scope first to clear client-side state immediately
     try {
-      console.log('[SessionManager] Signing out from Supabase (global scope to clear server session)...');
+      console.log('[SessionManager] Signing out from Supabase (local scope first)...');
+      await withTimeout(
+        assertSupabase().auth.signOut({ scope: 'local' } as any),
+        1000,
+        { error: null }
+      );
+      console.log('[SessionManager] Local sign-out completed');
+    } catch (localError) {
+      console.warn('[SessionManager] Local sign-out error (continuing):', localError);
+    }
+    
+    // Then sign out globally to invalidate server session
+    try {
+      console.log('[SessionManager] Signing out from Supabase (global scope)...');
       await withTimeout(
         assertSupabase().auth.signOut({ scope: 'global' } as any),
         2000,
         { error: null }
       );
-      console.log('[SessionManager] Supabase sign-out completed');
+      console.log('[SessionManager] Global sign-out completed');
     } catch (supabaseError) {
-      console.warn('[SessionManager] Supabase sign-out error (continuing):', supabaseError);
+      console.warn('[SessionManager] Global sign-out error (continuing):', supabaseError);
     }
-
-    // Clear stored data immediately (don't wait for Supabase)
-    await clearStoredData();
     
-    // Short delay to ensure storage is cleared
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Clear stored data again to ensure clean slate
+    await clearStoredData();
 
     track('edudash.auth.sign_out', {
       session_duration_minutes: sessionDuration,

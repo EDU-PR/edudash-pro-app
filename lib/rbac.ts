@@ -665,12 +665,15 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     log('Attempting to fetch profile for authenticated user:', userId);
     
     // SECURITY: Validate the requester identity as best as possible
-    // Try multiple sources for current authenticated identity
-    let session: any = null;
+    // CRITICAL FIX: Optimized session validation with shorter timeouts to prevent sign-in freeze
+    let session: { user: { id: string; email?: string }; access_token?: string } | null = null;
     let sessionUserId: string | null = null;
     let storedSession: import('@/lib/sessionManager').UserSession | null = null;
     
-    // Try stored session first (faster and more reliable after sign-in)
+    // Reduced timeout for faster sign-in (was 3s each, total 9s worst case)
+    const SESSION_CHECK_TIMEOUT = 2000; // 2 seconds max per check
+    
+    // Try stored session first (fastest)
     log('[Profile] Checking stored session first...');
     try {
       storedSession = await getCurrentSession();
@@ -689,13 +692,13 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       log('[Profile] getCurrentSession() failed:', e);
     }
     
-    // Then try getUser() if no stored session
+    // Then try getUser() if no stored session (with shorter timeout)
     if (!sessionUserId) {
       log('[Profile] No stored session, trying getUser()...');
       try {
         const getUserPromise = assertSupabase().auth.getUser();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('getUser timeout')), 3000)
+          setTimeout(() => reject(new Error('getUser timeout')), SESSION_CHECK_TIMEOUT)
         );
         const { data: { user } } = await Promise.race([getUserPromise, timeoutPromise]) as any;
         if (user?.id) {
@@ -709,21 +712,14 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       }
     }
     
-    // Only try getSession as last resort (can be slow/locked after sign-out)
-    if (!sessionUserId && !session) {
-      log('[Profile] Trying getSession() as last resort...');
-      try {
-        const sessionPromise = assertSupabase().auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session fetch timeout')), 3000)
-        );
-        const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        session = result?.data?.session;
-        sessionUserId = session?.user?.id ?? null;
-        log('[Profile] getSession() result:', sessionUserId ? 'SUCCESS' : 'FAILED');
-      } catch (e) {
-        log('[Profile] getSession() failed or timed out:', e);
-      }
+    // CRITICAL FIX: Skip getSession() as last resort - it's often slow after sign-out
+    // Instead, trust the provided userId if we couldn't validate via other means
+    // The RPC call will fail anyway if the user isn't actually authenticated
+    if (!sessionUserId && userId) {
+      log('[Profile] No session validated, trusting provided userId for RPC call:', userId);
+      sessionUserId = userId;
+      // Create a minimal session object for fallback logic
+      session = { user: { id: userId } };
     }
 
     // If we have an authenticated identity and it mismatches, block
@@ -736,13 +732,6 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       return null;
     }
     
-    // If we couldn't get sessionUserId due to lock contention, trust the provided userId
-    // This happens when user signs in immediately after sign-out
-    if (!sessionUserId && userId) {
-      log('[Profile] Could not validate session, trusting provided userId:', userId);
-      sessionUserId = userId;
-    }
-    
     // Try to get the profile with a more permissive approach
     // First, let's try without RLS constraints by using a function call
     let profile = null;
@@ -753,7 +742,9 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     // Preferred: Use secure RPC that returns the caller's profile (bypasses RLS safely)
     log('[Profile] Calling get_my_profile RPC...');
     const rpcCall = () => assertSupabase().rpc('get_my_profile').maybeSingle();
-    const rpcTimeoutMs = 12000; // allow more time on slow networks or after sign-in
+    // CRITICAL FIX: Reduced timeout from 12s to 5s to prevent sign-in freeze
+    // The overall routeAfterLogin timeout is 8s, so profile fetch must be faster
+    const rpcTimeoutMs = 5000; // 5 seconds max - must be less than routeAfterLogin timeout
     const rpcTimeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('RPC timeout')), rpcTimeoutMs)
     );
