@@ -12,11 +12,17 @@ import { GradientButton } from '@/components/marketing/GradientButton';
 import { supabase } from '@/lib/supabase';
 
 // Get proper redirect URL based on platform
+// For password reset, use the landing page which handles mobile deep-linking properly
 const getRedirectUrl = (path: string) => {
   if (Platform.OS === 'web') {
     return `${window.location.origin}/${path}`;
   }
-  // For native apps, use the configured deep link domain
+  // For native apps, use the landing page with flow=recovery parameter
+  // This allows the web landing page to detect mobile and deep-link back to the app
+  if (path === 'reset-password') {
+    return `https://edudashpro.org.za/landing?flow=recovery`;
+  }
+  // Fallback for other paths
   return `https://edudashpro.org.za/${path}`;
 };
 
