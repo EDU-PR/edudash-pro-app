@@ -64,7 +64,9 @@ export default function ForgotPassword() {
         setEmailSent(true);
         showAlert({
           title: t('common.success', { defaultValue: 'Success' }),
-          message: t('auth.forgot_password.email_sent', { defaultValue: 'Password reset email sent! Check your inbox.' }),
+          message: t('auth.forgot_password.email_sent_web', { 
+            defaultValue: 'Password reset email sent! Click the link in your email - you will reset your password on our secure website, then return to the app to sign in.' 
+          }),
           type: 'success',
           buttons: [{ text: 'OK', style: 'default' }],
         });
@@ -282,8 +284,8 @@ export default function ForgotPassword() {
                 <View style={styles.successContainer}>
                   <Ionicons name="checkmark-circle" size={64} color={theme.primary} />
                   <Text style={styles.successText}>
-                    {t('auth.forgot_password.check_email', { 
-                      defaultValue: 'Check your email for a link to reset your password. If it doesn\'t appear within a few minutes, check your spam folder.' 
+                    {t('auth.forgot_password.check_email_web', { 
+                      defaultValue: 'Check your email for a link to reset your password.\n\nYou will be taken to our secure website to create your new password, then you can return to the app to sign in.' 
                     })}
                   </Text>
                   <GradientButton

@@ -75,12 +75,10 @@ function LandingInner() {
         }
 
         // PASSWORD RESET - handle PKCE tokens, hash fragment tokens, and legacy token_hash
-        // Supabase PKCE flow: redirects with ?token=pkce_xxx&type=recovery
-        // Supabase legacy flow: redirects with #access_token=...&refresh_token=...&type=recovery
+        // ALL USERS (mobile and web) handle password reset on web to avoid deep-linking issues
+        // After success, mobile users will be redirected back to the native app
         if (flow === "recovery" || searchParams.get("type") === "recovery" || hashType === "recovery") {
           setMessage("Processing password reset...");
-          
-          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           
           // CASE 1: We have access tokens from hash fragment (session already established)
           if (accessToken && refreshToken) {
@@ -88,7 +86,7 @@ function LandingInner() {
             setStatus("done");
             setMessage("Redirecting to password reset...");
             
-            // Set the session on web first (so it's available if user stays on web)
+            // Set the session on web
             try {
               const { error } = await supabase.auth.setSession({
                 access_token: accessToken,
@@ -103,23 +101,10 @@ function LandingInner() {
               console.error("[Landing] Error setting session:", e);
             }
             
-            if (isMobile) {
-              // Pass tokens to native app - it will use setSession to restore
-              const resetParams = new URLSearchParams();
-              resetParams.set('access_token', accessToken);
-              resetParams.set('refresh_token', refreshToken);
-              resetParams.set('type', 'recovery');
-              
-              setTimeout(() => {
-                // Go directly to reset-password since we have tokens
-                tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
-              }, 500);
-            } else {
-              // For web, redirect to reset-password page
-              setTimeout(() => {
-                router.replace('/reset-password');
-              }, 500);
-            }
+            // All users go to web reset-password
+            setTimeout(() => {
+              router.replace('/reset-password');
+            }, 500);
             return;
           }
           
@@ -153,22 +138,10 @@ function LandingInner() {
               setStatus("done");
               setMessage("Redirecting to password reset...");
               
-              if (isMobile) {
-                // Pass the new session tokens to native app
-                const resetParams = new URLSearchParams();
-                resetParams.set('access_token', data.session.access_token);
-                resetParams.set('refresh_token', data.session.refresh_token);
-                resetParams.set('type', 'recovery');
-                
-                setTimeout(() => {
-                  tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
-                }, 500);
-              } else {
-                // For web, redirect to reset-password page (session is now active)
-                setTimeout(() => {
-                  router.replace('/reset-password');
-                }, 500);
-              }
+              // All users go to web reset-password
+              setTimeout(() => {
+                router.replace('/reset-password');
+              }, 500);
               return;
             } catch (e) {
               console.error("[Landing] PKCE token exchange error:", e);
@@ -206,20 +179,10 @@ function LandingInner() {
               setStatus("done");
               setMessage("Redirecting to password reset...");
               
-              if (isMobile) {
-                const resetParams = new URLSearchParams();
-                resetParams.set('access_token', data.session.access_token);
-                resetParams.set('refresh_token', data.session.refresh_token);
-                resetParams.set('type', 'recovery');
-                
-                setTimeout(() => {
-                  tryOpenApp(`(auth)/reset-password?${resetParams.toString()}`);
-                }, 500);
-              } else {
-                setTimeout(() => {
-                  router.replace('/reset-password');
-                }, 500);
-              }
+              // All users go to web reset-password
+              setTimeout(() => {
+                router.replace('/reset-password');
+              }, 500);
               return;
             } catch (e) {
               console.error("[Landing] Token hash exchange error:", e);
