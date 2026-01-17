@@ -41,7 +41,10 @@ function LandingInner() {
         const flow = (searchParams.get("flow") || searchParams.get("type") || "").toLowerCase();
         const tokenHash = searchParams.get("token_hash") || "";
         const token = searchParams.get("token") || ""; // PKCE token (starts with pkce_)
-        const inviteCode = searchParams.get("code") || searchParams.get("invitationCode") || "";
+        // NOTE: 'code' can be EITHER a Supabase auth code (from PKCE flow) OR an invite code
+        // We determine which based on the flow type
+        const codeParam = searchParams.get("code") || "";
+        const invitationCode = searchParams.get("invitationCode") || "";
 
         // IMPORTANT: Extract tokens from hash fragment (Supabase puts session tokens here after /verify)
         // Example: #access_token=...&refresh_token=...&type=recovery
@@ -54,6 +57,7 @@ function LandingInner() {
           flow, 
           tokenHash: !!tokenHash, 
           token: token ? `${token.substring(0, 10)}...` : null,
+          codeParam: codeParam ? `${codeParam.substring(0, 10)}...` : null,
           accessToken: !!accessToken, 
           refreshToken: !!refreshToken, 
           hashType 
@@ -61,11 +65,11 @@ function LandingInner() {
 
         // Check redirect_to parameter (from Supabase 303 redirects) for preserved invite codes
         const redirectTo = searchParams.get("redirect_to") || "";
-        let preservedInviteCode = inviteCode;
+        let preservedInviteCode = invitationCode;
         if (redirectTo) {
           try {
             const redirectUrl = new URL(decodeURIComponent(redirectTo));
-            const redirectCode = redirectUrl.searchParams.get("code") || redirectUrl.searchParams.get("invitationCode");
+            const redirectCode = redirectUrl.searchParams.get("invitationCode");
             if (redirectCode && !preservedInviteCode) {
               preservedInviteCode = redirectCode;
             }
@@ -74,7 +78,7 @@ function LandingInner() {
           }
         }
 
-        // PASSWORD RESET - handle PKCE tokens, hash fragment tokens, and legacy token_hash
+        // PASSWORD RESET - handle PKCE auth code, hash fragment tokens, and legacy token_hash
         // ALL USERS (mobile and web) handle password reset on web to avoid deep-linking issues
         // After success, mobile users will be redirected back to the native app
         if (flow === "recovery" || searchParams.get("type") === "recovery" || hashType === "recovery") {
@@ -108,9 +112,52 @@ function LandingInner() {
             return;
           }
           
-          // CASE 2: PKCE token (starts with pkce_) - need to exchange via verifyOtp
+          // CASE 2: Supabase PKCE authorization code - exchange for session
+          // After Supabase /verify endpoint validates the PKCE token, it redirects here with ?code=xxx
+          // This is different from invite codes - it's used to establish a session
+          if (codeParam && flow === "recovery") {
+            console.log("[Landing] Have Supabase PKCE auth code, exchanging for session...");
+            setMessage("Verifying password reset link...");
+            
+            try {
+              // Exchange authorization code for session
+              const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeParam);
+              
+              if (exchangeError) {
+                console.error("[Landing] Auth code exchange failed:", exchangeError);
+                setStatus("error");
+                setMessage(exchangeError.message || "Invalid or expired reset link. Please request a new one.");
+                return;
+              }
+              
+              if (!data.session) {
+                console.error("[Landing] Auth code exchange succeeded but no session");
+                setStatus("error");
+                setMessage("Reset link verified but session creation failed. Please try again.");
+                return;
+              }
+              
+              console.log("[Landing] Auth code exchanged successfully for:", data.session.user?.email);
+              setStatus("done");
+              setMessage("Redirecting to password reset...");
+              
+              // All users go to web reset-password
+              setTimeout(() => {
+                router.replace('/reset-password');
+              }, 500);
+              return;
+            } catch (e) {
+              console.error("[Landing] Auth code exchange error:", e);
+              setStatus("error");
+              setMessage("Failed to verify reset link. Please request a new one.");
+              return;
+            }
+          }
+          
+          // CASE 3: PKCE token (starts with pkce_) - need to exchange via verifyOtp
+          // This happens when the email link goes directly to landing page without going through /verify
           if (token && token.startsWith('pkce_')) {
-            console.log("[Landing] Have PKCE token, exchanging...");
+            console.log("[Landing] Have PKCE token, exchanging via verifyOtp...");
             setMessage("Verifying password reset link...");
             
             try {
@@ -236,7 +283,8 @@ function LandingInner() {
         }
 
         // PARENT INVITE (use preserved invite code if available)
-        const finalInviteCode = preservedInviteCode || inviteCode;
+        // For invite flows, 'code' param IS the invite code, not a Supabase auth code
+        const finalInviteCode = preservedInviteCode || (flow.includes("invite") ? codeParam : "") || invitationCode;
         if (flow === "invite-parent" && finalInviteCode) {
           setMessage("Opening the app for parent registration...");
           setStatus("ready");
