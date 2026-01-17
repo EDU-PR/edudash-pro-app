@@ -39,6 +39,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { TierBadge } from '@/components/ui/TierBadge';
+import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -95,6 +96,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setUnreadCount,
     isRecording,
     partialTranscript,
+    alertState,
+    hideAlert,
     flashListRef,
     inputRef,
     sendMessage,
@@ -323,6 +326,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           scrollToBottom={scrollToBottom}
           renderTypingIndicator={renderTypingIndicator}
           renderSuggestedActions={renderSuggestedActions}
+          onSendMessage={(text) => sendMessage(text)}
         />
 
         {/* Jump to end FAB */}
@@ -363,6 +367,17 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
         {/* Command Palette Modal */}
         <DashCommandPalette visible={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
+        
+        {/* Premium/Alert Modal */}
+        <AlertModal
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          type={alertState.type}
+          icon={alertState.icon as any}
+          buttons={alertState.buttons}
+          onClose={hideAlert}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
