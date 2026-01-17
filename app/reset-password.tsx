@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
+import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import ResetPasswordScreen from './(auth)/reset-password';
 
 export default function ResetPasswordRoute() {
@@ -23,6 +24,10 @@ export default function ResetPasswordRoute() {
     const checkAndSetupSession = async () => {
       try {
         const supabase = assertSupabase();
+        
+        // IMPORTANT: Set the recovery flag FIRST to prevent AuthContext from routing away
+        setPasswordRecoveryInProgress(true);
+        console.log('[ResetPasswordRoute] Set password recovery flag to true');
         
         // Check for PKCE code parameter (from web redirect)
         const code = params.code as string | undefined;
