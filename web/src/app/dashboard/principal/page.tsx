@@ -474,6 +474,10 @@ export default function PrincipalDashboard() {
       <div className="section">
         <div className="sectionTitle">ECD Planning & Curriculum</div>
         <div className="grid2">
+          <button className="qa" onClick={() => router.push('/dashboard/principal/ai-year-planner')} style={{ background: 'linear-gradient(135deg, #8b5cf620, #6366f120)', border: '1px solid #8b5cf650' }}>
+            <Sparkles className="icon20" style={{ color: '#8b5cf6' }} />
+            <span>✨ AI Year Planner</span>
+          </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/year-planner')}>
             <Calendar className="icon20" />
             <span>Year Planner</span>
@@ -489,6 +493,29 @@ export default function PrincipalDashboard() {
           <button className="qa" onClick={() => router.push('/dashboard/principal/weekly-plans')}>
             <Activity className="icon20" />
             <span>Weekly Plans</span>
+          </button>
+        </div>
+      </div>
+
+      {/* School Operations */}
+      <div className="section">
+        <div className="sectionTitle">School Operations</div>
+        <div className="grid2">
+          <button className="qa" onClick={() => router.push('/dashboard/principal/excursions')}>
+            <span style={{ fontSize: 20 }}>🚌</span>
+            <span>Excursion Planner</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/meetings')}>
+            <Users className="icon20" />
+            <span>Meeting Scheduler</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/activities')}>
+            <span style={{ fontSize: 20 }}>🎨</span>
+            <span>Activity Library</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/communications')}>
+            <Bell className="icon20" />
+            <span>Parent Communications</span>
           </button>
         </div>
       </div>

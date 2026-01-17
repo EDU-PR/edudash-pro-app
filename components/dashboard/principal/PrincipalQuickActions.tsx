@@ -146,22 +146,46 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       color: '#3B82F6',
     },
     {
+      id: 'ai-year-planner',
+      title: t('dashboard.ai_year_planner', { defaultValue: '✨ AI Year Planner' }),
+      icon: 'sparkles',
+      color: '#8B5CF6',
+    },
+    {
+      id: 'excursions',
+      title: t('dashboard.excursions', { defaultValue: 'Excursions' }),
+      icon: 'bus',
+      color: '#10B981',
+    },
+    {
+      id: 'meetings',
+      title: t('dashboard.meetings', { defaultValue: 'Meetings' }),
+      icon: 'people',
+      color: '#F59E0B',
+    },
+    {
+      id: 'activity-library',
+      title: t('dashboard.activity_library', { defaultValue: 'Activity Library' }),
+      icon: 'game-controller',
+      color: '#EC4899',
+    },
+    {
       id: 'curriculum-themes',
       title: t('dashboard.curriculum_themes', { defaultValue: 'Curriculum Themes' }),
       icon: 'book',
-      color: '#8B5CF6',
+      color: '#6366F1',
     },
     {
       id: 'lesson-templates',
       title: t('dashboard.lesson_templates', { defaultValue: 'Lesson Templates' }),
       icon: 'document-text',
-      color: '#10B981',
+      color: '#14B8A6',
     },
     {
       id: 'weekly-plans',
       title: t('dashboard.weekly_plans', { defaultValue: 'Weekly Plans' }),
       icon: 'list',
-      color: '#F59E0B',
+      color: '#64748B',
     },
   ];
 
@@ -225,6 +249,18 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'year-planner':
         router.push('/screens/principal-year-planner');
+        break;
+      case 'ai-year-planner':
+        router.push('/screens/principal-ai-year-planner');
+        break;
+      case 'excursions':
+        router.push('/screens/principal-excursions');
+        break;
+      case 'meetings':
+        router.push('/screens/principal-meetings');
+        break;
+      case 'activity-library':
+        router.push('/screens/principal-activities');
         break;
       case 'curriculum-themes':
         // TODO: Create screen - for now show coming soon
