@@ -52,7 +52,23 @@ export default function ExcursionsPage() {
   const preschoolId = profile?.preschoolId;
   const preschoolName = profile?.preschoolName;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    destination: string;
+    destination_address: string;
+    excursion_date: string;
+    departure_time: string;
+    return_time: string;
+    age_groups: string[];
+    estimated_cost_per_child: number;
+    total_budget: number;
+    consent_required: boolean;
+    consent_deadline: string;
+    items_to_bring: string[];
+    learning_objectives: string[];
+    status: Excursion['status'];
+  }>({
     title: '',
     description: '',
     destination: '',
@@ -65,9 +81,9 @@ export default function ExcursionsPage() {
     total_budget: 0,
     consent_required: true,
     consent_deadline: '',
-    items_to_bring: [] as string[],
-    learning_objectives: [] as string[],
-    status: 'draft' as const,
+    items_to_bring: [],
+    learning_objectives: [],
+    status: 'draft',
   });
 
   useEffect(() => {

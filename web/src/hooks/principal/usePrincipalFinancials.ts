@@ -8,6 +8,41 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
+// Type definitions for database records
+interface RegistrationRecord {
+  id: string;
+  registration_fee_amount: string | number | null;
+  registration_fee_paid: boolean | null;
+  payment_verified: boolean | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+interface StudentFeeRecord {
+  id: string;
+  amount: number | null;
+  status: string | null;
+  fee_type: string | null;
+  due_date: string | null;
+  paid_date: string | null;
+  students: { preschool_id: string } | null;
+}
+
+interface PaymentRecord {
+  id?: string;
+  amount: number | null;
+  status?: string | null;
+  created_at?: string | null;
+}
+
+interface ExpenseRecord {
+  id?: string;
+  amount: number | null;
+  type?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+}
+
 export interface PrincipalFinancials {
   // Registration fees
   registrationFeesCollected: number;
@@ -79,18 +114,20 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         .select('id, registration_fee_amount, registration_fee_paid, payment_verified, status, created_at')
         .eq('organization_id', preschoolId);
 
-      const paidRegistrations = registrations?.filter(r => 
+      const registrationRecords = (registrations || []) as RegistrationRecord[];
+      
+      const paidRegistrations = registrationRecords.filter((r: RegistrationRecord) => 
         r.payment_verified && r.status === 'approved'
-      ) || [];
-      const pendingRegistrations = registrations?.filter(r => 
+      );
+      const pendingRegistrations = registrationRecords.filter((r: RegistrationRecord) => 
         !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
-      ) || [];
+      );
 
       const registrationFeesCollected = paidRegistrations.reduce(
-        (sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
+        (sum: number, r: RegistrationRecord) => sum + (parseFloat(String(r.registration_fee_amount)) || 0), 0
       );
       const pendingRegistrationFees = pendingRegistrations.reduce(
-        (sum, r) => sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
+        (sum: number, r: RegistrationRecord) => sum + (parseFloat(String(r.registration_fee_amount)) || 0), 0
       );
 
       // 2. Student fees from student_fees table
@@ -102,22 +139,24 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         `)
         .eq('students.preschool_id', preschoolId);
 
-      const paidFees = studentFees?.filter(f => f.status === 'paid') || [];
-      const outstandingFees = studentFees?.filter(f => 
+      const feeRecords = (studentFees || []) as StudentFeeRecord[];
+
+      const paidFees = feeRecords.filter((f: StudentFeeRecord) => f.status === 'paid');
+      const outstandingFees = feeRecords.filter((f: StudentFeeRecord) => 
         f.status === 'pending' || f.status === 'overdue'
-      ) || [];
-      const overdueFees = studentFees?.filter(f => f.status === 'overdue') || [];
+      );
+      const overdueFees = feeRecords.filter((f: StudentFeeRecord) => f.status === 'overdue');
 
       // Calculate monthly fees (paid this month)
       const monthlyFeesCollected = paidFees
-        .filter(f => {
+        .filter((f: StudentFeeRecord) => {
           if (!f.paid_date) return false;
           const paidDate = new Date(f.paid_date);
           return paidDate >= new Date(monthStart) && paidDate <= new Date(monthEnd);
         })
-        .reduce((sum, f) => sum + (f.amount || 0), 0);
+        .reduce((sum: number, f: StudentFeeRecord) => sum + (f.amount || 0), 0);
 
-      const outstandingSchoolFees = outstandingFees.reduce((sum, f) => sum + (f.amount || 0), 0);
+      const outstandingSchoolFees = outstandingFees.reduce((sum: number, f: StudentFeeRecord) => sum + (f.amount || 0), 0);
 
       // 3. General payments this month
       const { data: payments } = await supabase
@@ -128,7 +167,8 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         .gte('created_at', monthStart)
         .lte('created_at', monthEnd);
 
-      const paymentsThisMonth = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      const paymentRecords = (payments || []) as PaymentRecord[];
+      const paymentsThisMonth = paymentRecords.reduce((sum: number, p: PaymentRecord) => sum + (p.amount || 0), 0);
 
       // 4. POP uploads pending review
       const { count: pendingPOPReviews } = await supabase
@@ -147,10 +187,11 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         .gte('created_at', monthStart)
         .lte('created_at', monthEnd);
 
-      const expensesThisMonth = expenses?.reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0;
+      const expenseRecords = (expenses || []) as ExpenseRecord[];
+      const expensesThisMonth = expenseRecords.reduce((sum: number, e: ExpenseRecord) => sum + Math.abs(e.amount || 0), 0);
 
       // 6. Fee type breakdown
-      const feeTypeBreakdown = calculateFeeTypeBreakdown(studentFees || []);
+      const feeTypeBreakdown = calculateFeeTypeBreakdown(feeRecords);
 
       // 7. Monthly trend (last 6 months)
       const monthlyTrend = await fetchMonthlyTrend(supabase, preschoolId);
@@ -177,9 +218,9 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         feeTypeBreakdown,
         monthlyTrend,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching principal financials:', err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -197,10 +238,10 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
   };
 }
 
-function calculateFeeTypeBreakdown(fees: any[]): PrincipalFinancials['feeTypeBreakdown'] {
+function calculateFeeTypeBreakdown(fees: StudentFeeRecord[]): PrincipalFinancials['feeTypeBreakdown'] {
   const breakdown: Record<string, { collected: number; outstanding: number }> = {};
 
-  fees.forEach(fee => {
+  fees.forEach((fee: StudentFeeRecord) => {
     const type = fee.fee_type || 'other';
     if (!breakdown[type]) {
       breakdown[type] = { collected: 0, outstanding: 0 };
@@ -258,7 +299,8 @@ async function fetchMonthlyTrend(
       .gte('created_at', monthStart)
       .lte('created_at', monthEnd);
 
-    const revenue = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+    const paymentRecords = (payments || []) as PaymentRecord[];
+    const revenue = paymentRecords.reduce((sum: number, p: PaymentRecord) => sum + (p.amount || 0), 0);
 
     // Get expenses
     const { data: expenses } = await supabase
@@ -270,7 +312,8 @@ async function fetchMonthlyTrend(
       .gte('created_at', monthStart)
       .lte('created_at', monthEnd);
 
-    const expenseTotal = expenses?.reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0;
+    const expenseRecords = (expenses || []) as ExpenseRecord[];
+    const expenseTotal = expenseRecords.reduce((sum: number, e: ExpenseRecord) => sum + Math.abs(e.amount || 0), 0);
 
     trend.push({
       month: `${monthNames[month]} ${year}`,
