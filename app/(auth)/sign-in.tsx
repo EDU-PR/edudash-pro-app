@@ -21,6 +21,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
+import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 
 export default function SignIn() {
   const { t } = useTranslation();
@@ -71,6 +72,15 @@ console.log('[SignIn] Component rendering, theme:', theme);
         console.log('[SignIn] Cleared any stale navigation locks on mount');
       } catch (err) {
         console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', err);
+      }
+      
+      // Also reset any stale sign-out state that could block new sign-ins
+      try {
+        const { resetSignOutState } = await import('@/lib/authActions');
+        resetSignOutState();
+        console.log('[SignIn] Reset any stale sign-out state');
+      } catch (err) {
+        console.warn('[SignIn] Failed to reset sign-out state (non-fatal):', err);
       }
     };
     clearStaleLocks();
@@ -129,41 +139,27 @@ console.log('[SignIn] Component rendering, theme:', theme);
         console.log('[SignIn] Attempting biometric sign-in...');
         setBiometricLoading(true);
         
-        // Attempt biometric authentication with timeout protection
-        const biometricPromise = BiometricAuthService.attemptBiometricLogin();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Biometric authentication timeout')), 10000)
-        );
+        // Use EnhancedBiometricAuth which properly handles session restoration
+        const result = await EnhancedBiometricAuth.authenticateWithBiometric();
         
-        const biometricData = await Promise.race([biometricPromise, timeoutPromise]) as any;
-        
-        if (biometricData?.securityToken) {
-          console.log('[SignIn] Biometric auth successful, restoring session...');
-          
-          // Get refresh token from secure storage
-          const refreshToken = await BiometricAuthService.getStoredRefreshToken();
-          if (refreshToken) {
-            // Restore Supabase session using refresh token
-            const { data, error } = await assertSupabase().auth.setSession({
-              access_token: biometricData.securityToken,
-              refresh_token: refreshToken,
-            });
-            
-            if (error) {
-              console.error('[SignIn] Session restore failed:', error);
-              Alert.alert(
-                t('common.error', { defaultValue: 'Error' }),
-                t('auth.biometric_restore_failed', { defaultValue: 'Biometric authentication succeeded but session restore failed. Please sign in again.' })
-              );
-            } else {
-              console.log('[SignIn] Session restored via biometrics');
-              // AuthContext will handle navigation
-            }
-          } else {
-            console.warn('[SignIn] No refresh token found, cannot restore session');
-          }
+        if (result.success && result.sessionRestored) {
+          console.log('[SignIn] Biometric auth and session restore successful');
+          // AuthContext will detect the session and handle navigation
+        } else if (result.success && !result.sessionRestored) {
+          // Biometric succeeded but session couldn't be restored (expired tokens)
+          console.log('[SignIn] Biometric succeeded but session not restored:', result.error);
+          Alert.alert(
+            t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
+            result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password to re-enable biometric login.' })
+          );
         } else {
-          console.log('[SignIn] Biometric auth failed or cancelled');
+          // Biometric auth failed or was cancelled
+          console.log('[SignIn] Biometric auth failed:', result.error);
+          // Don't show alert for user cancellation
+          if (result.error && !result.error.includes('cancelled') && !result.error.includes('No biometric session')) {
+            // Only show alert for unexpected errors, not for expected conditions
+            // (user cancelled, biometrics not set up yet, etc.)
+          }
         }
       } catch (error) {
         console.error('[SignIn] Biometric sign-in error:', error);

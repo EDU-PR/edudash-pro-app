@@ -69,7 +69,8 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
       { id: 'members', label: 'Youth Members', icon: 'person-circle', route: '/screens/membership/members-list' },
       { id: 'events', label: 'Events', icon: 'calendar', route: '/screens/membership/events' },
       { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/membership/programs' },
-      ...(isPresident ? [{ id: 'invite', label: 'Recruit Members', icon: 'person-add', route: '/screens/membership/youth-invite-code' }] : []),
+      // Both President and Secretary can recruit members
+      ...((isPresident || isSecretary) ? [{ id: 'invite', label: 'Recruit Members', icon: 'person-add', route: '/screens/membership/youth-invite-code' }] : []),
       { id: 'budget', label: 'Budget Requests', icon: 'wallet', route: '/screens/membership/budget-requests' },
       { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/membership/announcements' },
       { id: 'reports', label: 'Reports', icon: 'bar-chart', route: '/screens/membership/reports' },

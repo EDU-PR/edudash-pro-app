@@ -5,6 +5,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { OrganizationMember, MemberIDCard } from '@/components/membership/types';
+import { MembershipNotificationService } from '@/services/membership/MembershipNotificationService';
+
+// Executive member types that cannot be removed (must be demoted first)
+const PROTECTED_EXECUTIVE_TYPES = [
+  'ceo', 'president', 'deputy_president', 'secretary_general', 'treasurer',
+  'national_admin', 'national_coordinator',
+  'youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer',
+  'women_president', 'women_deputy', 'women_secretary', 'women_treasurer',
+  'veterans_president',
+  'regional_manager', 'provincial_manager',
+];
+
+// Member types that can approve removals (president hierarchy)
+const REMOVAL_APPROVERS = [
+  'ceo', 'president', 'youth_president', 'women_president', 'veterans_president',
+  'national_admin',
+];
 
 interface UseMemberDetailReturn {
   member: OrganizationMember | null;
@@ -16,6 +33,12 @@ interface UseMemberDetailReturn {
   suspendMember: () => Promise<boolean>;
   activateMember: () => Promise<boolean>;
   deleteMember: () => Promise<boolean>;
+  approveRemoval: () => Promise<boolean>;
+  rejectRemoval: () => Promise<boolean>;
+  canRemoveMember: boolean;
+  canApproveRemoval: boolean;
+  isExecutive: boolean;
+  isPendingRemoval: boolean;
 }
 
 export function useMemberDetail(memberId: string | null): UseMemberDetailReturn {
@@ -25,8 +48,12 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Get organization ID from profile
+  // Get organization ID and current user's member type from profile
   const organizationId = profile?.organization_membership?.organization_id || profile?.organization_id;
+  const currentUserMemberType = (profile as any)?.organization_membership?.member_type;
+  
+  // Check if current user can approve removals (is president or higher)
+  const canApproveRemoval = currentUserMemberType ? REMOVAL_APPROVERS.includes(currentUserMemberType) : false;
 
   const fetchMember = useCallback(async () => {
     if (!memberId) {
@@ -250,17 +277,19 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
     }
   }, [memberId, fetchMember]);
 
-  // Delete member (hard delete - permanently removes from database)
+  // Delete member (soft delete - revoke membership or request removal)
+  // If current user is a president, directly revoke
+  // Otherwise, set to 'pending_removal' status for president approval
   const deleteMember = useCallback(async (): Promise<boolean> => {
     if (!memberId) return false;
 
     try {
       const supabase = assertSupabase();
       
-      // First get the member's organization_id (needed for RLS policy to match)
+      // First get the member's organization_id and member_type (needed for RLS policy to match)
       const { data: memberData, error: fetchErr } = await supabase
         .from('organization_members')
-        .select('organization_id, user_id')
+        .select('organization_id, user_id, member_type')
         .eq('id', memberId)
         .single();
       
@@ -269,11 +298,25 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
         setError('Member not found');
         return false;
       }
+
+      // Check if the member is an executive
+      const isExec = PROTECTED_EXECUTIVE_TYPES.includes(memberData.member_type);
+      if (isExec) {
+        setError('Cannot delete executive member. Demote the member first.');
+        return false;
+      }
       
-      // Hard delete - permanently remove the member record
+      // Determine status: presidents can directly revoke, others request removal
+      const isPresident = currentUserMemberType && REMOVAL_APPROVERS.includes(currentUserMemberType);
+      const newStatus = isPresident ? 'revoked' : 'pending_removal';
+      
+      // Soft delete - revoke membership or request removal
       const { error: deleteError } = await supabase
         .from('organization_members')
-        .delete()
+        .update({
+          membership_status: newStatus,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', memberId)
         .eq('organization_id', memberData.organization_id);
 
@@ -283,18 +326,103 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
         return false;
       }
 
+      // If not president, notify the president about pending removal
+      if (!isPresident && member) {
+        console.log('[useMemberDetail] Removal request created, awaiting president approval');
+        
+        // Determine wing based on member type
+        const wing = member.wing as 'youth' | 'women' | 'veterans' | 'main' || 'youth';
+        
+        // Send notification to president
+        MembershipNotificationService.notifyPresidentOfPendingRemoval({
+          member_id: memberId,
+          organization_id: memberData.organization_id,
+          member_name: `${member.first_name} ${member.last_name}`,
+          member_type: member.member_type,
+          requested_by_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : 'A secretary',
+          requested_by_id: profile?.id,
+          region_name: member.region?.name,
+        }, wing).catch(err => {
+          console.warn('[useMemberDetail] Failed to notify president of pending removal:', err);
+        });
+      }
+
       return true;
     } catch (err: any) {
       console.error('[useMemberDetail] Delete exception:', err);
       setError(err.message || 'Failed to remove member');
       return false;
     }
-  }, [memberId]);
+  }, [memberId, currentUserMemberType]);
+
+  // Approve pending removal (president only)
+  const approveRemoval = useCallback(async (): Promise<boolean> => {
+    if (!memberId || !canApproveRemoval) return false;
+
+    try {
+      const supabase = assertSupabase();
+      
+      const { error: updateError } = await supabase
+        .from('organization_members')
+        .update({
+          membership_status: 'revoked',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', memberId);
+
+      if (updateError) {
+        console.error('[useMemberDetail] Error approving removal:', updateError);
+        setError(updateError.message);
+        return false;
+      }
+
+      await fetchMember();
+      return true;
+    } catch (err: any) {
+      console.error('[useMemberDetail] Approve removal exception:', err);
+      setError(err.message || 'Failed to approve removal');
+      return false;
+    }
+  }, [memberId, canApproveRemoval, fetchMember]);
+
+  // Reject pending removal and restore member (president only)
+  const rejectRemoval = useCallback(async (): Promise<boolean> => {
+    if (!memberId || !canApproveRemoval) return false;
+
+    try {
+      const supabase = assertSupabase();
+      
+      const { error: updateError } = await supabase
+        .from('organization_members')
+        .update({
+          membership_status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', memberId);
+
+      if (updateError) {
+        console.error('[useMemberDetail] Error rejecting removal:', updateError);
+        setError(updateError.message);
+        return false;
+      }
+
+      await fetchMember();
+      return true;
+    } catch (err: any) {
+      console.error('[useMemberDetail] Reject removal exception:', err);
+      setError(err.message || 'Failed to reject removal');
+      return false;
+    }
+  }, [memberId, canApproveRemoval, fetchMember]);
 
   // Initial fetch
   useEffect(() => {
     fetchMember();
   }, [fetchMember]);
+
+  const isExecutive = member ? PROTECTED_EXECUTIVE_TYPES.includes(member.member_type) : false;
+  const canRemoveMember = !isExecutive;
+  const isPendingRemoval = member?.membership_status === 'pending_removal';
 
   return {
     member,
@@ -306,5 +434,11 @@ export function useMemberDetail(memberId: string | null): UseMemberDetailReturn 
     suspendMember,
     activateMember,
     deleteMember,
+    approveRemoval,
+    rejectRemoval,
+    canRemoveMember,
+    canApproveRemoval,
+    isExecutive,
+    isPendingRemoval,
   };
 }

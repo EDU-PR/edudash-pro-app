@@ -44,6 +44,12 @@ export default function MemberDetailScreen() {
     suspendMember,
     activateMember,
     deleteMember,
+    approveRemoval,
+    rejectRemoval,
+    canRemoveMember,
+    canApproveRemoval,
+    isExecutive,
+    isPendingRemoval,
   } = useMemberDetail(memberId);
   
   // Loading state
@@ -117,9 +123,19 @@ export default function MemberDetailScreen() {
         ]
       );
     } else if (action === 'Delete' || action === 'Remove Member') {
+      // Check if member is an executive (protected from deletion)
+      if (!canRemoveMember) {
+        Alert.alert(
+          'Cannot Remove Executive',
+          `${member.first_name} is a ${member.member_type?.replace(/_/g, ' ')}.\n\nExecutive members cannot be removed directly. You must first demote them to a regular member role.`,
+          [{ text: 'OK', style: 'cancel' }]
+        );
+        return;
+      }
+
       Alert.alert(
         'Remove Member',
-        `Are you sure you want to remove ${member.first_name || ''} ${member.last_name || ''} from the organization?\n\nThis will revoke their membership.`,
+        `Are you sure you want to remove ${member.first_name || ''} ${member.last_name || ''} from the organization?\n\nThis will revoke their membership but their account will remain.`,
         [
           { text: 'Cancel', style: 'cancel' },
           { 
@@ -177,15 +193,21 @@ export default function MemberDetailScreen() {
     } else if (action === 'Edit') {
       router.push(`/screens/membership/edit-member?memberId=${member.id}`);
     } else if (action === 'More') {
+      const moreOptions: any[] = [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Change Role', onPress: () => handleAction('Change Role') },
+        { text: 'Transfer Region', onPress: () => handleAction('Transfer Region') },
+      ];
+      
+      // Only show Remove option for non-executive members
+      if (canRemoveMember) {
+        moreOptions.push({ text: 'Remove Member', style: 'destructive', onPress: () => handleAction('Remove Member') });
+      }
+      
       Alert.alert(
         'More Actions',
-        `Select an action for ${member.first_name}`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Change Role', onPress: () => handleAction('Change Role') },
-          { text: 'Transfer Region', onPress: () => handleAction('Transfer Region') },
-          { text: 'Remove Member', style: 'destructive', onPress: () => handleAction('Remove Member') },
-        ]
+        `Select an action for ${member.first_name}${isExecutive ? ' (Executive)' : ''}`,
+        moreOptions
       );
     } else if (action === 'Change Role') {
       Alert.alert('Coming Soon', 'Role change functionality will be available soon.');
@@ -222,6 +244,78 @@ export default function MemberDetailScreen() {
         >
         {/* Profile Header */}
         <ProfileHeader member={member} theme={theme} />
+
+        {/* Pending Removal Banner */}
+        {isPendingRemoval && (
+          <View style={[styles.pendingRemovalBanner, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+            <View style={styles.pendingRemovalContent}>
+              <Ionicons name="warning-outline" size={24} color="#D97706" />
+              <View style={styles.pendingRemovalText}>
+                <Text style={[styles.pendingRemovalTitle, { color: '#92400E' }]}>
+                  Pending Removal
+                </Text>
+                <Text style={[styles.pendingRemovalSubtitle, { color: '#B45309' }]}>
+                  This member's removal is awaiting president approval
+                </Text>
+              </View>
+            </View>
+            {canApproveRemoval && (
+              <View style={styles.pendingRemovalActions}>
+                <TouchableOpacity
+                  style={[styles.pendingRemovalButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Confirm Removal',
+                      `Are you sure you want to approve the removal of ${member.first_name} ${member.last_name}? This action cannot be undone.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Approve Removal',
+                          style: 'destructive',
+                          onPress: async () => {
+                            const success = await approveRemoval();
+                            if (success) {
+                              Alert.alert('Removed', 'Member has been removed from the organization.', [
+                                { text: 'OK', onPress: () => router.back() }
+                              ]);
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                  <Text style={styles.pendingRemovalButtonText}>Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.pendingRemovalButton, { backgroundColor: '#10B981' }]}
+                  onPress={() => {
+                    Alert.alert(
+                      'Restore Member',
+                      `Are you sure you want to reject the removal request and restore ${member.first_name} ${member.last_name}'s membership?`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Restore',
+                          onPress: async () => {
+                            const success = await rejectRemoval();
+                            if (success) {
+                              Alert.alert('Restored', 'Member has been restored to active status.');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="close" size={16} color="#fff" />
+                  <Text style={styles.pendingRemovalButtonText}>Reject</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
@@ -304,13 +398,20 @@ export default function MemberDetailScreen() {
           <Text style={[styles.bottomActionText, { color: '#EF4444' }]}>Suspend</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.bottomAction, { backgroundColor: '#DC262620' }]}
-          onPress={() => handleAction('Remove Member')}
-        >
-          <Ionicons name="trash-outline" size={20} color="#DC2626" />
-          <Text style={[styles.bottomActionText, { color: '#DC2626' }]}>Remove</Text>
-        </TouchableOpacity>
+        {canRemoveMember ? (
+          <TouchableOpacity 
+            style={[styles.bottomAction, { backgroundColor: '#DC262620' }]}
+            onPress={() => handleAction('Remove Member')}
+          >
+            <Ionicons name="trash-outline" size={20} color="#DC2626" />
+            <Text style={[styles.bottomActionText, { color: '#DC2626' }]}>Remove</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.bottomAction, { backgroundColor: theme.border + '40', opacity: 0.5 }]}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={theme.textSecondary} />
+            <Text style={[styles.bottomActionText, { color: theme.textSecondary }]}>Executive</Text>
+          </View>
+        )}
         
         <TouchableOpacity 
           style={[styles.bottomAction, { backgroundColor: theme.primary }]}
@@ -421,6 +522,49 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  // Pending Removal Banner Styles
+  pendingRemovalBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pendingRemovalContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  pendingRemovalText: {
+    flex: 1,
+  },
+  pendingRemovalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  pendingRemovalSubtitle: {
+    fontSize: 13,
+  },
+  pendingRemovalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  pendingRemovalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  pendingRemovalButtonText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,

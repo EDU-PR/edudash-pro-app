@@ -96,6 +96,10 @@ export function useVoiceCallAudio({
    * - shouldRouteThroughEarpiece: true  <-- THIS is the key setting for Android
    * 
    * ROBUSTNESS: Includes retry logic (up to 3 attempts) with exponential backoff
+   * 
+   * UPDATE: InCallManager.startRingback() is COMPLETELY SKIPPED now because
+   * it routes to speaker on most Android devices even when earpiece is requested.
+   * expo-audio is the PRIMARY and ONLY method for ringback playback.
    */
   const playCustomRingback = useCallback(async (retryAttempt = 0) => {
     if (ringbackStartedRef.current) {
@@ -115,38 +119,31 @@ export function useVoiceCallAudio({
     const MAX_RETRIES = 3;
     const retryDelay = Math.min(500 * Math.pow(2, retryAttempt), 2000);
     
-    // STRATEGY: Try InCallManager ringback first (most reliable for calls)
-    // Then fall back to expo-audio if that fails
-    
-    // Method 1: InCallManager system ringback (preferred for call audio)
-    if (InCallManager) {
+    // CRITICAL: Enforce earpiece setting BEFORE playing any audio
+    // This must be done regardless of playback method
+    if (InCallManager && !isSpeakerEnabled) {
       try {
-        // CRITICAL: Set audio routing BEFORE starting ringback
-        InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
-        
-        console.log('[VoiceCallAudio] 🔊 Starting InCallManager ringback...');
-        InCallManager.startRingback('_DEFAULT_');
-        ringbackStartedRef.current = true;
-        console.log('[VoiceCallAudio] ✅ InCallManager ringback started');
-        
-        // Give haptic feedback
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        return;
+        InCallManager.setForceSpeakerphoneOn(false);
+        console.log('[VoiceCallAudio] Earpiece enforced before ringback');
       } catch (e) {
-        console.warn('[VoiceCallAudio] InCallManager ringback failed:', e);
+        console.warn('[VoiceCallAudio] Failed to enforce earpiece:', e);
       }
     }
     
-    // Method 2: expo-audio player (fallback)
+    // NOTE: InCallManager.startRingback() is INTENTIONALLY NOT USED
+    // It ignores earpiece settings on most Android devices and always
+    // routes to speaker. Using expo-audio exclusively for ringback.
+    
+    // Use expo-audio player (respects earpiece routing)
     if (!RINGBACK_SOUND) {
       console.error('[VoiceCallAudio] ❌ No ringback sound available');
       return;
     }
     
     try {
-      console.log(`[VoiceCallAudio] 🔊 Trying expo-audio ringback (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
+      console.log(`[VoiceCallAudio] 🔊 Starting expo-audio ringback (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
       
-      // Set audio mode
+      // Set audio mode - CRITICAL: shouldRouteThroughEarpiece controls speaker/earpiece
       await setAudioModeAsync({
         playsInSilentMode: true,
         interruptionMode: 'doNotMix',
@@ -154,17 +151,39 @@ export function useVoiceCallAudio({
         shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: !isSpeakerEnabled,
       });
+      console.log('[VoiceCallAudio] ✅ Audio mode set, creating player...');
       
       const player = createAudioPlayer(RINGBACK_SOUND);
+      console.log('[VoiceCallAudio] ✅ Player created, configuring...');
+      
       player.loop = true;
       player.volume = 1.0;
-      player.play();
       
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // CRITICAL: Use async play() and verify it actually starts
+      try {
+        player.play();
+        console.log('[VoiceCallAudio] ✅ player.play() called');
+      } catch (playError) {
+        console.error('[VoiceCallAudio] ❌ player.play() threw:', playError);
+        throw playError;
+      }
+      
+      // Wait a bit longer to ensure playback starts
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Verify playback started by checking player state
+      const isPlaying = player.playing;
+      console.log('[VoiceCallAudio] Player state after play():', { isPlaying, volume: player.volume, loop: player.loop });
+      
+      if (!isPlaying) {
+        console.warn('[VoiceCallAudio] ⚠️ Player not playing after play() call, retrying...');
+        player.play();
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
       
       ringbackPlayerRef.current = player;
       ringbackStartedRef.current = true;
-      console.log('[VoiceCallAudio] ✅ expo-audio ringback started');
+      console.log('[VoiceCallAudio] ✅ expo-audio ringback started and verified');
       
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       
@@ -397,6 +416,18 @@ export function useVoiceCallAudio({
         // This prevents overriding the user's speaker toggle after they change it
         if (!speakerAppliedOnConnectRef.current) {
           speakerAppliedOnConnectRef.current = true;
+          
+          // CRITICAL: Re-set audio mode via expo-audio to enforce earpiece
+          // This helps override any changes Daily.co might have made
+          if (!isSpeakerEnabled) {
+            setAudioModeAsync({
+              playsInSilentMode: true,
+              interruptionMode: 'doNotMix',
+              allowsRecording: true,
+              shouldPlayInBackground: true,
+              shouldRouteThroughEarpiece: true,
+            }).catch(e => console.warn('[VoiceCallAudio] Failed to set audio mode on connect:', e));
+          }
           
           // Enforce current speaker state (earpiece by default, unless user toggled)
           // The continuous enforcement hook will maintain earpiece if not using speaker

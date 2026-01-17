@@ -404,13 +404,36 @@ export const VideoCallInterface = ({
             setParticipantCount(Object.keys(daily.participants()).length);
           })
           .on('left-meeting', () => {
+            console.log('[VideoCall] Left meeting - closing call UI');
             setCallState('ended');
+            onClose();
           })
           .on('participant-joined', () => {
             setParticipantCount(Object.keys(daily.participants()).length);
           })
           .on('participant-left', () => {
-            setParticipantCount(Object.keys(daily.participants()).length);
+            const count = Object.keys(daily.participants()).length;
+            setParticipantCount(count);
+            console.log('[VideoCall] Participant left, remaining:', count);
+            
+            // Check if all remote participants have left
+            const remoteCount = Object.values(daily.participants()).filter((p: any) => !p.local).length;
+            if (remoteCount === 0) {
+              console.log('[VideoCall] Last remote participant left - ending call');
+              setTimeout(() => {
+                if (dailyCallRef.current) {
+                  try {
+                    dailyCallRef.current.leave();
+                    dailyCallRef.current.destroy();
+                  } catch (err) {
+                    // Ignore cleanup errors
+                  }
+                  dailyCallRef.current = null;
+                }
+                setCallState('ended');
+                onClose();
+              }, 500);
+            }
           })
           .on('error', (event) => {
             console.error('[VideoCall] Daily error:', event);

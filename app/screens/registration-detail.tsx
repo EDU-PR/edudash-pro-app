@@ -13,14 +13,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
   Linking,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -99,6 +100,8 @@ export default function RegistrationDetailScreen() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [popViewed, setPopViewed] = useState(false); // Track if POP has been viewed
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   // Alert modal state
   interface AlertState {
@@ -291,11 +294,11 @@ export default function RegistrationDetailScreen() {
   // Open document
   const openDocument = (url: string | undefined, name: string) => {
     if (!url) {
-      Alert.alert('Not Available', `${name} has not been uploaded yet.`);
+      showAlert('Not Available', `${name} has not been uploaded yet.`, 'warning');
       return;
     }
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open document');
+      showAlert('Error', 'Could not open document', 'error');
     });
   };
 
@@ -384,47 +387,18 @@ export default function RegistrationDetailScreen() {
   // Reject registration
   const handleReject = () => {
     if (!registration) return;
-    
-    // Alert.prompt is iOS-only, so we use it conditionally
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Reject Registration',
-        `Enter reason for rejecting ${registration.student_first_name}'s registration:`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Reject',
-            style: 'destructive',
-            onPress: async (reason?: string) => {
-              if (!reason?.trim()) {
-                showAlert('Error', 'Please provide a rejection reason', 'error');
-                return;
-              }
-              await processRejection(reason);
-            },
-          },
-        ],
-        'plain-text'
-      );
-    } else {
-      // Android fallback - show confirmation first
-      showAlert(
-        'Reject Registration',
-        `Are you sure you want to reject ${registration.student_first_name}'s registration?`,
-        'warning',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Reject',
-            style: 'destructive',
-            onPress: async () => {
-              hideAlert();
-              await processRejection('Rejected by principal');
-            },
-          },
-        ]
-      );
+    setRejectionReason('');
+    setShowRejectionModal(true);
+  };
+
+  // Confirm rejection with reason
+  const confirmRejection = async () => {
+    if (!rejectionReason.trim()) {
+      showAlert('Error', 'Please provide a rejection reason', 'error');
+      return;
     }
+    setShowRejectionModal(false);
+    await processRejection(rejectionReason);
   };
 
   // Process the rejection
@@ -928,6 +902,46 @@ export default function RegistrationDetailScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      {/* Rejection Modal */}
+      <Modal
+        visible={showRejectionModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRejectionModal(false)}
+      >
+        <View style={[styles.rejectionModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          <View style={[styles.rejectionModalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setShowRejectionModal(false)}>
+              <Text style={[styles.rejectionModalCancel, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={[styles.rejectionModalTitle, { color: colors.text }]}>Reject Registration</Text>
+            <TouchableOpacity onPress={confirmRejection}>
+              <Text style={[styles.rejectionModalSubmit, { color: '#EF4444' }]}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.rejectionModalContent}>
+            <Text style={[styles.rejectionModalLabel, { color: colors.textSecondary }]}>
+              Enter reason for rejecting {registration?.student_first_name}'s registration:
+            </Text>
+            <TextInput
+              style={[styles.rejectionModalInput, { 
+                backgroundColor: colors.surface, 
+                color: colors.text, 
+                borderColor: colors.border 
+              }]}
+              placeholder="Enter rejection reason..."
+              placeholderTextColor={colors.textSecondary}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Alert Modal */}
       <AlertModal
         visible={alertState.visible}
@@ -1203,5 +1217,41 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  // Rejection Modal Styles
+  rejectionModalContainer: {
+    flex: 1,
+  },
+  rejectionModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  rejectionModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  rejectionModalCancel: {
+    fontSize: 16,
+  },
+  rejectionModalSubmit: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rejectionModalContent: {
+    padding: 16,
+  },
+  rejectionModalLabel: {
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  rejectionModalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    minHeight: 120,
   },
 });

@@ -3,6 +3,7 @@
  * 
  * Handles incoming call notifications when the app is backgrounded or killed.
  * Uses expo-task-manager for background execution on Android.
+ * Uses Notifee for better notification control (sticky, full-screen intent).
  * 
  * This is needed because:
  * - Supabase Realtime only works when app is active
@@ -14,6 +15,23 @@ import { Platform, Vibration, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Conditionally import Notifee for better notification control
+let notifee: typeof import('@notifee/react-native').default | null = null;
+let AndroidImportance: typeof import('@notifee/react-native').AndroidImportance | null = null;
+let AndroidCategory: typeof import('@notifee/react-native').AndroidCategory | null = null;
+let AndroidVisibility: typeof import('@notifee/react-native').AndroidVisibility | null = null;
+
+try {
+  const notifeeModule = require('@notifee/react-native');
+  notifee = notifeeModule.default;
+  AndroidImportance = notifeeModule.AndroidImportance;
+  AndroidCategory = notifeeModule.AndroidCategory;
+  AndroidVisibility = notifeeModule.AndroidVisibility;
+  console.log('[CallBackgroundNotification] ✅ Notifee loaded');
+} catch (error) {
+  console.warn('[CallBackgroundNotification] Notifee not available:', error);
+}
 
 // Task name for background notification handling
 const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
@@ -135,51 +153,127 @@ async function setupIncomingCallChannel(): Promise<void> {
  * Show full-screen incoming call notification
  * 
  * On Android, this shows a heads-up notification with Answer/Decline buttons.
- * Users need to expand the notification to see the action buttons on most devices.
- * On Samsung/OneUI devices, buttons may appear directly in the heads-up notification.
+ * Uses Notifee for better control over notification behavior:
+ * - True sticky notifications (ongoing: true)
+ * - Full-screen intent for lock screen
+ * - Proper action buttons
  */
 async function showIncomingCallNotification(callData: IncomingCallNotificationData): Promise<void> {
   try {
-    await setupIncomingCallChannel();
-    
     const callTypeEmoji = callData.call_type === 'video' ? '📹' : '📞';
     const callTypeText = callData.call_type === 'video' ? 'Video Call' : 'Voice Call';
     const callerName = callData.caller_name || 'Someone';
     
-    await Notifications.scheduleNotificationAsync({
-      identifier: `incoming-call-${callData.call_id}`,
-      content: {
+    // Try Notifee first for better notification handling
+    if (notifee && AndroidImportance && Platform.OS === 'android') {
+      console.log('[CallBackgroundNotification] Using Notifee for incoming call notification');
+      
+      // Create/update incoming calls channel
+      await notifee.createChannel({
+        id: 'incoming-calls',
+        name: 'Incoming Calls',
+        description: 'Voice and video call notifications',
+        importance: AndroidImportance.HIGH,
+        vibration: true,
+        vibrationPattern: RINGTONE_VIBRATION_PATTERN,
+        lights: true,
+        lightColor: '#00f5ff',
+        sound: 'default',
+        bypassDnd: true,
+      });
+      
+      // Display notification with full-screen intent and sticky behavior
+      await notifee.displayNotification({
+        id: `incoming-call-${callData.call_id}`,
         title: `${callTypeEmoji} ${callerName}`,
         body: `Incoming ${callTypeText} • Tap to answer`,
-        subtitle: 'Swipe down for Answer/Decline',
-        categoryIdentifier: 'incoming_call',
         data: {
           type: 'incoming_call',
           call_id: callData.call_id,
           caller_id: callData.caller_id,
           caller_name: callData.caller_name,
           call_type: callData.call_type,
-          meeting_url: callData.meeting_url,
+          meeting_url: callData.meeting_url || '',
         },
-        sound: 'default',
-        // Android-specific
-        ...(Platform.OS === 'android' && {
+        android: {
           channelId: 'incoming-calls',
-          priority: 'max',
-          sticky: true,
-          autoDismiss: false,
+          importance: AndroidImportance.HIGH,
+          // CRITICAL: Make notification persistent
+          ongoing: true,
+          autoCancel: false,
+          // Full-screen intent for lock screen
+          fullScreenAction: {
+            id: 'default',
+            launchActivity: 'default',
+          },
+          // Action buttons
+          actions: [
+            {
+              title: '✓ Answer',
+              pressAction: {
+                id: 'answer',
+                launchActivity: 'default',
+              },
+            },
+            {
+              title: '✕ Decline',
+              pressAction: {
+                id: 'decline',
+              },
+            },
+          ],
+          smallIcon: 'ic_launcher',
           color: '#00f5ff',
-          badge: 1,
-        }),
-        // iOS-specific
-        ...(Platform.OS === 'ios' && {
-          interruptionLevel: 'critical',
-        }),
-      },
-      trigger: null, // Show immediately
-    });
+          visibility: AndroidVisibility?.PUBLIC ?? 1,
+          ...(AndroidCategory?.CALL && { category: AndroidCategory.CALL }),
+          vibrationPattern: RINGTONE_VIBRATION_PATTERN,
+          lights: ['#00f5ff', 300, 600],
+          sound: 'default',
+          pressAction: {
+            id: 'default',
+            launchActivity: 'default',
+          },
+        },
+      });
+      
+      console.log('[CallBackgroundNotification] ✅ Notifee notification shown:', callData.call_id);
+    } else {
+      // Fallback to expo-notifications
+      await setupIncomingCallChannel();
+      
+      await Notifications.scheduleNotificationAsync({
+        identifier: `incoming-call-${callData.call_id}`,
+        content: {
+          title: `${callTypeEmoji} ${callerName}`,
+          body: `Incoming ${callTypeText} • Tap to answer`,
+          subtitle: 'Swipe down for Answer/Decline',
+          categoryIdentifier: 'incoming_call',
+          data: {
+            type: 'incoming_call',
+            call_id: callData.call_id,
+            caller_id: callData.caller_id,
+            caller_name: callData.caller_name,
+            call_type: callData.call_type,
+            meeting_url: callData.meeting_url,
+          },
+          sound: 'default',
+          ...(Platform.OS === 'android' && {
+            channelId: 'incoming-calls',
+            priority: 'max',
+            sticky: true,
+            autoDismiss: false,
+            color: '#00f5ff',
+            badge: 1,
+          }),
+          ...(Platform.OS === 'ios' && {
+            interruptionLevel: 'critical',
+          }),
+        },
+        trigger: null,
+      });
+    }
     
-    // Start vibration for Android (iOS handles via system)
+    // Start vibration for Android
     if (Platform.OS === 'android') {
       Vibration.vibrate(RINGTONE_VIBRATION_PATTERN, true);
       
@@ -210,6 +304,17 @@ async function showCallKeepNotification(_callData: IncomingCallNotificationData)
  */
 export async function cancelIncomingCallNotification(callId: string): Promise<void> {
   try {
+    // Cancel Notifee notification if available
+    if (notifee) {
+      try {
+        await notifee.cancelNotification(`incoming-call-${callId}`);
+        console.log('[CallBackgroundNotification] Notifee notification cancelled:', callId);
+      } catch (e) {
+        console.warn('[CallBackgroundNotification] Failed to cancel Notifee notification:', e);
+      }
+    }
+    
+    // Also cancel expo-notifications (in case it was used as fallback)
     await Notifications.cancelScheduledNotificationAsync(`incoming-call-${callId}`);
     await Notifications.dismissNotificationAsync(`incoming-call-${callId}`);
     Vibration.cancel();

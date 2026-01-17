@@ -364,7 +364,9 @@ export const VoiceCallInterface = ({
             setParticipantCount(Object.keys(daily.participants()).length);
           })
           .on('left-meeting', () => {
+            console.log('[VoiceCall] Left meeting - closing call UI');
             setCallState('ended');
+            onClose();
           })
           .on('participant-joined', () => {
             setParticipantCount(Object.keys(daily.participants()).length);
@@ -373,7 +375,26 @@ export const VoiceCallInterface = ({
             const count = Object.keys(daily.participants()).length;
             setParticipantCount(count);
             console.log('[VoiceCall] Participant left, remaining:', count);
-            // Note: Don't auto-end here - let the database listener handle it
+            
+            // Check if all remote participants have left
+            const remoteCount = Object.values(daily.participants()).filter((p: any) => !p.local).length;
+            if (remoteCount === 0) {
+              console.log('[VoiceCall] Last remote participant left - ending call');
+              // Database listener should handle this, but ensure UI closes
+              setTimeout(() => {
+                if (dailyCallRef.current) {
+                  try {
+                    dailyCallRef.current.leave();
+                    dailyCallRef.current.destroy();
+                  } catch (err) {
+                    // Ignore cleanup errors
+                  }
+                  dailyCallRef.current = null;
+                }
+                setCallState('ended');
+                onClose();
+              }, 500);
+            }
           })
           .on('error', (event) => {
             console.error('[VoiceCall] Daily error:', event);

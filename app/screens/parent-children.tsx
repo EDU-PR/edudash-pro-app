@@ -211,6 +211,45 @@ export default function ParentChildrenScreen() {
       fontSize: 16,
       fontWeight: '600',
     },
+    // Add child button section styles
+    addChildSection: {
+      marginTop: 16,
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    addChildButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      gap: 8,
+    },
+    addChildButtonText: {
+      color: theme.onPrimary,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    secondaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginTop: 12,
+      gap: 8,
+    },
+    secondaryButtonText: {
+      color: theme.primary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
   });
 
   if (loading) {
@@ -236,65 +275,76 @@ export default function ParentChildrenScreen() {
       >
         <View style={styles.section}>
           {children.length > 0 ? (
-            children.map((child) => {
-              const initials = `${child.first_name?.[0] || ''}${child.last_name?.[0] || ''}`.toUpperCase();
-              
-              return (
-                <TouchableOpacity
-                  key={child.id}
-                  style={styles.childCard}
-                  onPress={() => router.push(`/screens/student-detail?id=${child.id}` as any)}
+            <>
+              {children.map((child) => {
+                const initials = `${child.first_name?.[0] || ''}${child.last_name?.[0] || ''}`.toUpperCase();
+                
+                return (
+                  <TouchableOpacity
+                    key={child.id}
+                    style={styles.childCard}
+                    onPress={() => router.push(`/screens/student-detail?id=${child.id}` as any)}
+                  >
+                    <View style={styles.childHeader}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{initials}</Text>
+                      </View>
+                      
+                      <View style={styles.childInfo}>
+                        <Text style={styles.childName}>
+                          {child.first_name} {child.last_name}
+                        </Text>
+                        <Text style={styles.childDetails}>
+                          {getChildAge(child.date_of_birth)} • {child.classes?.grade_level || 'Preschool'}
+                        </Text>
+                        <Text style={styles.childDetails}>
+                          Class: {child.classes?.name || 'Not assigned'}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.statusBadge}>
+                        <Text style={styles.statusText}>Active</Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.childActions}>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => router.push(`/screens/attendance?id=${child.id}` as any)}
+                      >
+                        <Ionicons name="calendar" size={16} color={theme.primary} />
+                        <Text style={styles.actionButtonText}>Attendance</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => console.log('Homework coming soon')}
+                      >
+                        <Ionicons name="book" size={16} color={theme.primary} />
+                        <Text style={styles.actionButtonText}>Homework</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => console.log('Progress report coming soon')}
+                      >
+                        <Ionicons name="trending-up" size={16} color={theme.primary} />
+                        <Text style={styles.actionButtonText}>Progress</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={styles.addChildSection}>
+                <TouchableOpacity 
+                  style={styles.addChildButton}
+                  onPress={() => router.push('/screens/parent-child-registration')}
                 >
-                  <View style={styles.childHeader}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{initials}</Text>
-                    </View>
-                    
-                    <View style={styles.childInfo}>
-                      <Text style={styles.childName}>
-                        {child.first_name} {child.last_name}
-                      </Text>
-                      <Text style={styles.childDetails}>
-                        {getChildAge(child.date_of_birth)} • {child.classes?.grade_level || 'Preschool'}
-                      </Text>
-                      <Text style={styles.childDetails}>
-                        Class: {child.classes?.name || 'Not assigned'}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusText}>Active</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.childActions}>
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => router.push(`/screens/attendance?id=${child.id}` as any)}
-                    >
-                      <Ionicons name="calendar" size={16} color={theme.primary} />
-                      <Text style={styles.actionButtonText}>Attendance</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => console.log('Homework coming soon')}
-                    >
-                      <Ionicons name="book" size={16} color={theme.primary} />
-                      <Text style={styles.actionButtonText}>Homework</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => console.log('Progress report coming soon')}
-                    >
-                      <Ionicons name="trending-up" size={16} color={theme.primary} />
-                      <Text style={styles.actionButtonText}>Progress</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <Ionicons name="person-add" size={20} color={theme.onPrimary} />
+                  <Text style={styles.addChildButtonText}>Register Another Child</Text>
                 </TouchableOpacity>
-              );
-            })
+              </View>
+            </>
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="person-add" size={64} color={theme.textSecondary} style={styles.emptyIcon} />

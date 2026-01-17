@@ -33,6 +33,14 @@ const FILTERS: { key: FilterType; label: string; icon: string }[] = [
   { key: 'suspended', label: 'Suspended', icon: 'pause-circle' },
 ];
 
+// Executive member types that should be highlighted
+const EXECUTIVE_TYPES = [
+  'youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer',
+  'women_president', 'women_deputy', 'women_secretary', 'women_treasurer',
+  'veterans_president',
+  'regional_manager', 'provincial_manager', 'branch_manager',
+];
+
 export default function YouthMembersListScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -55,6 +63,8 @@ export default function YouthMembersListScreen() {
   const renderMemberItem = ({ item }: { item: OrganizationMember }) => {
     const statusColor = STATUS_COLORS[item.membership_status] || STATUS_COLORS.pending;
     const initials = `${item.first_name?.[0] || '?'}${item.last_name?.[0] || ''}`.toUpperCase();
+    const isExecutive = EXECUTIVE_TYPES.includes(item.member_type);
+    const badgeColor = isExecutive ? '#8B5CF6' : '#10B981';
 
     return (
       <TouchableOpacity
@@ -65,8 +75,14 @@ export default function YouthMembersListScreen() {
           {item.photo_url ? (
             <Image source={{ uri: item.photo_url }} style={styles.avatar} />
           ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary + '20' }]}>
-              <Text style={[styles.avatarText, { color: theme.primary }]}>{initials}</Text>
+            <View style={[styles.avatarPlaceholder, { backgroundColor: isExecutive ? '#8B5CF6' + '20' : theme.primary + '20' }]}>
+              <Text style={[styles.avatarText, { color: isExecutive ? '#8B5CF6' : theme.primary }]}>{initials}</Text>
+            </View>
+          )}
+          {/* Executive badge indicator */}
+          {isExecutive && (
+            <View style={styles.executiveBadge}>
+              <Ionicons name="shield-checkmark" size={12} color="#fff" />
             </View>
           )}
 
@@ -78,8 +94,8 @@ export default function YouthMembersListScreen() {
               {item.member_number || 'No member #'}
             </Text>
             <View style={styles.memberMeta}>
-              <View style={[styles.typeBadge, { backgroundColor: '#10B981' + '20' }]}>
-                <Text style={[styles.typeText, { color: '#10B981' }]}>
+              <View style={[styles.typeBadge, { backgroundColor: badgeColor + '20' }]}>
+                <Text style={[styles.typeText, { color: badgeColor }]}>
                   {MEMBER_TYPE_LABELS[item.member_type] || item.member_type}
                 </Text>
               </View>

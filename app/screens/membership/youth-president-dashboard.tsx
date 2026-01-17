@@ -52,13 +52,13 @@ interface YouthStats {
 // Youth Wing Executive Actions
 const YOUTH_EXECUTIVE_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
-  { id: '3', label: 'Invite Members', icon: 'person-add', color: '#06B6D4', route: '/screens/membership/youth-invite-code' },
-  { id: '4', label: 'Office Structure', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/youth-executive-invite' },
-  { id: '5', label: 'Events', icon: 'calendar', color: '#F59E0B', route: '/screens/membership/events' },
-  { id: '6', label: 'Programs', icon: 'school', color: '#EF4444', route: '/screens/membership/programs' },
-  { id: '7', label: 'Budget', icon: 'wallet', color: '#6366F1', route: '/screens/membership/budget-requests' },
-  { id: '8', label: 'ID Card', icon: 'card', color: '#9333EA', route: '/screens/membership/id-card' },
+  { id: '2', label: 'Groups', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/groups' },
+  { id: '3', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
+  { id: '4', label: 'Invite Members', icon: 'person-add', color: '#06B6D4', route: '/screens/membership/youth-invite-code' },
+  { id: '5', label: 'Office Structure', icon: 'git-network', color: '#9333EA', route: '/screens/membership/youth-executive-invite' },
+  { id: '6', label: 'Events', icon: 'calendar', color: '#F59E0B', route: '/screens/membership/events' },
+  { id: '7', label: 'Programs', icon: 'school', color: '#EF4444', route: '/screens/membership/programs' },
+  { id: '8', label: 'Budget', icon: 'wallet', color: '#6366F1', route: '/screens/membership/budget-requests' },
 ];
 
 export default function YouthPresidentDashboard() {

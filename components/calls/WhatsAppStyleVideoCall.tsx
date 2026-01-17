@@ -1052,7 +1052,10 @@ export function WhatsAppStyleVideoCall({
         });
 
         daily.on('left-meeting', () => {
+          console.log('[VideoCall] Left meeting - closing call UI');
           setCallState('ended');
+          // CRITICAL: Close the call interface when meeting is left
+          onClose();
         });
 
         daily.on('participant-joined', () => {
@@ -1069,7 +1072,37 @@ export function WhatsAppStyleVideoCall({
         });
 
         daily.on('participant-left', () => {
+          console.log('[VideoCall] Participant left');
           updateParticipants();
+          
+          // Check if all remote participants have left (1:1 call ended)
+          setTimeout(() => {
+            if (dailyRef.current) {
+              const participants = dailyRef.current.participants();
+              const remoteCount = Object.values(participants).filter((p: any) => !p.local).length;
+              console.log('[VideoCall] Remote participants remaining:', remoteCount);
+              
+              if (remoteCount === 0 && (callState === 'connected' || callState === 'ringing')) {
+                console.log('[VideoCall] Last remote participant left - ending call');
+                // Update database and close
+                if (callIdRef.current) {
+                  getSupabase()
+                    .from('active_calls')
+                    .update({ status: 'ended', ended_at: new Date().toISOString() })
+                    .eq('call_id', callIdRef.current)
+                    .then(() => {
+                      cleanupCall();
+                      setCallState('ended');
+                      onClose();
+                    });
+                } else {
+                  cleanupCall();
+                  setCallState('ended');
+                  onClose();
+                }
+              }
+            }
+          }, 500);
         });
 
         daily.on('participant-updated', (event: any) => {
