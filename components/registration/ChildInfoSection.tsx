@@ -4,7 +4,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { createRegistrationStyles } from './child-registration.styles';
-import type { RegistrationFormErrors } from '@/hooks/useChildRegistration';
+import type { RegistrationFormErrors, AgeRange } from '@/hooks/useChildRegistration';
 
 interface ChildInfoSectionProps {
   firstName: string;
@@ -19,6 +19,7 @@ interface ChildInfoSectionProps {
   clearError: (field: keyof RegistrationFormErrors) => void;
   showDatePicker: boolean;
   setShowDatePicker: (show: boolean) => void;
+  ageRange?: AgeRange;
 }
 
 export function ChildInfoSection({
@@ -28,11 +29,15 @@ export function ChildInfoSection({
   gender, setGender,
   errors, clearError,
   showDatePicker, setShowDatePicker,
+  ageRange,
 }: ChildInfoSectionProps) {
   const { theme } = useTheme();
   const styles = createRegistrationStyles(theme);
 
   const formatDate = (date: Date): string => date.toISOString().split('T')[0];
+  
+  // Default age hint if no ageRange provided
+  const ageHint = ageRange?.label || 'Child must be between 2 and 7 years old';
 
   return (
     <>
@@ -65,7 +70,7 @@ export function ChildInfoSection({
       {errors.lastName ? <Text style={styles.error}>{errors.lastName}</Text> : null}
 
       <Text style={styles.label}>Date of birth *</Text>
-      <Text style={styles.hint}>Child must be between 2 and 7 years old</Text>
+      <Text style={styles.hint}>{ageHint}</Text>
       <TouchableOpacity 
         style={[styles.dateButton, errors.dob && styles.inputError]} 
         onPress={() => setShowDatePicker(true)}
