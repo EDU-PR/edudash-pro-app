@@ -8,9 +8,53 @@ export interface Organization {
   id: string;
   name: string;
   type: string;
+  school_type?: string;
   city?: string;
   tenant_slug?: string;
   registration_fee?: number;
+}
+
+// Age range configuration based on school type
+export interface AgeRange {
+  minAge: number;
+  maxAge: number;
+  label: string;
+}
+
+export const SCHOOL_TYPE_AGE_RANGES: Record<string, AgeRange> = {
+  'preschool': { minAge: 2, maxAge: 7, label: 'Child must be between 2 and 7 years old for preschool' },
+  'primary': { minAge: 5, maxAge: 14, label: 'Child must be between 5 and 14 years old for primary school' },
+  'secondary': { minAge: 12, maxAge: 19, label: 'Student must be between 12 and 19 years old for secondary school' },
+  'k12': { minAge: 5, maxAge: 19, label: 'Student must be between 5 and 19 years old' },
+  'k12_school': { minAge: 5, maxAge: 19, label: 'Student must be between 5 and 19 years old' },
+  'combined': { minAge: 5, maxAge: 19, label: 'Student must be between 5 and 19 years old' },
+  'community_school': { minAge: 5, maxAge: 99, label: 'Students of all ages welcome' },
+  'training_center': { minAge: 16, maxAge: 99, label: 'Students must be 16 years or older' },
+  'skills_development': { minAge: 16, maxAge: 99, label: 'Students must be 16 years or older' },
+  'tutoring_center': { minAge: 5, maxAge: 99, label: 'Students of all ages welcome' },
+  'default': { minAge: 0, maxAge: 99, label: 'All ages accepted' },
+};
+
+export function getAgeRangeForSchoolType(schoolType?: string | null): AgeRange {
+  if (!schoolType) return SCHOOL_TYPE_AGE_RANGES['preschool']; // Default to preschool if not specified
+  return SCHOOL_TYPE_AGE_RANGES[schoolType] || SCHOOL_TYPE_AGE_RANGES['default'];
+}
+
+// Helper to get display type for UI
+export function getDisplayTypeForSchoolType(schoolType?: string | null): string {
+  const typeMap: Record<string, string> = {
+    'preschool': 'Preschool',
+    'primary': 'Primary School',
+    'secondary': 'Secondary School',
+    'k12': 'K-12 School',
+    'k12_school': 'K-12 School',
+    'combined': 'Combined School',
+    'community_school': 'Community School',
+    'training_center': 'Training Center',
+    'skills_development': 'Skills Development',
+    'tutoring_center': 'Tutoring Center',
+  };
+  return typeMap[schoolType || 'preschool'] || schoolType || 'Organization';
 }
 
 export interface PromoApplied {
@@ -109,7 +153,7 @@ export function useChildRegistration() {
         
         const { data: allPreschoolsData } = await assertSupabase()
           .from('preschools')
-          .select('id, name, address, tenant_slug')
+          .select('id, name, address, tenant_slug, school_type')
           .eq('is_active', true)
           .order('name');
         
@@ -131,10 +175,14 @@ export function useChildRegistration() {
                 city = addressParts[addressParts.length - 2].trim();
               }
             }
+            // Determine the display type based on school_type
+            const schoolType = p.school_type || 'preschool';
+            const displayType = getDisplayTypeForSchoolType(schoolType);
             return {
               id: p.id,
               name: p.name,
-              type: 'preschool' as const,
+              type: displayType,
+              school_type: schoolType,
               city,
               tenant_slug: p.tenant_slug,
               registration_fee: feeMap.get(p.id) || 0,
@@ -186,8 +234,13 @@ export function useChildRegistration() {
     if (!dob) {
       newErrors.dob = 'Date of birth is required';
     } else {
+      // Get age range based on selected organization's school type
+      const selectedOrg = organizations.find(o => o.id === selectedOrganizationId);
+      const ageRange = getAgeRangeForSchoolType(selectedOrg?.school_type);
       const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      if (age < 2 || age > 7) newErrors.dob = 'Child must be between 2 and 7 years old for preschool';
+      if (age < ageRange.minAge || age > ageRange.maxAge) {
+        newErrors.dob = ageRange.label;
+      }
     }
     if (!gender) newErrors.gender = 'Please select gender';
     if (!selectedOrganizationId) newErrors.organization = 'Please select an organization';
@@ -387,6 +440,10 @@ export function useChildRegistration() {
     }
   }, [validate, profile, firstName, lastName, dob, gender, dietary, medicalInfo, specialNeeds, emergencyName, emergencyPhone, emergencyRelation, notes, selectedOrganizationId, registrationFee, promoDiscount, finalAmount, promoApplied, paymentMethod, proofOfPayment, resetForm]);
 
+  // Get the current selected organization and its age range
+  const selectedOrganization = organizations.find(o => o.id === selectedOrganizationId) || null;
+  const currentAgeRange = getAgeRangeForSchoolType(selectedOrganization?.school_type);
+
   return {
     // Form state
     firstName, setFirstName,
@@ -404,6 +461,8 @@ export function useChildRegistration() {
     // Organization
     selectedOrganizationId, setSelectedOrganizationId,
     organizations, loadingOrganizations,
+    selectedOrganization,
+    currentAgeRange,
     
     // Payment
     registrationFee,

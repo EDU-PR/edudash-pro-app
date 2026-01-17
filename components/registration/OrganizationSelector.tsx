@@ -25,15 +25,26 @@ export function OrganizationSelector({
   const { theme } = useTheme();
   const styles = createRegistrationStyles(theme);
 
-  const getOrgTypeLabel = (type: string): string => {
+  const getOrgTypeLabel = (org: Organization): string => {
+    // Use school_type if available, otherwise fall back to type
+    const schoolType = org.school_type || org.type;
     const typeMap: Record<string, string> = {
       'preschool': '🏫 Preschool',
+      'primary': '📚 Primary School',
+      'secondary': '🎓 Secondary School',
+      'k12': '🎓 K-12 School',
       'k12_school': '🎓 K-12 School',
+      'combined': '🏫 Combined School',
+      'community_school': '🏠 Community School',
       'training_center': '📚 Training Center',
       'tutoring_center': '✏️ Tutoring Center',
-      'skills_development': '🛠️ Skills Development'
+      'skills_development': '🛠️ Skills Development',
+      'Preschool': '🏫 Preschool',
+      'Primary School': '📚 Primary School',
+      'K-12 School': '🎓 K-12 School',
+      'Community School': '🏠 Community School',
     };
-    return typeMap[type] || `📍 ${type}`;
+    return typeMap[schoolType] || `📍 ${org.type}`;
   };
 
   return (
@@ -85,7 +96,7 @@ export function OrganizationSelector({
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 8 }}>
                     <Text style={{ color: isSelected ? theme.primary : theme.textSecondary, fontSize: 12 }}>
-                      {getOrgTypeLabel(org.type)}
+                      {getOrgTypeLabel(org)}
                     </Text>
                     {org.city && (
                       <Text style={{ color: theme.textSecondary, fontSize: 12 }}>

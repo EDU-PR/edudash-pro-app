@@ -27,6 +27,8 @@ export default function ParentChildRegistrationScreen() {
     // Organization
     selectedOrganizationId, setSelectedOrganizationId,
     organizations, loadingOrganizations,
+    selectedOrganization,
+    currentAgeRange,
     
     // Health & emergency
     dietary, setDietary,
@@ -79,6 +81,7 @@ export default function ParentChildRegistrationScreen() {
             clearError={clearError}
             showDatePicker={showDatePicker}
             setShowDatePicker={setShowDatePicker}
+            ageRange={currentAgeRange}
           />
 
           <OrganizationSelector
