@@ -103,6 +103,10 @@ export function useVoiceCallDaily({
   // Audio mode session ref for cleanup
   const audioSessionRef = useRef<AudioModeSession | null>(null);
   
+  // CRITICAL: Ref to track endCall function for use in event handlers
+  // This solves the closure issue where event handlers capture stale function references
+  const endCallRef = useRef<(() => Promise<void>) | null>(null);
+  
   // CRITICAL: State to trigger realtime subscription when call ID is set
   // Refs don't cause re-renders, so we need a state variable to trigger the subscription effect
   // Initialize with initialCallId if provided (callee case)
@@ -514,9 +518,11 @@ export function useVoiceCallDaily({
         });
 
         daily.on('left-meeting', () => {
-          console.log('[VoiceCallDaily] Left meeting');
+          console.log('[VoiceCallDaily] Left meeting - closing call UI');
           setCallState('ended');
           stopAudio();
+          // CRITICAL: Close the call interface when meeting is left
+          onClose();
         });
 
         daily.on('participant-joined', (event: any) => {
@@ -550,7 +556,16 @@ export function useVoiceCallDaily({
             console.log('[VoiceCallDaily] Last remote participant left - ending call');
             // Small delay to let any final events process
             setTimeout(() => {
-              endCall();
+              // Use ref to get the latest endCall function
+              if (endCallRef.current) {
+                endCallRef.current();
+              } else {
+                // Fallback: directly cleanup and close
+                console.log('[VoiceCallDaily] endCallRef not set, using direct cleanup');
+                cleanupCall();
+                setCallState('ended');
+                onClose();
+              }
             }, 500);
           }
           
@@ -955,6 +970,11 @@ export function useVoiceCallDaily({
     setCallState('ended');
     onClose();
   }, [callIdRef, cleanupCall, setCallState, onClose]);
+
+  // Keep ref updated with latest endCall function for use in event handlers
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
 
   return {
     toggleAudio,

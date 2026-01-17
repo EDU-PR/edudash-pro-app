@@ -28,6 +28,7 @@ import { MemberType, MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { getDashboardRoute } from '@/lib/memberRegistrationUtils';
 import { useEffect } from 'react';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+import { MembershipNotificationService } from '@/services/membership/MembershipNotificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -473,6 +474,7 @@ export default function JoinByCodeScreen() {
       const memberNumber = `SOA-${orgInfo.region_code}-${year}-${sequence}`;
       
       // Create organization member record using RPC (handles both anon and authenticated users)
+      // Set status to pending_verification - requires president approval
       const { data: rpcResult, error: rpcError } = await supabase
         .rpc('register_organization_member', {
           p_organization_id: orgInfo.id,
@@ -481,7 +483,7 @@ export default function JoinByCodeScreen() {
           p_member_number: memberNumber,
           p_member_type: formData.member_type,
           p_membership_tier: 'standard',
-          p_membership_status: 'active',
+          p_membership_status: 'pending_verification', // Requires president approval
           p_first_name: formData.first_name,
           p_last_name: formData.last_name,
           p_email: formData.email,
@@ -528,21 +530,42 @@ export default function JoinByCodeScreen() {
           .eq('code', inviteCode.toUpperCase());
       }
       
-      // Show success message with next steps
-      const successMessage = `You've successfully joined ${orgInfo.region || orgInfo.name}!\n\nYour Member Number: ${memberNumber}\n\n📧 Check your email for a confirmation link to verify your account.`;
+      // Notify the president of the new registration (requires their approval)
+      // Determine wing from member type
+      const wing = formData.member_type?.includes('youth') ? 'youth' 
+                 : formData.member_type?.includes('women') ? 'women'
+                 : formData.member_type?.includes('veteran') ? 'veterans'
+                 : 'youth'; // Default to youth wing for SOA
+      
+      MembershipNotificationService.notifyPresidentOfNewRegistration({
+        id: rpcResult.id,
+        organization_id: orgInfo.id,
+        user_id: user.id,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        phone: formData.phone,
+        member_type: formData.member_type,
+        region_id: orgInfo.region_id,
+        region_name: orgInfo.region,
+        requested_role: orgInfo.requested_role || formData.member_type,
+      }, wing).catch(err => {
+        console.warn('[JoinByCode] Failed to notify president (non-blocking):', err);
+      });
+      
+      // Show success message - membership pending approval
+      const successMessage = `Your registration has been submitted!\n\nYour Member Number: ${memberNumber}\n\n⏳ Your membership is pending approval from the President. You'll be notified once approved.`;
       
       showAlert(
-        'Welcome to Soil of Africa! 🎉',
+        'Registration Submitted 📝',
         successMessage,
         'success',
         [
           { 
             text: 'Continue', 
             onPress: () => {
-              // Route to appropriate dashboard based on member type
-              const memberType = orgInfo.requested_role || formData.member_type;
-              const dashboardRoute = getDashboardRoute(memberType, 'member');
-              router.replace(dashboardRoute);
+              // Route to pending membership screen (not dashboard)
+              router.replace('/screens/membership/membership-pending');
             }
           },
         ]

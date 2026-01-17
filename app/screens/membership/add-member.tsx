@@ -13,7 +13,6 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Switch,
 } from 'react-native';
@@ -21,12 +20,14 @@ import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { 
   generateTemporaryPassword, 
   generateMemberNumber, 
@@ -166,6 +167,12 @@ export default function AddMemberScreen() {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showTierPicker, setShowTierPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDob, setSelectedDob] = useState<Date | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<'idle' | 'registering' | 'success' | 'error'>('idle');
+  
+  // Alert modal state
+  const { showAlert, hideAlert, alertProps } = useAlertModal();
 
   const updateField = <K extends keyof AddMemberData>(field: K, value: AddMemberData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -182,31 +189,66 @@ export default function AddMemberScreen() {
 
   const validateForm = (): boolean => {
     if (!organizationId) {
-      Alert.alert('Error', 'Organization context missing. Please try logging in again.');
+      showAlert({ 
+        title: 'Error', 
+        message: 'Organization context missing. Please try logging in again.',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!formData.region_id) {
-      Alert.alert('Required', 'Please select a region');
+      showAlert({ 
+        title: 'Required Field', 
+        message: 'Please select a region',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!formData.first_name || !formData.last_name) {
-      Alert.alert('Required', 'Please enter member name');
+      showAlert({ 
+        title: 'Required Field', 
+        message: 'Please enter member name',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!formData.email) {
-      Alert.alert('Required', 'Please enter email address');
+      showAlert({ 
+        title: 'Required Field', 
+        message: 'Please enter email address',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!isValidEmail(formData.email)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      showAlert({ 
+        title: 'Invalid Email', 
+        message: 'Please enter a valid email address',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!formData.phone) {
-      Alert.alert('Required', 'Please enter phone number');
+      showAlert({ 
+        title: 'Required Field', 
+        message: 'Please enter phone number',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     if (!isValidSAPhoneNumber(formData.phone)) {
-      Alert.alert('Invalid Phone', 'Please enter a valid South African phone number');
+      showAlert({ 
+        title: 'Invalid Phone', 
+        message: 'Please enter a valid South African phone number',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return false;
     }
     return true;
@@ -215,11 +257,17 @@ export default function AddMemberScreen() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!organizationId || !user?.id) {
-      Alert.alert('Error', 'Missing user or organization context');
+      showAlert({ 
+        title: 'Error', 
+        message: 'Missing user or organization context',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
       return;
     }
     
     setIsSubmitting(true);
+    setRegistrationStatus('registering');
     
     try {
       const supabase = assertSupabase();
@@ -266,7 +314,7 @@ export default function AddMemberScreen() {
       // - User is immediately available in auth.users
       // - Single call handles both user creation and member registration
       setRetryStatus({ retry: 0, maxRetries: 3 });
-      setErrorMessage('Creating member account...');
+      setErrorMessage(null); // Clear any previous error
       
       let edgeFunctionResult: any = null;
       let edgeFunctionError: any = null;
@@ -276,9 +324,18 @@ export default function AddMemberScreen() {
       
       while (retries < maxRetries) {
         setRetryStatus({ retry: retries, maxRetries });
-        setErrorMessage(retries > 0 ? `Retrying registration... (Attempt ${retries + 1}/${maxRetries})` : 'Creating member account...');
+        // Keep showing positive registering status during retries - don't show scary errors
         
         try {
+          // Build physical_address from address fields if available
+          const physicalAddress = [
+            formData.address_line1?.trim(),
+            formData.address_line2?.trim(),
+            formData.city?.trim(),
+            formData.province?.trim(),
+            formData.postal_code?.trim(),
+          ].filter(Boolean).join(', ') || null;
+          
           const { data, error } = await (supabase as any).functions.invoke('create-organization-member', {
             body: {
               email: formData.email.trim().toLowerCase(),
@@ -287,6 +344,8 @@ export default function AddMemberScreen() {
               last_name: formData.last_name.trim(),
               phone: formData.phone.trim() || null,
               id_number: formData.id_number.trim() || null,
+              date_of_birth: formData.date_of_birth || null,
+              physical_address: physicalAddress,
               organization_id: organizationId,
               region_id: regionIdToUse || null,
               member_number: memberNumber,
@@ -307,7 +366,7 @@ export default function AddMemberScreen() {
             if (retries < maxRetries) {
               console.log(`[AddMember] Edge Function error, retrying... (${retries}/${maxRetries})`);
               const delay = retryDelays[retries - 1] || 5000;
-              setErrorMessage(`Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+              // Don't show error message during retries, keep positive status
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
@@ -319,8 +378,10 @@ export default function AddMemberScreen() {
           if (!edgeFunctionResult?.success) {
             edgeFunctionError = edgeFunctionResult;
             
-            // If not USER_NOT_FOUND or NETWORK_ERROR, don't retry (validation/perm error)
-            if (edgeFunctionResult.code !== 'USER_NOT_FOUND' && edgeFunctionResult.code !== 'NETWORK_ERROR' && edgeFunctionResult.code !== 'RPC_ERROR') {
+            // Don't retry for specific non-recoverable errors
+            const nonRetryableCodes = ['EMAIL_EXISTS', 'WEAK_PASSWORD', 'INVALID_EMAIL', 'UNAUTHORIZED', 'NO_ORGANIZATION', 'PROFILE_NOT_FOUND'];
+            if (nonRetryableCodes.includes(edgeFunctionResult.code) || 
+                (edgeFunctionResult.code !== 'USER_NOT_FOUND' && edgeFunctionResult.code !== 'NETWORK_ERROR' && edgeFunctionResult.code !== 'RPC_ERROR')) {
               break;
             }
             
@@ -329,7 +390,7 @@ export default function AddMemberScreen() {
             if (retries < maxRetries) {
               console.log(`[AddMember] Edge Function returned error, retrying... (${retries}/${maxRetries}):`, edgeFunctionResult);
               const delay = retryDelays[retries - 1] || 5000;
-              setErrorMessage(`Account creation in progress... Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+              // Don't show error during retries
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
@@ -338,6 +399,7 @@ export default function AddMemberScreen() {
             // Success
             setRetryStatus(null);
             setErrorMessage(null);
+            setRegistrationStatus('success');
             break;
           }
         } catch (fetchError: any) {
@@ -352,7 +414,7 @@ export default function AddMemberScreen() {
           if (retries < maxRetries) {
             console.log(`[AddMember] Edge Function exception, retrying... (${retries}/${maxRetries})`);
             const delay = retryDelays[retries - 1] || 5000;
-            setErrorMessage(`Retrying in ${delay / 1000}s (Attempt ${retries + 1}/${maxRetries})`);
+            // Don't show error during retries
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -365,7 +427,9 @@ export default function AddMemberScreen() {
         console.error('[AddMember] Error code:', edgeFunctionError?.code || edgeFunctionResult?.code);
         console.error('[AddMember] Error message:', edgeFunctionError?.message || edgeFunctionResult?.error);
         
-        // Handle specific error codes
+        setRegistrationStatus('error');
+        
+        // Handle specific error codes - NOW show the error after all retries are done
         if (edgeFunctionError?.code === 'AUTH_ERROR' || edgeFunctionError?.message?.includes('Unauthorized')) {
           setErrorMessage('Authentication failed. Please log in again.');
           setRetryStatus(null);
@@ -380,6 +444,14 @@ export default function AddMemberScreen() {
           return;
         }
         
+        // Handle email already exists error (from Edge Function)
+        if (edgeFunctionResult?.code === 'EMAIL_EXISTS' || edgeFunctionError?.code === 'EMAIL_EXISTS') {
+          setErrorMessage(`This email address (${formData.email}) is already registered with another user account. Please use a different email address or contact support if you believe this is an error.`);
+          setRetryStatus(null);
+          setIsSubmitting(false);
+          return;
+        }
+        
         if (edgeFunctionResult?.code === 'DUPLICATE_ERROR' || edgeFunctionError?.message?.includes('already exists')) {
           setErrorMessage('A member with this email already exists in the organization.');
           setRetryStatus(null);
@@ -387,17 +459,22 @@ export default function AddMemberScreen() {
           return;
         }
         
-        // Other errors - show detailed message
+        // Other errors - show detailed message with extra debug info
         const errorMsg = edgeFunctionError?.message || edgeFunctionResult?.error || `Registration failed: ${edgeFunctionError?.code || edgeFunctionResult?.code || 'Unknown error'}`;
-        setErrorMessage(`Registration error: ${errorMsg}`);
+        const extraDetails = edgeFunctionResult?.details || edgeFunctionResult?.hint || edgeFunctionResult?.pgCode || '';
+        const fullErrorMsg = extraDetails ? `${errorMsg}\n\nDetails: ${extraDetails}` : errorMsg;
+        console.error('[AddMember] Full error details:', JSON.stringify(edgeFunctionResult || edgeFunctionError, null, 2));
+        setErrorMessage(`Registration error: ${fullErrorMsg}`);
         setRetryStatus(null);
         setIsSubmitting(false);
+        setRegistrationStatus('error');
         return; // Don't throw - show error and let user retry
       }
       
       // Clear any previous errors on success
       setErrorMessage(null);
       setRetryStatus(null);
+      setRegistrationStatus('success');
       
       console.log('[AddMember] Member created successfully via Edge Function:', edgeFunctionResult);
       
@@ -406,34 +483,54 @@ export default function AddMemberScreen() {
       const createdMemberId = edgeFunctionResult.member_id;
       const createdMemberNumber = edgeFunctionResult.member_number || memberNumber;
       const createdWing = edgeFunctionResult.wing || 'main';
+      // Use password from Edge Function response or the one we generated
+      const passwordToShare = edgeFunctionResult.temp_password || tempPassword;
       
-      // 6. Show success with temporary password
-      Alert.alert(
-        'Member Added Successfully',
-        `${formData.first_name} ${formData.last_name} has been registered.\n\n` +
-        `Member Number: ${createdMemberNumber}\n` +
-        `Temporary Password: ${tempPassword}\n\n` +
-        `⚠️ IMPORTANT: Please securely share the temporary password with the new member. ` +
-        `They should change it after their first login.`,
-        [
+      // Helper function to reset form to initial state
+      const resetForm = () => {
+        setFormData(getInitialData(defaultMemberType));
+        setSelectedDob(null);
+        setRegistrationStatus('idle');
+        setErrorMessage(null);
+        setRetryStatus(null);
+      };
+      
+      // 6. Show success with custom modal
+      showAlert({
+        title: '✅ Member Added Successfully',
+        message: `${formData.first_name} ${formData.last_name} has been registered.\n\n` +
+          `📋 Member Number: ${createdMemberNumber}\n` +
+          `🔑 Temporary Password: ${passwordToShare}\n\n` +
+          `⚠️ IMPORTANT: Please securely share the temporary password with the new member. ` +
+          `They will be prompted to change it after their first login.`,
+        type: 'success',
+        buttons: [
           { 
-            text: 'Copy Password', 
+            text: '📋 Copy Password', 
             onPress: async () => {
               // Copy to clipboard if available
               try {
-                await Clipboard.setStringAsync(tempPassword);
-                Alert.alert('Copied', 'Temporary password copied to clipboard');
+                await Clipboard.setStringAsync(passwordToShare);
+                // Reset form after copying password
+                resetForm();
+                showAlert({
+                  title: '✅ Copied',
+                  message: 'Temporary password copied to clipboard. Share it securely with the new member.',
+                  type: 'success',
+                  buttons: [{ text: 'OK', style: 'default' }]
+                });
               } catch (error) {
                 console.error('[AddMember] Failed to copy password:', error);
               }
             }
           },
-          { text: 'Add Another', onPress: () => setFormData(getInitialData(defaultMemberType)) },
-          { text: 'Done', onPress: () => router.back() },
+          { text: '➕ Add Another', onPress: resetForm },
+          { text: '✓ Done', onPress: () => { resetForm(); router.back(); } },
         ]
-      );
+      });
     } catch (error: any) {
       console.error('[AddMember] Registration error:', error);
+      setRegistrationStatus('error');
       
       let errorMsg = 'Failed to add member. Please try again.';
       
@@ -643,13 +740,61 @@ export default function AddMemberScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Date of Birth</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.textSecondary}
-                value={formData.date_of_birth}
-                onChangeText={(v) => updateField('date_of_birth', v)}
-              />
+              <TouchableOpacity 
+                style={[
+                  styles.datePickerButton, 
+                  { backgroundColor: theme.surface, borderColor: theme.border }
+                ]} 
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={[
+                  styles.datePickerText, 
+                  { color: formData.date_of_birth ? theme.text : theme.textSecondary }
+                ]}>
+                  {formData.date_of_birth || 'Select date of birth'}
+                </Text>
+                <Ionicons name="calendar" size={20} color={theme.primary} />
+              </TouchableOpacity>
+              
+              {showDatePicker && (
+                <DateTimePicker
+                  value={selectedDob || new Date(2000, 0, 1)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  maximumDate={new Date()}
+                  minimumDate={new Date(1920, 0, 1)}
+                  onChange={(event, selectedDate) => {
+                    setShowDatePicker(Platform.OS === 'ios');
+                    if (event.type === 'dismissed') {
+                      setShowDatePicker(false);
+                      return;
+                    }
+                    if (selectedDate) {
+                      setSelectedDob(selectedDate);
+                      // Format date as YYYY-MM-DD using local timezone (not UTC)
+                      // This prevents the date from shifting by a day due to timezone conversion
+                      const year = selectedDate.getFullYear();
+                      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                      const day = String(selectedDate.getDate()).padStart(2, '0');
+                      const formattedDate = `${year}-${month}-${day}`;
+                      updateField('date_of_birth', formattedDate);
+                      if (Platform.OS === 'android') {
+                        setShowDatePicker(false);
+                      }
+                    }
+                  }}
+                />
+              )}
+              
+              {/* iOS Done button for date picker */}
+              {showDatePicker && Platform.OS === 'ios' && (
+                <TouchableOpacity 
+                  style={[styles.datePickerDoneButton, { backgroundColor: theme.primary }]}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={styles.datePickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -981,6 +1126,31 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     fontSize: 15,
     borderWidth: 1,
+  },
+  
+  // Date Picker
+  datePickerButton: {
+    height: 50,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  datePickerText: {
+    fontSize: 15,
+  },
+  datePickerDoneButton: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  datePickerDoneText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   
   // Select

@@ -90,6 +90,10 @@ export function VideoCallInterface({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Default speaker for video calls
   const [isHandRaised, setIsHandRaised] = useState(false); // For participant hand raising
+  
+  // CRITICAL: State to trigger realtime subscription when call ID is set
+  // Using state instead of just ref so the subscription effect re-runs when ID is set
+  const [activeCallId, setActiveCallId] = useState<string | null>(callId || null);
 
   // Role-based permissions
   const isParticipant = role === 'parent' || role === 'student';
@@ -117,10 +121,11 @@ export function VideoCallInterface({
     },
   });
 
-  // Update callIdRef when prop changes
+  // Update callIdRef and activeCallId when prop changes
   useEffect(() => {
     if (callId && !callIdRef.current) {
       callIdRef.current = callId;
+      setActiveCallId(callId);
     }
   }, [callId]);
 
@@ -178,36 +183,46 @@ export function VideoCallInterface({
   };
 
   // Listen for call status changes
+  // CRITICAL: Uses activeCallId STATE (not ref) to properly trigger re-subscription
   useEffect(() => {
-    if (!callIdRef.current || callState === 'ended') return;
+    if (!activeCallId || callState === 'ended') {
+      console.log('[VideoCall] No activeCallId yet or call ended, skipping realtime subscription');
+      return;
+    }
 
-    const currentCallId = callIdRef.current;
+    console.log('[VideoCall] 🔔 Setting up realtime subscription for call:', activeCallId);
 
     const channel = getSupabase()
-      .channel(`video-status-${currentCallId}`)
+      .channel(`video-status-${activeCallId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'active_calls',
-          filter: `call_id=eq.${currentCallId}`,
+          filter: `call_id=eq.${activeCallId}`,
         },
         (payload: { new: { status: string } }) => {
           const newStatus = payload.new?.status;
+          console.log('[VideoCall] 📣 Status changed:', newStatus, 'for call:', activeCallId);
           if (['ended', 'rejected', 'missed'].includes(newStatus)) {
-            cleanupCall();
+            console.log('[VideoCall] Call ended/rejected/missed, cleaning up...');
+            // Cleanup is handled by calling the callback directly
             setCallState('ended');
             onClose();
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[VideoCall] Realtime subscription status:', status, 'for call:', activeCallId);
+      });
 
     return () => {
+      console.log('[VideoCall] Removing realtime subscription for call:', activeCallId);
       getSupabase().removeChannel(channel);
     };
-  }, [callState, onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCallId, callState, onClose]);
 
   // Cleanup call resources
   const cleanupCall = useCallback(() => {
@@ -439,6 +454,9 @@ export function VideoCallInterface({
           if (calleeId) {
             const newCallId = uuidv4(); // Generate proper UUID
             callIdRef.current = newCallId;
+            // CRITICAL: Also set state to trigger realtime subscription
+            setActiveCallId(newCallId);
+            console.log('[VideoCall] 📞 Created call ID:', newCallId);
 
             const { data: callerProfile } = await getSupabase()
               .from('profiles')
@@ -595,8 +613,10 @@ export function VideoCallInterface({
         });
 
         daily.on('left-meeting', () => {
-          console.log('[VideoCall] Left meeting');
+          console.log('[VideoCall] Left meeting - closing call UI');
           setCallState('ended');
+          // CRITICAL: Close the call interface when meeting is left
+          onClose();
         });
 
         daily.on('participant-joined', () => {
@@ -607,6 +627,36 @@ export function VideoCallInterface({
         daily.on('participant-left', () => {
           console.log('[VideoCall] Participant left');
           updateParticipants();
+          
+          // Check if all remote participants have left (1:1 call ended)
+          // Small delay to let Daily.co update its participant list
+          setTimeout(() => {
+            if (dailyRef.current) {
+              const participants = dailyRef.current.participants();
+              const remoteCount = Object.values(participants).filter((p: any) => !p.local).length;
+              console.log('[VideoCall] Remote participants remaining:', remoteCount);
+              
+              if (remoteCount === 0 && callState === 'connected') {
+                console.log('[VideoCall] Last remote participant left - ending call');
+                // Update database and close
+                if (callIdRef.current) {
+                  getSupabase()
+                    .from('active_calls')
+                    .update({ status: 'ended', ended_at: new Date().toISOString() })
+                    .eq('call_id', callIdRef.current)
+                    .then(() => {
+                      cleanupCall();
+                      setCallState('ended');
+                      onClose();
+                    });
+                } else {
+                  cleanupCall();
+                  setCallState('ended');
+                  onClose();
+                }
+              }
+            }
+          }, 500);
         });
 
         daily.on('participant-updated', () => {

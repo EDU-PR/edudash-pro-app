@@ -463,7 +463,27 @@ export class EnhancedBiometricAuth {
         }
       } catch (sessionError) {
         console.error('Error during session restoration:', sessionError);
-        // Continue anyway, as biometric auth was successful
+        // Don't continue - if we can't restore the session, biometric auth is useless
+        // Clear the invalid biometric session so user can sign in fresh
+        await this.removeBiometricSession(sessionData.userId);
+        return {
+          success: false,
+          error: 'Session expired. Please sign in with your email and password.',
+          sessionRestored: false
+        };
+      }
+
+      // CRITICAL: If session was NOT restored, we must return an error
+      // This happens when all refresh tokens are invalid (e.g., after sign-out)
+      if (!sessionRestored) {
+        if (__DEV__) console.log('Failed to restore Supabase session, biometric login cannot proceed');
+        // Clear the invalid biometric session data so user doesn't keep getting failed attempts
+        await this.removeBiometricSession(sessionData.userId);
+        return {
+          success: false,
+          error: 'Your session has expired. Please sign in with your email and password to re-enable biometric login.',
+          sessionRestored: false
+        };
       }
 
       // Update last used time

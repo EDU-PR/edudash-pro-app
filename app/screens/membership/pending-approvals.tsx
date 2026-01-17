@@ -42,20 +42,47 @@ export default function PendingApprovalsScreen() {
   const processMutation = useProcessApproval();
 
   const handleAction = (item: ApprovalRequest, action: 'approve' | 'reject') => {
+    // Custom messages for removal requests
+    const isRemoval = item.type === 'removal';
+    const isMembershipApproval = item.type === 'membership' && item.sourceTable === 'organization_members';
+    
+    let title: string;
+    let message: string;
+    let buttonText: string;
+    
+    if (isRemoval) {
+      title = action === 'approve' ? 'Confirm Removal' : 'Restore Member';
+      message = action === 'approve' 
+        ? `Are you sure you want to remove this member? This action cannot be undone.`
+        : `Are you sure you want to restore this member to active status?`;
+      buttonText = action === 'approve' ? 'Remove Member' : 'Restore';
+    } else if (isMembershipApproval) {
+      title = action === 'approve' ? 'Approve Membership' : 'Reject Membership';
+      message = action === 'approve' 
+        ? `Are you sure you want to approve this member? They will gain full access to the organization.`
+        : `Are you sure you want to reject this membership application?`;
+      buttonText = action === 'approve' ? 'Approve' : 'Reject';
+    } else {
+      title = action === 'approve' ? 'Approve Request' : 'Reject Request';
+      message = `Are you sure you want to ${action} this request?`;
+      buttonText = action === 'approve' ? 'Approve' : 'Reject';
+    }
+    
     Alert.alert(
-      action === 'approve' ? 'Approve Request' : 'Reject Request',
-      `Are you sure you want to ${action} this request?`,
+      title,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: action === 'approve' ? 'Approve' : 'Reject',
-          style: action === 'reject' ? 'destructive' : 'default',
+          text: buttonText,
+          style: action === 'reject' && !isRemoval ? 'destructive' : (action === 'approve' && isRemoval ? 'destructive' : 'default'),
           onPress: () => {
             try {
               processMutation.mutate({ 
                 id: item.id, 
                 action,
                 sourceTable: item.sourceTable || 'join_requests',
+                approvalType: item.type, // Pass the approval type to distinguish removal vs membership
               });
             } catch (error) {
               console.error('[PendingApprovals] Error processing approval:', error);

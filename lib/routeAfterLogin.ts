@@ -216,6 +216,21 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       return;
     }
 
+    // Check if user needs to change password on first login (admin-created accounts)
+    const forcePasswordChange = user?.user_metadata?.force_password_change;
+    if (forcePasswordChange) {
+      console.log('🚦 [ROUTE] User needs to change password on first login, redirecting to change-password screen');
+      track('edudash.auth.force_password_change', {
+        user_id: userId,
+        created_by_admin: user?.user_metadata?.created_by_admin,
+      });
+      clearNavigationLock(userId);
+      clearTimeout(overallTimeout);
+      // Route to the change password screen (we'll create this)
+      router.replace('/screens/change-password-required' as any);
+      return;
+    }
+
     // If there is a pending plan selection (from unauthenticated plan click),
     // prioritize routing to subscription setup and auto-start checkout.
     try {
@@ -342,12 +357,30 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   console.log('[ROUTE DEBUG] Profile capabilities:', profile.capabilities);
   console.log('[ROUTE DEBUG] Profile hasCapability(access_mobile_app):', profile.hasCapability('access_mobile_app'));
   
+  // PRIORITY CHECK #0: Check membership status - pending members go to pending screen
+  // This ensures users can't access dashboards until approved by the President
+  const membershipStatus = (profile as any)?.organization_membership?.membership_status 
+                        || (profile as any)?.membership_status;
+  const isPendingMember = membershipStatus === 'pending' || membershipStatus === 'pending_verification';
+  
+  console.log('[ROUTE DEBUG] Membership status:', membershipStatus, 'isPending:', isPendingMember);
+  
+  // Skip pending check for executive roles who should never be blocked
+  const executiveTypes = ['youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer', 
+                          'ceo', 'president', 'national_admin', 'secretary_general', 'treasurer'];
+  const memberType = (profile as any)?.organization_membership?.member_type;
+  const isExecutive = memberType && executiveTypes.includes(memberType);
+  
+  if (isPendingMember && !isExecutive && role !== 'super_admin') {
+    console.log('[ROUTE DEBUG] User has pending membership - routing to membership-pending screen');
+    return { path: '/screens/membership/membership-pending' };
+  }
+  
   // Check for organization membership (null means independent user)
   const hasOrganization = !!(profile.organization_id || (profile as any).preschool_id);
   const isIndependentUser = !hasOrganization;
   
-  // Get member type for SOA routing decisions
-  const memberType = (profile as any)?.organization_membership?.member_type;
+  // Get member role for SOA routing decisions (memberType already declared above)
   const memberRole = (profile as any)?.organization_membership?.role;
   
   console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
@@ -427,10 +460,16 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     
-    // Other Youth Wing members (youth_member, youth_coordinator, youth_facilitator, youth_mentor)
-    if (memberType?.startsWith('youth_')) {
-      console.log('[ROUTE DEBUG] Youth wing member detected - routing to youth dashboard');
+    // Youth Wing coordinators/facilitators/mentors - route to youth president dashboard (they help manage)
+    if (memberType === 'youth_coordinator' || memberType === 'youth_facilitator' || memberType === 'youth_mentor') {
+      console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
+    }
+    
+    // Regular Youth Wing members (youth_member) - route to learner dashboard
+    if (memberType === 'youth_member') {
+      console.log('[ROUTE DEBUG] Youth member detected - routing to learner dashboard');
+      return { path: '/screens/learner-dashboard' };
     }
     
     // Women's Wing - all members route to women's dashboard

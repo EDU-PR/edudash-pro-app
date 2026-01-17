@@ -144,7 +144,7 @@ export interface OrganizationMember {
   notes?: string;
   
   membership_tier: 'standard' | 'premium' | 'vip' | 'honorary';
-  membership_status: 'pending' | 'active' | 'suspended' | 'expired' | 'cancelled';
+  membership_status: 'pending' | 'pending_verification' | 'active' | 'suspended' | 'expired' | 'cancelled' | 'pending_removal' | 'revoked';
   join_date?: string; // Database column name
   joined_date: string; // Mapped for display (alias of join_date)
   expiry_date?: string;
@@ -312,9 +312,12 @@ export const MEMBERSHIP_TIER_LABELS: Record<string, string> = {
 export const STATUS_COLORS: Record<string, string> = {
   active: '#10B981',
   pending: '#F59E0B',
+  pending_verification: '#F59E0B',
   suspended: '#EF4444',
   expired: '#6B7280',
   cancelled: '#374151',
+  pending_removal: '#DC2626',
+  revoked: '#7F1D1D',
 };
 
 // Type aliases for backward compatibility

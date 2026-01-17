@@ -213,10 +213,24 @@ export function WhatsAppStyleIncomingCall({
     let systemRingtoneStarted = false;
     
     const playRingtone = async () => {
-      // STRATEGY 1: Try expo-audio with preloaded asset (most reliable)
+      // STRATEGY 1: Try InCallManager system/device ringtone FIRST (most natural sound)
+      // This uses the device's default ringtone that users are familiar with
+      if (InCallManager && !ringtoneStarted) {
+        try {
+          console.log('[IncomingCall] 📱 Trying InCallManager device default ringtone (primary)...');
+          InCallManager.startRingtone('_DEFAULT_');
+          systemRingtoneStarted = true;
+          ringtoneStarted = true;
+          console.log('[IncomingCall] ✅ Device default ringtone started via InCallManager');
+        } catch (error) {
+          console.error('[IncomingCall] ❌ InCallManager ringtone failed:', error);
+        }
+      }
+      
+      // STRATEGY 2: Try expo-audio with preloaded custom asset (fallback if InCallManager unavailable)
       if (RINGTONE_ASSET && !ringtoneStarted) {
         try {
-          console.log('[IncomingCall] 📱 Trying expo-audio with preloaded asset...');
+          console.log('[IncomingCall] 📱 Trying expo-audio with preloaded asset (fallback)...');
           
           // Set audio mode for ringtone - should be loud and through speaker
           await setAudioModeAsync({
@@ -244,19 +258,6 @@ export function WhatsAppStyleIncomingCall({
         } catch (error) {
           console.error('[IncomingCall] ❌ Expo-audio failed:', error);
           soundRef.current = null;
-        }
-      }
-      
-      // STRATEGY 2: Try InCallManager system ringtone (fallback)
-      if (!ringtoneStarted && InCallManager) {
-        try {
-          console.log('[IncomingCall] 📱 Trying InCallManager system ringtone...');
-          InCallManager.startRingtone('_DEFAULT_');
-          systemRingtoneStarted = true;
-          ringtoneStarted = true;
-          console.log('[IncomingCall] ✅ System ringtone started via InCallManager');
-        } catch (error) {
-          console.error('[IncomingCall] ❌ InCallManager ringtone failed:', error);
         }
       }
       

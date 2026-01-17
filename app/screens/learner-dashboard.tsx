@@ -280,6 +280,12 @@ export default function LearnerDashboard() {
                 onPress: () => router.push('/screens/learner/programs'),
               },
               {
+                icon: 'search-outline',
+                title: t('learner.browse_programs', { defaultValue: 'Browse Programs' }),
+                subtitle: t('learner.find_enroll', { defaultValue: 'Find & enroll in courses' }),
+                onPress: () => router.push('/screens/learner/browse-programs'),
+              },
+              {
                 icon: 'document-text-outline',
                 title: t('learner.submissions', { defaultValue: 'Submissions' }),
                 subtitle: t('learner.view_assignments', { defaultValue: 'View assignments' }),
@@ -400,9 +406,17 @@ export default function LearnerDashboard() {
               </Text>
               <TouchableOpacity
                 style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/register')}
+                onPress={() => router.push('/screens/learner/browse-programs')}
               >
                 <Text style={styles.primaryButtonText}>{t('learner.browse_programs', { defaultValue: 'Browse Programs' })}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, { borderColor: theme.border }]}
+                onPress={() => router.push('/screens/learner/enroll-by-program-code')}
+              >
+                <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+                  {t('learner.have_code', { defaultValue: 'Have a program code?' })}
+                </Text>
               </TouchableOpacity>
             </View>
           </Card>
@@ -417,6 +431,7 @@ export default function LearnerDashboard() {
         navItems={[
           { id: 'home', label: t('learner.dashboard_title', { defaultValue: 'Dashboard' }), icon: 'home', route: '/screens/learner-dashboard' },
           { id: 'programs', label: t('learner.my_programs', { defaultValue: 'My Programs' }), icon: 'school', route: '/screens/learner/programs' },
+          { id: 'browse', label: t('learner.browse_programs', { defaultValue: 'Browse Programs' }), icon: 'search', route: '/screens/learner/browse-programs' },
           { id: 'assignments', label: t('learner.submissions', { defaultValue: 'Assignments' }), icon: 'document-text', route: '/screens/learner/submissions' },
           { id: 'ai-help', label: t('learner.assignment_help', { defaultValue: 'Assignment Help' }), icon: 'help-circle', route: '/screens/ai-homework-helper' },
           { id: 'portfolio', label: t('learner.portfolio', { defaultValue: 'Portfolio' }), icon: 'folder', route: '/screens/learner/portfolio' },

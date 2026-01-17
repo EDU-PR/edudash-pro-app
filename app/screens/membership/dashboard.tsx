@@ -47,11 +47,11 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Regional Manager Quick Actions
 const REGIONAL_QUICK_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
-  { id: '3', label: 'Invite Members', icon: 'person-add', color: '#06B6D4', route: '/screens/membership/regional-invite-code' },
-  { id: '4', label: 'Approvals', icon: 'checkmark-circle', color: '#F59E0B', route: '/screens/membership/pending-approvals' },
-  { id: '5', label: 'Events', icon: 'calendar', color: '#8B5CF6', route: '/screens/membership/events' },
-  { id: '6', label: 'Reports', icon: 'bar-chart', color: '#EF4444', route: '/screens/membership/reports' },
+  { id: '2', label: 'Groups', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/groups' },
+  { id: '3', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
+  { id: '4', label: 'Invite Members', icon: 'person-add', color: '#06B6D4', route: '/screens/membership/regional-invite-code' },
+  { id: '5', label: 'Approvals', icon: 'checkmark-circle', color: '#F59E0B', route: '/screens/membership/pending-approvals' },
+  { id: '6', label: 'Events', icon: 'calendar', color: '#9333EA', route: '/screens/membership/events' },
 ];
 
 export default function OrganizationDashboard() {

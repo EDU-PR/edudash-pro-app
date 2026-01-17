@@ -43,14 +43,15 @@ interface SecretaryStats {
   totalRegions: number;
 }
 
-// Youth Secretary Actions - Focused on documentation and administration
+// Youth Secretary Actions - Focused on documentation, administration, and recruitment
 const YOUTH_SECRETARY_ACTIONS = [
   { id: '1', label: 'Members', icon: 'people', color: '#3B82F6', route: '/screens/membership/members-list' },
-  { id: '2', label: 'Messages', icon: 'chatbubbles', color: '#10B981', route: '/screens/membership/messages' },
-  { id: '3', label: 'Documents', icon: 'document-text', color: '#8B5CF6', route: '/screens/membership/documents' },
-  { id: '4', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
-  { id: '5', label: 'Announcements', icon: 'megaphone', color: '#F59E0B', route: '/screens/membership/broadcast' },
-  { id: '6', label: 'Approvals', icon: 'checkmark-circle', color: '#EF4444', route: '/screens/membership/pending-approvals' },
+  { id: '2', label: 'Groups', icon: 'people-circle', color: '#8B5CF6', route: '/screens/membership/groups' },
+  { id: '3', label: 'Recruit', icon: 'person-add', color: '#10B981', route: '/screens/membership/youth-invite-code' },
+  { id: '4', label: 'Documents', icon: 'document-text', color: '#6366F1', route: '/screens/membership/documents' },
+  { id: '5', label: 'Events', icon: 'calendar', color: '#06B6D4', route: '/screens/membership/events' },
+  { id: '6', label: 'Announce', icon: 'megaphone', color: '#F59E0B', route: '/screens/membership/broadcast' },
+  { id: '7', label: 'Messages', icon: 'chatbubbles', color: '#EF4444', route: '/screens/membership/messages' },
 ];
 
 export default function YouthSecretaryDashboard() {

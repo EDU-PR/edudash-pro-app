@@ -3,14 +3,42 @@ import { signOut } from '@/lib/sessionManager';
 import { Platform } from 'react-native';
 import { deactivateCurrentUserTokens } from './pushTokenUtils';
 
-// Prevent duplicate sign-out calls
+// Prevent duplicate sign-out calls with timestamp tracking
 let isSigningOut = false;
+let signOutStartTime = 0;
+const STALE_SIGNOUT_THRESHOLD = 10000; // Consider sign-out stale after 10 seconds
 
 // Timeout constants for sign-out operations
 const TOKEN_DEACTIVATION_TIMEOUT = 3000; // 3 seconds (reduced from 5)
 const SIGNOUT_TIMEOUT = 3000; // 3 seconds (reduced from 5)
 const OVERALL_SIGNOUT_TIMEOUT = 8000; // 8 seconds max total (reduced from 15)
 const FORCE_SIGNOUT_DELAY = 5000; // Show force button after 5 seconds
+
+/**
+ * Force reset the sign-out state (used when stuck)
+ */
+export function resetSignOutState(): void {
+  console.log('[authActions] Manually resetting sign-out state');
+  isSigningOut = false;
+  signOutStartTime = 0;
+}
+
+/**
+ * Check if sign-out is currently in progress
+ */
+export function isSignOutInProgress(): boolean {
+  // If sign-out has been running for too long, consider it stale and allow retry
+  if (isSigningOut && signOutStartTime > 0) {
+    const elapsed = Date.now() - signOutStartTime;
+    if (elapsed > STALE_SIGNOUT_THRESHOLD) {
+      console.warn('[authActions] Sign-out appears stale, resetting flag');
+      isSigningOut = false;
+      signOutStartTime = 0;
+      return false;
+    }
+  }
+  return isSigningOut;
+}
 
 /**
  * Helper to wrap a promise with a timeout
@@ -52,11 +80,13 @@ function forceNavigate(targetRoute: string): void {
  * Includes timeout protection to prevent hanging
  */
 export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: boolean; redirectTo?: string } | any): Promise<void> {
-  if (isSigningOut) {
+  // Check if sign-out is in progress, but also handle stale sign-outs
+  if (isSignOutInProgress()) {
     console.log('[authActions] Sign-out already in progress, skipping...');
     return;
   }
   isSigningOut = true;
+  signOutStartTime = Date.now();
   
   // If invoked as onPress handler, first argument will be an event; ignore it
   const options = (optionsOrEvent && typeof optionsOrEvent === 'object' && (
@@ -187,12 +217,11 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
     }
   } finally {
-    // Reset flag after a longer delay to ensure all async operations complete
-    // This prevents race conditions when immediately signing in with a new account
-    setTimeout(() => {
-      isSigningOut = false;
-      console.log('[authActions] Sign-out flag reset, ready for new sign-in');
-    }, 500);
+    // Reset flag immediately - no delay needed since we use timestamp tracking
+    // This allows immediate sign-in after sign-out completes
+    isSigningOut = false;
+    signOutStartTime = 0;
+    console.log('[authActions] Sign-out flag reset, ready for new sign-in');
   }
 }
 

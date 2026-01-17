@@ -5,16 +5,18 @@
  * Data Sources:
  * - join_requests table (membership approvals)
  * - organization_budgets table (budget approvals)
+ * - organization_members table (pending registrations, removal requests)
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { MembershipNotificationService } from '@/services/membership/MembershipNotificationService';
 
 export interface ApprovalRequest {
   id: string;
   title: string;
   description: string;
-  type: 'budget' | 'event' | 'membership' | 'report';
+  type: 'budget' | 'event' | 'membership' | 'report' | 'removal';
   requestedBy: string;
   requestedAt: Date;
   amount?: number;
@@ -23,7 +25,7 @@ export interface ApprovalRequest {
   processedAt?: Date;
   processedBy?: string;
   // Internal tracking
-  sourceTable?: 'join_requests' | 'organization_budgets';
+  sourceTable?: 'join_requests' | 'organization_budgets' | 'organization_members';
   sourceId?: string;
 }
 
@@ -188,6 +190,102 @@ export function usePendingApprovals(tab: 'pending' | 'history' = 'pending') {
         }
       }
 
+      // 3. Fetch pending member removal requests (president approval needed)
+      if (tab === 'pending') {
+        const { data: pendingRemovals, error: removalError } = await supabase
+          .from('organization_members')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            email,
+            member_type,
+            membership_status,
+            updated_at,
+            region_id,
+            organization_regions (
+              name
+            )
+          `)
+          .eq('organization_id', organizationId)
+          .eq('membership_status', 'pending_removal')
+          .order('updated_at', { ascending: false })
+          .limit(50);
+
+        if (!removalError && pendingRemovals) {
+          for (const member of pendingRemovals) {
+            const memberName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'Unknown Member';
+            const regionData = Array.isArray(member.organization_regions) 
+              ? member.organization_regions[0] 
+              : member.organization_regions;
+            const regionName = regionData?.name || '';
+            
+            requests.push({
+              id: member.id,
+              title: `Member Removal: ${memberName}`,
+              description: `Request to remove ${memberName}${regionName ? ` from ${regionName}` : ''}`,
+              type: 'removal',
+              requestedBy: 'Secretary', // We don't track who requested removal yet
+              requestedAt: new Date(member.updated_at),
+              isUrgent: true, // Removal requests are always urgent
+              status: 'pending',
+              sourceTable: 'organization_members',
+              sourceId: member.id,
+            });
+          }
+        }
+        
+        // 4. Fetch pending membership registrations (new members awaiting approval)
+        const { data: pendingRegistrations, error: registrationError } = await supabase
+          .from('organization_members')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            email,
+            member_type,
+            membership_status,
+            created_at,
+            region_id,
+            organization_regions (
+              name
+            )
+          `)
+          .eq('organization_id', organizationId)
+          .in('membership_status', ['pending', 'pending_verification'])
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (!registrationError && pendingRegistrations) {
+          for (const member of pendingRegistrations) {
+            const memberName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'New Applicant';
+            const regionData = Array.isArray(member.organization_regions) 
+              ? member.organization_regions[0] 
+              : member.organization_regions;
+            const regionName = regionData?.name || '';
+            const roleDisplay = member.member_type?.replace(/_/g, ' ') || 'member';
+            
+            // Calculate urgency: pending > 3 days
+            const createdAt = new Date(member.created_at);
+            const daysPending = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            const isUrgent = daysPending > 3;
+            
+            requests.push({
+              id: member.id,
+              title: `New Member: ${memberName}`,
+              description: `${memberName} is requesting to join as ${roleDisplay}${regionName ? ` in ${regionName}` : ''}`,
+              type: 'membership',
+              requestedBy: memberName,
+              requestedAt: createdAt,
+              isUrgent,
+              status: 'pending',
+              sourceTable: 'organization_members',
+              sourceId: member.id,
+            });
+          }
+        }
+      }
+
       // Sort all requests by date (newest first)
       requests.sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
 
@@ -259,9 +357,31 @@ export function useApprovalStats() {
         .in('status', ['proposed', 'draft'])
         .gte('budgeted_amount', 10000);
 
+      // Count pending removal requests (always urgent)
+      const { count: pendingRemovalCount } = await supabase
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('membership_status', 'pending_removal');
+
+      // Count pending membership registrations (new members awaiting approval)
+      const { count: pendingRegistrationCount } = await supabase
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .in('membership_status', ['pending', 'pending_verification']);
+
+      // Count urgent pending registrations (> 3 days)
+      const { count: urgentRegistrationCount } = await supabase
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .in('membership_status', ['pending', 'pending_verification'])
+        .lte('created_at', threeDaysAgo);
+
       return {
-        pending: (pendingJoinCount || 0) + (pendingBudgetCount || 0),
-        urgent: (urgentJoinCount || 0) + (urgentBudgetCount || 0),
+        pending: (pendingJoinCount || 0) + (pendingBudgetCount || 0) + (pendingRemovalCount || 0) + (pendingRegistrationCount || 0),
+        urgent: (urgentJoinCount || 0) + (urgentBudgetCount || 0) + (pendingRemovalCount || 0) + (urgentRegistrationCount || 0),
         processed: (processedJoinCount || 0) + (processedBudgetCount || 0),
       };
     },
@@ -279,11 +399,13 @@ export function useProcessApproval() {
       id, 
       action,
       sourceTable = 'join_requests',
+      approvalType = 'membership',
       notes 
     }: { 
       id: string; 
       action: 'approve' | 'reject';
-      sourceTable?: 'join_requests' | 'organization_budgets';
+      sourceTable?: 'join_requests' | 'organization_budgets' | 'organization_members';
+      approvalType?: 'membership' | 'removal' | 'budget' | 'event' | 'report';
       notes?: string;
     }) => {
       const supabase = assertSupabase();
@@ -335,6 +457,63 @@ export function useProcessApproval() {
           .eq('id', id);
         
         if (error) throw error;
+      } else if (sourceTable === 'organization_members') {
+        // Handle organization_members approval based on type
+        // For removal: approve = 'revoked', reject = 'active'
+        // For membership: approve = 'active', reject = 'revoked'
+        let newStatus: string;
+        
+        if (approvalType === 'removal') {
+          // Removal request: approve = remove member, reject = restore member
+          newStatus = action === 'approve' ? 'revoked' : 'active';
+        } else {
+          // Membership request: approve = activate member, reject = revoke membership
+          newStatus = action === 'approve' ? 'active' : 'revoked';
+        }
+        
+        // Fetch member details before updating for notifications
+        const { data: memberData } = await supabase
+          .from('organization_members')
+          .select('user_id, first_name, last_name, member_type, organization_id, organizations(name)')
+          .eq('id', id)
+          .single();
+        
+        const { error } = await supabase
+          .from('organization_members')
+          .update({
+            membership_status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+        
+        if (error) throw error;
+        
+        // Send notifications for membership approvals
+        if (memberData?.user_id) {
+          const memberName = `${memberData.first_name || ''} ${memberData.last_name || ''}`.trim();
+          const orgName = (memberData.organizations as any)?.name || 'the organization';
+          const memberType = memberData.member_type || 'member';
+          
+          if (approvalType === 'membership') {
+            // Notify member of approval/rejection
+            if (action === 'approve') {
+              MembershipNotificationService.notifyMemberApproved(
+                memberData.user_id,
+                memberName,
+                orgName,
+                memberType
+              ).catch(err => console.warn('[usePendingApprovals] Failed to notify member of approval:', err));
+            } else {
+              MembershipNotificationService.notifyMemberRejected(
+                memberData.user_id,
+                memberName,
+                orgName,
+                notes
+              ).catch(err => console.warn('[usePendingApprovals] Failed to notify member of rejection:', err));
+            }
+          }
+          // Note: Removal notifications are handled in useMemberDetail.ts
+        }
       }
 
       return { id, status: action === 'approve' ? 'approved' : 'rejected' };
@@ -412,4 +591,5 @@ export const APPROVAL_TYPE_CONFIG = {
   event: { icon: 'calendar-outline', color: '#6366F1', label: 'Event Proposal' },
   membership: { icon: 'people-outline', color: '#F59E0B', label: 'Membership' },
   report: { icon: 'document-text-outline', color: '#8B5CF6', label: 'Report' },
+  removal: { icon: 'person-remove-outline', color: '#EF4444', label: 'Member Removal' },
 } as const;

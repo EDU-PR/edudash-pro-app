@@ -47,6 +47,7 @@ interface YouthInviteCode {
   created_at: string;
   requested_role?: string;
   temp_password?: string;
+  region_id?: string | null;
 }
 
 // All roles that can be assigned via invite by Youth President/Secretary
@@ -140,6 +141,7 @@ export default function YouthInviteCodeScreen() {
         created_at: r.created_at,
         requested_role: r.requested_role || 'youth_member',
         temp_password: r.temp_password || undefined, // Include temporary password if available
+        region_id: r.region_id || null, // Include region_id for display
       }));
       setCodes(mapped);
     } catch (e: any) {
@@ -612,6 +614,11 @@ export default function YouthInviteCodeScreen() {
                   // Allow deleting any code (active, inactive, or expired)
                   const canDelete = true;
                   const roleLabel = YOUTH_ROLES.find(r => r.id === item.requested_role)?.label || item.requested_role || 'Youth Member';
+                  // Find region name from regions array
+                  const regionInfo = item.region_id 
+                    ? regions.find(r => r.id === item.region_id)
+                    : null;
+                  const regionLabel = regionInfo?.name || regionInfo?.code || null;
                   
                   return (
                     <View key={item.id} style={[styles.card, (isInactive || expired) && styles.cardInactive]}>
@@ -644,12 +651,18 @@ export default function YouthInviteCodeScreen() {
                         </View>
                       </View>
                       
-                      {/* Role & Description */}
+                      {/* Role & Region & Description */}
                       <View style={styles.metaRow}>
                         <View style={[styles.roleTag, { backgroundColor: `${theme.primary}20` }]}>
                           <Ionicons name="person" size={12} color={theme.primary} />
                           <Text style={[styles.roleTagText, { color: theme.primary }]}>{roleLabel}</Text>
                         </View>
+                        {regionLabel && (
+                          <View style={[styles.roleTag, { backgroundColor: '#10B98120', marginLeft: 6 }]}>
+                            <Ionicons name="location" size={12} color="#10B981" />
+                            <Text style={[styles.roleTagText, { color: '#10B981' }]}>{regionLabel}</Text>
+                          </View>
+                        )}
                         <Text style={[styles.description, { color: theme.textSecondary }]}>• {item.description}</Text>
                       </View>
                       

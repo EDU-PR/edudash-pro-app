@@ -127,37 +127,69 @@ export function setupForegroundEventListener(): () => void {
   const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
     const EventType = require('@notifee/react-native').EventType;
     
-    console.log('[CallBackgroundHandler] Foreground event:', type, 'action:', detail?.pressAction?.id);
+    console.log('[CallBackgroundHandler] Foreground event:', type, 'action:', detail?.pressAction?.id, 'notification:', detail?.notification?.id);
     
-    // Handle "End Call" action press from notification
+    // Handle "End Call" action press from ongoing call notification
     if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'end-call') {
       console.log('[CallBackgroundHandler] 🛑 End call action pressed from notification (foreground)');
-      // Emit event so CallProvider can terminate the call
       DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.END_CALL);
-      // Stop the foreground service
       notifee?.stopForegroundService();
+    }
+    
+    // Handle "Answer" action from INCOMING call notification
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'answer') {
+      console.log('[CallBackgroundHandler] 📞 Answer action pressed (foreground)');
+      const callData = detail?.notification?.data;
+      if (callData?.call_id) {
+        // Emit event with call data for CallProvider to handle
+        DeviceEventEmitter.emit('call:notification:answer', {
+          call_id: callData.call_id,
+          caller_id: callData.caller_id,
+          caller_name: callData.caller_name,
+          call_type: callData.call_type,
+          meeting_url: callData.meeting_url,
+        });
+      }
+      // Cancel the incoming call notification
+      if (detail?.notification?.id) {
+        notifee?.cancelNotification(detail.notification.id);
+      }
+    }
+    
+    // Handle "Decline" action from INCOMING call notification
+    if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'decline') {
+      console.log('[CallBackgroundHandler] ❌ Decline action pressed (foreground)');
+      const callData = detail?.notification?.data;
+      if (callData?.call_id) {
+        // Emit event with call data for CallProvider to handle
+        DeviceEventEmitter.emit('call:notification:decline', {
+          call_id: callData.call_id,
+        });
+      }
+      // Cancel the incoming call notification
+      if (detail?.notification?.id) {
+        notifee?.cancelNotification(detail.notification.id);
+      }
+      // Stop vibration
+      const { Vibration } = require('react-native');
+      Vibration.cancel();
     }
     
     // Handle "Mute" action press from notification
     if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'mute') {
       console.log('[CallBackgroundHandler] 🔇 Mute action pressed from notification (foreground)');
-      // Emit event so CallProvider can toggle mute
       DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.MUTE);
-      // DON'T stop the service - just toggle mute
     }
     
     // Handle "Speaker" action press from notification
     if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'speaker') {
       console.log('[CallBackgroundHandler] 🔊 Speaker action pressed from notification (foreground)');
-      // Emit event so CallProvider can toggle speaker
       DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.SPEAKER);
-      // DON'T stop the service - just toggle speaker
     }
     
     // Handle notification body press - open call screen
     if (type === EventType.PRESS && detail?.notification?.id === CALL_NOTIFICATION_ID) {
       console.log('[CallBackgroundHandler] Notification pressed - returning to call');
-      // App will come to foreground automatically via launchActivity: 'default'
     }
   });
   
@@ -182,37 +214,98 @@ export function registerCallNotificationBackgroundHandler(): void {
   try {
     notifee.onBackgroundEvent(async ({ type, detail }) => {
       const EventType = require('@notifee/react-native').EventType;
-      console.log('[CallBackgroundHandler] Background event:', type, detail?.notification?.id);
+      console.log('[CallBackgroundHandler] Background event:', type, 'action:', detail?.pressAction?.id, 'notification:', detail?.notification?.id);
       
-      // Handle "End Call" action from notification when app is backgrounded
+      // Handle "End Call" action from ongoing call notification
       if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'end-call') {
         console.log('[CallBackgroundHandler] End call action pressed (background)');
-        // Emit event so CallProvider can terminate the call when app returns
         DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.END_CALL);
-        // Stop the foreground service - this removes the ongoing notification
         await notifee?.stopForegroundService();
+      }
+      
+      // Handle "Answer" action from INCOMING call notification
+      if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'answer') {
+        console.log('[CallBackgroundHandler] 📞 Answer action pressed (background)');
+        const callData = detail?.notification?.data;
+        if (callData?.call_id) {
+          // Save pending call for CallProvider to pick up when app opens
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          await AsyncStorage.setItem('edudash_pending_call', JSON.stringify({
+            type: 'incoming_call',
+            call_id: callData.call_id,
+            caller_id: callData.caller_id,
+            caller_name: callData.caller_name,
+            call_type: callData.call_type,
+            meeting_url: callData.meeting_url,
+            action: 'answer', // Indicate user pressed answer
+            timestamp: Date.now(),
+          }));
+          console.log('[CallBackgroundHandler] ✅ Pending call saved for answer');
+        }
+        // Cancel the incoming call notification
+        if (detail?.notification?.id) {
+          await notifee?.cancelNotification(detail.notification.id);
+        }
+        // App will open via launchActivity: 'default' in the pressAction
+      }
+      
+      // Handle "Decline" action from INCOMING call notification
+      if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'decline') {
+        console.log('[CallBackgroundHandler] ❌ Decline action pressed (background)');
+        const callData = detail?.notification?.data;
+        if (callData?.call_id) {
+          // Update call status to rejected in database
+          try {
+            const { assertSupabase } = require('@/lib/supabase');
+            const supabase = assertSupabase();
+            await supabase
+              .from('active_calls')
+              .update({ status: 'rejected', ended_at: new Date().toISOString() })
+              .eq('call_id', callData.call_id);
+            console.log('[CallBackgroundHandler] ✅ Call rejected in database');
+          } catch (e) {
+            console.warn('[CallBackgroundHandler] Failed to update call status:', e);
+          }
+        }
+        // Cancel the incoming call notification
+        if (detail?.notification?.id) {
+          await notifee?.cancelNotification(detail.notification.id);
+        }
+        // Stop vibration
+        const { Vibration } = require('react-native');
+        Vibration.cancel();
       }
       
       // Handle "Mute" action from notification when app is backgrounded
       if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'mute') {
         console.log('[CallBackgroundHandler] Mute action pressed (background)');
-        // Emit event so CallProvider can toggle mute
         DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.MUTE);
-        // DON'T stop the service - mute just toggles audio
       }
       
       // Handle "Speaker" action from notification when app is backgrounded
       if (type === EventType.ACTION_PRESS && detail?.pressAction?.id === 'speaker') {
         console.log('[CallBackgroundHandler] Speaker action pressed (background)');
-        // Emit event so CallProvider can toggle speaker
         DeviceEventEmitter.emit(CALL_NOTIFICATION_EVENTS.SPEAKER);
-        // DON'T stop the service - speaker just toggles audio routing
       }
       
       // Handle notification press - return to app/call screen
       if (type === EventType.PRESS) {
         console.log('[CallBackgroundHandler] Notification pressed - app will be opened');
-        // App will open automatically via pressAction.launchActivity: 'default'
+        // If this is an incoming call notification, save it for CallProvider
+        const callData = detail?.notification?.data;
+        if (callData?.type === 'incoming_call' && callData?.call_id) {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          await AsyncStorage.setItem('edudash_pending_call', JSON.stringify({
+            type: 'incoming_call',
+            call_id: callData.call_id,
+            caller_id: callData.caller_id,
+            caller_name: callData.caller_name,
+            call_type: callData.call_type,
+            meeting_url: callData.meeting_url,
+            action: 'tap', // Indicate user tapped the notification
+            timestamp: Date.now(),
+          }));
+        }
       }
     });
     console.log('[CallBackgroundHandler] ✅ Background event handler registered');
