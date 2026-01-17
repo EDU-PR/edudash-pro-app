@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import EnhancedRegistrationForm from '@/components/auth/EnhancedRegistrationForm';
 import { EnhancedRegistration } from '@/types/auth-enhanced';
 import { assertSupabase } from '@/lib/supabase';
+
+const ACTIVE_ORG_KEY = '@active_organization';
 
 export default function ParentRegistrationScreen() {
   const { theme } = useTheme();
@@ -68,30 +71,114 @@ export default function ParentRegistrationScreen() {
 
   const handleRegistrationSuccess = async (registration: EnhancedRegistration) => {
     try {
-      // Create user account with Supabase Auth
-      const { data: authData, error: authError } = await assertSupabase().auth.signUp({
-        email: registration.email,
-        password: registration.password,
-        options: {
-          emailRedirectTo: 'https://www.edudashpro.org.za/landing?flow=email-confirm',
-          data: {
-            first_name: registration.firstName,
-            last_name: registration.lastName,
-            phone: registration.phone,
-            role: 'parent',
+      const supabase = assertSupabase();
+      
+      // Check if user is already logged in
+      let { data: { user } } = await supabase.auth.getUser();
+      let isExistingUser = false;
+      
+      // If not logged in, try to create a new account
+      if (!user) {
+        console.log('[ParentRegistration] Creating new user account...');
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: registration.email,
+          password: registration.password,
+          options: {
+            emailRedirectTo: 'https://www.edudashpro.org.za/landing?flow=email-confirm',
+            data: {
+              first_name: registration.firstName,
+              last_name: registration.lastName,
+              phone: registration.phone,
+              role: 'parent',
+            }
+          }
+        });
+
+        if (authError) {
+          console.error('[ParentRegistration] Sign up error:', authError);
+          
+          // Check various "already exists" error patterns
+          const errorMsg = authError.message?.toLowerCase() || '';
+          const isAlreadyRegistered = 
+            errorMsg.includes('already registered') ||
+            errorMsg.includes('already been registered') ||
+            errorMsg.includes('user already exists') ||
+            errorMsg.includes('email already') ||
+            authError.status === 400;
+            
+          if (isAlreadyRegistered) {
+            // Try to sign in with the provided credentials
+            console.log('[ParentRegistration] User already exists, attempting sign in...');
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              email: registration.email,
+              password: registration.password,
+            });
+            
+            if (signInError) {
+              console.error('[ParentRegistration] Sign in failed:', signInError);
+              Alert.alert(
+                'Account Exists',
+                'An account with this email already exists. Please sign in with your existing password to complete parent registration.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Sign In', 
+                    onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(registration.email)}&returnTo=/screens/parent-registration${invitationCode ? `?invitationCode=${invitationCode}` : ''}`)
+                  }
+                ]
+              );
+              return;
+            }
+            
+            // Sign in successful! Continue with parent registration
+            if (signInData.user) {
+              console.log('[ParentRegistration] Sign in successful, continuing with parent registration');
+              user = signInData.user;
+              isExistingUser = true;
+            } else {
+              Alert.alert('Error', 'Sign in succeeded but no user returned. Please try again.');
+              return;
+            }
+          } else {
+            throw authError;
+          }
+        } else {
+          // Sign up succeeded
+          user = authData.user;
+          
+          // If confirmations are enabled, Supabase returns no session until email is verified
+          if (!authData.session) {
+            // Still try to redeem invitation code before redirecting
+            const parentReg = registration as any;
+            const codeToUse = invitationCode || parentReg.invitationToken;
+            
+            if (codeToUse && user) {
+              try {
+                const fullName = `${registration.firstName} ${registration.lastName}`.trim();
+                await supabase.rpc('use_invitation_code', {
+                  p_auth_user_id: user.id,
+                  p_code: codeToUse.trim().toUpperCase(),
+                  p_name: fullName,
+                  p_phone: registration.phone || null,
+                });
+                console.log('[ParentRegistration] Invitation code redeemed (pending email verification)');
+              } catch (codeError) {
+                console.error('[ParentRegistration] Invitation code redemption error:', codeError);
+              }
+            }
+            
+            router.replace({
+              pathname: '/screens/verify-your-email',
+              params: { email: registration.email }
+            } as any);
+            return;
           }
         }
-      });
-
-      if (authError) throw authError;
-
-      // If confirmations are enabled, Supabase returns no session until the email is verified
-      if (!authData.session) {
-        router.replace({
-          pathname: '/screens/verify-your-email',
-          params: { email: registration.email }
-        } as any);
-        return;
+      } else {
+        // User was already logged in
+        isExistingUser = true;
+        console.log('[ParentRegistration] User already logged in:', user.email);
       }
 
       // Get invitation code from URL params or from the form
@@ -99,34 +186,78 @@ export default function ParentRegistrationScreen() {
       const codeToUse = invitationCode || parentReg.invitationToken;
 
       // If we have an invitation code, redeem it to link the parent to the school
-      if (codeToUse && authData.user) {
+      if (codeToUse && user) {
         try {
           const fullName = `${registration.firstName} ${registration.lastName}`.trim();
-          const { error: redeemError } = await assertSupabase()
+          const { error: redeemError } = await supabase
             .rpc('use_invitation_code', {
-              p_auth_user_id: authData.user.id,
+              p_auth_user_id: user.id,
               p_code: codeToUse.trim().toUpperCase(),
               p_name: fullName,
               p_phone: registration.phone || null,
             });
 
           if (redeemError) {
-            console.error('Failed to redeem invitation code:', redeemError);
+            console.error('[ParentRegistration] Failed to redeem invitation code:', redeemError);
             Alert.alert(
-              'Registration Successful',
-              'Your account was created, but we couldn\'t link you to the school. You can join later using the invitation code.',
+              isExistingUser ? 'Linked to School' : 'Registration Successful',
+              isExistingUser 
+                ? 'We couldn\'t link you to the school automatically. You can try joining again using the invitation code.'
+                : 'Your account was created, but we couldn\'t link you to the school. You can join later using the invitation code.',
               [{ text: 'OK' }]
             );
           } else {
+            // Successfully linked to school - set this school as active organization
+            // This ensures the user sees the parent dashboard, not their other org's dashboard
+            if (organizationId) {
+              try {
+                // Get school name for display
+                const { data: schoolData } = await supabase
+                  .from('preschools')
+                  .select('name')
+                  .eq('id', organizationId)
+                  .single();
+                
+                // Update profile to set this as the active preschool
+                await supabase
+                  .from('profiles')
+                  .update({ 
+                    preschool_id: organizationId,
+                    role: 'parent', // Set role to parent for this context
+                  })
+                  .eq('id', user.id);
+                
+                // Store active organization in AsyncStorage
+                await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
+                  id: organizationId,
+                  name: schoolData?.name || 'School',
+                  type: 'preschool',
+                }));
+                
+                console.log('[ParentRegistration] Set active organization to preschool:', organizationId);
+              } catch (activeOrgError) {
+                console.error('[ParentRegistration] Failed to set active organization:', activeOrgError);
+                // Non-fatal - continue with navigation
+              }
+            }
+            
             Alert.alert(
               'Success!',
-              'Your account has been created and linked to the school.',
+              isExistingUser 
+                ? 'You have been linked to the school as a parent.'
+                : 'Your account has been created and linked to the school.',
               [{ text: 'OK' }]
             );
           }
         } catch (codeError) {
-          console.error('Invitation code redemption error:', codeError);
+          console.error('[ParentRegistration] Invitation code redemption error:', codeError);
         }
+      } else if (isExistingUser && !codeToUse) {
+        Alert.alert(
+          'Account Updated',
+          'Your account has been updated with parent information.',
+          [{ text: 'OK' }]
+        );
       }
 
       // Navigate to parent dashboard or child registration
@@ -136,7 +267,7 @@ export default function ParentRegistrationScreen() {
         router.replace('/screens/parent-dashboard');
       }
     } catch (error: any) {
-      console.error('Registration error:', error);
+      console.error('[ParentRegistration] Registration error:', error);
       handleRegistrationError(error.message || 'Registration failed');
     }
   };
