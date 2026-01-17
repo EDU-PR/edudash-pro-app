@@ -212,16 +212,12 @@ export default function LearnerDashboard() {
           </View>
         </View>
 
-        {/* Subscription Status Card - Show tier details for standalone users */}
-        {(subscriptionReady || tier !== 'free') && (
-          <Card padding={16} margin={0} elevation="small" style={{ marginBottom: 16 }}>
-            <SubscriptionStatusCard 
-              showPaymentHistory={false}
-              showUpgradeCTA={tier === 'free' || !tier}
-              showCancelOption={false}
-            />
-          </Card>
-        )}
+        {/* 
+          NOTE: Subscription upgrade flow is currently disabled for learners.
+          The PayFast subscription flow is designed for schools/principals, not individual learners.
+          TODO: Implement proper learner subscription flow via RevenueCat or organization-based plans.
+          When ready, re-enable the SubscriptionStatusCard here.
+        */}
 
         {/* AI Quota Display - Assignment Help */}
         {user && (
