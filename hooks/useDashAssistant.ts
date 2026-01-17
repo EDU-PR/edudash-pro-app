@@ -36,6 +36,19 @@ interface UseDashAssistantOptions {
   onClose?: () => void;
 }
 
+interface AlertState {
+  visible: boolean;
+  title: string;
+  message: string;
+  type?: 'info' | 'warning' | 'success' | 'error';
+  icon?: string;
+  buttons?: Array<{
+    text: string;
+    onPress?: () => void;
+    style?: 'default' | 'cancel' | 'destructive';
+  }>;
+}
+
 interface UseDashAssistantReturn {
   // State
   messages: DashMessage[];
@@ -62,6 +75,10 @@ interface UseDashAssistantReturn {
   // Voice input state
   isRecording: boolean;
   partialTranscript: string;
+  
+  // Alert state for premium modals
+  alertState: AlertState;
+  hideAlert: () => void;
   
   // Refs
   flashListRef: React.RefObject<any>;
@@ -123,6 +140,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [partialTranscript, setPartialTranscript] = useState('');
   const voiceSessionRef = useRef<VoiceSession | null>(null);
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
+  
+  // Alert state for premium modals (replaces native Alert.alert)
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+  
+  // Helper to show alerts
+  const showAlert = useCallback((config: Omit<AlertState, 'visible'>) => {
+    setAlertState({ ...config, visible: true });
+  }, []);
+  
+  // Helper to hide alerts
+  const hideAlert = useCallback(() => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  }, []);
   
   // Refs
   const flashListRef = useRef<any>(null);
@@ -227,7 +261,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           } catch (error) {
             console.error(`Failed to upload ${attachment.name}:`, error);
             updateAttachmentProgress(attachment.id, 0, 'failed');
-            Alert.alert('Upload Failed', `Failed to upload ${attachment.name}. Please try again.`);
+            showAlert({
+              title: 'Upload Failed',
+              message: `Failed to upload ${attachment.name}. Please try again.`,
+              type: 'error',
+              icon: 'cloud-offline-outline',
+              buttons: [{ text: 'OK', style: 'default' }]
+            });
           }
         }
       }
@@ -346,12 +386,18 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
     } catch (error) {
       console.error('Failed to send message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to send message. Please try again.',
+        type: 'error',
+        icon: 'alert-circle-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     } finally {
       setIsLoading(false);
       setLoadingStatus(null);
     }
-  }, [dashInstance, conversation, scrollToBottom, updateAttachmentProgress, setLayout, wantsLessonGenerator]);
+  }, [dashInstance, conversation, scrollToBottom, updateAttachmentProgress, setLayout, wantsLessonGenerator, showAlert]);
 
   // Process queue
   const processQueue = useCallback(async () => {
@@ -417,17 +463,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
     // Check tier for TTS access
     if (!hasTTSAccess()) {
-      Alert.alert(
-        'Voice Playback - Premium',
-        'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
-        [
+      showAlert({
+        title: 'Voice Playback - Premium',
+        message: 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
+        type: 'info',
+        icon: 'volume-high-outline',
+        buttons: [
           { text: 'Maybe Later', style: 'cancel' },
           { 
             text: 'Upgrade Now', 
-            onPress: () => router.push('/screens/subscription-setup' as any)
+            onPress: () => {
+              hideAlert();
+              router.push('/screens/subscription-setup' as any);
+            }
           }
         ]
-      );
+      });
       return;
     }
 
@@ -460,17 +511,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           
           // Check for tier-blocked error
           if (error?.message === 'TTS_FREE_TIER_BLOCKED') {
-            Alert.alert(
-              'Voice Playback - Premium',
-              'Text-to-speech is a premium feature. Upgrade to Starter or Plus to unlock voice features.',
-              [
+            showAlert({
+              title: 'Voice Playback - Premium',
+              message: 'Text-to-speech is a premium feature. Upgrade to Starter or Plus to unlock voice features.',
+              type: 'info',
+              icon: 'volume-high-outline',
+              buttons: [
                 { text: 'Maybe Later', style: 'cancel' },
                 { 
                   text: 'Upgrade Now', 
-                  onPress: () => router.push('/screens/subscription-setup' as any)
+                  onPress: () => {
+                    hideAlert();
+                    router.push('/screens/subscription-setup' as any);
+                  }
                 }
               ]
-            );
+            });
           }
         }
       });
@@ -479,7 +535,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
-  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess]);
+  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert]);
 
   const stopSpeaking = useCallback(async () => {
     if (!dashInstance) return;
@@ -499,19 +555,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const handleAttachFile = useCallback(async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      Alert.alert(
-        'Attach Files',
-        'Choose the type of files to attach',
-        [
+      showAlert({
+        title: 'Attach Files',
+        message: 'Choose the type of files to attach',
+        type: 'info',
+        icon: 'attach-outline',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Documents', onPress: () => handlePickDocuments() },
-          { text: 'Photos', onPress: () => handlePickImages() }
+          { text: 'Documents', onPress: () => { hideAlert(); handlePickDocuments(); } },
+          { text: 'Photos', onPress: () => { hideAlert(); handlePickImages(); } }
         ]
-      );
+      });
     } catch (error) {
       console.error('Failed to show file picker:', error);
     }
-  }, []);
+  }, [showAlert, hideAlert]);
 
   const handlePickDocuments = useCallback(async () => {
     try {
@@ -522,9 +580,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
     } catch (error) {
       console.error('Failed to pick documents:', error);
-      Alert.alert('Error', 'Failed to select documents.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to select documents.',
+        type: 'error',
+        icon: 'document-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     }
-  }, []);
+  }, [showAlert]);
 
   const handlePickImages = useCallback(async () => {
     try {
@@ -535,9 +599,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
     } catch (error) {
       console.error('Failed to pick images:', error);
-      Alert.alert('Error', 'Failed to select images.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to select images.',
+        type: 'error',
+        icon: 'image-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     }
-  }, []);
+  }, [showAlert]);
 
   const handleTakePhoto = useCallback(async () => {
     try {
@@ -548,9 +618,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
     } catch (error) {
       console.error('Failed to take photo:', error);
-      Alert.alert('Error', 'Failed to take photo.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to take photo.',
+        type: 'error',
+        icon: 'camera-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     }
-  }, []);
+  }, [showAlert]);
 
   const handleRemoveAttachment = useCallback(async (attachmentId: string) => {
     try {
@@ -580,17 +656,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const handleInputMicPress = useCallback(async () => {
     // Check tier for voice features
     if (!hasTTSAccess()) {
-      Alert.alert(
-        'Voice Features - Premium',
-        'Voice input and text-to-speech are premium features available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Voice input (speak to Dash)\n• Text-to-speech (Dash reads responses)\n• Voice commands',
-        [
+      showAlert({
+        title: 'Voice Features - Premium',
+        message: 'Voice input and text-to-speech are premium features available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Voice input (speak to Dash)\n• Text-to-speech (Dash reads responses)\n• Voice commands',
+        type: 'info',
+        icon: 'mic-outline',
+        buttons: [
           { text: 'Maybe Later', style: 'cancel' },
           { 
             text: 'Upgrade Now', 
-            onPress: () => router.push('/screens/subscription-setup' as any)
+            onPress: () => {
+              hideAlert();
+              router.push('/screens/subscription-setup' as any);
+            }
           }
         ]
-      );
+      });
       return;
     }
 
@@ -619,14 +700,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           );
           
           if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            Alert.alert(
-              'Microphone Permission Required',
-              'Please grant microphone permission to use voice input with Dash.',
-              [
+            showAlert({
+              title: 'Microphone Permission Required',
+              message: 'Please grant microphone permission to use voice input with Dash.',
+              type: 'warning',
+              icon: 'mic-off-outline',
+              buttons: [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                { text: 'Open Settings', onPress: () => { hideAlert(); Linking.openSettings(); } }
               ]
-            );
+            });
             return;
           }
         } catch (permErr) {
@@ -637,14 +720,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         try {
           const { status } = await AudioModule.requestPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert(
-              'Microphone Permission Required',
-              'Please grant microphone permission to use voice input with Dash.',
-              [
+            showAlert({
+              title: 'Microphone Permission Required',
+              message: 'Please grant microphone permission to use voice input with Dash.',
+              type: 'warning',
+              icon: 'mic-off-outline',
+              buttons: [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                { text: 'Open Settings', onPress: () => { hideAlert(); Linking.openSettings(); } }
               ]
-            );
+            });
             return;
           }
         } catch (permErr) {
@@ -681,16 +766,18 @@ To enable voice input:
 
 You can also use text input to chat with Dash.`;
 
-        Alert.alert(
-          'Voice Input Unavailable',
-          Platform.OS === 'android' ? androidMessage : iosMessage,
-          [
+        showAlert({
+          title: 'Voice Input Unavailable',
+          message: Platform.OS === 'android' ? androidMessage : iosMessage,
+          type: 'warning',
+          icon: 'mic-off-outline',
+          buttons: [
             { text: 'Use Text Input', style: 'default' },
             Platform.OS === 'android' 
-              ? { text: 'Open Play Store', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.googlequicksearchbox') }
-              : { text: 'Open Settings', onPress: () => Linking.openSettings() },
+              ? { text: 'Open Play Store', onPress: () => { hideAlert(); Linking.openURL('https://play.google.com/store/apps/details?id=com.google.android.googlequicksearchbox'); } }
+              : { text: 'Open Settings', onPress: () => { hideAlert(); Linking.openSettings(); } },
           ]
-        );
+        });
         return;
       }
 
@@ -732,24 +819,28 @@ You can also use text input to chat with Dash.`;
           user_tier: tier || 'free',
         });
       } else {
-        Alert.alert(
-          'Voice Error',
-          'Failed to start voice recognition. Please check microphone permissions and try again.',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Voice Error',
+          message: 'Failed to start voice recognition. Please check microphone permissions and try again.',
+          type: 'error',
+          icon: 'alert-circle-outline',
+          buttons: [{ text: 'OK', style: 'default' }]
+        });
       }
     } catch (error) {
       console.error('[useDashAssistant] Voice recognition error:', error);
       setIsRecording(false);
       setPartialTranscript('');
       
-      Alert.alert(
-        'Voice Error',
-        'An error occurred with voice recognition. Please try again.',
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: 'Voice Error',
+        message: 'An error occurred with voice recognition. Please try again.',
+        type: 'error',
+        icon: 'alert-circle-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     }
-  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier]);
+  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert]);
 
   // Cleanup voice session on unmount
   useEffect(() => {
@@ -780,9 +871,15 @@ You can also use text input to chat with Dash.`;
       }
     } catch (error) {
       console.error('Failed to start new conversation:', error);
-      Alert.alert('Error', 'Failed to start new conversation.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to start new conversation.',
+        type: 'error',
+        icon: 'alert-circle-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
     }
-  }, [dashInstance]);
+  }, [dashInstance, showAlert]);
 
   // Initialize Dash AI
   useEffect(() => {
@@ -980,6 +1077,10 @@ You can also use text input to chat with Dash.`;
     // Voice input state
     isRecording,
     partialTranscript,
+    
+    // Alert state for premium modals
+    alertState,
+    hideAlert,
     
     // Refs
     flashListRef,

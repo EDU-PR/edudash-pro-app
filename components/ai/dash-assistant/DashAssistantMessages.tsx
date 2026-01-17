@@ -18,6 +18,7 @@ export interface DashAssistantMessagesProps {
   scrollToBottom: (opts: { animated?: boolean; delay?: number }) => void;
   renderTypingIndicator: () => React.ReactElement | null;
   renderSuggestedActions: () => React.ReactElement | null;
+  onSendMessage?: (text: string) => void;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -33,6 +34,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   scrollToBottom,
   renderTypingIndicator,
   renderSuggestedActions,
+  onSendMessage,
 }) => {
   // Empty state component
   const renderEmptyState = () => (
@@ -61,6 +63,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
             activeOpacity={0.7}
+            onPress={() => onSendMessage?.('Help me with a math problem')}
           >
             <View style={styles.actionButtonContent}>
               <Ionicons name="calculator-outline" size={20} color={theme.primary} />
@@ -72,6 +75,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
             activeOpacity={0.7}
+            onPress={() => onSendMessage?.('Explain a concept to me')}
           >
             <View style={styles.actionButtonContent}>
               <Ionicons name="bulb-outline" size={20} color={theme.primary} />
@@ -83,6 +87,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
             activeOpacity={0.7}
+            onPress={() => onSendMessage?.('Give me study guidance and tips')}
           >
             <View style={styles.actionButtonContent}>
               <Ionicons name="book-outline" size={20} color={theme.primary} />
