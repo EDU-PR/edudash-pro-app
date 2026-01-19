@@ -145,6 +145,7 @@ export interface TeacherRegistration extends BaseRegistration {
 export interface ParentRegistration extends BaseRegistration {
   role: 'parent';
   invitationToken?: string;
+  organizationId?: string; // Selected school/organization ID
   children: {
     firstName: string;
     lastName: string;
@@ -332,6 +333,7 @@ export type AuthFlowStep =
   | 'role_selection'
   | 'personal_info'
   | 'organization_setup'
+  | 'organization_selection' // For parents to select their school
   | 'security_setup'
   | 'email_verification'
   | 'profile_completion'
