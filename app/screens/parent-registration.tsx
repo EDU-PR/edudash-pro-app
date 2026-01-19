@@ -184,6 +184,9 @@ export default function ParentRegistrationScreen() {
       // Get invitation code from URL params or from the form
       const parentReg = registration as any;
       const codeToUse = invitationCode || parentReg.invitationToken;
+      
+      // Get the organization ID - from invitation code validation, form selection, or prop
+      const selectedOrgId = organizationId || parentReg.organizationId || '00000000-0000-0000-0000-000000000001';
 
       // If we have an invitation code, redeem it to link the parent to the school
       if (codeToUse && user) {
@@ -209,32 +212,33 @@ export default function ParentRegistrationScreen() {
           } else {
             // Successfully linked to school - set this school as active organization
             // This ensures the user sees the parent dashboard, not their other org's dashboard
-            if (organizationId) {
+            if (selectedOrgId) {
               try {
                 // Get school name for display
                 const { data: schoolData } = await supabase
                   .from('preschools')
                   .select('name')
-                  .eq('id', organizationId)
+                  .eq('id', selectedOrgId)
                   .single();
                 
                 // Update profile to set this as the active preschool
                 await supabase
                   .from('profiles')
                   .update({ 
-                    preschool_id: organizationId,
+                    preschool_id: selectedOrgId,
+                    organization_id: selectedOrgId,
                     role: 'parent', // Set role to parent for this context
                   })
                   .eq('id', user.id);
                 
                 // Store active organization in AsyncStorage
                 await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
-                  id: organizationId,
+                  id: selectedOrgId,
                   name: schoolData?.name || 'School',
                   type: 'preschool',
                 }));
                 
-                console.log('[ParentRegistration] Set active organization to preschool:', organizationId);
+                console.log('[ParentRegistration] Set active organization to preschool:', selectedOrgId);
               } catch (activeOrgError) {
                 console.error('[ParentRegistration] Failed to set active organization:', activeOrgError);
                 // Non-fatal - continue with navigation
@@ -251,6 +255,51 @@ export default function ParentRegistrationScreen() {
           }
         } catch (codeError) {
           console.error('[ParentRegistration] Invitation code redemption error:', codeError);
+        }
+      } else if (user && selectedOrgId) {
+        // Self-service registration (no invitation code) - set organization from form selection
+        try {
+          console.log('[ParentRegistration] Self-service registration, setting organization:', selectedOrgId);
+          
+          // Get school name for display
+          const { data: schoolData } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', selectedOrgId)
+            .single();
+          
+          // Update profile to set the selected preschool
+          await supabase
+            .from('profiles')
+            .update({ 
+              preschool_id: selectedOrgId,
+              organization_id: selectedOrgId,
+              role: 'parent',
+            })
+            .eq('id', user.id);
+          
+          // Store active organization in AsyncStorage
+          await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
+            id: selectedOrgId,
+            name: schoolData?.name || 'EduDash Pro Community School',
+            type: 'preschool',
+          }));
+          
+          console.log('[ParentRegistration] Set organization to:', schoolData?.name || selectedOrgId);
+          
+          Alert.alert(
+            'Registration Successful!',
+            `Welcome to ${schoolData?.name || 'EduDash Pro'}! You can now add your children to your account.`,
+            [{ text: 'OK' }]
+          );
+        } catch (orgError) {
+          console.error('[ParentRegistration] Failed to set organization:', orgError);
+          // Non-fatal - account was still created
+          Alert.alert(
+            isExistingUser ? 'Account Updated' : 'Registration Successful',
+            'Your account has been created. You can add your children from the dashboard.',
+            [{ text: 'OK' }]
+          );
         }
       } else if (isExistingUser && !codeToUse) {
         Alert.alert(

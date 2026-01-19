@@ -142,46 +142,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Don't check session, don't refresh profile - just continue where user left off
   }, []);
 
-  // Enhanced sign out with cache clearing and browser history management
-  // CRITICAL: Clear state IMMEDIATELY before any async operations to prevent hanging
+  // Enhanced sign out with cache clearing
+  // Simplified: Call Supabase signOut first (triggers auth listener), then clean up
   const handleSignOut = useCallback(async () => {
     try {
       console.log('[AuthContext] Starting sign-out process...');
-      // #region agent log
-      console.log('[DEBUG_AGENT] SignOut-START', JSON.stringify({location:'AuthContext.tsx:handleSignOut',userId:user?.id,hasSession:!!session,hasProfile:!!profile,timestamp:Date.now()}));
-      // #endregion
       
       // CRITICAL: Clear all navigation locks FIRST to prevent stale locks
-      // This must happen before any state changes or async operations
-      // Try both async import and direct require as fallback
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[AuthContext] All navigation locks cleared before sign-out (via import)');
+        console.log('[AuthContext] Navigation locks cleared');
       } catch (lockErr) {
-        console.warn('[AuthContext] Failed to clear navigation locks via import, trying require:', lockErr);
-        // Fallback: try direct require (works in some environments)
-        try {
-          const routeModule = require('@/lib/routeAfterLogin');
-          if (routeModule.clearAllNavigationLocks) {
-            routeModule.clearAllNavigationLocks();
-            console.log('[AuthContext] All navigation locks cleared before sign-out (via require)');
-          }
-        } catch (requireErr) {
-          console.warn('[AuthContext] Failed to clear navigation locks via require (non-fatal):', requireErr);
-        }
+        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
       }
       
-      // CRITICAL FIX: Clear all auth state IMMEDIATELY - before any async work
-      // This prevents the UI from hanging while waiting for backend cleanup
-      console.log('[AuthContext] Clearing auth state immediately...');
+      // Call sessionManager sign out - this clears storage and calls Supabase signOut
+      // The onAuthStateChange listener will handle state clearing via SIGNED_OUT event
+      try {
+        await signOut();
+        console.log('[AuthContext] Supabase sign-out completed');
+      } catch (signOutErr) {
+        console.warn('[AuthContext] Sign-out failed (continuing anyway):', signOutErr);
+      }
+      
+      // Clear state explicitly as backup (in case listener doesn't fire)
       setUser(null);
       setSession(null);
       setProfile(null);
       setPermissions(createPermissionChecker(null));
       setProfileLoading(false);
       
-      // Clear TanStack Query cache immediately
+      // Clear TanStack Query cache
       try {
         queryClient.clear();
         console.log('[AuthContext] Query cache cleared');
@@ -189,77 +181,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AuthContext] Query cache clear failed:', cacheErr);
       }
       
-      // Security audit for logout (fire-and-forget, don't block)
-      const userId = user?.id;
-      const userRole = profile?.role;
-      if (userId) {
-        // Don't await - fire and forget
-        Promise.resolve().then(() => {
-          securityAuditor.auditAuthenticationEvent(userId, 'logout', {
-            role: userRole,
-          });
-        });
-      }
-      
-      // Call sessionManager sign out with short timeout (don't let it block)
-      const signOutPromise = signOut();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Sign out timeout')), 3000)
-      );
-      
-      try {
-        await Promise.race([signOutPromise, timeoutPromise]);
-        console.log('[AuthContext] Supabase sign-out completed');
-      } catch (signOutErr) {
-        console.warn('[AuthContext] Sign-out timed out or failed (continuing anyway):', signOutErr);
-      }
-      
-      // Clear PostHog and Sentry (don't block on these)
+      // Clear PostHog and Sentry (fire-and-forget)
       Promise.resolve().then(async () => {
-        try { await getPostHog()?.reset(); } catch { /* Intentional: non-fatal */ }
-        try { Sentry.Native.setUser(null as any); } catch { /* Intentional: non-fatal */ }
+        try { await getPostHog()?.reset(); } catch { /* non-fatal */ }
+        try { Sentry.Native.setUser(null as any); } catch { /* non-fatal */ }
       });
       
-      console.log('[AuthContext] Sign-out completed successfully');
-      // #region agent log
-      console.log('[DEBUG_AGENT] SignOut-COMPLETE', JSON.stringify({location:'AuthContext.tsx:handleSignOut',userId:user?.id,platform:Platform.OS,timestamp:Date.now()}));
-      // #endregion
+      console.log('[AuthContext] Sign-out completed - navigation handled by route guard');
       
-      // Navigate to sign-in screen
-      if (Platform.OS === 'web') {
-        try {
-          const w = globalThis as any;
-          if (w?.location) {
-            w.location.replace('/(auth)/sign-in');
-          } else {
-            router.replace('/(auth)/sign-in');
-          }
-        } catch {
-          router.replace('/(auth)/sign-in');
-        }
-      } else {
-        router.replace('/(auth)/sign-in');
-      }
     } catch (error) {
       console.error('[AuthContext] Sign out failed:', error);
-      
-      // Even if sign-out fails, state is already cleared - just navigate
-      try {
-        if (Platform.OS === 'web') {
-          const w = globalThis as any;
-          if (w?.location) {
-            w.location.replace('/(auth)/sign-in');
-          } else {
-            router.replace('/(auth)/sign-in');
-          }
-        } else {
-          router.replace('/(auth)/sign-in');
-        }
-      } catch (navErr) {
-        console.error('[AuthContext] Navigation to sign-in failed:', navErr);
-      }
+      // Force clear state even on error
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setPermissions(createPermissionChecker(null));
+      setProfileLoading(false);
     }
-  }, [user?.id, profile?.role, queryClient]);
+  }, [queryClient]);
 
   useEffect(() => {
     let unsub: { subscription?: { unsubscribe: () => void } } | null = null;
@@ -619,9 +558,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               logger.debug('Toast on sign-out failed (non-blocking)', e);
             }
             
-            // Don't navigate here - let signOutAndRedirect handle navigation
+            // Don't navigate here - let useAuthGuard handle navigation
             // This prevents conflicting navigation calls
-            console.log('[AuthContext] Sign-out cleanup complete, navigation handled by signOutAndRedirect');
+            console.log('[AuthContext] Sign-out cleanup complete, navigation handled by useAuthGuard');
           }
         } catch (error) {
           console.error('Auth state change handler error:', error);

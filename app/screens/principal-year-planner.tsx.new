@@ -1,0 +1,198 @@
+// filepath: /media/king/5e026cdc-594e-4493-bf92-c35c231beea3/home/king/Desktop/dashpro/app/screens/principal-year-planner.tsx
+// Principal Year Planner Screen - Refactored for WARP.md compliance (≤500 lines)
+
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { extractOrganizationId } from '@/lib/tenant/compat';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useYearPlanner } from '@/hooks/principal/useYearPlanner';
+import {
+  TermCard,
+  TermFormModal,
+  getDefaultTermFormData,
+  termFormDataFromTerm,
+  groupTermsByYear,
+  type AcademicTerm,
+  type TermFormData,
+} from '@/components/principal/year-planner';
+
+export default function PrincipalYearPlannerScreen() {
+  const { theme } = useTheme();
+  const { profile, user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(theme);
+
+  const orgId = extractOrganizationId(profile);
+
+  const { terms, loading, refreshing, handleRefresh, handleSubmit, handleDelete, handleTogglePublish } =
+    useYearPlanner({ orgId, userId: user?.id });
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTerm, setEditingTerm] = useState<AcademicTerm | null>(null);
+  const [formData, setFormData] = useState<TermFormData>(getDefaultTermFormData());
+
+  const groupedTerms = groupTermsByYear(terms);
+
+  const openCreateModal = () => {
+    setFormData(getDefaultTermFormData());
+    setEditingTerm(null);
+    setShowCreateModal(true);
+  };
+
+  const openEditModal = (term: AcademicTerm) => {
+    setFormData(termFormDataFromTerm(term));
+    setEditingTerm(term);
+    setShowCreateModal(true);
+  };
+
+  const onSubmit = async () => {
+    const success = await handleSubmit(formData, editingTerm);
+    if (success) {
+      setShowCreateModal(false);
+    }
+  };
+
+  return (
+    <DesktopLayout role="principal">
+      <Stack.Screen options={{ title: 'Year Planner', headerShown: true }} />
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.addButton} onPress={openCreateModal}>
+            <Ionicons name="add" size={24} color="#fff" />
+            <Text style={styles.addButtonText}>New Term</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={theme.primary} />
+          </View>
+        ) : Object.keys(groupedTerms).length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="calendar-outline" size={64} color={theme.textSecondary} />
+            <Text style={styles.emptyText}>No Terms Planned</Text>
+            <Text style={styles.emptySubtext}>Start by creating your first academic term</Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={openCreateModal}>
+              <Text style={styles.emptyButtonText}>Create First Term</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          Object.entries(groupedTerms)
+            .sort(([a], [b]) => Number(b) - Number(a))
+            .map(([year, yearTerms]) => (
+              <View key={year} style={styles.yearSection}>
+                <Text style={styles.yearTitle}>Academic Year {year}</Text>
+                {yearTerms.map((term) => (
+                  <TermCard
+                    key={term.id}
+                    term={term}
+                    onEdit={() => openEditModal(term)}
+                    onDelete={() => handleDelete(term)}
+                    onTogglePublish={() => handleTogglePublish(term)}
+                    theme={theme}
+                  />
+                ))}
+              </View>
+            ))
+        )}
+
+        <TermFormModal
+          visible={showCreateModal}
+          isEditing={!!editingTerm}
+          formData={formData}
+          setFormData={setFormData}
+          onSubmit={onSubmit}
+          onClose={() => setShowCreateModal(false)}
+          theme={theme}
+        />
+      </ScrollView>
+    </DesktopLayout>
+  );
+}
+
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      padding: 16,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 8,
+      gap: 8,
+    },
+    addButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40,
+    },
+    empty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40,
+    },
+    emptyText: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 24,
+      textAlign: 'center',
+    },
+    emptyButton: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 8,
+    },
+    emptyButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+    },
+    yearSection: {
+      marginBottom: 24,
+      paddingHorizontal: 16,
+    },
+    yearTitle: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 16,
+    },
+  });

@@ -10,7 +10,7 @@ import * as fs from 'fs';
 
 // Load environment variables
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_DB_URL || '';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (!SERVICE_ROLE_KEY) {
   console.log('❌ SERVICE_ROLE_KEY environment variable is required');
@@ -220,7 +220,7 @@ async function performInspection(): Promise<void> {
   
   if (report.rlsPolicies.length > 0) {
     console.log(`\n🔒 Found ${report.rlsPolicies.length} RLS Policies:`);
-    const policiesByTable = report.rlsPolicies.reduce((acc, policy) => {
+    const policiesByTable: Record<string, Array<{ name: string; command: string; roles: string }>> = report.rlsPolicies.reduce((acc, policy) => {
       if (!acc[policy.tablename]) acc[policy.tablename] = [];
       acc[policy.tablename].push({
         name: policy.policyname,
@@ -228,7 +228,7 @@ async function performInspection(): Promise<void> {
         roles: policy.roles
       });
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {} as Record<string, Array<{ name: string; command: string; roles: string }>>);
     
     Object.entries(policiesByTable).forEach(([table, policies]) => {
       console.log(`  🛡️ ${table}: ${policies.length} policies`);
