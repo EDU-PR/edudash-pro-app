@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+
+// Auto-redirect delay (in ms) - gives time for proper route resolution
+const AUTO_REDIRECT_DELAY = 1200;
 
 /** Debug information for route not found */
 interface DebugInfo {
@@ -21,9 +24,60 @@ export default function NotFound() {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Smart fallback navigation based on user state
+  const getSmartFallback = () => {
+    if (!user) return '/(auth)/sign-in';
+    
+    // Route based on user role
+    switch (profile?.role) {
+      case 'super_admin':
+      case 'superadmin':
+        return '/(super-admin)/dashboard';
+      case 'principal':
+      case 'principal_admin':
+        return '/(tabs)/principal-hub';
+      case 'teacher':
+        return '/(tabs)/teacher-hub';
+      case 'parent':
+      default:
+        return '/(tabs)/parent-hub';
+    }
+  };
+  
+  // Auto-redirect after auth loads - prevents "Route Not Found" flash
+  useEffect(() => {
+    // Don't redirect while auth is still loading
+    if (authLoading) return;
+    
+    // Clear any existing timeout
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
+    }
+    
+    // Set up auto-redirect with a delay
+    redirectTimeoutRef.current = setTimeout(() => {
+      setIsRedirecting(true);
+      const targetRoute = getSmartFallback();
+      
+      if (__DEV__) {
+        console.log('[NotFound] Auto-redirecting to:', targetRoute, 'from:', pathname);
+      }
+      
+      router.replace(targetRoute as any);
+    }, AUTO_REDIRECT_DELAY);
+    
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, [authLoading, user, profile?.role, pathname]);
   
   useEffect(() => {
     // Gather debug information
@@ -55,25 +109,18 @@ export default function NotFound() {
     gatherDebugInfo();
   }, [pathname, segments, user, profile, router]);
   
-  // Smart fallback navigation based on user state
-  const getSmartFallback = () => {
-    if (!user) return '/';
-    
-    // Route based on user role
-    switch (profile?.role) {
-      case 'super_admin':
-        return '/screens/super-admin-dashboard';
-      case 'principal_admin':
-        return '/screens/principal-dashboard';
-      case 'teacher':
-        return '/screens/teacher-dashboard';
-      case 'parent':
-        return '/screens/parent-dashboard';
-      default:
-        return '/';
-    }
-  };
-
+  // Show loading state while auth is resolving or redirecting
+  if (authLoading || isRedirecting) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#00f5ff" />
+        <Text style={styles.loadingText}>
+          {authLoading ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.redirecting', { defaultValue: 'Redirecting...' })}
+        </Text>
+      </View>
+    );
+  }
+  
   const handleSmartBack = () => {
     try {
       if (canGoBack) {
@@ -89,6 +136,7 @@ export default function NotFound() {
   };
 
   const handleGoToDashboard = () => {
+    setIsRedirecting(true);
     const fallback = getSmartFallback();
     router.replace(fallback as `/${string}`);
   };
@@ -147,6 +195,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0f',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#0a0a0f',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#9ca3af',
   },
   content: {
     flexGrow: 1,
