@@ -174,6 +174,9 @@ export default function AfterCareAdminScreen() {
             if (enrollmentResult.data?.student_created) {
               messages.push('✓ Student record created');
             }
+            if (enrollmentResult.data?.welcome_email_sent) {
+              messages.push('✓ Welcome email sent');
+            }
             Alert.alert(
               '🎉 Student Enrolled!',
               messages.length > 0 
@@ -188,9 +191,29 @@ export default function AfterCareAdminScreen() {
           Alert.alert('Success', 'Student enrolled (account creation pending)');
         }
       } else if (newStatus === 'paid') {
+        // Send payment verified notification email to parent
+        const registration = registrations.find(r => r.id === id);
+        if (registration) {
+          try {
+            await supabase.functions.invoke('send-aftercare-payment-verified', {
+              body: {
+                registration_id: id,
+                parent_email: registration.parent_email,
+                parent_name: `${registration.parent_first_name} ${registration.parent_last_name}`,
+                child_name: `${registration.child_first_name} ${registration.child_last_name}`,
+                payment_amount: registration.registration_fee,
+              },
+            });
+            console.log('[AfterCareAdmin] ✅ Payment verified email sent');
+          } catch (emailErr) {
+            console.warn('[AfterCareAdmin] Failed to send payment verified email:', emailErr);
+            // Don't block the success - email is non-critical
+          }
+        }
+        
         Alert.alert(
           'Payment Verified ✓',
-          'Payment has been verified. Click "Enroll Student" when ready to create their account.'
+          'Payment has been verified and the parent has been notified via email.\n\nClick "Enroll Student" when ready to create their account.'
         );
       } else if (newStatus === 'cancelled') {
         Alert.alert('Registration Cancelled', 'This registration has been cancelled.');
