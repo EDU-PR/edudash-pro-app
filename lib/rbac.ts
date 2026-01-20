@@ -872,8 +872,9 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     let orgMember: OrganizationMember | null = null;
     let org: OrganizationData | null = null;
 
+    // UUID regex that accepts any UUID-formatted string (including non-RFC-compliant like 00000000-0000-0000-0000-000000000001)
     const isUuid = (v: string): boolean =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     
     // Consider multiple sources for organization identifier
     const sessionMeta = (session?.user as { user_metadata?: Record<string, unknown> })?.user_metadata || {};

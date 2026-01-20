@@ -200,7 +200,7 @@ export function K12AdminDashboard() {
       icon: 'card-outline',
       color: '#F59E0B',
       badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
-      onPress: () => router.push('/screens/payment-management'),
+      onPress: () => router.push('/screens/financial-transactions'),
     },
     {
       id: 'announcements',

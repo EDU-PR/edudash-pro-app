@@ -9,8 +9,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { warn, log } from '@/lib/debug';
 import type { User } from '@supabase/supabase-js';
 
-/** UUID regex pattern for validation */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** UUID regex pattern for validation (accepts any UUID-formatted string including non-RFC-compliant) */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Check if a string is a valid UUID

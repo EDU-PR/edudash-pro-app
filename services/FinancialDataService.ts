@@ -482,7 +482,13 @@ const expenses = petty + otherExp;
     try {
       const transactions: TransactionRecord[] = [];
 
+      console.log('[FinancialDataService] getTransactions called with:', {
+        dateRange,
+        preschoolId,
+      });
+
       // Get payments within date range
+      // Use LEFT JOIN (no !inner) so payments without students still return
       let paymentsQuery = assertSupabase()
         .from('payments')
         .select(`
@@ -493,7 +499,8 @@ const expenses = petty + otherExp;
           created_at,
           payment_reference,
           attachment_url,
-          students!inner(first_name, last_name)
+          student_id,
+          students(first_name, last_name)
         `)
         .gte('created_at', dateRange.from)
         .lte('created_at', dateRange.to)
@@ -504,6 +511,12 @@ const expenses = petty + otherExp;
       }
 
       const { data: payments, error: paymentsError } = await paymentsQuery;
+
+      console.log('[FinancialDataService] Payments query result:', {
+        count: payments?.length ?? 0,
+        error: paymentsError?.message,
+        preschoolId,
+      });
 
       if (paymentsError) {
         console.error('Error fetching payments for transactions:', paymentsError);
@@ -542,6 +555,12 @@ const expenses = petty + otherExp;
       }
 
       const { data: pettyCash, error: pettyCashError } = await pettyCashQuery;
+
+      console.log('[FinancialDataService] Petty cash query result:', {
+        count: pettyCash?.length ?? 0,
+        error: pettyCashError?.message,
+        preschoolId,
+      });
 
       if (pettyCashError) {
         console.error('Error fetching petty cash for transactions:', pettyCashError);
@@ -587,25 +606,48 @@ const expenses = petty + otherExp;
       }
 
       // Include financial transactions (expenses) within date range
+      // Note: financial_transactions uses expense_category_id, not category
       try {
         let finQuery = assertSupabase()
           .from('financial_transactions')
-          .select('id, amount, description, status, created_at, category, type')
+          .select(`
+            id, 
+            amount, 
+            description, 
+            status, 
+            created_at, 
+            type,
+            expense_category_id,
+            expense_categories(name)
+          `)
           .gte('created_at', dateRange.from)
           .lte('created_at', dateRange.to)
           .order('created_at', { ascending: false });
         if (preschoolId) {
           finQuery = finQuery.eq('preschool_id', preschoolId);
         }
-        const { data: finTx } = await finQuery;
+        const { data: finTx, error: finError } = await finQuery;
+        
+        console.log('[FinancialDataService] Financial transactions query result:', {
+          count: finTx?.length ?? 0,
+          error: finError?.message,
+          preschoolId,
+        });
+        
         (finTx || []).forEach((txn: any) => {
           const lowerType = String(txn.type || '').toLowerCase();
           const isExpense = lowerType.includes('expense') || Number(txn.amount) < 0;
+          // Get category name from joined expense_categories or use type as fallback
+          const categoryData = Array.isArray(txn.expense_categories) 
+            ? txn.expense_categories[0] 
+            : txn.expense_categories;
+          const categoryName = categoryData?.name || txn.type || 'Expense';
+          
           if (isExpense) {
             transactions.push({
               id: txn.id,
               type: 'expense',
-              category: txn.category || 'Expense',
+              category: categoryName,
               amount: Math.abs(Number(txn.amount) || 0),
               description: txn.description || 'Expense',
               date: txn.created_at,
@@ -614,10 +656,15 @@ const expenses = petty + otherExp;
             });
           }
         });
-      } catch { /* Intentional: non-fatal */ }
+      } catch (err) { 
+        console.error('[FinancialDataService] Error fetching financial_transactions:', err);
+      }
 
       // Sort by date (newest first)
       transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      console.log('[FinancialDataService] Total transactions returned:', transactions.length);
+      
       return transactions;
 
     } catch (error) {
