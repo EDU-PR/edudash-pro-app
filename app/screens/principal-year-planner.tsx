@@ -66,8 +66,8 @@ export default function PrincipalYearPlannerScreen() {
   };
 
   return (
-    <DesktopLayout role="principal">
-      <Stack.Screen options={{ title: 'Year Planner', headerShown: true }} />
+    <DesktopLayout role="principal" title="Year Planner" showBackButton>
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         style={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
