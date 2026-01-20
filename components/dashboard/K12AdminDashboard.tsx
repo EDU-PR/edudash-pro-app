@@ -7,6 +7,7 @@
  * - Grade-based student organization (R-12)
  * - Attendance tracking
  * - Payment management
+ * - Birthday tracking
  * 
  * Different from preschool dashboard which focuses on early childhood education.
  */
@@ -16,13 +17,10 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
-  Dimensions,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -31,20 +29,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { assertSupabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width } = Dimensions.get('window');
-const isTablet = width > 768;
+// Extracted components
+import {
+  K12StatsOverview,
+  K12GradeBreakdown,
+  K12QuickActions,
+  K12RecentRegistrations,
+  type AftercareStat,
+  type GradeCount,
+  type Registration,
+  type QuickAction,
+} from './k12';
 
-interface AftercareStat {
-  total: number;
-  pendingPayment: number;
-  paid: number;
-  enrolled: number;
-}
-
-interface GradeCount {
-  grade: string;
-  count: number;
-}
+// Birthday widget
+import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
+import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 
 export function K12AdminDashboard() {
   const { user, profile } = useAuth();
@@ -56,13 +55,19 @@ export function K12AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<AftercareStat>({ total: 0, pendingPayment: 0, paid: 0, enrolled: 0 });
   const [gradeBreakdown, setGradeBreakdown] = useState<GradeCount[]>([]);
-  const [recentRegistrations, setRecentRegistrations] = useState<any[]>([]);
+  const [recentRegistrations, setRecentRegistrations] = useState<Registration[]>([]);
   const [schoolName, setSchoolName] = useState<string>('Loading...');
   
   const styles = useMemo(() => createStyles(theme, insets.top), [theme, insets.top]);
   
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const userName = profile?.first_name || user?.user_metadata?.first_name || 'Admin';
+  
+  // Birthday planner hook
+  const { birthdays, loading: birthdaysLoading, refresh: refreshBirthdays } = useBirthdayPlanner({
+    preschoolId: organizationId,
+    daysAhead: 30,
+  });
   
   // Get greeting based on time of day
   const greeting = useMemo(() => {
@@ -78,10 +83,6 @@ export function K12AdminDashboard() {
     try {
       const supabase = assertSupabase();
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:76',message:'loadDashboardData entry',data:{organizationId,userId:user?.id,profileRole:profile?.role,profileOrgId:profile?.organization_id,profilePreschoolId:profile?.preschool_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-      
       // Fetch school name
       const { data: schoolData, error: schoolError } = await supabase
         .from('preschools')
@@ -92,26 +93,16 @@ export function K12AdminDashboard() {
       if (!schoolError && schoolData) {
         setSchoolName(schoolData.name);
       } else {
-        // Fallback to a generic name if fetch fails
         setSchoolName('EduDash Pro School');
         console.warn('[K12Dashboard] Could not fetch school name:', schoolError);
       }
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:98',message:'Before aftercare query',data:{organizationId,targetPreschoolId:organizationId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
       // Fetch aftercare registrations stats
-      // Simplified: Each principal sees only their own school's registrations
       const { data: registrations, error } = await supabase
         .from('aftercare_registrations')
         .select('id, status, child_grade, child_first_name, child_last_name, created_at')
         .eq('preschool_id', organizationId)
         .order('created_at', { ascending: false });
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/f48af9d6-9953-4cb6-83b3-cbebe5169087',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'K12AdminDashboard.tsx:104',message:'After aftercare query',data:{hasError:!!error,errorCode:error?.code,errorMessage:error?.message,registrationsCount:registrations?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       if (error && error.code !== '42P01') {
         console.error('[K12Dashboard] Error fetching registrations:', error);
@@ -167,10 +158,11 @@ export function K12AdminDashboard() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadDashboardData();
-  }, [loadDashboardData]);
+    refreshBirthdays();
+  }, [loadDashboardData, refreshBirthdays]);
 
   // Quick actions for K-12 admin
-  const quickActions = [
+  const quickActions: QuickAction[] = useMemo(() => [
     {
       id: 'aftercare',
       title: 'Aftercare Registrations',
@@ -230,7 +222,7 @@ export function K12AdminDashboard() {
       color: '#64748B',
       onPress: () => router.push('/screens/school-settings'),
     },
-  ];
+  ], [stats.pendingPayment, stats.enrolled]);
 
   if (loading) {
     return (
@@ -266,131 +258,31 @@ export function K12AdminDashboard() {
       </LinearGradient>
 
       {/* Stats Overview */}
-      <View style={styles.statsContainer}>
-        <Text style={styles.sectionTitle}>Aftercare Overview</Text>
-        <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { backgroundColor: '#3B82F620' }]}>
-            <Ionicons name="people" size={24} color="#3B82F6" />
-            <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total Registrations</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#F59E0B20' }]}>
-            <Ionicons name="time" size={24} color="#F59E0B" />
-            <Text style={styles.statNumber}>{stats.pendingPayment}</Text>
-            <Text style={styles.statLabel}>Pending Payment</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#10B98120' }]}>
-            <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-            <Text style={styles.statNumber}>{stats.paid}</Text>
-            <Text style={styles.statLabel}>Paid</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#8B5CF620' }]}>
-            <Ionicons name="school" size={24} color="#8B5CF6" />
-            <Text style={styles.statNumber}>{stats.enrolled}</Text>
-            <Text style={styles.statLabel}>Enrolled</Text>
-          </View>
-        </View>
-      </View>
+      <K12StatsOverview stats={stats} theme={theme} />
 
       {/* Grade Breakdown */}
-      {gradeBreakdown.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Students by Grade</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.gradeScroll}>
-            {gradeBreakdown.map(({ grade, count }) => (
-              <View key={grade} style={styles.gradeCard}>
-                <Text style={styles.gradeLabel}>Grade {grade}</Text>
-                <Text style={styles.gradeCount}>{count}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      <K12GradeBreakdown gradeBreakdown={gradeBreakdown} theme={theme} />
 
-      {/* Quick Actions */}
+      {/* Upcoming Birthdays */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionsGrid}>
-          {quickActions.map(action => (
-            <TouchableOpacity
-              key={action.id}
-              style={styles.actionCard}
-              onPress={action.onPress}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.actionIconContainer, { backgroundColor: `${action.color}20` }]}>
-                <Ionicons name={action.icon as any} size={24} color={action.color} />
-                {action.badge !== undefined && action.badge > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{action.badge}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.actionTitle}>{action.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <UpcomingBirthdaysCard
+          birthdays={birthdays}
+          loading={birthdaysLoading}
+          maxItems={5}
+          onViewAll={() => router.push('/screens/birthday-planner')}
+        />
       </View>
 
+      {/* Quick Actions */}
+      <K12QuickActions actions={quickActions} theme={theme} />
+
       {/* Recent Registrations */}
-      {recentRegistrations.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Registrations</Text>
-            <TouchableOpacity onPress={() => router.push('/screens/aftercare-admin')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-          {recentRegistrations.map(reg => (
-            <View key={reg.id} style={styles.registrationItem}>
-              <View style={styles.registrationAvatar}>
-                <Text style={styles.registrationAvatarText}>
-                  {reg.child_first_name?.[0] || '?'}
-                </Text>
-              </View>
-              <View style={styles.registrationInfo}>
-                <Text style={styles.registrationName}>
-                  {reg.child_first_name} {reg.child_last_name}
-                </Text>
-                <Text style={styles.registrationGrade}>Grade {reg.child_grade}</Text>
-              </View>
-              <View style={[
-                styles.statusBadge,
-                { backgroundColor: getStatusColor(reg.status) + '20' }
-              ]}>
-                <Text style={[styles.statusText, { color: getStatusColor(reg.status) }]}>
-                  {formatStatus(reg.status)}
-                </Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+      <K12RecentRegistrations registrations={recentRegistrations} theme={theme} />
 
       {/* Bottom padding */}
       <View style={{ height: 100 }} />
     </ScrollView>
   );
-}
-
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'pending_payment': return '#F59E0B';
-    case 'paid': return '#10B981';
-    case 'enrolled': return '#3B82F6';
-    case 'cancelled': return '#EF4444';
-    default: return '#64748B';
-  }
-}
-
-function formatStatus(status: string): string {
-  switch (status) {
-    case 'pending_payment': return 'Pending';
-    case 'paid': return 'Paid';
-    case 'enrolled': return 'Enrolled';
-    case 'cancelled': return 'Cancelled';
-    default: return status;
-  }
 }
 
 const createStyles = (theme: any, topInset: number) => StyleSheet.create({
@@ -449,164 +341,9 @@ const createStyles = (theme: any, topInset: number) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  statsContainer: {
-    padding: 20,
-    marginTop: -20,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 12,
-  },
-  statCard: {
-    width: isTablet ? '23%' : '47%',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: theme.text,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    textAlign: 'center',
-  },
   section: {
-    padding: 20,
-    paddingTop: 0,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 12,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: theme.primary,
-    fontWeight: '600',
-  },
-  gradeScroll: {
-    marginHorizontal: -20,
     paddingHorizontal: 20,
-  },
-  gradeCard: {
-    backgroundColor: theme.card,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginRight: 12,
-    alignItems: 'center',
-    minWidth: 80,
-  },
-  gradeLabel: {
-    fontSize: 12,
-    color: theme.textSecondary,
-  },
-  gradeCount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.text,
-    marginTop: 4,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: isTablet ? '23%' : '47%',
-    backgroundColor: theme.card,
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  actionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.text,
-    textAlign: 'center',
-  },
-  registrationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    gap: 12,
-  },
-  registrationAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#3B82F620',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  registrationAvatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3B82F6',
-  },
-  registrationInfo: {
-    flex: 1,
-  },
-  registrationName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  registrationGrade: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
+    paddingBottom: 8,
   },
 });
 

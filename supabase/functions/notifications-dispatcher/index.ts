@@ -510,6 +510,107 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       sound: 'default',
       priority: 'high',
       channelId: 'calendar'
+    },
+    
+    // Birthday notifications
+    birthday_reminder_week: {
+      title: '🎂 Birthday Coming Up!',
+      body: context.student_name 
+        ? `${context.student_name}'s birthday is in 1 week (${context.birthday_date}). They'll be turning ${context.age}!`
+        : 'A birthday is coming up in 1 week!',
+      data: {
+        type: 'birthday_reminder',
+        screen: 'birthday-planner',
+        student_name: context.student_name,
+        days_until: 7,
+        age: context.age,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'general'
+    },
+    birthday_reminder_tomorrow: {
+      title: '🎈 Birthday Tomorrow!',
+      body: context.student_name 
+        ? `${context.student_name}'s birthday is TOMORROW! They'll be turning ${context.age}! 🎉`
+        : 'A birthday is tomorrow!',
+      data: {
+        type: 'birthday_reminder',
+        screen: 'birthday-planner',
+        student_name: context.student_name,
+        days_until: 1,
+        age: context.age,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    birthday_reminder_teacher: {
+      title: '🎂 Student Birthday Tomorrow',
+      body: context.student_name 
+        ? `${context.student_name} from ${context.class_name || 'your class'} has a birthday tomorrow! They'll be turning ${context.age}.`
+        : 'A student in your class has a birthday tomorrow!',
+      data: {
+        type: 'birthday_reminder',
+        screen: 'dashboard',
+        student_name: context.student_name,
+        class_name: context.class_name,
+        age: context.age,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'general'
+    },
+    birthday_today: {
+      title: '🎉 Happy Birthday!',
+      body: context.student_name 
+        ? `Today is ${context.student_name}'s special day! Happy ${context.age}th birthday! 🎂🎈🎁`
+        : 'Happy Birthday! 🎂🎈🎁',
+      data: {
+        type: 'birthday',
+        screen: 'birthday-planner',
+        student_name: context.student_name,
+        age: context.age,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    birthday_today_teacher: {
+      title: '🎂 Student Birthday Today!',
+      body: context.student_name 
+        ? `${context.student_name} from ${context.class_name || 'your class'} is celebrating their ${context.age}th birthday today! 🎉`
+        : 'A student in your class has a birthday today!',
+      data: {
+        type: 'birthday',
+        screen: 'dashboard',
+        student_name: context.student_name,
+        class_name: context.class_name,
+        age: context.age,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    birthday_classmates_notification: {
+      title: '🎈 Classmate Birthday!',
+      body: context.student_name 
+        ? `${context.student_name} has a birthday ${context.days_until === 0 ? 'today' : context.days_until === 1 ? 'tomorrow' : `in ${context.days_until} days`}!`
+        : 'A classmate has an upcoming birthday!',
+      data: {
+        type: 'birthday',
+        screen: 'dashboard',
+        student_name: context.student_name,
+        days_until: context.days_until,
+      },
+      sound: 'default',
+      priority: 'normal',
+      channelId: 'general'
     }
   };
 
