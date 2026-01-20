@@ -1,0 +1,543 @@
+/**
+ * Birthday Planner Service
+ * 
+ * Provides birthday tracking, notifications, and planning features for preschools.
+ * - Tracks upcoming student birthdays from date_of_birth
+ * - Sends advance notifications to parents and teachers
+ * - Manages birthday celebration preferences per student
+ * - Integrates with school calendar and notifications
+ */
+
+import { assertSupabase } from '@/lib/supabase';
+
+// Types
+export interface StudentBirthday {
+  id: string;
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  birthDate: Date; // This year's birthday
+  age: number; // Age they're turning
+  daysUntil: number;
+  classId?: string;
+  className?: string;
+  parentId?: string;
+  parentName?: string;
+  photoUrl?: string;
+  celebrationPreferences?: BirthdayCelebrationPreferences;
+}
+
+export interface BirthdayCelebrationPreferences {
+  id?: string;
+  studentId: string;
+  wantsSchoolCelebration: boolean;
+  allergies?: string[];
+  dietaryRestrictions?: string[];
+  preferredTheme?: string;
+  specialRequests?: string;
+  parentBringingTreats: boolean;
+  treatsDescription?: string;
+  guestCount?: number;
+  notifyClassmates: boolean;
+  updatedAt?: string;
+}
+
+export interface BirthdayCalendarEvent {
+  id: string;
+  title: string;
+  date: string;
+  type: 'student_birthday';
+  studentId: string;
+  studentName: string;
+  age: number;
+  classId?: string;
+  className?: string;
+}
+
+export interface UpcomingBirthdaysResponse {
+  today: StudentBirthday[];
+  thisWeek: StudentBirthday[];
+  thisMonth: StudentBirthday[];
+  nextMonth: StudentBirthday[];
+}
+
+// Helper functions
+const calculateAge = (dateOfBirth: string, onDate: Date = new Date()): number => {
+  const dob = new Date(dateOfBirth);
+  let age = onDate.getFullYear() - dob.getFullYear();
+  const monthDiff = onDate.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && onDate.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age + 1; // Return age they're turning, not current age
+};
+
+const getThisYearsBirthday = (dateOfBirth: string): Date => {
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  const thisYearBirthday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+  
+  // If birthday has passed this year, get next year's
+  if (thisYearBirthday < today) {
+    thisYearBirthday.setFullYear(today.getFullYear() + 1);
+  }
+  
+  return thisYearBirthday;
+};
+
+const getDaysUntil = (date: Date): number => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+/**
+ * Birthday Planner Service
+ */
+export class BirthdayPlannerService {
+  /**
+   * Get all upcoming birthdays for a preschool
+   */
+  static async getUpcomingBirthdays(
+    preschoolId: string,
+    daysAhead: number = 90
+  ): Promise<UpcomingBirthdaysResponse> {
+    try {
+      const supabase = assertSupabase();
+      
+      // Fetch all active students with their class and parent info
+      const { data: students, error } = await supabase
+        .from('students')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          date_of_birth,
+          photo_url,
+          class_id,
+          parent_id,
+          classes(name),
+          profiles!students_parent_id_fkey(first_name, last_name)
+        `)
+        .eq('preschool_id', preschoolId)
+        .eq('is_active', true)
+        .not('date_of_birth', 'is', null);
+
+      if (error) {
+        console.error('[BirthdayPlannerService] Error fetching students:', error);
+        throw error;
+      }
+
+      // Fetch celebration preferences for all students
+      const studentIds = (students || []).map(s => s.id);
+      let preferencesMap = new Map<string, BirthdayCelebrationPreferences>();
+      
+      if (studentIds.length > 0) {
+        const { data: preferences } = await supabase
+          .from('birthday_celebration_preferences')
+          .select('*')
+          .in('student_id', studentIds);
+        
+        (preferences || []).forEach((pref: any) => {
+          preferencesMap.set(pref.student_id, {
+            id: pref.id,
+            studentId: pref.student_id,
+            wantsSchoolCelebration: pref.wants_school_celebration ?? true,
+            allergies: pref.allergies || [],
+            dietaryRestrictions: pref.dietary_restrictions || [],
+            preferredTheme: pref.preferred_theme,
+            specialRequests: pref.special_requests,
+            parentBringingTreats: pref.parent_bringing_treats ?? false,
+            treatsDescription: pref.treats_description,
+            guestCount: pref.guest_count,
+            notifyClassmates: pref.notify_classmates ?? true,
+            updatedAt: pref.updated_at,
+          });
+        });
+      }
+
+      // Process students into birthday entries
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const cutoffDate = new Date(today);
+      cutoffDate.setDate(cutoffDate.getDate() + daysAhead);
+
+      const birthdays: StudentBirthday[] = (students || [])
+        .map((student: any) => {
+          const birthDate = getThisYearsBirthday(student.date_of_birth);
+          const daysUntil = getDaysUntil(birthDate);
+          
+          // Only include if within range
+          if (daysUntil < 0 || daysUntil > daysAhead) return null;
+          
+          const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
+          const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
+          
+          return {
+            id: `birthday-${student.id}`,
+            studentId: student.id,
+            firstName: student.first_name,
+            lastName: student.last_name,
+            dateOfBirth: student.date_of_birth,
+            birthDate,
+            age: calculateAge(student.date_of_birth, birthDate),
+            daysUntil,
+            classId: student.class_id,
+            className: classData?.name,
+            parentId: student.parent_id,
+            parentName: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
+            photoUrl: student.photo_url,
+            celebrationPreferences: preferencesMap.get(student.id),
+          };
+        })
+        .filter(Boolean) as StudentBirthday[];
+
+      // Sort by days until
+      birthdays.sort((a, b) => a.daysUntil - b.daysUntil);
+
+      // Categorize
+      const todayBirthdays = birthdays.filter(b => b.daysUntil === 0);
+      const thisWeek = birthdays.filter(b => b.daysUntil > 0 && b.daysUntil <= 7);
+      const thisMonth = birthdays.filter(b => b.daysUntil > 7 && b.daysUntil <= 30);
+      const nextMonth = birthdays.filter(b => b.daysUntil > 30 && b.daysUntil <= 60);
+
+      return {
+        today: todayBirthdays,
+        thisWeek,
+        thisMonth,
+        nextMonth,
+      };
+    } catch (error) {
+      console.error('[BirthdayPlannerService] Error:', error);
+      return {
+        today: [],
+        thisWeek: [],
+        thisMonth: [],
+        nextMonth: [],
+      };
+    }
+  }
+
+  /**
+   * Get birthdays for a specific class
+   */
+  static async getClassBirthdays(
+    classId: string,
+    daysAhead: number = 30
+  ): Promise<StudentBirthday[]> {
+    try {
+      const supabase = assertSupabase();
+      
+      const { data: students, error } = await supabase
+        .from('students')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          date_of_birth,
+          photo_url,
+          class_id,
+          parent_id,
+          classes(name),
+          profiles!students_parent_id_fkey(first_name, last_name)
+        `)
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .not('date_of_birth', 'is', null);
+
+      if (error) throw error;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const birthdays: StudentBirthday[] = (students || [])
+        .map((student: any) => {
+          const birthDate = getThisYearsBirthday(student.date_of_birth);
+          const daysUntil = getDaysUntil(birthDate);
+          
+          if (daysUntil < 0 || daysUntil > daysAhead) return null;
+          
+          const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
+          const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
+          
+          return {
+            id: `birthday-${student.id}`,
+            studentId: student.id,
+            firstName: student.first_name,
+            lastName: student.last_name,
+            dateOfBirth: student.date_of_birth,
+            birthDate,
+            age: calculateAge(student.date_of_birth, birthDate),
+            daysUntil,
+            classId: student.class_id,
+            className: classData?.name,
+            parentId: student.parent_id,
+            parentName: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
+            photoUrl: student.photo_url,
+          };
+        })
+        .filter(Boolean) as StudentBirthday[];
+
+      return birthdays.sort((a, b) => a.daysUntil - b.daysUntil);
+    } catch (error) {
+      console.error('[BirthdayPlannerService] Error fetching class birthdays:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get birthday for a specific student (parent view)
+   */
+  static async getStudentBirthday(studentId: string): Promise<StudentBirthday | null> {
+    try {
+      const supabase = assertSupabase();
+      
+      const { data: student, error } = await supabase
+        .from('students')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          date_of_birth,
+          photo_url,
+          class_id,
+          parent_id,
+          preschool_id,
+          classes(name)
+        `)
+        .eq('id', studentId)
+        .single();
+
+      if (error || !student?.date_of_birth) return null;
+
+      // Get preferences
+      const { data: prefData } = await supabase
+        .from('birthday_celebration_preferences')
+        .select('*')
+        .eq('student_id', studentId)
+        .single();
+
+      const birthDate = getThisYearsBirthday(student.date_of_birth);
+      const daysUntil = getDaysUntil(birthDate);
+      const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
+
+      const preferences: BirthdayCelebrationPreferences | undefined = prefData ? {
+        id: prefData.id,
+        studentId: prefData.student_id,
+        wantsSchoolCelebration: prefData.wants_school_celebration ?? true,
+        allergies: prefData.allergies || [],
+        dietaryRestrictions: prefData.dietary_restrictions || [],
+        preferredTheme: prefData.preferred_theme,
+        specialRequests: prefData.special_requests,
+        parentBringingTreats: prefData.parent_bringing_treats ?? false,
+        treatsDescription: prefData.treats_description,
+        guestCount: prefData.guest_count,
+        notifyClassmates: prefData.notify_classmates ?? true,
+        updatedAt: prefData.updated_at,
+      } : undefined;
+
+      return {
+        id: `birthday-${student.id}`,
+        studentId: student.id,
+        firstName: student.first_name,
+        lastName: student.last_name,
+        dateOfBirth: student.date_of_birth,
+        birthDate,
+        age: calculateAge(student.date_of_birth, birthDate),
+        daysUntil,
+        classId: student.class_id,
+        className: classData?.name,
+        parentId: student.parent_id,
+        photoUrl: student.photo_url,
+        celebrationPreferences: preferences,
+      };
+    } catch (error) {
+      console.error('[BirthdayPlannerService] Error fetching student birthday:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save or update celebration preferences (parent action)
+   */
+  static async saveCelebrationPreferences(
+    studentId: string,
+    preferences: Partial<BirthdayCelebrationPreferences>
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const supabase = assertSupabase();
+      
+      const { data: existing } = await supabase
+        .from('birthday_celebration_preferences')
+        .select('id')
+        .eq('student_id', studentId)
+        .single();
+
+      const prefData = {
+        student_id: studentId,
+        wants_school_celebration: preferences.wantsSchoolCelebration ?? true,
+        allergies: preferences.allergies || [],
+        dietary_restrictions: preferences.dietaryRestrictions || [],
+        preferred_theme: preferences.preferredTheme,
+        special_requests: preferences.specialRequests,
+        parent_bringing_treats: preferences.parentBringingTreats ?? false,
+        treats_description: preferences.treatsDescription,
+        guest_count: preferences.guestCount,
+        notify_classmates: preferences.notifyClassmates ?? true,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existing) {
+        const { error } = await supabase
+          .from('birthday_celebration_preferences')
+          .update(prefData)
+          .eq('id', existing.id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('birthday_celebration_preferences')
+          .insert(prefData);
+        
+        if (error) throw error;
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[BirthdayPlannerService] Error saving preferences:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get birthdays as calendar events for a month
+   */
+  static async getBirthdayCalendarEvents(
+    preschoolId: string,
+    year: number,
+    month: number
+  ): Promise<BirthdayCalendarEvent[]> {
+    try {
+      const supabase = assertSupabase();
+      
+      const { data: students, error } = await supabase
+        .from('students')
+        .select('id, first_name, last_name, date_of_birth, class_id, classes(name)')
+        .eq('preschool_id', preschoolId)
+        .eq('is_active', true)
+        .not('date_of_birth', 'is', null);
+
+      if (error) throw error;
+
+      const events: BirthdayCalendarEvent[] = [];
+      
+      (students || []).forEach((student: any) => {
+        const dob = new Date(student.date_of_birth);
+        
+        // Check if birthday falls in the requested month
+        if (dob.getMonth() === month) {
+          const birthdayDate = new Date(year, month, dob.getDate());
+          const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
+          
+          events.push({
+            id: `birthday-${student.id}-${year}-${month}`,
+            title: `🎂 ${student.first_name}'s Birthday`,
+            date: birthdayDate.toISOString(),
+            type: 'student_birthday',
+            studentId: student.id,
+            studentName: `${student.first_name} ${student.last_name}`,
+            age: calculateAge(student.date_of_birth, birthdayDate),
+            classId: student.class_id,
+            className: classData?.name,
+          });
+        }
+      });
+
+      return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    } catch (error) {
+      console.error('[BirthdayPlannerService] Error fetching birthday events:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Send birthday reminder notifications
+   * Called by cron job - notifies parents 1 week and 1 day before
+   */
+  static async sendBirthdayReminders(preschoolId: string): Promise<{
+    sent: number;
+    failed: number;
+  }> {
+    try {
+      const supabase = assertSupabase();
+      const results = { sent: 0, failed: 0 };
+
+      // Get birthdays coming up in 7 days and 1 day
+      const { thisWeek } = await this.getUpcomingBirthdays(preschoolId, 7);
+      
+      for (const birthday of thisWeek) {
+        // Only send reminders for 7-day and 1-day marks
+        if (birthday.daysUntil !== 7 && birthday.daysUntil !== 1) continue;
+        
+        try {
+          // Notify parent
+          if (birthday.parentId) {
+            await supabase.functions.invoke('notifications-dispatcher', {
+              body: {
+                event_type: 'birthday_reminder',
+                user_id: birthday.parentId,
+                preschool_id: preschoolId,
+                context: {
+                  student_name: `${birthday.firstName} ${birthday.lastName}`,
+                  days_until: birthday.daysUntil,
+                  age: birthday.age,
+                  birthday_date: birthday.birthDate.toISOString(),
+                },
+              },
+            });
+            results.sent++;
+          }
+
+          // Notify teacher if within 1 day
+          if (birthday.daysUntil === 1 && birthday.classId) {
+            const { data: classData } = await supabase
+              .from('classes')
+              .select('teacher_id')
+              .eq('id', birthday.classId)
+              .single();
+
+            if (classData?.teacher_id) {
+              await supabase.functions.invoke('notifications-dispatcher', {
+                body: {
+                  event_type: 'birthday_reminder_teacher',
+                  user_id: classData.teacher_id,
+                  preschool_id: preschoolId,
+                  context: {
+                    student_name: `${birthday.firstName} ${birthday.lastName}`,
+                    class_name: birthday.className,
+                    age: birthday.age,
+                  },
+                },
+              });
+              results.sent++;
+            }
+          }
+        } catch (err) {
+          console.error(`[BirthdayPlannerService] Failed to send reminder for ${birthday.studentId}:`, err);
+          results.failed++;
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('[BirthdayPlannerService] Error sending reminders:', error);
+      return { sent: 0, failed: 0 };
+    }
+  }
+}
+
+export default BirthdayPlannerService;
