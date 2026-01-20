@@ -37,6 +37,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TierBadge from '@/components/ui/TierBadge';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { PendingParentLinkRequests } from './PendingParentLinkRequests';
+import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
+import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 
 // Import modular components
 import { 
@@ -71,6 +73,19 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
   
+  // Get organization ID for birthday planner
+  const organizationId = profile?.organization_id || profile?.preschool_id;
+  
+  // Birthday planner hook
+  const {
+    birthdays,
+    loading: birthdaysLoading,
+    refresh: refreshBirthdays,
+  } = useBirthdayPlanner({
+    preschoolId: organizationId,
+    daysAhead: 60, // Show birthdays for next 2 months
+  });
+  
   // Clear any stuck dashboardSwitching flag on mount to prevent loading/navigation issues
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
@@ -103,6 +118,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
     setRefreshing(true);
     try {
       await refresh();
+      await refreshBirthdays();
       await Feedback.vibrate(10);
     } catch (_error) {
       console.error('Refresh error:', _error);
@@ -230,6 +246,28 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             onToggle={toggleSection}
           >
             <PendingParentLinkRequests />
+          </CollapsibleSection>
+        </View>
+
+        {/* Upcoming Birthdays */}
+        <View style={styles.section}>
+          <CollapsibleSection 
+            title={birthdays?.today?.length 
+              ? t('dashboard.upcoming_birthdays_with_count', { defaultValue: 'Upcoming Birthdays ({{count}} today!)', count: birthdays.today.length })
+              : t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays' })} 
+            sectionId="birthdays" 
+            icon="🎂"
+            defaultCollapsed={collapsedSections.has('birthdays')}
+            onToggle={toggleSection}
+          >
+            <UpcomingBirthdaysCard
+              birthdays={birthdays}
+              loading={birthdaysLoading}
+              showHeader={false}
+              maxItems={5}
+              compact
+              onViewAll={() => router.push('/screens/birthday-planner')}
+            />
           </CollapsibleSection>
         </View>
 
