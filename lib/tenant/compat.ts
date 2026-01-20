@@ -89,12 +89,12 @@ export function getOrganizationType(
 }
 
 /**
- * Check if organization ID is valid (UUID format)
+ * Check if organization ID is valid (UUID format - accepts any UUID-formatted string)
  */
 export function isValidOrganizationId(id: string | null | undefined): boolean {
   if (!id) return false;
   
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(id);
 }
 

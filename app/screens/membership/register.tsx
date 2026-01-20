@@ -346,8 +346,8 @@ export default function MemberRegistrationScreen() {
             return;
           }
           
-          // Validate the user ID is a proper UUID
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          // Validate the user ID is a proper UUID (accepts any UUID-formatted string)
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (!signUpData.user.id || !uuidRegex.test(signUpData.user.id)) {
             console.error('[Register] Invalid user ID returned from signUp:', signUpData.user.id);
             Alert.alert('Error', 'Invalid user ID returned. Please try again.');

@@ -82,8 +82,22 @@ export default function TransactionsScreen() {
       if (forceRefresh) setRefreshing(true);
 
       const preschoolId = derivePreschoolId(profile);
+      
+      console.log('[TransactionsScreen] Loading transactions with:', {
+        preschoolId,
+        profile: {
+          id: profile?.id,
+          role: profile?.role,
+          preschool_id: profile?.preschool_id,
+          organization_id: profile?.organization_id,
+        },
+        dateRange: filters.dateRange,
+      });
 
       const data = await FinancialDataService.getTransactions(filters.dateRange, preschoolId || undefined);
+      
+      console.log('[TransactionsScreen] Loaded transactions count:', data.length);
+      
       setTransactions(data);
 
     } catch (error) {

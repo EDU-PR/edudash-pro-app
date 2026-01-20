@@ -127,10 +127,10 @@ export const mapActivityType = (actionType: string): string => {
 };
 
 /**
- * Check if a string is a valid UUID
+ * Check if a string is a valid UUID (accepts any UUID-formatted string including non-RFC-compliant)
  */
 export const isUuid = (v: string): boolean => 
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 /**
  * Format event time as relative text
