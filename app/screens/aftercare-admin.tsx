@@ -239,6 +239,44 @@ export default function AfterCareAdminScreen() {
       setProcessing(null);
     }
   };
+
+  // Resend confirmation email to parent
+  const resendConfirmationEmail = async (registration: AfterCareRegistration) => {
+    setProcessing(registration.id);
+    try {
+      const supabase = assertSupabase();
+      
+      const { data, error } = await supabase.functions.invoke('send-aftercare-confirmation', {
+        body: {
+          registration_id: registration.id,
+          parent_email: registration.parent_email,
+          parent_name: `${registration.parent_first_name} ${registration.parent_last_name}`,
+          child_name: `${registration.child_first_name} ${registration.child_last_name}`,
+          payment_reference: registration.payment_reference || `AC-${registration.id.slice(0, 8).toUpperCase()}`,
+          has_proof: !!registration.proof_of_payment_url,
+          registration_fee: registration.registration_fee,
+          is_early_bird: registration.registration_fee < registration.registration_fee_original,
+        },
+      });
+      
+      if (error) {
+        console.error('[AfterCareAdmin] Resend email error:', error);
+        Alert.alert('Error', `Failed to resend email: ${error.message || 'Unknown error'}`);
+        return;
+      }
+      
+      console.log('[AfterCareAdmin] ✅ Confirmation email resent:', data);
+      Alert.alert(
+        'Email Sent ✓',
+        `Confirmation email has been resent to:\n${registration.parent_email}\n\nThe email includes banking details${registration.proof_of_payment_url ? ' (POP already received)' : ''} and WhatsApp group link.`
+      );
+    } catch (err) {
+      console.error('[AfterCareAdmin] Resend email exception:', err);
+      Alert.alert('Error', 'Failed to resend confirmation email. Please try again.');
+    } finally {
+      setProcessing(null);
+    }
+  };
   
   const filteredRegistrations = statusFilter === 'all' 
     ? registrations 
@@ -636,6 +674,36 @@ export default function AfterCareAdminScreen() {
                       <Text style={styles.workflowButtonText}>Reactivate Registration</Text>
                     </TouchableOpacity>
                   )}
+                  
+                  {/* Resend Confirmation Email - Available for pending_payment and paid */}
+                  {(selectedRegistration.status === 'pending_payment' || selectedRegistration.status === 'paid') && (
+                    <TouchableOpacity
+                      style={[styles.workflowButton, styles.resendEmailButton]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Resend Confirmation Email',
+                          `Send confirmation email to:\n${selectedRegistration.parent_email}\n\nThe email includes banking details and WhatsApp group link.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Send Email',
+                              onPress: () => resendConfirmationEmail(selectedRegistration),
+                            },
+                          ]
+                        );
+                      }}
+                      disabled={processing === selectedRegistration.id}
+                    >
+                      {processing === selectedRegistration.id ? (
+                        <ActivityIndicator size="small" color="#667eea" />
+                      ) : (
+                        <>
+                          <Ionicons name="mail-outline" size={20} color="#667eea" />
+                          <Text style={[styles.workflowButtonText, { color: '#667eea' }]}>Resend Confirmation Email</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
                 
                 {/* Workflow Guide */}
@@ -982,6 +1050,11 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   reactivateButton: {
     backgroundColor: '#6B7280',
+  },
+  resendEmailButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#667eea',
   },
   enrolledBanner: {
     flexDirection: 'row',
