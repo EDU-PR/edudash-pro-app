@@ -12,13 +12,13 @@ const FROM_EMAIL = 'EduDash Pro <noreply@edudashpro.org.za>';
 const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';
 
-// Community School banking details
+// Community School banking details (EduDash Pro Pty Ltd - Capitec Business)
 const BANK_DETAILS = {
-  bank_name: 'FNB (First National Bank)',
-  account_holder: 'EduDash Pro Community School',
-  account_number: '62890000000', // Replace with actual account number
-  branch_code: '250655',
-  account_type: 'Business Current',
+  bank_name: 'Capitec Bank',
+  account_holder: 'EduDash Pro Pty Ltd',
+  account_number: '1053747152',
+  branch_code: '450105',
+  account_type: 'Business',
   reference_prefix: 'AC-',
 };
 
