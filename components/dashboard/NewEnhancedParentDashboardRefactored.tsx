@@ -43,6 +43,8 @@ import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadge
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
+import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
+import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -84,6 +86,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   // Unified notification hook - auto-refreshes on screen focus
   const { messages: unreadMessageCount, calls: missedCallsCount } = useNotificationsWithFocus();
 
+  // Birthday planner hook - show upcoming birthdays in child's class
+  const { birthdays: upcomingBirthdays, loading: birthdaysLoading, refresh: refreshBirthdays } = useBirthdayPlanner();
+
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
@@ -124,7 +129,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     try {
       // Refresh subscription tier first (in case payment was processed)
       refreshSubscription();
-      await refresh();
+      await Promise.all([
+        refresh(),
+        refreshBirthdays(),
+      ]);
       try { await Feedback.vibrate(10); } catch { /* ignore */ }
     } catch (_error) {
       logger.error('Dashboard refresh failed:', _error);
@@ -531,6 +539,26 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             compact={false}
             showHeader={true}
           />
+        )}
+
+        {/* Upcoming Birthdays in Class */}
+        {profile?.preschool_id && (
+          <CollapsibleSection 
+            title={t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays 🎂' })}
+            sectionId="birthdays"
+            icon="🎈"
+            defaultCollapsed={collapsedSections.has('birthdays')}
+            onToggle={toggleSection}
+          >
+            <UpcomingBirthdaysCard
+              birthdays={upcomingBirthdays}
+              loading={birthdaysLoading}
+              showHeader={false}
+              maxItems={4}
+              compact={true}
+              onViewAll={() => router.push('/screens/birthday-planner' as any)}
+            />
+          </CollapsibleSection>
         )}
 
         {/* Today's Activities - Show daily activities for child's class */}

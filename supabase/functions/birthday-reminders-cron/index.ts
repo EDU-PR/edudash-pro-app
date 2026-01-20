@@ -24,7 +24,7 @@ interface StudentBirthday {
   class_id: string | null;
   parent_id: string | null;
   preschool_id: string;
-  photo_url: string | null;
+  avatar_url: string | null;
 }
 
 interface BirthdayReminder {
@@ -82,14 +82,27 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Verify cron secret (for scheduled execution)
+    // Verify authorization - check for service role key in header
     const authHeader = req.headers.get('Authorization');
-    const isCronJob = authHeader === `Bearer ${CRON_SECRET}`;
+    const token = authHeader?.replace('Bearer ', '');
     
-    // Also allow service role for manual triggering
-    const isServiceRole = authHeader === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+    // Check if token matches service role key or contains service_role in JWT payload
+    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+    const isCronJob = token === CRON_SECRET;
     
-    if (!isCronJob && !isServiceRole) {
+    // Also validate by decoding JWT and checking role claim
+    let isValidServiceRole = false;
+    if (token && !isServiceRole && !isCronJob) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        isValidServiceRole = payload.role === 'service_role';
+      } catch {
+        // Invalid token format
+      }
+    }
+    
+    if (!isCronJob && !isServiceRole && !isValidServiceRole) {
+      console.log('[birthday-reminders-cron] Authorization failed');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
         status: 401,
         headers: { 'Content-Type': 'application/json' }
@@ -112,7 +125,7 @@ serve(async (req: Request): Promise<Response> => {
     const { data: schools, error: schoolsError } = await supabase
       .from('preschools')
       .select('id, name')
-      .eq('status', 'active');
+      .eq('is_active', true);
 
     if (schoolsError) {
       console.error('[birthday-reminders-cron] Error fetching schools:', schoolsError);
@@ -133,7 +146,7 @@ serve(async (req: Request): Promise<Response> => {
           class_id,
           parent_id,
           preschool_id,
-          photo_url,
+          avatar_url,
           classes(id, name, teacher_id)
         `)
         .eq('preschool_id', school.id)
