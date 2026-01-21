@@ -12,6 +12,9 @@ const isSmallScreen = SCREEN_WIDTH < 360;
 const isShortScreen = SCREEN_HEIGHT < 700;
 const isCompact = isSmallScreen || isShortScreen;
 
+// K-12 school types that should route to K-12 dashboards
+const K12_SCHOOL_TYPES = ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'];
+
 interface TabItem {
   id: string;
   label: string;
@@ -485,6 +488,10 @@ export function BottomTabBar() {
   // Check if user is Veterans League member
   const isVeteransLeague = memberType?.startsWith('veterans_');
   
+  // Check school type for K-12 routing (parents and students)
+  const schoolType = (profile as any)?.organization_membership?.school_type;
+  const isK12SchoolType = schoolType && K12_SCHOOL_TYPES.includes(schoolType);
+  
   // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
     if (!item.roles) return false; // Require explicit role assignment
@@ -521,6 +528,19 @@ export function BottomTabBar() {
            !item.roles.includes('regional_manager') &&
            !item.roles.includes('women_league') &&
            !item.roles.includes('veterans_league');
+  }).map(item => {
+    // Override home routes for K-12 parents and students
+    if (isK12SchoolType) {
+      // K-12 Parent: route to K-12 parent dashboard
+      if (item.id === 'parent-dashboard' && userRole === 'parent') {
+        return { ...item, route: '/(k12)/parent/dashboard' };
+      }
+      // K-12 Student: route to K-12 student dashboard
+      if (item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
+        return { ...item, route: '/(k12)/student/dashboard' };
+      }
+    }
+    return item;
   });
 
   // Check if current route matches tab

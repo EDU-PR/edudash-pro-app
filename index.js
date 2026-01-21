@@ -12,30 +12,39 @@ import './polyfills/promise';
 // =====================================================
 // SENTRY INITIALIZATION - MUST BE EARLY FOR CRASH TRACKING
 // =====================================================
-import * as Sentry from 'sentry-expo';
+import Constants from 'expo-constants';
 
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
-if (SENTRY_DSN && /https?:\/\/.+@.+/i.test(SENTRY_DSN)) {
-  try {
-    Sentry.init({
-      dsn: SENTRY_DSN,
-      enableInExpoDevelopment: true, // Track in dev too for testing
-      debug: __DEV__,
-      environment: process.env.EXPO_PUBLIC_ENVIRONMENT || (__DEV__ ? 'development' : 'production'),
-      tracesSampleRate: __DEV__ ? 1.0 : 0.2,
-      // Enable native crash handling for production
-      enableNative: true,
-      enableNativeCrashHandling: true,
-      enableAutoPerformanceTracing: !__DEV__,
-      // Breadcrumbs for better debugging
-      enableAutoBreadcrumbTracking: true,
-    });
-    console.log('[Sentry] ✅ Initialized at app entry point');
-  } catch (e) {
-    console.warn('[Sentry] ❌ Failed to initialize:', e);
+// Check if running in Expo Go (native Sentry not available in Expo Go)
+const isExpoGo = Constants.appOwnership === 'expo';
+
+// Only initialize Sentry if NOT running in Expo Go
+// The sentry-expo import itself triggers native client errors in Expo Go
+if (!isExpoGo) {
+  const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
+  if (SENTRY_DSN && /https?:\/\/.+@.+/i.test(SENTRY_DSN)) {
+    try {
+      // Dynamic import to avoid loading native modules in Expo Go
+      const Sentry = require('sentry-expo');
+      Sentry.init({
+        dsn: SENTRY_DSN,
+        enableInExpoDevelopment: false,
+        debug: __DEV__,
+        environment: process.env.EXPO_PUBLIC_ENVIRONMENT || (__DEV__ ? 'development' : 'production'),
+        tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+        enableNative: true,
+        enableNativeCrashHandling: true,
+        enableAutoPerformanceTracing: !__DEV__,
+        enableAutoBreadcrumbTracking: true,
+      });
+      console.log('[Sentry] ✅ Initialized at app entry point');
+    } catch (e) {
+      console.warn('[Sentry] ❌ Failed to initialize:', e);
+    }
+  } else {
+    console.log('[Sentry] ⚠️ No valid DSN, skipping initialization');
   }
 } else {
-  console.log('[Sentry] ⚠️ No valid DSN, skipping initialization');
+  console.log('[Sentry] ⚠️ Skipping in Expo Go (native not available)');
 }
 
 // Suppress known harmless warnings from third-party libraries

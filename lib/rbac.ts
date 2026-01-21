@@ -364,6 +364,7 @@ interface OrganizationData {
   name: string;
   subscription_tier?: PlanTier;
   plan_tier?: PlanTier;
+  school_type?: string; // preschool, primary, secondary, k12, combined, community_school, etc.
 }
 
 /**
@@ -394,6 +395,7 @@ export interface EnhancedUserProfile extends UserProfile {
     invited_by?: string;
     joined_at: string;
     member_type?: string; // Member type (e.g., 'ceo', 'national_admin', 'regional_manager', 'staff')
+    school_type?: string; // School type (preschool, primary, secondary, k12, combined, community_school)
   };
   
   // Complete capabilities list
@@ -500,6 +502,7 @@ export function createEnhancedProfile(
       invited_by: orgMembership.invited_by,
       joined_at: orgMembership.created_at,
       member_type: orgMembership.member_type, // Member type (ceo, national_admin, regional_manager, staff, etc.)
+      school_type: orgMembership.school_type, // School type (preschool, k12, combined, community_school, etc.)
     };
   }
   
@@ -902,7 +905,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
           // Try preschools by id first
           const { data: presById } = await assertSupabase()
             .from('preschools')
-            .select('id, name, subscription_tier')
+            .select('id, name, subscription_tier, school_type')
             .eq('id', orgIdentifierRaw)
             .maybeSingle();
           if (presById) {
@@ -927,7 +930,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
           try {
             const { data: presBySlug } = await assertSupabase()
               .from('preschools')
-              .select('id, name, subscription_tier')
+              .select('id, name, subscription_tier, school_type')
               .eq('tenant_slug', orgIdentifierRaw)
               .maybeSingle();
             if (presBySlug) {
@@ -1159,7 +1162,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
         try {
           const { data: orgData } = await assertSupabase()
             .from('preschools')
-            .select('id, name, subscription_tier')
+            .select('id, name, subscription_tier, school_type')
             .eq('id', orgIdToUse)
             .maybeSingle();
           if (orgData) {
@@ -1232,6 +1235,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       invited_by: orgMember?.invited_by,
       created_at: orgMember?.created_at,
       member_type: orgMember?.member_type, // Member type (ceo, national_admin, regional_manager, etc.)
+      school_type: org?.school_type, // School type (preschool, k12, combined, community_school, etc.)
     });
 
     // #region agent log
@@ -1240,6 +1244,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       email: profile.email,
       organization_id: baseProfile.organization_id,
       member_type: orgMember?.member_type,
+      school_type: org?.school_type,
       hasOrgMember: !!orgMember,
       orgMemberKeys: orgMember ? Object.keys(orgMember) : [],
       timestamp: Date.now()

@@ -549,6 +549,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             icon="🎈"
             defaultCollapsed={collapsedSections.has('birthdays')}
             onToggle={toggleSection}
+            actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
+            onActionPress={() => router.push('/screens/birthday-chart' as any)}
           >
             <UpcomingBirthdaysCard
               birthdays={upcomingBirthdays}
@@ -556,7 +558,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               showHeader={false}
               maxItems={4}
               compact={true}
-              onViewAll={() => router.push('/screens/birthday-planner' as any)}
+              onViewAll={() => router.push('/screens/birthday-chart' as any)}
             />
           </CollapsibleSection>
         )}

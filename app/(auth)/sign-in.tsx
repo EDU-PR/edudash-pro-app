@@ -1,7 +1,7 @@
 // needs refactor to use AuthContext for sign-in state management
 
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView, RefreshControl } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,8 +39,37 @@ export default function SignIn() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricAttempted, setBiometricAttempted] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
   const { showAlert, alertProps } = useAlertModal();
+
+  // Pull-to-refresh handler - clears any stale state
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    console.log('[SignIn] Pull-to-refresh triggered');
+    
+    try {
+      // Clear any stale navigation locks
+      const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
+      clearAllNavigationLocks();
+      
+      // Reset sign-out state
+      const { resetSignOutState } = await import('@/lib/authActions');
+      resetSignOutState();
+      
+      // Clear error/success messages
+      setSuccessMessage(null);
+      
+      // Small delay to show the refresh indicator
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      console.log('[SignIn] Refresh complete');
+    } catch (err) {
+      console.warn('[SignIn] Error during refresh:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
 console.log('[SignIn] Component rendering, theme:', theme);
 
@@ -828,6 +857,15 @@ return (
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.primary}
+              colors={[theme.primary]}
+              progressBackgroundColor={theme.surface}
+            />
+          }
         >
           <View style={styles.content}>
             {/* Logo Section */}

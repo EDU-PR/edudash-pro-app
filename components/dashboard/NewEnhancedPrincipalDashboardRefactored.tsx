@@ -259,6 +259,8 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             icon="🎂"
             defaultCollapsed={collapsedSections.has('birthdays')}
             onToggle={toggleSection}
+            actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
+            onActionPress={() => router.push('/screens/birthday-chart')}
           >
             <UpcomingBirthdaysCard
               birthdays={birthdays}
@@ -266,7 +268,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
               showHeader={false}
               maxItems={5}
               compact
-              onViewAll={() => router.push('/screens/birthday-planner')}
+              onViewAll={() => router.push('/screens/birthday-chart')}
             />
           </CollapsibleSection>
         </View>
