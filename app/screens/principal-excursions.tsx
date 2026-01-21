@@ -75,11 +75,11 @@ export default function PrincipalExcursionsScreen() {
   };
 
   return (
-    <DesktopLayout role="principal">
+    <DesktopLayout role="principal" title="Excursion Planner">
       <Stack.Screen
         options={{
           title: 'Excursion Planner',
-          headerShown: true,
+          headerShown: false,
         }}
       />
       <ScrollView

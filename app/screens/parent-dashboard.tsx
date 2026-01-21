@@ -152,16 +152,16 @@ export default function ParentDashboardScreen() {
   }
 
   return (
-    <DesktopLayout role="parent">
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor={theme.headerBackground}
-          translucent={false}
-        />
-        <Stack.Screen options={{ headerShown: false }} />
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.headerBackground}
+        translucent={false}
+      />
+      <DesktopLayout role="parent">
         <ParentDashboardWrapper />
-      </View>
-    </DesktopLayout>
+      </DesktopLayout>
+    </>
   );
 }

@@ -187,6 +187,20 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       icon: 'list',
       color: '#64748B',
     },
+    // Birthday Management
+    {
+      id: 'birthday-chart',
+      title: t('dashboard.birthday_chart', { defaultValue: 'Birthday Chart' }),
+      icon: 'gift',
+      color: '#F472B6',
+    },
+    // Financial Management
+    {
+      id: 'fee-management',
+      title: t('dashboard.fee_management', { defaultValue: 'Fee Management' }),
+      icon: 'wallet',
+      color: '#10B981',
+    },
   ];
 
   const handleActionPress = (actionId: string) => {
@@ -282,6 +296,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
           t('common.coming_soon', { defaultValue: 'Coming Soon' }),
           t('ecd.weekly_plans_coming_soon', { defaultValue: 'Weekly Plans management is coming in the next update.' })
         );
+        break;
+      case 'birthday-chart':
+        router.push('/screens/birthday-chart');
+        break;
+      case 'fee-management':
+        router.push('/screens/principal-fee-overview');
         break;
       default:
         Alert.alert(

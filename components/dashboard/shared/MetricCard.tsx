@@ -218,9 +218,10 @@ const createStyles = (theme: any, customCardWidth?: number) => {
 
   // Fixed 3-column layout for small cards (Quick Actions)
   // Calculate to ensure exactly 3 cards fit per row with proper spacing
+  // For 3 columns, we need: (totalWidth - horizontalPadding - 2 gaps) / 3
   const smallCardWidth = isTablet 
     ? (width - 80) / 5 
-    : Math.floor((width - (cardPadding * 2) - (cardGap * 4)) / 3);
+    : Math.floor((width - (cardPadding * 2) - (cardGap * 2)) / 3);
 
   return StyleSheet.create({
     metricCard: {

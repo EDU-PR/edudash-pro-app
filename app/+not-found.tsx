@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Auto-redirect delay (in ms) - gives time for proper route resolution
 const AUTO_REDIRECT_DELAY = 1200;
@@ -113,10 +114,30 @@ export default function NotFound() {
   if (authLoading || isRedirecting) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00f5ff" />
-        <Text style={styles.loadingText}>
-          {authLoading ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.redirecting', { defaultValue: 'Redirecting...' })}
-        </Text>
+        <LinearGradient
+          colors={['#0a0a0f', '#0f172a', '#0a0a0f']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <View style={styles.logoCircle}>
+            <Ionicons name="school" size={48} color="#00f5ff" />
+          </View>
+          <Text style={styles.logoText}>EduDash Pro</Text>
+          <Text style={styles.logoSubtext}>Empowering Education Through AI</Text>
+        </View>
+        
+        {/* Loading spinner */}
+        <View style={styles.spinnerContainer}>
+          <ActivityIndicator size="large" color="#00f5ff" />
+          <Text style={styles.loadingText}>
+            {authLoading 
+              ? t('common.loading', { defaultValue: 'Loading your dashboard...' }) 
+              : t('common.redirecting', { defaultValue: 'Preparing your experience...' })}
+          </Text>
+        </View>
       </View>
     );
   }
@@ -202,10 +223,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 48,
+  },
+  logoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  logoText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 1,
+  },
+  logoSubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  spinnerContainer: {
+    alignItems: 'center',
+    gap: 16,
+  },
   loadingText: {
-    marginTop: 16,
+    marginTop: 8,
     fontSize: 16,
     color: '#9ca3af',
+    textAlign: 'center',
   },
   content: {
     flexGrow: 1,

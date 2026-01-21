@@ -269,7 +269,7 @@ export function K12AdminDashboard() {
           birthdays={birthdays}
           loading={birthdaysLoading}
           maxItems={5}
-          onViewAll={() => router.push('/screens/birthday-planner')}
+          onViewAll={() => router.push('/screens/birthday-chart')}
         />
       </View>
 

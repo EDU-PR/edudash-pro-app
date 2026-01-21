@@ -28,6 +28,10 @@ export interface CollapsibleSectionProps {
   children: React.ReactNode;
   defaultCollapsed?: boolean;
   onToggle?: (sectionId: string, isCollapsed: boolean) => void;
+  /** Optional action button label shown in header */
+  actionLabel?: string;
+  /** Optional action button press handler */
+  onActionPress?: () => void;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ 
@@ -37,6 +41,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   children, 
   defaultCollapsed = false,
   onToggle,
+  actionLabel,
+  onActionPress,
 }) => {
   const { theme } = useTheme();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -100,13 +106,27 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             <Text style={styles.headerTitle}>{title}</Text>
           </View>
         </View>
-        <Animated.View style={animatedChevronStyle}>
-          <Ionicons 
-            name="chevron-forward" 
-            size={20} 
-            color={theme.textSecondary} 
-          />
-        </Animated.View>
+        <View style={styles.headerRight}>
+          {actionLabel && onActionPress && (
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onActionPress();
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={[styles.actionText, { color: theme.primary }]}>{actionLabel}</Text>
+            </TouchableOpacity>
+          )}
+          <Animated.View style={animatedChevronStyle}>
+            <Ionicons 
+              name="chevron-forward" 
+              size={20} 
+              color={theme.textSecondary} 
+            />
+          </Animated.View>
+        </View>
       </TouchableOpacity>
       <Animated.View style={animatedContentStyle}>
         {!collapsed && children}
@@ -131,6 +151,12 @@ const createStyles = (theme: any) => {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+      flex: 1,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
     headerIcon: {
       fontSize: 18,
@@ -151,6 +177,14 @@ const createStyles = (theme: any) => {
       fontSize: isTablet ? 22 : isSmallScreen ? 18 : 20,
       fontWeight: '600',
       color: theme.text,
+    },
+    actionButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    actionText: {
+      fontSize: isSmallScreen ? 12 : 14,
+      fontWeight: '600',
     },
   });
 };

@@ -615,12 +615,43 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/teacher-dashboard' };
 
     case 'parent':
+      // Check school_type to route to appropriate parent dashboard
+      const parentSchoolType = (profile as any)?.organization_membership?.school_type;
+      // #region agent log
+      console.log('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
+        parentSchoolType,
+        organization_membership: (profile as any)?.organization_membership,
+        organization_id: profile.organization_id,
+        hasOrgMembership: !!(profile as any)?.organization_membership,
+        allKeys: (profile as any)?.organization_membership ? Object.keys((profile as any).organization_membership) : [],
+        timestamp: Date.now()
+      }));
+      // #endregion
+      console.log('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType);
+      
+      // K-12 related school types route to K-12 parent dashboard
+      const isK12Parent = parentSchoolType && ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'].includes(parentSchoolType);
+      if (isK12Parent) {
+        console.log('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
+        return { path: '/(k12)/parent/dashboard', params: { schoolType: parentSchoolType, mode: 'k12' } };
+      }
+      // Default to preschool parent dashboard
       return { path: '/screens/parent-dashboard' };
 
     case 'student':
-      // Students with organization_id (registered via program code) should always go to learner-dashboard
-      // Only truly standalone students (no org) should go to student-dashboard
+      // Check school_type to route to appropriate student dashboard
+      const studentSchoolType = (profile as any)?.organization_membership?.school_type;
+      console.log('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType);
+      
+      // Students with organization_id go to appropriate dashboard
       if (hasOrganization) {
+        // K-12 related school types route to K-12 student dashboard
+        const isK12Student = studentSchoolType && ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'].includes(studentSchoolType);
+        if (isK12Student) {
+          console.log('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
+          return { path: '/(k12)/student/dashboard', params: { schoolType: studentSchoolType, mode: 'k12' } };
+        }
+        // Default to learner dashboard for preschool/other types
         console.log('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
         return { path: '/screens/learner-dashboard' };
       }
