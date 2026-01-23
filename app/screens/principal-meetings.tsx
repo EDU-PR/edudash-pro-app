@@ -106,14 +106,22 @@ export default function PrincipalMeetingsScreen() {
     updateStatus(meeting.id, newStatus);
   }, [updateStatus]);
 
+  const handleViewMeeting = useCallback((meeting: Meeting) => {
+    router.push({
+      pathname: '/screens/meeting-detail',
+      params: { id: meeting.id },
+    });
+  }, []);
+
   const renderMeetingCard = useCallback(({ item }: { item: Meeting }) => (
     <MeetingCard
       meeting={item}
-      onPress={handleEditMeeting}
+      onPress={handleViewMeeting}
+      onEdit={handleEditMeeting}
       onStatusChange={handleMeetingStatusChange}
       onDelete={deleteMeeting}
     />
-  ), [handleEditMeeting, handleMeetingStatusChange, deleteMeeting]);
+  ), [handleViewMeeting, handleEditMeeting, handleMeetingStatusChange, deleteMeeting]);
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
