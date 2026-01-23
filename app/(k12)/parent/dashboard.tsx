@@ -74,13 +74,14 @@ export default function K12ParentDashboardScreen() {
   const hasAccess = permissions?.can ? permissions.can('access_mobile_app') : true;
 
   // Use the K12 parent data hook for data fetching
+  // NOTE: Pass profile?.id (internal profile ID), NOT user?.id (auth user ID)
   const {
     children,
     recentUpdates,
     upcomingEvents,
     dataLoading,
     fetchChildrenData,
-  } = useK12ParentData(user?.id, organizationId);
+  } = useK12ParentData(profile?.id, organizationId);
 
   // Track dashboard view
   useEffect(() => {
@@ -94,12 +95,12 @@ export default function K12ParentDashboardScreen() {
     }
   }, [canView, hasAccess, user?.id, schoolType, tier]);
 
-  // Load data on mount
+  // Load data on mount - use profile.id for data fetching
   useEffect(() => {
-    if (user?.id && !authLoading && !profileLoading) {
+    if (profile?.id && !authLoading && !profileLoading) {
       fetchChildrenData();
     }
-  }, [user?.id, authLoading, profileLoading, fetchChildrenData]);
+  }, [profile?.id, authLoading, profileLoading, fetchChildrenData]);
 
   // Redirect if unauthorized
   const hasRedirectedRef = React.useRef(false);

@@ -116,11 +116,11 @@ export default function ParentDocumentUploadScreen() {
           .single();
         registration = data;
       } else {
-        // Find by parent email
+        // Find by parent email using auth_user_id (NOT profiles.id!)
         const { data: profile } = await supabase
           .from('profiles')
           .select('email')
-          .eq('id', user.id)
+          .eq('auth_user_id', user.id)
           .single();
 
         if (profile?.email) {

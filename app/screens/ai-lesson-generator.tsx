@@ -113,8 +113,8 @@ export default function AILessonGeneratorScreen() {
     try {
       setSaving(true);
       const { data: auth } = await assertSupabase().auth.getUser();
-      // profiles.id = auth_user_id
-      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('id', auth?.user?.id || '').maybeSingle();
+      // Use auth_user_id to lookup profile (NOT profiles.id!)
+      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('auth_user_id', auth?.user?.id || '').maybeSingle();
       if (!profile) { toast.error('Not signed in'); return; }
       const schoolId = profile.preschool_id || profile.organization_id;
       

@@ -43,7 +43,7 @@ export const formatTimeAgo = (dateString: string): string => {
   return 'Just now';
 };
 
-export function useK12ParentData(userId: string | undefined, organizationId: string | undefined) {
+export function useK12ParentData(profileId: string | undefined, organizationId: string | undefined) {
   const [children, setChildren] = useState<Child[]>([]);
   const [recentUpdates, setRecentUpdates] = useState<RecentUpdate[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -51,14 +51,16 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
   const childrenIdsRef = useRef<string[]>([]);
 
   const fetchChildrenData = useCallback(async () => {
-    if (!userId) return;
+    // profileId is the internal profile.id (NOT auth user.id!)
+    if (!profileId) return;
     
     try {
       setDataLoading(true);
       const supabase = assertSupabase();
       
       // Fetch children linked to this parent (supports multiple parents per child)
-      const studentsData = await fetchParentChildren(userId, {
+      // NOTE: fetchParentChildren expects profile.id, NOT auth user.id
+      const studentsData = await fetchParentChildren(profileId, {
         includeInactive: false,
         schoolId: organizationId || undefined,
       });
@@ -208,18 +210,18 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
     } finally {
       setDataLoading(false);
     }
-  }, [userId, organizationId]);
+  }, [profileId, organizationId]);
 
   // Set up realtime subscription for attendance updates
   useEffect(() => {
-    if (!userId || childrenIdsRef.current.length === 0) return;
+    if (!profileId || childrenIdsRef.current.length === 0) return;
     
     const supabase = assertSupabase();
     const studentIds = childrenIdsRef.current;
     
     // Subscribe to attendance changes for the parent's children
     const channel = supabase
-      .channel(`parent-attendance-${userId}`)
+      .channel(`parent-attendance-${profileId}`)
       .on(
         'postgres_changes',
         {
@@ -241,7 +243,7 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchChildrenData]);
+  }, [profileId, fetchChildrenData]);
 
   // Update childrenIdsRef when children change
   useEffect(() => {
