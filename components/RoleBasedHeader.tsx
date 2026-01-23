@@ -91,13 +91,13 @@ export function RoleBasedHeader({
       // First, try user metadata (fastest)
       let url = user.user_metadata?.avatar_url;
       
-      // If not in metadata, try profiles table
+      // If not in metadata, try profiles table using auth_user_id
       if (!url) {
         try {
           const { data: profileData } = await assertSupabase()
             .from('profiles')
             .select('avatar_url')
-            .eq('id', user.id)
+            .eq('auth_user_id', user.id)
             .maybeSingle();
           
           if (profileData?.avatar_url) {
@@ -114,7 +114,7 @@ export function RoleBasedHeader({
           const { data: profileData } = await assertSupabase()
             .from('profiles')
             .select('avatar_url')
-            .eq('id', user.id)
+            .eq('auth_user_id', user.id)
             .maybeSingle();
           
           if (profileData?.avatar_url) {

@@ -79,11 +79,11 @@ export default function StudentDetailScreen() {
     try {
       setLoading(true);
 
-      // Get user's preschool (profiles.id = auth_user_id)
+      // Get user's preschool by auth_user_id (NOT profiles.id!)
       const { data: userProfile, error: profileError } = await assertSupabase()
         .from('profiles')
-        .select('preschool_id, organization_id, role')
-        .eq('id', user.id)
+        .select('id, preschool_id, organization_id, role')
+        .eq('auth_user_id', user.id)
         .single();
 
       if (profileError) {
@@ -410,11 +410,11 @@ export default function StudentDetailScreen() {
       throw new Error('Unauthorized or missing data');
     }
 
-    // Get user's preschool
+    // Get user's preschool by auth_user_id
     const { data: userProfile } = await assertSupabase()
       .from('profiles')
       .select('preschool_id, organization_id')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .single();
 
     const schoolId = userProfile?.preschool_id || userProfile?.organization_id;

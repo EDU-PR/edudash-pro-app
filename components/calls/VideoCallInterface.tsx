@@ -458,10 +458,11 @@ export function VideoCallInterface({
             setActiveCallId(newCallId);
             console.log('[VideoCall] 📞 Created call ID:', newCallId);
 
+            // Use auth_user_id to lookup profile (NOT profiles.id!)
             const { data: callerProfile } = await getSupabase()
               .from('profiles')
               .select('first_name, last_name')
-              .eq('id', user.id)
+              .eq('auth_user_id', user.id)
               .maybeSingle();
 
             const callerName = callerProfile

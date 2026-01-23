@@ -43,8 +43,8 @@ export default function CreateLessonScreen() {
       setSaving(true)
       const { data: auth } = await assertSupabase().auth.getUser()
       const authUserId = auth?.user?.id || ''
-      // profiles.id = auth_user_id
-      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('id', authUserId).maybeSingle()
+      // Use auth_user_id to lookup profile (NOT profiles.id!)
+      const { data: profile } = await assertSupabase().from('profiles').select('id,preschool_id,organization_id').eq('auth_user_id', authUserId).maybeSingle()
       if (!profile) { Alert.alert('Not signed in', 'No user profile.'); return }
       const schoolId = profile.preschool_id || profile.organization_id;
 
