@@ -10,6 +10,7 @@ import { getMeetingTypeInfo, formatMeetingDate, formatMeetingTime, STATUS_COLORS
 interface MeetingCardProps {
   meeting: Meeting;
   onPress: (meeting: Meeting) => void;
+  onEdit?: (meeting: Meeting) => void;
   onStatusChange: (meeting: Meeting, status: MeetingStatus) => void;
   onDelete: (meeting: Meeting) => void;
 }
@@ -17,6 +18,7 @@ interface MeetingCardProps {
 export const MeetingCard: React.FC<MeetingCardProps> = ({
   meeting,
   onPress,
+  onEdit,
   onStatusChange,
   onDelete,
 }) => {
@@ -70,10 +72,31 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
       {meeting.agenda_items?.length > 0 && (
         <View style={styles.agendaPreview}>
           <Text style={styles.agendaLabel}>Agenda ({meeting.agenda_items.length} items)</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
         </View>
       )}
       
       <View style={styles.cardActions}>
+        {/* View Details - primary action */}
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: theme.primary + '20', flex: 1 }]}
+          onPress={() => onPress(meeting)}
+        >
+          <Ionicons name="eye-outline" size={14} color={theme.primary} style={{ marginRight: 4 }} />
+          <Text style={[styles.actionButtonText, { color: theme.primary }]}>View</Text>
+        </TouchableOpacity>
+        
+        {/* Edit button */}
+        {onEdit && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: '#6366f120' }]}
+            onPress={() => onEdit(meeting)}
+          >
+            <Ionicons name="pencil-outline" size={14} color="#6366f1" style={{ marginRight: 4 }} />
+            <Text style={[styles.actionButtonText, { color: '#6366f1' }]}>Edit</Text>
+          </TouchableOpacity>
+        )}
+        
         {meeting.status === 'scheduled' && (
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: '#f59e0b20' }]}
@@ -161,6 +184,9 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
   },
   agendaPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: theme.background,
     borderRadius: 8,
     padding: 10,
