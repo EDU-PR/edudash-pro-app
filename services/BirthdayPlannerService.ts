@@ -108,7 +108,8 @@ export class BirthdayPlannerService {
     try {
       const supabase = assertSupabase();
       
-      // Fetch all active students with their class and parent info
+      // Fetch all active students with their class info
+      // Note: Parent info fetched separately to avoid FK join issues with RLS
       const { data: students, error } = await supabase
         .from('students')
         .select(`
@@ -116,11 +117,10 @@ export class BirthdayPlannerService {
           first_name,
           last_name,
           date_of_birth,
-          photo_url,
+          avatar_url,
           class_id,
           parent_id,
-          classes(name),
-          profiles!students_parent_id_fkey(first_name, last_name)
+          classes!students_class_id_fkey(name)
         `)
         .eq('preschool_id', preschoolId)
         .eq('is_active', true)
@@ -175,7 +175,6 @@ export class BirthdayPlannerService {
           if (daysUntil < 0 || daysUntil > daysAhead) return null;
           
           const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
-          const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
           
           return {
             id: `birthday-${student.id}`,
@@ -189,8 +188,8 @@ export class BirthdayPlannerService {
             classId: student.class_id,
             className: classData?.name,
             parentId: student.parent_id,
-            parentName: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
-            photoUrl: student.photo_url,
+            parentName: undefined, // Parent names fetched separately if needed
+            photoUrl: student.avatar_url,
             celebrationPreferences: preferencesMap.get(student.id),
           };
         })
@@ -239,11 +238,10 @@ export class BirthdayPlannerService {
           first_name,
           last_name,
           date_of_birth,
-          photo_url,
+          avatar_url,
           class_id,
           parent_id,
-          classes(name),
-          profiles!students_parent_id_fkey(first_name, last_name)
+          classes!students_class_id_fkey(name)
         `)
         .eq('class_id', classId)
         .eq('is_active', true)
@@ -262,7 +260,6 @@ export class BirthdayPlannerService {
           if (daysUntil < 0 || daysUntil > daysAhead) return null;
           
           const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
-          const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
           
           return {
             id: `birthday-${student.id}`,
@@ -276,8 +273,8 @@ export class BirthdayPlannerService {
             classId: student.class_id,
             className: classData?.name,
             parentId: student.parent_id,
-            parentName: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
-            photoUrl: student.photo_url,
+            parentName: undefined, // Parent names fetched separately if needed
+            photoUrl: student.avatar_url,
           };
         })
         .filter(Boolean) as StudentBirthday[];
@@ -308,6 +305,8 @@ export class BirthdayPlannerService {
       
       console.log('[BirthdayPlannerService.getAllBirthdays] Total active students:', totalStudents);
       
+      // Simplified query - fetch students with classes only, get parent info separately if needed
+      // This matches how student-detail.tsx fetches data successfully
       const { data: students, error } = await supabase
         .from('students')
         .select(`
@@ -315,11 +314,10 @@ export class BirthdayPlannerService {
           first_name,
           last_name,
           date_of_birth,
-          photo_url,
+          avatar_url,
           class_id,
           parent_id,
-          classes(name),
-          profiles!students_parent_id_fkey(first_name, last_name)
+          classes!students_class_id_fkey(name)
         `)
         .eq('preschool_id', preschoolId)
         .eq('is_active', true)
@@ -349,7 +347,6 @@ export class BirthdayPlannerService {
           const daysUntil = getDaysUntil(birthDate);
           
           const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
-          const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
           
           return {
             id: `birthday-${student.id}`,
@@ -363,8 +360,8 @@ export class BirthdayPlannerService {
             classId: student.class_id,
             className: classData?.name,
             parentId: student.parent_id,
-            parentName: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
-            photoUrl: student.photo_url,
+            parentName: undefined, // Skip parent lookup for performance - not essential for birthday chart
+            photoUrl: student.avatar_url,
           };
         });
 
@@ -396,11 +393,11 @@ export class BirthdayPlannerService {
           first_name,
           last_name,
           date_of_birth,
-          photo_url,
+          avatar_url,
           class_id,
           parent_id,
           preschool_id,
-          classes(name)
+          classes!students_class_id_fkey(name)
         `)
         .eq('id', studentId)
         .single();
@@ -445,7 +442,7 @@ export class BirthdayPlannerService {
         classId: student.class_id,
         className: classData?.name,
         parentId: student.parent_id,
-        photoUrl: student.photo_url,
+        photoUrl: student.avatar_url,
         celebrationPreferences: preferences,
       };
     } catch (error) {
@@ -519,7 +516,7 @@ export class BirthdayPlannerService {
       
       const { data: students, error } = await supabase
         .from('students')
-        .select('id, first_name, last_name, date_of_birth, class_id, classes(name)')
+        .select('id, first_name, last_name, date_of_birth, class_id, classes!students_class_id_fkey(name)')
         .eq('preschool_id', preschoolId)
         .eq('is_active', true)
         .not('date_of_birth', 'is', null);

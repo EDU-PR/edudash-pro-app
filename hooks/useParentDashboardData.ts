@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 interface ChildCard {
   id: string;
@@ -159,22 +160,13 @@ export function useParentDashboardData() {
           const internalUserId = me?.id;
           const mySchoolId = me?.preschool_id || me?.organization_id || (profile as any)?.organization_id || null;
 
-          const { data: directChildren } = internalUserId ? await client
-            .from('students')
-            .select(`
-              id, first_name, last_name, class_id, is_active, preschool_id, date_of_birth, parent_id, guardian_id,
-              classes!left(id, name, grade_level)
-            `)
-            .or(`parent_id.eq.${internalUserId},guardian_id.eq.${internalUserId}`)
-            .eq('is_active', true) : { data: null } as any;
-
-          let directChildrenList: any[] = [];
-          if (directChildren) {
-            directChildrenList = Array.isArray(directChildren) ? directChildren : [directChildren];
-          }
-
-          if (directChildrenList.length > 0) {
-            studentsData = directChildrenList;
+          // Use centralized utility that checks both direct links AND junction table
+          // This supports multiple parents per child
+          if (internalUserId) {
+            studentsData = await fetchParentChildren(internalUserId, {
+              includeInactive: false,
+              schoolId: mySchoolId || undefined,
+            });
           }
           // Removed: Don't show unclaimed children from school
           // Parents must use "Claim Child" search to find and request linking

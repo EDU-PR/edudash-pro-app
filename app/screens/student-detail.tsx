@@ -71,21 +71,32 @@ export default function StudentDetailScreen() {
   const isPrincipal = profile?.role === 'principal';
 
   const loadStudentData = async () => {
-    if (!studentId || !user) return;
+    if (!studentId || !user) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
 
       // Get user's preschool (profiles.id = auth_user_id)
-      const { data: userProfile } = await assertSupabase()
+      const { data: userProfile, error: profileError } = await assertSupabase()
         .from('profiles')
         .select('preschool_id, organization_id, role')
         .eq('id', user.id)
         .single();
 
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        Alert.alert('Error', 'Failed to load user profile');
+        setLoading(false);
+        return;
+      }
+
       const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
       if (!schoolId) {
         Alert.alert('Error', 'No school assigned to your account');
+        setLoading(false);
         return;
       }
 
@@ -94,7 +105,7 @@ export default function StudentDetailScreen() {
         .from('students')
         .select(`
           *,
-          classes!left(id, name, grade_level, teacher_id)
+          classes!students_class_id_fkey(id, name, grade_level, teacher_id)
         `)
         .eq('id', studentId)
         .eq('preschool_id', schoolId)
@@ -103,6 +114,7 @@ export default function StudentDetailScreen() {
       if (studentError) {
         console.error('Error loading student:', studentError);
         Alert.alert('Error', 'Student not found');
+        setLoading(false);
         router.back();
         return;
       }
@@ -392,6 +404,60 @@ export default function StudentDetailScreen() {
     );
   };
 
+  // Handle marking a payment as received (Principal only)
+  const handleMarkPaymentReceived = async (amount: number, paymentMethod: string, notes: string) => {
+    if (!student || !user || !isPrincipal) {
+      throw new Error('Unauthorized or missing data');
+    }
+
+    // Get user's preschool
+    const { data: userProfile } = await assertSupabase()
+      .from('profiles')
+      .select('preschool_id, organization_id')
+      .eq('id', user.id)
+      .single();
+
+    const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
+    if (!schoolId) {
+      throw new Error('No school assigned');
+    }
+
+    // Create a financial transaction record
+    const { error: transactionError } = await assertSupabase()
+      .from('financial_transactions')
+      .insert({
+        student_id: student.id,
+        preschool_id: schoolId,
+        type: 'fee_payment',
+        amount: amount,
+        status: 'completed',
+        payment_method: paymentMethod,
+        notes: notes ? `Manual payment recorded by principal: ${notes}` : 'Manual payment recorded by principal',
+        recorded_by: user.id,
+        created_at: new Date().toISOString(),
+      });
+
+    if (transactionError) {
+      console.error('Error recording payment:', transactionError);
+      throw transactionError;
+    }
+
+    // Update any pending parent_payments records for this student if they exist
+    await assertSupabase()
+      .from('parent_payments')
+      .update({ 
+        status: 'verified',
+        verified_by: user.id,
+        verified_at: new Date().toISOString(),
+        notes: `Marked as paid by principal (${paymentMethod}): ${notes || 'No additional notes'}`
+      })
+      .eq('student_id', student.id)
+      .eq('status', 'pending');
+
+    // Reload the student data to reflect changes
+    await loadStudentData();
+  };
+
   useEffect(() => {
     loadStudentData();
   }, [studentId, user]);
@@ -508,6 +574,8 @@ export default function StudentDetailScreen() {
           showDetails={showFinancialDetails}
           onToggleDetails={() => setShowFinancialDetails(!showFinancialDetails)}
           theme={theme}
+          isPrincipal={isPrincipal}
+          onMarkPaymentReceived={handleMarkPaymentReceived}
         />
 
         {/* Medical & Emergency Information */}

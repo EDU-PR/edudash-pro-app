@@ -20,7 +20,7 @@ import { createCheckout } from '@/lib/payments';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
-import { getAvailableProducts, purchaseProduct, REVENUECAT_CONFIG, identifyRevenueCatUser, ensureInitialized } from '@/lib/revenuecat/config';
+// RevenueCat removed - all payments now use PayFast
 
 interface SubscriptionPlan {
   id: string;
@@ -406,97 +406,7 @@ export default function SubscriptionSetupScreen() {
         user_id: profile?.id || null,
       });
       
-      // For parent plans on mobile, use RevenueCat (Google Play / App Store)
-      if (isPlanForParent && Platform.OS !== 'web') {
-        try {
-          // CRITICAL: Identify user with RevenueCat before purchase
-          // This ensures the webhook knows which Supabase user made the purchase
-          if (profile?.id) {
-            console.log('[subscription-setup] Identifying user with RevenueCat:', profile.id);
-            await ensureInitialized();
-            await identifyRevenueCatUser(profile.id);
-          } else {
-            throw new Error('User profile not found. Please log in again.');
-          }
-          
-          // Map plan tier to RevenueCat product ID
-          const tierLower = plan.tier.toLowerCase().replace(/-/g, '_');
-          let productId: string;
-          
-          if (tierLower === 'parent_starter' || tierLower === 'starter') {
-            productId = annual 
-              ? REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_ANNUAL 
-              : REVENUECAT_CONFIG.PRODUCT_IDS.STARTER_MONTHLY;
-          } else if (tierLower === 'parent_plus' || tierLower === 'premium' || tierLower === 'pro') {
-            productId = annual 
-              ? REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_ANNUAL 
-              : REVENUECAT_CONFIG.PRODUCT_IDS.PREMIUM_MONTHLY;
-          } else {
-            throw new Error(`Unknown parent plan tier: ${plan.tier}`);
-          }
-          
-          track('revenuecat_purchase_started', {
-            plan_tier: plan.tier,
-            product_id: productId,
-            billing: annual ? 'annual' : 'monthly',
-          });
-          
-          const purchaseResult = await purchaseProduct(productId);
-          
-          if (purchaseResult.success) {
-            track('revenuecat_purchase_success', {
-              plan_tier: plan.tier,
-              product_id: productId,
-            });
-            
-            // SINGLE SOURCE OF TRUTH: Update profiles.subscription_tier
-            // Database trigger automatically syncs to user_ai_tiers and user_ai_usage
-            try {
-              const newTier = tierLower.startsWith('parent_') ? tierLower : `parent_${tierLower}`;
-              console.log('[subscription-setup] Updating profiles.subscription_tier to:', newTier);
-              
-              const { error: profileError } = await assertSupabase()
-                .from('profiles')
-                .update({ subscription_tier: newTier })
-                .eq('id', profile?.id);
-              
-              if (profileError) {
-                console.error('Failed to update profiles.subscription_tier:', profileError);
-              } else {
-                console.log('Successfully updated profiles.subscription_tier to:', newTier);
-              }
-            } catch (dbErr) {
-              console.error('Failed to update tier in DB:', dbErr);
-              // Don't fail - RevenueCat webhook will sync
-            }
-            
-            // Refresh subscription context to update UI immediately
-            refreshSubscription();
-            
-            Alert.alert(
-              'Purchase Successful!',
-              `You are now subscribed to ${plan.name}. Enjoy your premium features!`,
-              [{ text: 'OK', onPress: () => router.push('/') }]
-            );
-          } else {
-            if (purchaseResult.error?.includes('cancelled')) {
-              track('revenuecat_purchase_cancelled', { plan_tier: plan.tier });
-              // User cancelled - don't show error
-            } else {
-              throw new Error(purchaseResult.error || 'Purchase failed');
-            }
-          }
-          return;
-        } catch (rcError: any) {
-          track('revenuecat_purchase_failed', {
-            plan_tier: plan.tier,
-            error: rcError.message,
-          });
-          throw rcError;
-        }
-      }
-      
-      // For school plans or web, use PayFast checkout
+      // All payments (school and parent plans) use PayFast
       // Get user email for PayFast
       const userEmail = profile?.email || (await assertSupabase().auth.getUser()).data.user?.email;
       

@@ -106,6 +106,20 @@ export class ParentJoinService {
       .single();
     if (reqErr || !req) throw reqErr || new Error('Request not found');
 
+    // Get the parent's profile.id from their auth_user_id
+    // CRITICAL: students.parent_id/guardian_id contain profiles.id, NOT auth.users UUIDs
+    const { data: parentProfile, error: profileErr } = await assertSupabase()
+      .from('profiles')
+      .select('id, preschool_id')
+      .eq('auth_user_id', req.parent_auth_id)
+      .single();
+    
+    if (profileErr || !parentProfile) {
+      throw new Error('Could not find parent profile');
+    }
+    
+    const parentProfileId = parentProfile.id;
+
     // Update student linkage conservatively
     try {
       // Try to set parent_id if not set
@@ -116,9 +130,10 @@ export class ParentJoinService {
         .single();
       if (student) {
         if (!student.parent_id) {
-          await assertSupabase().from('students').update({ parent_id: req.parent_auth_id }).eq('id', studentId);
+          // Use profile.id (NOT auth.users UUID) for parent_id
+          await assertSupabase().from('students').update({ parent_id: parentProfileId }).eq('id', studentId);
           
-          // ✅ NEW: Sync parent's preschool_id from student
+          // ✅ Sync parent's preschool_id from student
           if (student.preschool_id) {
             await assertSupabase()
               .from('profiles')
@@ -127,13 +142,14 @@ export class ParentJoinService {
                 organization_id: student.preschool_id,
                 updated_at: new Date().toISOString()
               })
-              .eq('id', req.parent_auth_id)
+              .eq('id', parentProfileId)
               .eq('role', 'parent');
           }
-        } else if (!student.guardian_id && req.parent_auth_id !== student.parent_id) {
-          await assertSupabase().from('students').update({ guardian_id: req.parent_auth_id }).eq('id', studentId);
+        } else if (!student.guardian_id && parentProfileId !== student.parent_id) {
+          // Use profile.id (NOT auth.users UUID) for guardian_id
+          await assertSupabase().from('students').update({ guardian_id: parentProfileId }).eq('id', studentId);
           
-          // ✅ NEW: Sync guardian's preschool_id from student
+          // ✅ Sync guardian's preschool_id from student
           if (student.preschool_id) {
             await assertSupabase()
               .from('profiles')
@@ -142,7 +158,7 @@ export class ParentJoinService {
                 organization_id: student.preschool_id,
                 updated_at: new Date().toISOString()
               })
-              .eq('id', req.parent_auth_id)
+              .eq('id', parentProfileId)
               .eq('role', 'parent');
           }
         }

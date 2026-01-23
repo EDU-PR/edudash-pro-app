@@ -72,7 +72,7 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   messageBubble: {
-    maxWidth: SCREEN_WIDTH * 0.75,
+    maxWidth: SCREEN_WIDTH * 0.90,
     padding: 12,
     borderRadius: 16,
   },

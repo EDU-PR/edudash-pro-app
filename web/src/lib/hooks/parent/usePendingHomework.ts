@@ -49,7 +49,7 @@ export function usePendingHomework(userId: string | undefined) {
             title,
             due_date,
             subject,
-            class:classes(name),
+            class:classes!homework_assignments_class_id_fkey(name),
             homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)
           `)
           .in('class_id', children.map((c: any) => c.class_id))

@@ -89,7 +89,7 @@ export default function AssignLessonPage() {
     const loadStudents = async () => {
       const { data, error } = await supabase
         .from('students')
-        .select('id, first_name, last_name, class_id, classes(name)')
+        .select('id, first_name, last_name, class_id, classes!students_class_id_fkey(name)')
         .eq('preschool_id', profile.preschoolId)
         .eq('is_active', true)
         .order('first_name');

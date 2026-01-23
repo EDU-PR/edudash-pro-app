@@ -88,7 +88,7 @@ function AuthCallbackContent() {
               router.push('/signin');
             }, 3000);
           } else {
-            // No code provided, just show success
+            // No code provided, just show success and redirect to sign-in
             setStatus('success');
             setMessage('Your email has been verified! You can now sign in.');
             setTimeout(() => {
@@ -118,12 +118,14 @@ function AuthCallbackContent() {
         }
 
         // Success - this is email verification
+        // Sign out any session and redirect to sign-in for a clean login experience
+        await supabase.auth.signOut();
         setStatus('success');
-        setMessage('Email verified successfully! You can now sign in to the Soil of Africa app.');
+        setMessage('Email verified successfully! You can now sign in to the Soil of Africa platform.');
         
-        // Redirect to home or sign-in page after a delay
+        // Redirect to sign-in page after a delay (not home page)
         setTimeout(() => {
-          router.push('/');
+          router.push('/signin');
         }, 3000);
         
       } catch (error) {
@@ -156,7 +158,7 @@ function AuthCallbackContent() {
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">Email Verified! 🎉</h1>
             <p className="text-gray-300 mb-6">{message}</p>
-            <p className="text-sm text-gray-400">Redirecting you to the home page...</p>
+            <p className="text-sm text-gray-400">Redirecting you to sign in...</p>
           </>
         )}
 

@@ -120,13 +120,60 @@ export default function NotificationsScreen() {
         router.push('/screens/calls');
         break;
       case 'homework':
-        router.push('/screens/homework');
+        if (notification.data?.assignment_id) {
+          router.push({
+            pathname: '/screens/homework-details',
+            params: { assignmentId: notification.data.assignment_id as string },
+          });
+        } else {
+          router.push('/screens/homework');
+        }
         break;
       case 'grade':
         router.push('/screens/grades');
         break;
       case 'announcement':
-        router.push('/screens/announcements');
+        if (notification.data?.announcementId) {
+          router.push({
+            pathname: '/screens/announcement-detail',
+            params: { id: notification.data.announcementId as string },
+          });
+        } else {
+          router.push('/screens/announcements');
+        }
+        break;
+      case 'attendance':
+        router.push('/screens/child-progress');
+        break;
+      case 'registration':
+        if (notification.data?.registration_id) {
+          router.push({
+            pathname: '/screens/registration-detail',
+            params: { id: notification.data.registration_id as string },
+          });
+        } else {
+          router.push('/screens/principal-registrations');
+        }
+        break;
+      case 'billing':
+        if (notification.data?.invoice_id) {
+          router.push({
+            pathname: '/screens/invoice-detail',
+            params: { id: notification.data.invoice_id as string },
+          });
+        } else {
+          router.push('/screens/billing');
+        }
+        break;
+      case 'calendar':
+        router.push('/screens/school-calendar');
+        break;
+      case 'birthday':
+        router.push('/screens/birthday-planner');
+        break;
+      case 'system':
+      default:
+        // For system notifications, don't navigate
         break;
     }
   }, [user?.id, queryClient]);

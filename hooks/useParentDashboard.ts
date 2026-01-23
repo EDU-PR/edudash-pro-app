@@ -2,10 +2,11 @@
  * Parent Dashboard Hook
  * 
  * Fetches and manages parent dashboard data.
+ * Includes realtime subscription for attendance updates.
  * Extracted from hooks/useDashboardData.ts per WARP.md standards.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
@@ -26,6 +27,7 @@ export const useParentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
+  const childIdsRef = useRef<string[]>([]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     try {
@@ -269,6 +271,46 @@ export const useParentDashboard = () => {
       setError(null);
     }
   }, [fetchData, authLoading, user]);
+
+  // Set up realtime subscription for attendance updates
+  useEffect(() => {
+    if (!user?.id || childIdsRef.current.length === 0) return;
+    
+    const supabase = assertSupabase();
+    const childIds = childIdsRef.current;
+    
+    // Subscribe to attendance changes for this parent's children
+    const channel = supabase
+      .channel(`parent-dashboard-attendance-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'attendance',
+        },
+        (payload) => {
+          const studentId = (payload.new as any)?.student_id || (payload.old as any)?.student_id;
+          // Only refresh if the attendance is for one of this parent's children
+          if (childIds.includes(studentId)) {
+            log('[ParentDashboard] Attendance updated for child:', studentId);
+            fetchData(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchData]);
+
+  // Update childIdsRef when data changes
+  useEffect(() => {
+    if (data?.children) {
+      childIdsRef.current = data.children.map(c => c.id);
+    }
+  }, [data?.children]);
 
   const refresh = useCallback(() => {
     fetchData(true);

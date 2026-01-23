@@ -176,6 +176,7 @@ if (!preschoolId) {
       
       // **FETCH REAL STUDENTS FROM DATABASE**
       // Include inactive students if filter allows it
+      // Join parent profile via parent_id or guardian_id
       let query = assertSupabase()
         .from('students')
         .select(`
@@ -184,6 +185,7 @@ if (!preschoolId) {
           last_name,
           date_of_birth,
           parent_id,
+          guardian_id,
           class_id,
           is_active,
           preschool_id,
@@ -193,7 +195,10 @@ if (!preschoolId) {
           medical_conditions,
           allergies,
           emergency_contact_name,
-          emergency_contact_phone
+          emergency_contact_phone,
+          classes!students_class_id_fkey(name),
+          parent:profiles!students_parent_id_fkey(first_name, last_name, email, phone),
+          guardian:profiles!students_guardian_id_fkey(first_name, last_name, email, phone)
         `)
         .eq('preschool_id', preschoolId);
       
@@ -214,29 +219,40 @@ if (!preschoolId) {
       
       // Transform database data to match Student interface
       const transformedStudents: Student[] = (studentsData || []).map((dbStudent: any, index: number) => {
+        // Get parent/guardian info - prefer parent, fallback to guardian
+        const parentInfo = dbStudent.parent || dbStudent.guardian;
+        const guardianName = parentInfo 
+          ? `${parentInfo.first_name || ''} ${parentInfo.last_name || ''}`.trim() || 'Not provided'
+          : 'Not provided';
+        const guardianPhone = parentInfo?.phone || dbStudent.emergency_contact_phone || 'Not provided';
+        const guardianEmail = parentInfo?.email || 'Not provided';
+        
+        // Get class name
+        const className = dbStudent.classes?.name || null;
+        
         return {
           id: dbStudent.id,
           studentId: `STU${new Date().getFullYear()}${String(index + 1).padStart(3, '0')}`,
           firstName: dbStudent.first_name || 'Unknown',
           lastName: dbStudent.last_name || 'Student',
-          grade: 'Grade R-A', // TODO: Get from class_id lookup
-          dateOfBirth: dbStudent.date_of_birth || '2019-01-01',
-          guardianName: 'Guardian Name', // TODO: Get from parent lookup using parent_id
-          guardianPhone: '+27 80 000 0000',
-          guardianEmail: 'guardian@example.com', // TODO: Get from parent lookup using parent_id
-          emergencyContact: dbStudent.emergency_contact_name || 'Emergency Contact',
-          emergencyPhone: dbStudent.emergency_contact_phone || '+27 80 000 0000',
+          grade: className || 'Not Assigned',
+          dateOfBirth: dbStudent.date_of_birth || '',
+          guardianName,
+          guardianPhone,
+          guardianEmail,
+          emergencyContact: dbStudent.emergency_contact_name || 'Not provided',
+          emergencyPhone: dbStudent.emergency_contact_phone || 'Not provided',
           medicalConditions: dbStudent.medical_conditions || '',
           allergies: dbStudent.allergies || '',
-          enrollmentDate: dbStudent.created_at?.split('T')[0] || '2024-01-01',
+          enrollmentDate: dbStudent.created_at?.split('T')[0] || '',
           status: (dbStudent.status || 'active') as 'active' | 'inactive' | 'pending',
           profilePhoto: undefined,
           attendanceRate: 90, // TODO: Calculate from attendance_records
           lastAttendance: new Date().toISOString(),
-          assignedTeacher: 'Teacher Name', // TODO: Get from class->teacher lookup
+          assignedTeacher: 'Not Assigned', // TODO: Get from class->teacher lookup
           fees: {
             outstanding: 0,
-            lastPayment: '2024-09-01',
+            lastPayment: '',
             paymentStatus: 'current' as const,
           },
           schoolId: preschoolId,
@@ -449,6 +465,17 @@ const canEditStudent = (_student: Student): boolean => {
       // Remove from local state
       setStudents(prev => prev.filter(s => s.id !== studentId));
       
+      // Invalidate cache so deleted student doesn't reappear on reload
+      const preschoolId = getPreschoolId();
+      if (user?.id && preschoolId) {
+        const userRole = profile?.role || 'parent';
+        const identifier = userRole === 'principal_admin' 
+          ? `${preschoolId}` 
+          : `${preschoolId}_${user.id}`;
+        await offlineCacheService.remove('student_data_', identifier);
+        console.log('✅ Student cache invalidated after soft delete');
+      }
+      
       setPendingDeleteStudent(null);
       showAlert('Success', `${studentName} has been removed from the active students list.`, 'success');
     } catch (error: any) {
@@ -504,6 +531,17 @@ const canEditStudent = (_student: Student): boolean => {
       
       // Remove from local state
       setStudents(prev => prev.filter(s => s.id !== studentId));
+      
+      // Invalidate cache so deleted student doesn't reappear on reload
+      const preschoolId = getPreschoolId();
+      if (user?.id && preschoolId) {
+        const userRole = profile?.role || 'parent';
+        const identifier = userRole === 'principal_admin' 
+          ? `${preschoolId}` 
+          : `${preschoolId}_${user.id}`;
+        await offlineCacheService.remove('student_data_', identifier);
+        console.log('✅ Student cache invalidated after permanent delete');
+      }
       
       setPendingPermanentDelete(null);
       showAlert('Deleted', `${studentName} has been permanently deleted.`, 'success');

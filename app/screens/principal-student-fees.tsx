@@ -103,7 +103,7 @@ export default function StudentFeeManagementScreen() {
         .from('students')
         .select(`
           id, first_name, last_name, class_id,
-          classes(name),
+          classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
         `)
         .eq('id', studentId)

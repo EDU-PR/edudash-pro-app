@@ -113,16 +113,24 @@ export default function StudentDetailPage() {
     const loadStudent = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        // First try to get student with guardian_id relationship
+        let { data, error } = await supabase
           .from('students')
           .select(`
             *,
             classes (
               id,
               name,
-              age_group
+              age_group,
+              teacher_id
             ),
-            profiles!students_guardian_id_fkey (
+            guardian:profiles!students_guardian_id_fkey (
+              first_name,
+              last_name,
+              email,
+              phone
+            ),
+            parent:profiles!students_parent_id_fkey (
               first_name,
               last_name,
               email,
@@ -132,6 +140,16 @@ export default function StudentDetailPage() {
           .eq('id', studentId)
           .eq('preschool_id', preschoolId)
           .single();
+        
+        // Merge guardian/parent data - prefer guardian, fallback to parent
+        if (data) {
+          const guardianData = data.guardian as any;
+          const parentData = data.parent as any;
+          data.profiles = guardianData || parentData;
+          // Clean up the separate fields
+          delete (data as any).guardian;
+          delete (data as any).parent;
+        }
 
         if (error) {
           console.error('Error loading student:', error);

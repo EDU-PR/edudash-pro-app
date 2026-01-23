@@ -110,7 +110,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
       }
 
       const { data: students } = await supabase.from('students')
-        .select(`id, first_name, last_name, class_id, is_active, preschool_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!left(id, name, grade_level)`)
+        .select(`id, first_name, last_name, class_id, is_active, preschool_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!students_class_id_fkey(id, name, grade_level)`)
         .or(`parent_id.eq.${profile.id},guardian_id.eq.${profile.id}`)
         .eq('is_active', true).eq('preschool_id', profile.preschool_id);
 

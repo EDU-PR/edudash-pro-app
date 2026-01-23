@@ -38,6 +38,8 @@ import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
 import { useWakeWord } from '../../hooks/useWakeWord';
 import { CosmicOrb } from './CosmicOrb';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
+import { useAuth } from '../../contexts/AuthContext';
+import { isSuperAdmin } from '../../lib/roleUtils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -55,6 +57,11 @@ export default function DashOrb({
   size = 60,
   onCommandExecuted,
 }: DashOrbProps) {
+  // Get user profile for role-based AI endpoint selection
+  const { profile } = useAuth();
+  const userRole = profile?.role?.toLowerCase() || '';
+  const isUserSuperAdmin = isSuperAdmin(userRole);
+  
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -503,8 +510,8 @@ export default function DashOrb({
   };
 
   /**
-   * Execute command via superadmin-ai Edge Function
-   * This connects to the real AI backend with full tool capabilities
+   * Execute command via AI Edge Function
+   * Uses superadmin-ai for super admins, ai-proxy for regular users
    */
   const executeCommand = async (command: string, history: Array<{role: string, content: string}> = []): Promise<string> => {
     try {
@@ -515,23 +522,42 @@ export default function DashOrb({
         throw new Error('Not authenticated. Please log in again.');
       }
       
-      // Call the superadmin-ai Edge Function
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
+      // Choose endpoint based on user role
+      const endpoint = isUserSuperAdmin 
+        ? `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`
+        : `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
+      
+      // Build request body based on endpoint
+      const requestBody = isUserSuperAdmin
+        ? {
             action: 'chat',
             message: command,
             history: history,
-            max_tokens: 1024, // Shorter, faster responses
-          }),
-        }
-      );
+            max_tokens: 1024,
+          }
+        : {
+            scope: userRole || 'parent',
+            service_type: 'dash_conversation',
+            payload: {
+              prompt: command,
+              context: history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : undefined,
+            },
+            stream: false,
+            enable_tools: true,
+            metadata: {
+              role: userRole,
+              source: 'dash_orb'
+            }
+          };
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -540,30 +566,64 @@ export default function DashOrb({
       
       const data = await response.json();
       
-      if (!data.success) {
-        throw new Error(data.error || 'Unknown error occurred');
+      // Debug logging for response format
+      console.log('[DashOrb] AI Response data:', JSON.stringify(data, null, 2).substring(0, 500));
+      
+      // Handle response format based on endpoint
+      if (isUserSuperAdmin) {
+        if (!data.success) {
+          throw new Error(data.error || 'Unknown error occurred');
+        }
+        
+        let formattedResponse = data.response;
+        
+        if (data.tool_calls && data.tool_calls.length > 0) {
+          const toolNames = data.tool_calls.map((t: any) => t.name).join(', ');
+          formattedResponse += `\n\n🔧 _Tools used: ${toolNames}_`;
+        }
+        
+        if (data.tokens_used && data.tokens_used > 1000) {
+          formattedResponse += `\n📊 _${data.tokens_used.toLocaleString()} tokens used_`;
+        }
+        
+        return formattedResponse;
+      } else {
+        // ai-proxy response format - handle multiple possible response shapes
+        // 1. Direct string content (most common)
+        // 2. Anthropic format: content[0].text
+        // 3. OpenAI format: message.content
+        // 4. Legacy: text or response field
+        let content: string;
+        
+        if (typeof data.content === 'string') {
+          // Direct string content from ai-proxy
+          content = data.content;
+        } else if (Array.isArray(data.content) && data.content[0]?.text) {
+          // Anthropic API format: content[0].text
+          content = data.content[0].text;
+        } else if (data.message?.content) {
+          // OpenAI format
+          content = data.message.content;
+        } else if (data.text) {
+          // Simple text field
+          content = data.text;
+        } else if (data.response) {
+          // Legacy response field
+          content = data.response;
+        } else if (data.success && data.content) {
+          // Success wrapper with content
+          content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+        } else {
+          console.warn('[DashOrb] Unknown response format:', Object.keys(data));
+          content = 'I received your message but couldn\'t parse the response.';
+        }
+        
+        return content;
       }
-      
-      // Format the response nicely
-      let formattedResponse = data.response;
-      
-      // Add tool call info if available
-      if (data.tool_calls && data.tool_calls.length > 0) {
-        const toolNames = data.tool_calls.map((t: any) => t.name).join(', ');
-        formattedResponse += `\n\n🔧 _Tools used: ${toolNames}_`;
-      }
-      
-      // Add token usage if significant
-      if (data.tokens_used && data.tokens_used > 1000) {
-        formattedResponse += `\n📊 _${data.tokens_used.toLocaleString()} tokens used_`;
-      }
-      
-      return formattedResponse;
       
     } catch (error) {
       console.error('[DashOrb] Command execution error:', error);
       
-      // Return helpful error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
       if (errorMessage.includes('Not authenticated')) {
@@ -574,8 +634,12 @@ export default function DashOrb({
         return `🔒 **Access Denied**\n\nThis feature requires Super Admin privileges.`;
       }
       
+      if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
+        return `📊 **AI Quota Exceeded**\n\nYou've reached your AI usage limit. Please try again later or upgrade your subscription.`;
+      }
+      
       if (errorMessage.includes('ANTHROPIC_API_KEY')) {
-        return `⚙️ **Configuration Required**\n\nThe AI service is not configured. Please set up the ANTHROPIC_API_KEY in Supabase secrets.`;
+        return `⚙️ **Configuration Required**\n\nThe AI service is not configured. Please contact support.`;
       }
       
       return `❌ **Error**\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`;

@@ -53,7 +53,7 @@ export default function ParentChildrenScreen() {
             .select(`
               id, first_name, last_name, class_id, is_active, 
               preschool_id, date_of_birth, parent_id, guardian_id,
-              classes!left(id, name, grade_level)
+              classes!students_class_id_fkey(id, name, grade_level)
             `)
             .or(`parent_id.eq.${me.id},guardian_id.eq.${me.id}`)
             .eq('is_active', true);

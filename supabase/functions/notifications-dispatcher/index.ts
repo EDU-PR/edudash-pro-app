@@ -58,6 +58,22 @@ interface NotificationContext {
   event_date?: string;
   event_type?: string;
   event_location?: string;
+  // Attendance
+  attendance_date?: string;
+  attendance_status?: string;
+  class_name?: string;
+  present_count?: number;
+  late_count?: number;
+  absent_count?: number;
+  total_count?: number;
+  // Birthday
+  birthday_date?: string;
+  age?: number;
+  days_until?: number;
+  // Child Registration
+  child_name?: string;
+  parent_name?: string;
+  registration_id?: string;
 }
 
 // Notification template type
@@ -97,6 +113,17 @@ interface NotificationRequest {
   // School calendar events
   event_id?: string;
   target_audience?: string[];
+  // Attendance
+  attendance_date?: string;
+  student_ids?: string[];
+  class_id?: string;
+  attendance_status?: string;
+  // Child Registration
+  registration_id?: string;
+  child_name?: string;
+  parent_name?: string;
+  parent_id?: string;
+  // Custom payload
   custom_payload?: Record<string, unknown>;
   template_override?: Partial<NotificationTemplate>;
   send_immediately?: boolean;
@@ -611,6 +638,116 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       sound: 'default',
       priority: 'normal',
       channelId: 'general'
+    },
+    
+    // Attendance notifications
+    attendance_recorded: {
+      title: '📋 Attendance Recorded',
+      body: context.student_name && context.attendance_status
+        ? `${context.student_name} was marked ${context.attendance_status} today`
+        : context.class_name 
+          ? `Attendance recorded for ${context.class_name}`
+          : 'Attendance has been recorded for your child',
+      data: {
+        type: 'attendance',
+        student_id: context.student_id,
+        attendance_date: context.attendance_date,
+        status: context.attendance_status,
+        screen: 'child-progress'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'general'
+    },
+    attendance_absent: {
+      title: '⚠️ Absence Notification',
+      body: context.student_name
+        ? `${context.student_name} was marked absent today (${context.attendance_date || 'today'})`
+        : 'Your child was marked absent today',
+      data: {
+        type: 'attendance',
+        student_id: context.student_id,
+        attendance_date: context.attendance_date,
+        status: 'absent',
+        screen: 'child-progress'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    attendance_late: {
+      title: '⏰ Late Arrival',
+      body: context.student_name
+        ? `${context.student_name} was marked late today (${context.attendance_date || 'today'})`
+        : 'Your child was marked late today',
+      data: {
+        type: 'attendance',
+        student_id: context.student_id,
+        attendance_date: context.attendance_date,
+        status: 'late',
+        screen: 'child-progress'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'general'
+    },
+    
+    // Child Registration notifications
+    child_registration_submitted: {
+      title: '📝 New Registration Request',
+      body: context.child_name && context.parent_name
+        ? `${context.parent_name} submitted a registration for ${context.child_name}`
+        : context.child_name
+          ? `New registration request for ${context.child_name}`
+          : 'A new child registration has been submitted',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        screen: 'registration-detail'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
+    },
+    child_registration_approved: {
+      title: '✅ Registration Approved!',
+      body: context.child_name && context.school_name
+        ? `${context.child_name}'s registration at ${context.school_name} has been approved!`
+        : context.child_name
+          ? `${context.child_name}'s registration has been approved!`
+          : 'Your child registration has been approved!',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        student_id: context.student_id,
+        screen: 'child-progress'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    child_registration_rejected: {
+      title: '❌ Registration Not Approved',
+      body: context.child_name && context.rejection_reason
+        ? `${context.child_name}'s registration was not approved: ${context.rejection_reason}`
+        : context.child_name
+          ? `${context.child_name}'s registration was not approved`
+          : 'Your child registration was not approved',
+      data: {
+        type: 'registration',
+        registration_id: context.registration_id,
+        rejection_reason: context.rejection_reason,
+        screen: 'registrations'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
     }
   };
 
@@ -855,6 +992,51 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
       }
       break;
 
+    // Attendance notifications - notify parents of students whose attendance was recorded
+    case 'attendance_recorded':
+    case 'attendance_absent':
+    case 'attendance_late':
+      // If specific student IDs are provided, get their parents
+      if (request.student_ids && request.student_ids.length > 0) {
+        const { data: students } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id')
+          .in('id', request.student_ids);
+        if (students) {
+          students.forEach((student: { parent_id?: string; guardian_id?: string }) => {
+            if (student.parent_id) userIds.push(student.parent_id);
+            if (student.guardian_id) userIds.push(student.guardian_id);
+          });
+        }
+      }
+      // If a single student_id is provided
+      else if (request.student_id) {
+        const { data: student } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id')
+          .eq('id', request.student_id)
+          .single();
+        if (student) {
+          if (student.parent_id) userIds.push(student.parent_id);
+          if (student.guardian_id) userIds.push(student.guardian_id);
+        }
+      }
+      // If class_id is provided, get all students' parents in that class
+      else if (request.class_id) {
+        const { data: students } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id')
+          .eq('class_id', request.class_id)
+          .eq('is_active', true);
+        if (students) {
+          students.forEach((student: { parent_id?: string; guardian_id?: string }) => {
+            if (student.parent_id) userIds.push(student.parent_id);
+            if (student.guardian_id) userIds.push(student.guardian_id);
+          });
+        }
+      }
+      break;
+
     // School calendar events - notify based on target_audience
     case 'school_event_created':
     case 'school_event_updated':
@@ -897,6 +1079,40 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           if (users) {
             userIds.push(...users.map((u: { id: string }) => u.id));
           }
+        }
+      }
+      break;
+
+    // Child registration notifications
+    case 'child_registration_submitted':
+      // Notify principals and principal_admins at the school
+      if (request.preschool_id) {
+        const { data: principals } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+          .in('role', ['principal', 'principal_admin', 'admin'])
+          .eq('is_active', true);
+        if (principals) {
+          userIds.push(...principals.map((p: { id: string }) => p.id));
+        }
+      }
+      break;
+
+    case 'child_registration_approved':
+    case 'child_registration_rejected':
+      // Notify the parent who submitted the registration
+      if (request.parent_id) {
+        userIds.push(request.parent_id);
+      } else if (request.registration_id) {
+        // Look up the parent from the registration
+        const { data: registration } = await supabase
+          .from('child_registration_requests')
+          .select('parent_id')
+          .eq('id', request.registration_id)
+          .single();
+        if (registration?.parent_id) {
+          userIds.push(registration.parent_id);
         }
       }
       break;
@@ -1089,7 +1305,7 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
             .select(`
               id,
               student:students(first_name, last_name),
-              teacher:teacher_id(first_name, last_name)
+              teacher:profiles!progress_reports_teacher_id_fkey(first_name, last_name)
             `)
             .eq('id', request.report_id)
             .single();
@@ -1250,6 +1466,130 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
             if (eventData.preschool) {
               context.school_name = eventData.preschool.name;
             }
+          }
+        }
+        break;
+
+      // Attendance notifications
+      case 'attendance_recorded':
+      case 'attendance_absent':
+      case 'attendance_late':
+        // Set attendance date from request or use today
+        context.attendance_date = request.attendance_date || new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
+        context.attendance_status = request.attendance_status;
+
+        // Get student info if available
+        if (request.student_id) {
+          const { data: student } = await supabase
+            .from('students')
+            .select('id, first_name, last_name, class_id')
+            .eq('id', request.student_id)
+            .single();
+
+          if (student) {
+            context.student_id = student.id;
+            context.student_name = `${student.first_name} ${student.last_name}`;
+            
+            // Get class name if available
+            if (student.class_id) {
+              const { data: classData } = await supabase
+                .from('classes')
+                .select('name')
+                .eq('id', student.class_id)
+                .single();
+              if (classData) {
+                context.class_name = classData.name;
+              }
+            }
+          }
+        }
+
+        // If class_id provided directly, get class name
+        if (request.class_id && !context.class_name) {
+          const { data: classData } = await supabase
+            .from('classes')
+            .select('name')
+            .eq('id', request.class_id)
+            .single();
+          if (classData) {
+            context.class_name = classData.name;
+          }
+        }
+
+        // Add counts from custom payload if available
+        if (request.custom_payload) {
+          if (request.custom_payload.present_count !== undefined) {
+            context.present_count = request.custom_payload.present_count as number;
+          }
+          if (request.custom_payload.late_count !== undefined) {
+            context.late_count = request.custom_payload.late_count as number;
+          }
+          if (request.custom_payload.absent_count !== undefined) {
+            context.absent_count = request.custom_payload.absent_count as number;
+          }
+          if (request.custom_payload.total_count !== undefined) {
+            context.total_count = request.custom_payload.total_count as number;
+          }
+        }
+        break;
+
+      // Child registration notifications
+      case 'child_registration_submitted':
+      case 'child_registration_approved':
+      case 'child_registration_rejected':
+        // Set basic context from request
+        context.child_name = request.child_name;
+        context.parent_name = request.parent_name;
+        context.registration_id = request.registration_id;
+        context.rejection_reason = request.rejection_reason;
+
+        // Get additional context from registration if available
+        if (request.registration_id) {
+          const { data: registration } = await supabase
+            .from('child_registration_requests')
+            .select(`
+              id,
+              child_first_name,
+              child_last_name,
+              student_id,
+              parent:profiles!parent_id(first_name, last_name),
+              preschool:preschools(name)
+            `)
+            .eq('id', request.registration_id)
+            .single();
+
+          if (registration) {
+            // Set child name if not already set
+            if (!context.child_name && registration.child_first_name) {
+              context.child_name = `${registration.child_first_name} ${registration.child_last_name || ''}`.trim();
+            }
+            // Set parent name if not already set
+            if (!context.parent_name && registration.parent) {
+              context.parent_name = `${registration.parent.first_name || ''} ${registration.parent.last_name || ''}`.trim();
+            }
+            // Set school name
+            if (registration.preschool) {
+              context.school_name = registration.preschool.name;
+            }
+            // Set student ID if approved
+            if (registration.student_id) {
+              context.student_id = registration.student_id;
+            }
+          }
+        }
+
+        // Get school name from preschool_id if not yet set
+        if (!context.school_name && request.preschool_id) {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', request.preschool_id)
+            .single();
+          if (school) {
+            context.school_name = school.name;
           }
         }
         break;

@@ -138,6 +138,16 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'warning',
     category: 'reports',
   },
+  
+  // === BIRTHDAYS ===
+  birthday_chart: {
+    path: '/screens/birthday-chart' as Href,
+    title: 'Birthday Chart',
+    titleKey: 'teacher.birthday_chart',
+    icon: 'gift',
+    color: '#E91E63',
+    category: 'classroom',
+  },
 } as const;
 
 /**
@@ -165,6 +175,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'start_live_lesson',
   'assign_lesson',
   'my_class',
+  'birthday_chart',
   'messages',
   'student_reports',
   'ai_assistant',

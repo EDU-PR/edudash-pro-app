@@ -92,14 +92,14 @@ export class CourseService {
         .from('courses')
         .select(`
           *,
-          instructor:profiles!instructor_id(
+          instructor:profiles!courses_instructor_id_fkey(
             id,
             first_name,
             last_name,
             email,
             role
           ),
-          organization:preschools!organization_id(
+          organization:organizations!courses_organization_id_fkey(
             id,
             name
           )
@@ -204,14 +204,14 @@ export class CourseService {
         .from('courses')
         .select(`
           *,
-          instructor:profiles!instructor_id(
+          instructor:profiles!courses_instructor_id_fkey(
             id,
             first_name,
             last_name,
             email,
             role
           ),
-          organization:preschools!organization_id(
+          organization:organizations!courses_organization_id_fkey(
             id,
             name
           )
@@ -577,14 +577,14 @@ export class CourseService {
         .from('courses')
         .select(`
           *,
-          instructor:profiles!instructor_id(
+          instructor:profiles!courses_instructor_id_fkey(
             id,
             first_name,
             last_name,
             email,
             role
           ),
-          organization:preschools!organization_id(
+          organization:organizations!courses_organization_id_fkey(
             id,
             name
           ),
@@ -593,7 +593,7 @@ export class CourseService {
             enrolled_at,
             enrollment_method,
             is_active,
-            student:profiles!student_id(
+            student:profiles!enrollments_student_id_fkey(
               id,
               first_name,
               last_name,

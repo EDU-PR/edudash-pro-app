@@ -43,7 +43,7 @@ export function useOrgPrograms() {
           max_students,
           start_date,
           end_date,
-          instructor:profiles!instructor_id(
+          instructor:profiles!courses_instructor_id_fkey(
             id,
             first_name,
             last_name,

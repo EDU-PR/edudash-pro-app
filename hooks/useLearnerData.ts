@@ -253,7 +253,7 @@ export function useLearnerSubmissions(enrollmentId?: string) {
         .from('assignment_submissions')
         .select(`
           *,
-          assignment:homework_assignments (
+          assignment:homework_assignments!assignment_submissions_assignment_id_fkey (
             id,
             title,
             description,

@@ -282,29 +282,33 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           />
         </View>
 
-        {/* Financial Overview */}
+        {/* Quick Tips Section - Help principals get started */}
         <View style={styles.section}>
           <CollapsibleSection 
-            title={t('dashboard.financial_overview', { defaultValue: 'Financial Overview' })} 
-            sectionId="financials" 
-            icon="💰"
-            defaultCollapsed={collapsedSections.has('financials')}
+            title={t('dashboard.quick_tips', { defaultValue: 'Quick Tips' })} 
+            sectionId="tips" 
+            icon="💡"
+            defaultCollapsed={collapsedSections.has('tips')}
             onToggle={toggleSection}
           >
-            <View style={styles.financialGrid}>
-              <View style={styles.financialCard}>
-                <Text style={styles.financialLabel}>{t('dashboard.monthly_revenue', { defaultValue: 'Monthly Revenue' })}</Text>
-                <Text style={[styles.financialValue, { color: '#10B981' }]}>
-                  R{(data.stats?.registrationFees?.total ?? data.financialSummary?.monthlyRevenue ?? 0).toLocaleString()}
-                </Text>
+            <View style={styles.tipsContainer}>
+              <View style={styles.tipCard}>
+                <Text style={styles.tipIcon}>📱</Text>
+                <View style={styles.tipContent}>
+                  <Text style={styles.tipTitle}>{t('dashboard.tip_invite_parents', { defaultValue: 'Invite Parents' })}</Text>
+                  <Text style={styles.tipText}>
+                    {t('dashboard.tip_invite_parents_desc', { defaultValue: 'Share your school code with parents so they can register their children.' })}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.financialCard}>
-                <Text style={styles.financialLabel}>{t('dashboard.net_profit', { defaultValue: 'Net Profit' })}</Text>
-                <Text style={[styles.financialValue, { 
-                  color: ((data.stats?.registrationFees?.total ?? data.financialSummary?.netProfit ?? 0) - (data.financialSummary?.estimatedExpenses ?? 0)) >= 0 ? '#10B981' : '#EF4444' 
-                }]}>
-                  R{((data.stats?.registrationFees?.total ?? data.financialSummary?.monthlyRevenue ?? 0) - (data.financialSummary?.estimatedExpenses ?? 0)).toLocaleString()}
-                </Text>
+              <View style={styles.tipCard}>
+                <Text style={styles.tipIcon}>📊</Text>
+                <View style={styles.tipContent}>
+                  <Text style={styles.tipTitle}>{t('dashboard.tip_track_attendance', { defaultValue: 'Track Attendance' })}</Text>
+                  <Text style={styles.tipText}>
+                    {t('dashboard.tip_track_attendance_desc', { defaultValue: 'Teachers can mark daily attendance. You can view reports anytime.' })}
+                  </Text>
+                </View>
               </View>
             </View>
           </CollapsibleSection>
@@ -340,32 +344,41 @@ const createStyles = (theme: any, insetTop = 0, insetBottom = 0) => {
     firstSectionWeb: {
       paddingTop: 0,
     },
-    financialGrid: {
+    // Tips section styles
+    tipsContainer: {
+      gap: isSmallScreen ? 10 : 12,
+    },
+    tipCard: {
       flexDirection: 'row',
-      gap: cardGap,
-    },
-    financialCard: {
       backgroundColor: theme.cardBackground,
-      borderRadius: isSmallScreen ? 12 : 16,
+      borderRadius: isSmallScreen ? 12 : 14,
       padding: isSmallScreen ? 12 : 16,
-      flex: 1,
+      alignItems: 'flex-start',
       shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 6,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 1,
     },
-    financialLabel: {
-      fontSize: isSmallScreen ? 12 : 14,
+    tipIcon: {
+      fontSize: isSmallScreen ? 24 : 28,
+      marginRight: isSmallScreen ? 10 : 12,
+    },
+    tipContent: {
+      flex: 1,
+    },
+    tipTitle: {
+      fontSize: isSmallScreen ? 14 : 16,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    tipText: {
+      fontSize: isSmallScreen ? 12 : 13,
       color: theme.textSecondary,
-      marginBottom: isSmallScreen ? 6 : 8,
-      fontWeight: '500',
+      lineHeight: isSmallScreen ? 16 : 18,
     },
-    financialValue: {
-      fontSize: isSmallScreen ? 20 : isTablet ? 28 : 24,
-      fontWeight: '700',
-      lineHeight: isSmallScreen ? 24 : isTablet ? 32 : 28,
-    },
+    // Error styles
     errorContainer: {
       flex: 1,
       alignItems: 'center',

@@ -86,6 +86,10 @@ interface Registration {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  // Source tracking - which table this came from
+  source?: 'edusite' | 'in-app' | 'aftercare';
+  // Parent ID for in-app registrations
+  parent_id?: string;
 }
 
 export default function RegistrationDetailScreen() {
@@ -157,7 +161,7 @@ export default function RegistrationDetailScreen() {
         }
         
         if (data) {
-          setRegistration(data);
+          setRegistration({ ...data, source: 'edusite' as const });
           setLoading(false);
           return;
         }
@@ -184,6 +188,11 @@ export default function RegistrationDetailScreen() {
             reviewed_at,
             rejection_reason,
             created_at,
+            registration_fee_amount,
+            registration_fee_paid,
+            payment_method,
+            proof_of_payment_url,
+            payment_verified,
             parent:profiles!parent_id(first_name, last_name, email, phone)
           `)
           .eq('id', id)
@@ -209,15 +218,21 @@ export default function RegistrationDetailScreen() {
             student_dob: inAppData.child_birth_date,
             student_gender: inAppData.child_gender,
             documents_uploaded: true,
-            registration_fee_paid: true,
-            payment_verified: true,
+            // Payment info from DB
+            registration_fee_amount: inAppData.registration_fee_amount || 0,
+            registration_fee_paid: inAppData.registration_fee_paid || false,
+            payment_verified: inAppData.payment_verified || false,
+            payment_method: inAppData.payment_method,
+            proof_of_payment_url: inAppData.proof_of_payment_url,
             status: inAppData.status,
             reviewed_by: inAppData.reviewed_by,
             rejection_reason: inAppData.rejection_reason,
             notes: inAppData.notes,
             created_at: inAppData.created_at,
-            // In-app registrations don't have these fields
-            proof_of_payment_url: undefined,
+            // Source tracking
+            source: 'in-app' as const,
+            parent_id: inAppData.parent_id,
+            // Document fields (not available for in-app)
             guardian_id_document_url: undefined,
             student_birth_certificate_url: undefined,
             student_clinic_card_url: undefined,
@@ -327,14 +342,27 @@ export default function RegistrationDetailScreen() {
   const handleApprove = async () => {
     if (!registration) return;
     
+    const isInApp = registration.source === 'in-app';
+    const hasUnverifiedPayment = registration.proof_of_payment_url && !registration.payment_verified;
+    
+    let confirmMessage = `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?\n\nThis will:\n• Create student profile`;
+    if (!isInApp) {
+      confirmMessage += '\n• Create parent account\n• Send welcome email';
+    } else {
+      confirmMessage += '\n• Link to parent\n• Notify parent';
+    }
+    if (hasUnverifiedPayment) {
+      confirmMessage += '\n\n⚠️ Note: Payment has not been verified yet.';
+    }
+    
     showAlert(
       'Approve Registration',
-      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?\n\nThis will:\n• Create parent account\n• Create student profile\n• Send welcome email`,
+      confirmMessage,
       'info',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Approve',
+          text: hasUnverifiedPayment ? 'Approve Anyway' : 'Approve',
           style: 'default',
           onPress: async () => {
             hideAlert();
@@ -342,36 +370,58 @@ export default function RegistrationDetailScreen() {
             try {
               const supabase = assertSupabase();
               
-              const { error: updateError } = await supabase
-                .from('registration_requests')
-                .update({
-                  status: 'approved',
-                  reviewed_by: user?.email,
-                  reviewed_date: new Date().toISOString(),
-                })
-                .eq('id', registration.id);
+              if (isInApp) {
+                // In-app registration - update child_registration_requests
+                const { error: updateError } = await supabase
+                  .from('child_registration_requests')
+                  .update({
+                    status: 'approved',
+                    reviewed_by: user?.id,
+                    reviewed_at: new Date().toISOString(),
+                  })
+                  .eq('id', registration.id);
 
-              if (updateError) throw updateError;
+                if (updateError) throw updateError;
 
-              // Call sync function
-              const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
-                body: { registration_id: registration.id },
-              });
-
-              if (syncError) {
-                showAlert(
-                  'Partial Success',
-                  'Registration approved, but account creation may have failed. Please contact admin.',
-                  'warning',
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
-              } else {
                 showAlert(
                   'Success',
-                  '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
+                  '✅ Registration approved!\n\nPlease use the registration list to complete student creation.',
                   'success',
                   [{ text: 'OK', onPress: () => router.back() }]
                 );
+              } else {
+                // EduSite registration - original flow
+                const { error: updateError } = await supabase
+                  .from('registration_requests')
+                  .update({
+                    status: 'approved',
+                    reviewed_by: user?.email,
+                    reviewed_date: new Date().toISOString(),
+                  })
+                  .eq('id', registration.id);
+
+                if (updateError) throw updateError;
+
+                // Call sync function for EduSite registrations
+                const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
+                  body: { registration_id: registration.id },
+                });
+
+                if (syncError) {
+                  showAlert(
+                    'Partial Success',
+                    'Registration approved, but account creation may have failed. Please contact admin.',
+                    'warning',
+                    [{ text: 'OK', onPress: () => router.back() }]
+                  );
+                } else {
+                  showAlert(
+                    'Success',
+                    '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
+                    'success',
+                    [{ text: 'OK', onPress: () => router.back() }]
+                  );
+                }
               }
             } catch (err: any) {
               showAlert('Error', err.message || 'Failed to approve registration', 'error');
@@ -409,14 +459,25 @@ export default function RegistrationDetailScreen() {
     try {
       const supabase = assertSupabase();
       
+      const isInApp = registration.source === 'in-app';
+      const tableName = isInApp ? 'child_registration_requests' : 'registration_requests';
+      
+      const updateData: Record<string, any> = {
+        status: 'rejected',
+        rejection_reason: reason,
+      };
+      
+      if (isInApp) {
+        updateData.reviewed_by = user?.id;
+        updateData.reviewed_at = new Date().toISOString();
+      } else {
+        updateData.reviewed_by = user?.email;
+        updateData.reviewed_date = new Date().toISOString();
+      }
+      
       const { error } = await supabase
-        .from('registration_requests')
-        .update({
-          status: 'rejected',
-          reviewed_by: user?.email,
-          reviewed_date: new Date().toISOString(),
-          rejection_reason: reason,
-        })
+        .from(tableName)
+        .update(updateData)
         .eq('id', registration.id);
 
       if (error) throw error;
@@ -450,8 +511,13 @@ export default function RegistrationDetailScreen() {
             try {
               const supabase = assertSupabase();
               
+              // Use the correct table based on source
+              const tableName = registration.source === 'in-app' 
+                ? 'child_registration_requests' 
+                : 'registration_requests';
+              
               const { error } = await supabase
-                .from('registration_requests')
+                .from(tableName)
                 .update({
                   payment_verified: true,
                   registration_fee_paid: true,

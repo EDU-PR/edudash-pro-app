@@ -77,6 +77,7 @@ export function JoinLiveLesson({
         .lt('scheduled_end', now);
 
       // Fetch live lessons
+      // Use explicit FK hint for PostgREST: profiles!video_calls_teacher_id_fkey
       let query = getSupabase()
         .from('video_calls')
         .select(`
@@ -86,8 +87,8 @@ export function JoinLiveLesson({
           status,
           scheduled_start,
           scheduled_end,
-          teacher:teacher_id (first_name, last_name),
-          classes:class_id (name, grade_level)
+          teacher:profiles!video_calls_teacher_id_fkey (first_name, last_name),
+          classes:classes!video_calls_class_id_fkey (name, grade_level)
         `)
         .eq('preschool_id', preschoolId)
         .eq('status', 'live')
@@ -113,11 +114,12 @@ export function JoinLiveLesson({
     }
   }, [preschoolId, classId]);
 
-  // Initial fetch
+  // Initial fetch + realtime subscription
   useEffect(() => {
     fetchLiveLessons(false);
 
-    // Set up realtime subscription
+    // Set up realtime subscription for live lessons
+    // Only refresh when status or meeting_url changes (lesson starts/ends)
     const channel = getSupabase()
       .channel(`live-lessons-${preschoolId}`)
       .on(
@@ -128,7 +130,10 @@ export function JoinLiveLesson({
           table: 'video_calls',
           filter: `preschool_id=eq.${preschoolId}`,
         },
-        () => fetchLiveLessons(false)
+        (payload) => {
+          console.log('[JoinLiveLesson] New lesson created:', payload);
+          fetchLiveLessons(false);
+        }
       )
       .on(
         'postgres_changes',
@@ -138,12 +143,23 @@ export function JoinLiveLesson({
           table: 'video_calls',
           filter: `preschool_id=eq.${preschoolId}`,
         },
-        () => fetchLiveLessons(false)
+        (payload) => {
+          // Only refresh if status changed to live/ended or meeting_url was set
+          const newStatus = (payload.new as any)?.status;
+          const oldStatus = (payload.old as any)?.status;
+          const newUrl = (payload.new as any)?.meeting_url;
+          const oldUrl = (payload.old as any)?.meeting_url;
+          
+          if (newStatus !== oldStatus || newUrl !== oldUrl) {
+            console.log('[JoinLiveLesson] Lesson status changed:', oldStatus, '->', newStatus);
+            fetchLiveLessons(false);
+          }
+        }
       )
       .subscribe();
 
-    // Poll every 10 seconds as fallback
-    const pollInterval = setInterval(() => fetchLiveLessons(false), 10000);
+    // Poll every 60 seconds as fallback (reduced from 10s to avoid excessive refreshes)
+    const pollInterval = setInterval(() => fetchLiveLessons(false), 60000);
 
     return () => {
       getSupabase().removeChannel(channel);

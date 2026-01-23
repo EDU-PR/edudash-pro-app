@@ -5,7 +5,7 @@
  * Used by Principal, Teacher, and Parent dashboards.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -47,15 +47,24 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   const { theme } = useTheme();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const rotation = useSharedValue(defaultCollapsed ? 0 : 1);
-  const contentHeight = useSharedValue(defaultCollapsed ? 0 : 1);
+  const contentOpacity = useSharedValue(defaultCollapsed ? 0 : 1);
 
   const styles = createStyles(theme);
+
+  // Sync with external collapsed state (from parent component)
+  useEffect(() => {
+    if (defaultCollapsed !== collapsed) {
+      setCollapsed(defaultCollapsed);
+      rotation.value = withTiming(defaultCollapsed ? 0 : 1, { duration: 200 });
+      contentOpacity.value = withTiming(defaultCollapsed ? 0 : 1, { duration: 200 });
+    }
+  }, [defaultCollapsed]);
 
   const toggleCollapse = useCallback(() => {
     const newCollapsed = !collapsed;
     setCollapsed(newCollapsed);
     rotation.value = withTiming(newCollapsed ? 0 : 1, { duration: 200 });
-    contentHeight.value = withTiming(newCollapsed ? 0 : 1, { duration: 200 });
+    contentOpacity.value = withTiming(newCollapsed ? 0 : 1, { duration: 200 });
     
     try {
       Feedback.vibrate(5);
@@ -66,7 +75,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     if (onToggle) {
       onToggle(sectionId, newCollapsed);
     }
-  }, [collapsed, sectionId, onToggle, rotation, contentHeight]);
+  }, [collapsed, sectionId, onToggle, rotation, contentOpacity]);
 
   const animatedChevronStyle = useAnimatedStyle(() => {
     const rotate = interpolate(rotation.value, [0, 1], [0, 90]);
@@ -77,9 +86,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 
   const animatedContentStyle = useAnimatedStyle(() => {
     return {
-      opacity: contentHeight.value,
-      maxHeight: contentHeight.value === 0 ? 0 : undefined,
-      overflow: 'hidden' as const,
+      opacity: contentOpacity.value,
     };
   });
 
@@ -129,7 +136,10 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         </View>
       </TouchableOpacity>
       <Animated.View style={animatedContentStyle}>
-        {!collapsed && children}
+        {/* Always render children but control visibility with display/height */}
+        <View style={collapsed ? styles.hiddenContent : undefined}>
+          {children}
+        </View>
       </Animated.View>
     </View>
   );
@@ -139,6 +149,10 @@ const createStyles = (theme: any) => {
   return StyleSheet.create({
     container: {
       marginBottom: 24,
+    },
+    hiddenContent: {
+      height: 0,
+      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',

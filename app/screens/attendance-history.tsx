@@ -138,15 +138,25 @@ export default function AttendanceHistoryScreen() {
   const attendanceQuery = useQuery({
     queryKey: ['attendance_history', schoolId, selectedDate, selectedClass],
     queryFn: async () => {
-      if (!schoolId) return { records: [], stats: null };
+      if (!schoolId) {
+        console.log('[AttendanceHistory] No schoolId available');
+        return { records: [], stats: null };
+      }
 
-      // First get all students in this school
-      const { data: schoolStudents } = await assertSupabase()
+      console.log('[AttendanceHistory] Fetching for schoolId:', schoolId, 'date:', selectedDate);
+
+      // First get all students in this school (check both preschool_id and organization_id)
+      const { data: schoolStudents, error: studentsError } = await assertSupabase()
         .from('students')
         .select('id')
-        .eq('preschool_id', schoolId);
+        .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`);
+      
+      if (studentsError) {
+        console.error('[AttendanceHistory] Error fetching students:', studentsError);
+      }
       
       const studentIds = schoolStudents?.map(s => s.id) || [];
+      console.log('[AttendanceHistory] Found', studentIds.length, 'students');
       
       if (studentIds.length === 0) {
         return { records: [], stats: { total_records: 0, present_count: 0, absent_count: 0, late_count: 0 } };
@@ -161,11 +171,11 @@ export default function AttendanceHistoryScreen() {
           status,
           recorded_by,
           created_at,
-          students!attendance_student_id_fkey (
+          students:student_id (
             first_name,
             last_name,
             class_id,
-            classes!students_class_id_fkey (
+            classes:class_id (
               name
             )
           )
@@ -180,7 +190,12 @@ export default function AttendanceHistoryScreen() {
 
       const { data, error } = await query;
       
-      if (error) throw error;
+      console.log('[AttendanceHistory] Query result - data:', data?.length || 0, 'records, error:', error);
+      
+      if (error) {
+        console.error('[AttendanceHistory] Query error:', error);
+        throw error;
+      }
 
       let records: AttendanceRecord[] = (data || []).map((record: any) => ({
         id: record.id,
@@ -223,11 +238,15 @@ export default function AttendanceHistoryScreen() {
       const { data, error } = await assertSupabase()
         .from('classes')
         .select('id, name')
-        .eq('preschool_id', schoolId)
+        .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
         .eq('active', true)
         .order('name');
       
-      if (error) throw error;
+      if (error) {
+        console.error('[AttendanceHistory] Error fetching classes:', error);
+        throw error;
+      }
+      console.log('[AttendanceHistory] Found', data?.length || 0, 'classes');
       return data || [];
     },
     enabled: !!schoolId,

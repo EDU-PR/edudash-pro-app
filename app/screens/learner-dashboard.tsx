@@ -323,10 +323,10 @@ export default function LearnerDashboard() {
                 onPress: () => router.push('/screens/learner/courses'),
               },
               {
-                icon: 'briefcase-outline',
-                title: t('learner.my_cv', { defaultValue: 'My CV' }),
-                subtitle: t('learner.manage_cv', { defaultValue: 'Manage CV' }),
-                onPress: () => router.push('/screens/learner/cv'),
+                icon: 'documents-outline',
+                title: t('learner.documents', { defaultValue: 'Documents' }),
+                subtitle: t('learner.documents_description', { defaultValue: 'CV, Certificates, Tax No. etc' }),
+                onPress: () => router.push('/screens/learner/documents'),
               },
               {
                 icon: 'folder-outline',
