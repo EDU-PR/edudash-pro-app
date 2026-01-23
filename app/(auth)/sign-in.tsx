@@ -980,7 +980,7 @@ return (
               </TouchableOpacity>
             </View>
 
-            {/* Magic Link Option */}
+            {/* Magic Link Option - Temporarily disabled
             <TouchableOpacity
               style={styles.magicLinkButton}
               onPress={() => router.push('/(auth)/magic-link')}
@@ -991,6 +991,7 @@ return (
                 {t('auth.sign_in_with_email_link', { defaultValue: 'Sign in with Email Link (No Password)' })}
               </Text>
             </TouchableOpacity>
+            */}
 
             <GradientButton
               label={loading ? t('auth.sign_in.signing_in', { defaultValue: 'Signing In...' }) : t('auth.sign_in.cta', { defaultValue: 'Sign In' })}

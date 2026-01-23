@@ -6,8 +6,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// Auto-redirect delay (in ms) - gives time for proper route resolution
-const AUTO_REDIRECT_DELAY = 1200;
+// Auto-redirect delay (in ms) - reduced for better UX
+const AUTO_REDIRECT_DELAY = 300;
+
+// Time to show loading spinner before showing actual not-found content
+const SHOW_NOT_FOUND_DELAY = 2000;
 
 /** Debug information for route not found */
 interface DebugInfo {
@@ -29,7 +32,9 @@ export default function NotFound() {
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [showNotFoundContent, setShowNotFoundContent] = useState(false);
   const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notFoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Smart fallback navigation based on user state
   const getSmartFallback = () => {
@@ -61,7 +66,7 @@ export default function NotFound() {
       clearTimeout(redirectTimeoutRef.current);
     }
     
-    // Set up auto-redirect with a delay
+    // Set up auto-redirect with a short delay (allows route to resolve first)
     redirectTimeoutRef.current = setTimeout(() => {
       setIsRedirecting(true);
       const targetRoute = getSmartFallback();
@@ -73,9 +78,18 @@ export default function NotFound() {
       router.replace(targetRoute as any);
     }, AUTO_REDIRECT_DELAY);
     
+    // Only show the actual "not found" UI after a longer delay
+    // This prevents flash during normal navigation
+    notFoundTimeoutRef.current = setTimeout(() => {
+      setShowNotFoundContent(true);
+    }, SHOW_NOT_FOUND_DELAY);
+    
     return () => {
       if (redirectTimeoutRef.current) {
         clearTimeout(redirectTimeoutRef.current);
+      }
+      if (notFoundTimeoutRef.current) {
+        clearTimeout(notFoundTimeoutRef.current);
       }
     };
   }, [authLoading, user, profile?.role, pathname]);
@@ -110,8 +124,8 @@ export default function NotFound() {
     gatherDebugInfo();
   }, [pathname, segments, user, profile, router]);
   
-  // Show loading state while auth is resolving or redirecting
-  if (authLoading || isRedirecting) {
+  // Show loading state while auth is resolving, redirecting, or before showing not-found content
+  if (authLoading || isRedirecting || !showNotFoundContent) {
     return (
       <View style={styles.loadingContainer}>
         <LinearGradient
@@ -135,7 +149,7 @@ export default function NotFound() {
           <Text style={styles.loadingText}>
             {authLoading 
               ? t('common.loading', { defaultValue: 'Loading your dashboard...' }) 
-              : t('common.redirecting', { defaultValue: 'Preparing your experience...' })}
+              : t('common.redirecting', { defaultValue: 'Navigating...' })}
           </Text>
         </View>
       </View>

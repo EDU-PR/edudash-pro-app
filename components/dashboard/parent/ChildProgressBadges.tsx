@@ -96,55 +96,148 @@ export function ChildProgressBadges({
         .order('attendance_date', { ascending: false });
       
       const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
-      const totalDays = attendanceData?.length || 0;
+      // Children typically have 5 school days per week
+      const totalDays = Math.min(attendanceData?.length || 0, 5);
 
-      // Calculate homework completion
-      const { data: homeworkData } = await supabase
-        .from('homework_submissions')
-        .select('status')
-        .eq('student_id', studentId)
-        .gte('created_at', weekStart.toISOString());
+      // Get student's class_id for homework queries
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('class_id')
+        .eq('id', studentId)
+        .single();
+
+      // Calculate homework completion - out of 4 per week
+      let completedHomework = 0;
+      let totalHomework = 4; // Weekly homework target is 4
       
-      const completedHomework = homeworkData?.filter(h => h.status === 'submitted' || h.status === 'graded').length || 0;
-      const totalHomework = homeworkData?.length || 0;
+      if (studentData?.class_id) {
+        // Get assignments for this week
+        const { data: assignments } = await supabase
+          .from('homework_assignments')
+          .select('id')
+          .eq('class_id', studentData.class_id)
+          .gte('created_at', weekStart.toISOString())
+          .lte('due_date', new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString());
+        
+        const assignmentIds = assignments?.map(a => a.id) || [];
+        
+        if (assignmentIds.length > 0) {
+          const { data: submissions } = await supabase
+            .from('homework_submissions')
+            .select('assignment_id, status')
+            .eq('student_id', studentId)
+            .in('assignment_id', assignmentIds);
+          
+          completedHomework = submissions?.filter(h => 
+            h.status === 'submitted' || h.status === 'graded'
+          ).length || 0;
+          
+          // Use actual assignments count, but default to 4 if less
+          totalHomework = Math.max(assignmentIds.length, 4);
+        }
+      }
 
       // Set progress stats
       setProgressStats([
         {
           label: 'Attendance',
           value: presentDays,
-          max: Math.max(totalDays, 5),
+          max: 5, // 5 school days per week
           color: '#10B981',
           icon: 'calendar-outline',
         },
         {
           label: 'Homework',
           value: completedHomework,
-          max: Math.max(totalHomework, 3),
+          max: totalHomework,
           color: '#3B82F6',
           icon: 'document-text-outline',
         },
       ]);
 
-      // Generate earned badges based on progress
+      // Fetch real achievements from student_achievements table
+      const { data: achievementsData } = await supabase
+        .from('student_achievements')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('earned_at', { ascending: false });
+
       const badges: Badge[] = [];
       
-      if (presentDays >= 5) {
+      // Map database achievements to badges
+      if (achievementsData && achievementsData.length > 0) {
+        achievementsData.forEach((achievement: any) => {
+          const matchingDef = BADGE_DEFINITIONS.find(
+            b => b.id === achievement.achievement_type || 
+                 b.name.toLowerCase() === achievement.achievement_name.toLowerCase()
+          );
+          
+          if (matchingDef) {
+            badges.push({
+              ...matchingDef,
+              name: achievement.achievement_name || matchingDef.name,
+              description: achievement.description || matchingDef.description,
+              icon: achievement.achievement_icon || matchingDef.icon,
+              color: achievement.achievement_color || matchingDef.color,
+              earned_at: achievement.earned_at || achievement.created_at,
+            });
+          } else {
+            // Custom achievement not in predefined list
+            badges.push({
+              id: achievement.id,
+              name: achievement.achievement_name,
+              description: achievement.description || '',
+              icon: achievement.achievement_icon || 'star',
+              color: achievement.achievement_color || '#F59E0B',
+              earned_at: achievement.earned_at || achievement.created_at,
+            });
+          }
+        });
+      }
+      
+      // Add attendance badge based on current progress
+      if (presentDays >= 5 && !badges.find(b => b.id === 'attendance_star')) {
         badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'attendance_star')!, earned_at: new Date().toISOString() });
-      } else if (presentDays >= 3) {
+      } else if (presentDays >= 3 && !badges.find(b => b.id === 'attendance_star')) {
         badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'attendance_star')!, progress: (presentDays / 5) * 100 });
       }
 
-      if (totalHomework > 0 && completedHomework === totalHomework) {
+      // Add homework badge based on current progress
+      if (completedHomework >= totalHomework && !badges.find(b => b.id === 'homework_hero')) {
         badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'homework_hero')!, earned_at: new Date().toISOString() });
+      } else if (completedHomework > 0 && !badges.find(b => b.id === 'homework_hero')) {
+        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'homework_hero')!, progress: (completedHomework / totalHomework) * 100 });
       }
 
-      // Add some aspirational badges with progress
-      if (!badges.find(b => b.id === 'helping_hand')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'helping_hand')!, progress: 60 });
+      // Add helping_hand and bookworm with real progress from activities
+      // Check if student has shared work or helped others (from daily_activities or similar)
+      const { data: helpingActivities } = await supabase
+        .from('student_achievements')
+        .select('id')
+        .eq('student_id', studentId)
+        .or('achievement_type.eq.helping_hand,achievement_name.ilike.%help%,category.eq.social')
+        .limit(5);
+      
+      const helpingCount = helpingActivities?.length || 0;
+      if (helpingCount >= 3 && !badges.find(b => b.id === 'helping_hand')) {
+        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'helping_hand')!, earned_at: new Date().toISOString() });
+      } else if (!badges.find(b => b.id === 'helping_hand')) {
+        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'helping_hand')!, progress: Math.min((helpingCount / 3) * 100, 99) });
       }
-      if (!badges.find(b => b.id === 'bookworm')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'bookworm')!, progress: 40 });
+
+      // Check reading/storytime activities for bookworm
+      const { data: readingActivities } = await supabase
+        .from('student_achievements')
+        .select('id')
+        .eq('student_id', studentId)
+        .or('achievement_type.eq.bookworm,achievement_name.ilike.%read%,achievement_name.ilike.%story%,category.eq.reading')
+        .limit(5);
+      
+      const readingCount = readingActivities?.length || 0;
+      if (readingCount >= 5 && !badges.find(b => b.id === 'bookworm')) {
+        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'bookworm')!, earned_at: new Date().toISOString() });
+      } else if (!badges.find(b => b.id === 'bookworm')) {
+        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'bookworm')!, progress: Math.min((readingCount / 5) * 100, 99) });
       }
 
       setEarnedBadges(badges);
@@ -158,6 +251,54 @@ export function ChildProgressBadges({
   useEffect(() => {
     loadProgress();
   }, [loadProgress]);
+
+  // Set up realtime subscription for attendance and achievements updates
+  useEffect(() => {
+    if (!studentId) return;
+    
+    const supabase = assertSupabase();
+    
+    // Subscribe to attendance changes for this student
+    const attendanceChannel = supabase
+      .channel(`child-progress-attendance-${studentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attendance',
+          filter: `student_id=eq.${studentId}`,
+        },
+        () => {
+          console.log('[ChildProgressBadges] Attendance updated');
+          loadProgress();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to achievement changes for this student
+    const achievementsChannel = supabase
+      .channel(`child-progress-achievements-${studentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'student_achievements',
+          filter: `student_id=eq.${studentId}`,
+        },
+        () => {
+          console.log('[ChildProgressBadges] Achievements updated');
+          loadProgress();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(attendanceChannel);
+      supabase.removeChannel(achievementsChannel);
+    };
+  }, [studentId, loadProgress]);
 
   const renderProgressRing = (stat: ProgressStat) => {
     const percentage = stat.max > 0 ? Math.min((stat.value / stat.max) * 100, 100) : 0;

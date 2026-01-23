@@ -32,6 +32,7 @@ export default function EnrollByProgramCodeScreen() {
   const [enrolling, setEnrolling] = useState(false);
   const [autoEnrolling, setAutoEnrolling] = useState(false);
   const autoEnrollAttempted = useRef(false);
+  const codeFromParams = useRef(!!params?.code); // Track if code came from URL params
 
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -52,9 +53,10 @@ export default function EnrollByProgramCodeScreen() {
     }
   }, [user]);
 
-  // Auto-enroll if user is logged in and has a program code
+  // Auto-enroll ONLY if code was provided via URL params (e.g., from QR code scan)
+  // Don't auto-validate when user is manually typing
   useEffect(() => {
-    if (user?.id && programCode.trim() && !autoEnrollAttempted.current && !validating && !enrolling && !autoEnrolling) {
+    if (user?.id && codeFromParams.current && programCode.trim() && !autoEnrollAttempted.current && !validating && !enrolling && !autoEnrolling) {
       autoEnrollAttempted.current = true;
       setAutoEnrolling(true);
       // Auto-validate and enroll

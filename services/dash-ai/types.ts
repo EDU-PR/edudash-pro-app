@@ -788,6 +788,12 @@ export interface ToolExecutionResult {
     executionTime?: number;
     rowsAffected?: number;
     cached?: boolean;
+    // Extended metadata for specific tools
+    toolId?: string;
+    requiredTier?: string;
+    feature?: string;
+    // Allow additional custom metadata
+    [key: string]: unknown;
   };
 }
 

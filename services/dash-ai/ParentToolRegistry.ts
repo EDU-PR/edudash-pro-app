@@ -52,7 +52,7 @@ export class ParentToolRegistry extends DashToolRegistry {
           // Get student basic info with class details
           const { data: student, error: studentError } = await client
             .from('students')
-            .select('first_name, last_name, date_of_birth, class_id, classes!left(name, grade_level)')
+            .select('first_name, last_name, date_of_birth, class_id, classes!students_class_id_fkey(name, grade_level)')
             .eq('id', args.student_id)
             .single();
 
@@ -353,7 +353,7 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
           // Get student and teacher info
           const { data: student, error: studentError } = await client
             .from('students')
-            .select('first_name, last_name, class_id, classes!left(teacher_id, teacher:profiles!left(first_name, last_name))')
+            .select('first_name, last_name, class_id, classes!students_class_id_fkey(teacher_id, teacher:profiles!classes_teacher_id_fkey(first_name, last_name))')
             .eq('id', args.student_id)
             .single();
 

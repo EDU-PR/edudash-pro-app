@@ -20,11 +20,14 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -86,6 +89,7 @@ export default function ParentDocumentUploadScreen() {
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<DocumentType | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0-100 progress percentage
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
   const [registrationData, setRegistrationData] = useState<any>(null);
   const [studentData, setStudentData] = useState<any>(null);
@@ -251,6 +255,29 @@ export default function ParentDocumentUploadScreen() {
     }
   };
 
+  // Convert base64 to Uint8Array for upload
+  const base64ToUint8Array = (base64: string): Uint8Array => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    const str = base64.replace(/\s/g, '');
+    const output: number[] = [];
+
+    for (let i = 0; i < str.length; i += 4) {
+      const enc1 = chars.indexOf(str.charAt(i));
+      const enc2 = chars.indexOf(str.charAt(i + 1));
+      const enc3 = chars.indexOf(str.charAt(i + 2));
+      const enc4 = chars.indexOf(str.charAt(i + 3));
+
+      const chr1 = (enc1 << 2) | (enc2 >> 4);
+      const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+      const chr3 = ((enc3 & 3) << 6) | enc4;
+
+      output.push(chr1);
+      if (enc3 !== 64 && enc3 !== -1) output.push(chr2);
+      if (enc4 !== 64 && enc4 !== -1) output.push(chr3);
+    }
+    return new Uint8Array(output);
+  };
+
   // Upload document
   const uploadDocument = async (
     docType: DocumentType,
@@ -262,6 +289,8 @@ export default function ParentDocumentUploadScreen() {
     }
 
     setUploading(docType);
+    setUploadProgress(0);
+    
     try {
       const supabase = assertSupabase();
 
@@ -270,16 +299,45 @@ export default function ParentDocumentUploadScreen() {
       const timestamp = Date.now();
       const filePath = `documents/${profile.preschool_id}/${user.id}/${docType}_${timestamp}.${ext}`;
 
-      // Read file and upload
-      const response = await fetch(file.uri);
-      const blob = await response.blob();
+      // Simulate initial progress
+      setUploadProgress(10);
+
+      // Read file properly based on platform
+      let body: Uint8Array;
+      if (Platform.OS === 'web') {
+        // Web: use fetch + arrayBuffer
+        const response = await fetch(file.uri);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch file: ${response.status}`);
+        }
+        const buffer = await response.arrayBuffer();
+        body = new Uint8Array(buffer);
+      } else {
+        // Native: read as base64 and convert to Uint8Array
+        setUploadProgress(20);
+        const base64 = await FileSystem.readAsStringAsync(file.uri, { 
+          encoding: FileSystem.EncodingType.Base64 
+        });
+        setUploadProgress(40);
+        body = base64ToUint8Array(base64);
+      }
+
+      setUploadProgress(50);
+
+      console.log('[DocUpload] Uploading file:', {
+        path: filePath,
+        size: body.length,
+        mimeType: file.mimeType,
+      });
 
       const { error: uploadError } = await supabase.storage
         .from('registration-documents')
-        .upload(filePath, blob, {
+        .upload(filePath, body, {
           contentType: file.mimeType || 'application/octet-stream',
           upsert: true,
         });
+
+      setUploadProgress(70);
 
       if (uploadError) throw uploadError;
 
@@ -332,8 +390,12 @@ export default function ParentDocumentUploadScreen() {
         }
       }
 
+      setUploadProgress(90);
+
       // Refresh data
       await loadDocuments();
+
+      setUploadProgress(100);
 
       Alert.alert(
         '✅ Document Uploaded',
@@ -344,6 +406,7 @@ export default function ParentDocumentUploadScreen() {
       Alert.alert('Upload Failed', error.message || 'Failed to upload document. Please try again.');
     } finally {
       setUploading(null);
+      setUploadProgress(0);
     }
   };
 
@@ -419,7 +482,23 @@ export default function ParentDocumentUploadScreen() {
 
           <View style={styles.docActions}>
             {isUploading ? (
-              <ActivityIndicator color={theme.primary} />
+              <View style={styles.uploadingContainer}>
+                <ActivityIndicator color={theme.primary} size="small" />
+                <Text style={[styles.uploadProgressText, { color: theme.textSecondary }]}>
+                  {uploadProgress}%
+                </Text>
+                <View style={styles.uploadProgressBarContainer}>
+                  <View 
+                    style={[
+                      styles.uploadProgressBar, 
+                      { 
+                        width: `${uploadProgress}%`,
+                        backgroundColor: theme.primary 
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
             ) : uploaded ? (
               <View style={styles.actionButtons}>
                 <TouchableOpacity
@@ -456,7 +535,7 @@ export default function ParentDocumentUploadScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Upload Documents',
@@ -542,7 +621,7 @@ export default function ParentDocumentUploadScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -640,6 +719,27 @@ const createStyles = (theme: any) =>
     },
     docActions: {
       marginLeft: 12,
+    },
+    uploadingContainer: {
+      alignItems: 'center',
+      minWidth: 60,
+    },
+    uploadProgressText: {
+      fontSize: 11,
+      marginTop: 4,
+      fontWeight: '500',
+    },
+    uploadProgressBarContainer: {
+      width: 50,
+      height: 4,
+      backgroundColor: theme.border,
+      borderRadius: 2,
+      marginTop: 4,
+      overflow: 'hidden',
+    },
+    uploadProgressBar: {
+      height: '100%',
+      borderRadius: 2,
     },
     actionButtons: {
       flexDirection: 'row',

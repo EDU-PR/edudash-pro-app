@@ -74,7 +74,7 @@ export function useMessages({ organizationId }: UseMessagesOptions) {
       // Load recent messages
       const { data: historyData } = await supabase
         .from('teacher_messages')
-        .select('id, subject, message, class_id, sent_at, created_at, classes(name)')
+        .select('id, subject, message, class_id, sent_at, created_at, classes!teacher_messages_class_id_fkey(name)')
         .eq('preschool_id', organizationId)
         .order('sent_at', { ascending: false })
         .limit(10);

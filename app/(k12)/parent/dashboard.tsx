@@ -30,6 +30,7 @@ import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { styles } from './dashboard.styles';
 import { ChildCard } from './ChildCard';
 import { useK12ParentData } from './useK12ParentData';
+import DashOrb from '@/components/dash-orb';
 
 // Quick action items for K-12 parent
 const quickActions = [
@@ -43,7 +44,7 @@ const quickActions = [
 
 // Second row of quick actions - AI/Study features from PWA
 const aiQuickActions = [
-  { id: 'dash-ai', icon: 'sparkles', label: 'Dash AI', route: '/screens/dash-ai-chat', color: '#7C3AED' },
+  { id: 'dash-ai', icon: 'sparkles', label: 'Dash AI', route: '/screens/dash-assistant', color: '#7C3AED' },
   { id: 'exam-prep', icon: 'school', label: 'Exam Prep', route: '/screens/exam-prep', color: '#EC4899' },
   { id: 'homework', icon: 'document-text', label: 'Homework', route: '/screens/homework', color: '#06B6D4' },
   { id: 'weekly-report', icon: 'stats-chart', label: 'Reports', route: '/screens/parent-weekly-report', color: '#F97316' },
@@ -289,7 +290,7 @@ export default function K12ParentDashboardScreen() {
           activeOpacity={0.8}
           onPress={() => {
             track('k12.parent.dash_ai_tap', { user_id: user?.id });
-            router.push('/screens/dash-ai-chat' as any);
+            router.push('/screens/dash-assistant' as any);
           }}
         >
           <LinearGradient
@@ -425,6 +426,13 @@ export default function K12ParentDashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Floating Dash AI Orb - Role-aware, works for all users */}
+      <DashOrb 
+        position="bottom-right"
+        size={56}
+        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'k12_parent_dashboard' })}
+      />
     </SafeAreaView>
   );
 }

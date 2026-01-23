@@ -79,8 +79,8 @@ export default function BrowseProgramsScreen() {
           is_active,
           max_students,
           created_at,
-          organization:preschools!organization_id(id, name),
-          instructor:profiles!instructor_id(first_name, last_name)
+          organization:organizations!courses_organization_id_fkey(id, name),
+          instructor:profiles!courses_instructor_id_fkey(first_name, last_name)
         `)
         .eq('is_active', true)
         .is('deleted_at', null)

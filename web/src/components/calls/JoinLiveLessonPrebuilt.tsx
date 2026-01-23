@@ -61,6 +61,7 @@ function JoinLiveLessonPrebuiltInner({ classId, preschoolId }: JoinLiveLessonPre
     }
 
     // Fetch only LIVE lessons
+    // Use explicit FK hint for PostgREST
     let query = supabase
       .from('video_calls')
       .select(`
@@ -70,8 +71,8 @@ function JoinLiveLessonPrebuiltInner({ classId, preschoolId }: JoinLiveLessonPre
         status,
         scheduled_start,
         scheduled_end,
-        teacher:teacher_id (first_name, last_name),
-        classes:class_id (name, grade_level)
+        teacher:profiles!video_calls_teacher_id_fkey (first_name, last_name),
+        classes:classes!video_calls_class_id_fkey (name, grade_level)
       `)
       .eq('preschool_id', preschoolId)
       .eq('status', 'live')

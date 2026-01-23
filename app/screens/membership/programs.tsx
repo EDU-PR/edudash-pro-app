@@ -32,7 +32,16 @@ export default function YouthProgramsScreen() {
     const categoryIcon = CATEGORY_ICONS[item.category] || 'folder';
 
     return (
-      <TouchableOpacity style={[styles.programCard, { backgroundColor: theme.card }]}>
+      <TouchableOpacity 
+        style={[styles.programCard, { backgroundColor: theme.card }]}
+        activeOpacity={0.7}
+        onPress={() => {
+          router.push({
+            pathname: '/screens/membership/program-detail',
+            params: { id: item.id }
+          });
+        }}
+      >
         <View style={styles.programHeader}>
           <View style={[styles.categoryIcon, { backgroundColor: '#10B981' + '20' }]}>
             <Ionicons name={categoryIcon as any} size={24} color="#10B981" />

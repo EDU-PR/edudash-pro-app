@@ -2,10 +2,11 @@
  * Principal Dashboard Hook
  * 
  * Fetches and manages principal dashboard data.
+ * Includes realtime subscription for attendance updates.
  * Extracted from hooks/useDashboardData.ts per WARP.md standards.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
@@ -35,6 +36,7 @@ export const usePrincipalDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
+  const schoolIdRef = useRef<string | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     const startTime = Date.now();
@@ -398,6 +400,50 @@ export const usePrincipalDashboard = () => {
 
     return () => clearInterval(interval);
   }, [fetchData, data, loading]);
+
+  // Set up realtime subscription for attendance updates
+  useEffect(() => {
+    if (!user?.id || !schoolIdRef.current) return;
+    
+    const supabase = assertSupabase();
+    const schoolId = schoolIdRef.current;
+    
+    // Subscribe to attendance changes for this school
+    const channel = supabase
+      .channel(`principal-attendance-${schoolId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'attendance',
+        },
+        (payload) => {
+          // Check if the attendance is for this school's students
+          const preschoolId = (payload.new as any)?.preschool_id || (payload.old as any)?.preschool_id;
+          if (preschoolId === schoolId) {
+            log('[PrincipalDashboard] Attendance updated - refreshing dashboard');
+            fetchData(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchData]);
+
+  // Update schoolIdRef when data changes
+  useEffect(() => {
+    if (data?.schoolId) {
+      schoolIdRef.current = data.schoolId;
+    } else if ((profile as any)?.preschool_id) {
+      schoolIdRef.current = (profile as any).preschool_id;
+    } else if ((profile as any)?.organization_id) {
+      schoolIdRef.current = (profile as any).organization_id;
+    }
+  }, [data?.schoolId, profile]);
 
   return {
     data,

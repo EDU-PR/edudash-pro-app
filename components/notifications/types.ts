@@ -4,9 +4,22 @@
  * Shared type definitions for notification components and hooks
  */
 
+export type NotificationType = 
+  | 'message' 
+  | 'call' 
+  | 'announcement' 
+  | 'system' 
+  | 'homework' 
+  | 'grade'
+  | 'attendance'
+  | 'registration'
+  | 'billing'
+  | 'calendar'
+  | 'birthday';
+
 export interface Notification {
   id: string;
-  type: 'message' | 'call' | 'announcement' | 'system' | 'homework' | 'grade';
+  type: NotificationType;
   title: string;
   body: string;
   data?: Record<string, unknown>;

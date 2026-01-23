@@ -8,7 +8,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Notification } from './types';
+import { Notification, NotificationType } from './types';
 
 interface NotificationItemProps {
   notification: Notification;
@@ -37,7 +37,7 @@ const formatTime = (dateStr: string) => {
 /**
  * Get icon config based on notification type
  */
-const getIconConfig = (type: Notification['type'], theme: ReturnType<typeof useTheme>['theme']) => {
+const getIconConfig = (type: NotificationType, theme: ReturnType<typeof useTheme>['theme']) => {
   switch (type) {
     case 'message':
       return { icon: 'chatbubble', color: theme.primary, bgColor: theme.primary + '20' };
@@ -49,6 +49,16 @@ const getIconConfig = (type: Notification['type'], theme: ReturnType<typeof useT
       return { icon: 'book', color: theme.info, bgColor: theme.info + '20' };
     case 'grade':
       return { icon: 'school', color: theme.success, bgColor: theme.success + '20' };
+    case 'attendance':
+      return { icon: 'calendar-outline', color: '#9C27B0', bgColor: '#9C27B020' };
+    case 'registration':
+      return { icon: 'person-add', color: '#00BCD4', bgColor: '#00BCD420' };
+    case 'billing':
+      return { icon: 'card', color: '#4CAF50', bgColor: '#4CAF5020' };
+    case 'calendar':
+      return { icon: 'calendar', color: '#FF5722', bgColor: '#FF572220' };
+    case 'birthday':
+      return { icon: 'gift', color: '#E91E63', bgColor: '#E91E6320' };
     default:
       return { icon: 'notifications', color: theme.textSecondary, bgColor: theme.border };
   }

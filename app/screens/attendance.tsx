@@ -180,23 +180,79 @@ export default function AttendanceScreen() {
     const entries = students.map(s => ({ student_id: s.id, status: statusMap[s.id] || 'present' }))
     const presentCount = entries.filter(e => e.status === 'present').length
     const lateCount = entries.filter(e => e.status === 'late').length
+    const absentCount = entries.filter(e => e.status === 'absent').length
 
     setSubmitting(true)
     try {
-      // Best-effort server insert; ignore errors if schema not present
+      // Insert attendance records
+      const { data: auth } = await assertSupabase().auth.getUser()
+      const authUserId = auth?.user?.id || null
+      
+      const { error: insertError } = await assertSupabase().from('attendance').insert(entries.map(e => ({
+        student_id: e.student_id,
+        status: e.status,
+        attendance_date: today,
+        recorded_by: authUserId,
+      })) as any)
+      
+      if (insertError) {
+        console.error('[Attendance] Insert error:', insertError)
+        throw insertError
+      }
+      
+      // Send push notifications to parents
       try {
-        const { data: auth } = await assertSupabase().auth.getUser()
-        const authUserId = auth?.user?.id || null
-        await assertSupabase().from('attendance').insert(entries.map(e => ({
-          student_id: e.student_id,
-          status: e.status,
-          attendance_date: today,
-          recorded_by: authUserId,
-        })) as any)
-      } catch { /* noop */ void 0; }
+        const { data: sessionData } = await assertSupabase().auth.getSession()
+        if (sessionData?.session?.access_token) {
+          // Get students who were absent or late - notify their parents
+          const absentStudentIds = entries.filter(e => e.status === 'absent').map(e => e.student_id)
+          const lateStudentIds = entries.filter(e => e.status === 'late').map(e => e.student_id)
+          
+          // Send notifications for absent students (higher priority)
+          if (absentStudentIds.length > 0) {
+            for (const studentId of absentStudentIds) {
+              await assertSupabase().functions.invoke('notifications-dispatcher', {
+                body: {
+                  event_type: 'attendance_absent',
+                  student_id: studentId,
+                  preschool_id: schoolId,
+                  attendance_date: today,
+                  attendance_status: 'absent',
+                  send_immediately: true,
+                },
+                headers: {
+                  Authorization: `Bearer ${sessionData.session.access_token}`,
+                },
+              })
+            }
+          }
+          
+          // Send notifications for late students
+          if (lateStudentIds.length > 0) {
+            for (const studentId of lateStudentIds) {
+              await assertSupabase().functions.invoke('notifications-dispatcher', {
+                body: {
+                  event_type: 'attendance_late',
+                  student_id: studentId,
+                  preschool_id: schoolId,
+                  attendance_date: today,
+                  attendance_status: 'late',
+                  send_immediately: true,
+                },
+                headers: {
+                  Authorization: `Bearer ${sessionData.session.access_token}`,
+                },
+              })
+            }
+          }
+        }
+      } catch (notifyError) {
+        // Don't fail attendance submission if notification fails
+        console.warn('[Attendance] Failed to send notifications:', notifyError)
+      }
 
-      track('edudash.attendance.submit', { classId, presentCount, lateCount, total: entries.length, date: today })
-      showAlert('Attendance recorded', `Marked ${presentCount} present, ${lateCount} late, ${entries.length - presentCount - lateCount} absent for ${today}.`, 'success', [
+      track('edudash.attendance.submit', { classId, presentCount, lateCount, absentCount, total: entries.length, date: today })
+      showAlert('Attendance recorded', `Marked ${presentCount} present, ${lateCount} late, ${absentCount} absent for ${today}.`, 'success', [
         { text: 'View History', onPress: () => router.push('/screens/attendance-history') },
         { text: 'Done', onPress: () => router.back() },
       ])

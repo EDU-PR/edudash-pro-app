@@ -123,7 +123,7 @@ export const styles = StyleSheet.create({
     }),
   },
   messageBubble: {
-    maxWidth: screenWidth < 400 ? screenWidth * 0.75 : screenWidth * 0.72,
+    maxWidth: screenWidth < 400 ? screenWidth * 0.90 : screenWidth * 0.88,
     padding: screenWidth < 400 ? 14 : 16,
     minHeight: 48,
     flex: 1,

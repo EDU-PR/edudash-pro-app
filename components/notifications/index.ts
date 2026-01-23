@@ -7,4 +7,4 @@
 export { NotificationItem } from './NotificationItem';
 export { NotificationHeader } from './NotificationHeader';
 export { NotificationMenu } from './NotificationMenu';
-export type { Notification } from './types';
+export type { Notification, NotificationType } from './types';

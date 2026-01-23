@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -147,19 +148,19 @@ export default function BirthdayChartScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Stack.Screen options={{ title: 'Birthday Chart' }} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+        <Stack.Screen options={{ headerShown: false }} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading birthdays...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Show error state if no organization ID
   if (!organizationId) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Stack.Screen options={{ title: 'Birthday Chart' }} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+        <Stack.Screen options={{ headerShown: false }} />
         <Ionicons name="alert-circle" size={48} color={theme.warning} />
         <Text style={[styles.loadingText, { marginTop: 16 }]}>
           Unable to determine your school.
@@ -173,15 +174,15 @@ export default function BirthdayChartScreen() {
         >
           <Text style={{ color: theme.primary, fontWeight: '600' }}>Go Back</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Show error state if there was an error loading data
   if (error) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Stack.Screen options={{ title: 'Birthday Chart' }} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+        <Stack.Screen options={{ headerShown: false }} />
         <Ionicons name="warning" size={48} color={theme.error} />
         <Text style={[styles.loadingText, { marginTop: 16 }]}>
           {error}
@@ -192,25 +193,24 @@ export default function BirthdayChartScreen() {
         >
           <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen 
-        options={{ 
-          title: 'Birthday Chart',
-          headerRight: () => (
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={onRefresh}
-            >
-              <Ionicons name="refresh" size={22} color={theme.primary} />
-            </TouchableOpacity>
-          ),
-        }} 
-      />
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      {/* Custom Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Birthday Chart</Text>
+        <TouchableOpacity style={styles.headerButton} onPress={onRefresh}>
+          <Ionicons name="refresh" size={22} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
       
       <ScrollView
         style={styles.content}
@@ -292,15 +292,19 @@ export default function BirthdayChartScreen() {
             <Ionicons name="calendar-outline" size={64} color={theme.textSecondary} />
             <Text style={styles.emptyStateTitle}>No Birthdays Found</Text>
             <Text style={styles.emptyStateText}>
-              No students have their date of birth recorded yet.
-              {'\n'}Add dates of birth to student profiles to see them here.
+              {profile?.role === 'parent' 
+                ? 'No students have their date of birth recorded yet.\nPlease contact your school to update your child\'s information.'
+                : 'No students have their date of birth recorded yet.\nAdd dates of birth to student profiles to see them here.'}
             </Text>
-            <TouchableOpacity
-              style={[styles.headerButton, { marginTop: 20, backgroundColor: theme.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }]}
-              onPress={() => router.push('/screens/student-management' as any)}
-            >
-              <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>Manage Students</Text>
-            </TouchableOpacity>
+            {/* Only show Manage Students button for principals/teachers, not parents */}
+            {(profile?.role === 'principal' || profile?.role === 'principal_admin' || profile?.role === 'teacher') && (
+              <TouchableOpacity
+                style={[styles.headerButton, { marginTop: 20, backgroundColor: theme.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }]}
+                onPress={() => router.push('/screens/student-management' as any)}
+              >
+                <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>Manage Students</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <>
@@ -331,7 +335,7 @@ export default function BirthdayChartScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -343,6 +347,24 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    backgroundColor: theme.card,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  backButton: {
+    padding: 8,
   },
   content: {
     flex: 1,

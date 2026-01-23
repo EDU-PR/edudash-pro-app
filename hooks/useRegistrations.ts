@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 
@@ -17,6 +18,7 @@ export interface Registration {
   organization_id: string;
   organization_name?: string;
   edusite_id?: string;
+  parent_id?: string; // For in-app registrations - the parent's profile ID
   // Guardian info
   guardian_name: string;
   guardian_email: string;
@@ -212,6 +214,7 @@ export function useRegistrations(): UseRegistrationsReturn {
       const transformedInApp: Registration[] = (inAppData || []).map((item: any) => ({
         id: item.id,
         organization_id: item.preschool_id,
+        parent_id: item.parent_id, // Map parent_id for notifications
         // Guardian info from joined parent profile
         guardian_name: item.parent 
           ? `${item.parent.first_name || ''} ${item.parent.last_name || ''}`.trim() 
@@ -325,6 +328,16 @@ export function useRegistrations(): UseRegistrationsReturn {
       fetchRegistrations();
     }
   }, [organizationId, fetchRegistrations]);
+
+  // Refresh data when screen comes back into focus (e.g., after viewing detail page)
+  useFocusEffect(
+    useCallback(() => {
+      if (organizationId) {
+        console.log('🔄 [Registrations] Screen focused, refreshing data...');
+        fetchRegistrations();
+      }
+    }, [organizationId, fetchRegistrations])
+  );
 
   // Filter registrations when search/filter changes
   useEffect(() => {
@@ -564,7 +577,9 @@ export function useRegistrations(): UseRegistrationsReturn {
                     body: {
                       event_type: 'child_registration_approved',
                       user_ids: [regData.parent_id],
+                      parent_id: regData.parent_id,
                       registration_id: registration.id,
+                      preschool_id: regData.preschool_id,
                       student_id: newStudent.id,
                       child_name: `${registration.student_first_name} ${registration.student_last_name}`,
                     },
@@ -786,8 +801,10 @@ export function useRegistrations(): UseRegistrationsReturn {
                   await supabase.functions.invoke('notifications-dispatcher', {
                     body: {
                       event_type: 'child_registration_rejected',
-                      user_ids: [registration.organization_id], // parent_id stored for in-app
+                      user_ids: registration.parent_id ? [registration.parent_id] : [],
+                      parent_id: registration.parent_id,
                       registration_id: registration.id,
+                      preschool_id: registration.organization_id,
                       child_name: `${registration.student_first_name} ${registration.student_last_name}`,
                       rejection_reason: reason,
                     },

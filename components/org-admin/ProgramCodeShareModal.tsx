@@ -15,6 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useOrganization } from '@/hooks/useOrganization';
+import { assertSupabase } from '@/lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
 
 // QR Code - optional dependency
 import QRCode from 'react-native-qrcode-svg';
@@ -37,17 +39,49 @@ export function ProgramCodeShareModal({
   program,
 }: ProgramCodeShareModalProps) {
   const { data: organization } = useOrganization();
+  const queryClient = useQueryClient();
   const [qrCodeValue, setQrCodeValue] = useState('');
   const [registerLink, setRegisterLink] = useState('');
   const [programCode, setProgramCode] = useState('');
   const [showFullLink, setShowFullLink] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [savingCode, setSavingCode] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Save generated code to database
+  const saveGeneratedCode = async (code: string, programId: string) => {
+    try {
+      setSavingCode(true);
+      const { error } = await assertSupabase()
+        .from('courses')
+        .update({ course_code: code })
+        .eq('id', programId);
+      
+      if (error) {
+        console.error('Failed to save program code:', error);
+      } else {
+        // Invalidate queries to refresh the programs list
+        queryClient.invalidateQueries({ queryKey: ['org-programs'] });
+        queryClient.invalidateQueries({ queryKey: ['program-detail', programId] });
+      }
+    } catch (err) {
+      console.error('Error saving code:', err);
+    } finally {
+      setSavingCode(false);
+    }
+  };
 
   useEffect(() => {
     if (visible && program) {
       // Generate program code if doesn't exist
-      const code = program.course_code || generateProgramCode(program.id);
+      let code = program.course_code;
+      
+      if (!code) {
+        code = generateProgramCode(program.id);
+        // Save the generated code to the database
+        saveGeneratedCode(code, program.id);
+      }
+      
       setProgramCode(code);
 
       // Create registration link with all program details encoded

@@ -68,10 +68,24 @@ export default function ProgramsScreen() {
         ) : programs && programs.length > 0 ? (
           <View style={styles.programList}>
             {programs.map((program) => (
-              <View key={program.id} style={[styles.programCard, { 
-                backgroundColor: theme.card,
-                borderColor: theme.border,
-              }]}>
+              <TouchableOpacity 
+                key={program.id} 
+                style={[
+                  styles.programCard, 
+                  { 
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                  }
+                ]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  console.log('[Programs] Navigating to program:', program.id, program.title);
+                  router.push({
+                    pathname: '/screens/org-admin/program-detail',
+                    params: { id: program.id }
+                  });
+                }}
+              >
                 <View style={styles.programHeader}>
                   <View style={styles.programTitleRow}>
                     <Text style={[styles.programTitle, { color: theme.text }]}>
@@ -83,9 +97,13 @@ export default function ProgramsScreen() {
                       </View>
                     )}
                   </View>
-                  {program.course_code && (
+                  {program.course_code ? (
                     <Text style={[styles.courseCode, { color: theme.textSecondary }]}>
                       {program.course_code}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.courseCode, { color: theme.warning || '#F59E0B' }]}>
+                      No code - tap Share to generate
                     </Text>
                   )}
                 </View>
@@ -140,7 +158,7 @@ export default function ProgramsScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         ) : (

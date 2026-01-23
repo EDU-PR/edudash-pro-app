@@ -296,8 +296,8 @@ export async function GET(request: NextRequest) {
       .from('video_calls')
       .select(`
         *,
-        classes:class_id (name, grade_level),
-        teacher:teacher_id (first_name, last_name)
+        classes:classes!video_calls_class_id_fkey (name, grade_level),
+        teacher:profiles!video_calls_teacher_id_fkey (first_name, last_name)
       `)
       .in('status', ['scheduled', 'live'])
       .order('scheduled_start', { ascending: true });

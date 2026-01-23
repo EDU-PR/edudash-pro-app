@@ -2,10 +2,12 @@
  * K-12 Parent Dashboard Data Hook
  * 
  * Fetches children, attendance, homework, and events data for the K-12 parent dashboard.
+ * Includes realtime subscription for attendance updates.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
+import { fetchParentChildren } from '@/lib/parent-children';
 import type { Child } from './ChildCard';
 
 export interface RecentUpdate {
@@ -46,6 +48,7 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
   const [recentUpdates, setRecentUpdates] = useState<RecentUpdate[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const childrenIdsRef = useRef<string[]>([]);
 
   const fetchChildrenData = useCallback(async () => {
     if (!userId) return;
@@ -54,25 +57,11 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
       setDataLoading(true);
       const supabase = assertSupabase();
       
-      // Fetch children linked to this parent
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          date_of_birth,
-          grade,
-          class_id,
-          classes!left(id, name, grade_level)
-        `)
-        .or(`parent_id.eq.${userId},guardian_id.eq.${userId}`)
-        .eq('is_active', true);
-
-      if (studentsError) {
-        console.error('[K12 Dashboard] Error fetching children:', studentsError);
-        return;
-      }
+      // Fetch children linked to this parent (supports multiple parents per child)
+      const studentsData = await fetchParentChildren(userId, {
+        includeInactive: false,
+        schoolId: organizationId || undefined,
+      });
 
       if (!studentsData || studentsData.length === 0) {
         setChildren([]);
@@ -220,6 +209,44 @@ export function useK12ParentData(userId: string | undefined, organizationId: str
       setDataLoading(false);
     }
   }, [userId, organizationId]);
+
+  // Set up realtime subscription for attendance updates
+  useEffect(() => {
+    if (!userId || childrenIdsRef.current.length === 0) return;
+    
+    const supabase = assertSupabase();
+    const studentIds = childrenIdsRef.current;
+    
+    // Subscribe to attendance changes for the parent's children
+    const channel = supabase
+      .channel(`parent-attendance-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'attendance',
+        },
+        (payload) => {
+          const studentId = (payload.new as any)?.student_id || (payload.old as any)?.student_id;
+          // Only refresh if the attendance is for one of the parent's children
+          if (studentIds.includes(studentId)) {
+            console.log('[K12 Dashboard] Attendance updated for child:', studentId);
+            fetchChildrenData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchChildrenData]);
+
+  // Update childrenIdsRef when children change
+  useEffect(() => {
+    childrenIdsRef.current = children.map(c => c.id);
+  }, [children]);
 
   return {
     children,

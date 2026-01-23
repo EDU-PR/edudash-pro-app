@@ -17,6 +17,8 @@ const isSmallScreen = width < 380;
 
 export interface MetricCardProps {
   title: string;
+  /** Optional subtitle/hint text below the title */
+  subtitle?: string;
   value: string | number;
   icon: string;
   color: string;
@@ -35,6 +37,7 @@ export interface MetricCardProps {
 
 export const MetricCard: React.FC<MetricCardProps> = ({ 
   title, 
+  subtitle,
   value, 
   icon, 
   color, 
@@ -203,6 +206,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             {value}
           </Text>
           <Text style={styles.metricTitle}>{title}</Text>
+          {subtitle && (
+            <Text style={styles.metricSubtitle}>{subtitle}</Text>
+          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -319,6 +325,15 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       fontWeight: '500',
       lineHeight: isSmallScreen ? 18 : isTablet ? 22 : 20,
       textAlign: 'left',
+    },
+    metricSubtitle: {
+      fontSize: isSmallScreen ? 11 : isTablet ? 13 : 12,
+      color: theme.textTertiary || theme.textSecondary,
+      fontWeight: '400',
+      lineHeight: isSmallScreen ? 14 : isTablet ? 18 : 16,
+      textAlign: 'left',
+      marginTop: 2,
+      opacity: 0.7,
     },
   });
 };

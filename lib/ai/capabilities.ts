@@ -25,7 +25,7 @@ export type Tier = 'free' | 'starter' | 'premium' | 'enterprise';
  * Granular capability identifiers for feature gating
  * 
  * Naming convention: <domain>.<feature>.<variant>
- * - domain: chat, memory, multimodal, homework, lessons, insights, agent, export
+ * - domain: chat, memory, multimodal, homework, lessons, insights, agent, export, voice, exam, student
  * - feature: specific functionality area
  * - variant: optional specificity (basic, advanced, etc.)
  */
@@ -35,18 +35,28 @@ export type DashCapability =
   | 'chat.streaming'                // Real-time token streaming
   | 'chat.thinking'                 // Show AI reasoning process
   | 'chat.priority'                 // Priority queue processing
+  | 'chat.contextual'               // Context-aware responses based on user role/data
   
   // Memory capabilities
   | 'memory.lite'                   // 7-day conversation history
   | 'memory.standard'               // 30-day conversation history
   | 'memory.advanced'               // Unlimited history + behavioral learning
   | 'memory.patterns'               // Cross-session pattern detection
+  | 'memory.semantic'               // Semantic search across conversations
   
   // Multimodal capabilities
   | 'multimodal.vision'             // Image analysis and understanding
   | 'multimodal.ocr'                // Optical character recognition
   | 'multimodal.documents'          // PDF/DOCX processing
   | 'multimodal.handwriting'        // Handwriting recognition
+  | 'multimodal.audio'              // Audio file processing
+  | 'multimodal.diagrams'           // Diagram/chart analysis
+  
+  // Voice capabilities (NEW)
+  | 'voice.input'                   // Speech-to-text input
+  | 'voice.output'                  // Text-to-speech output
+  | 'voice.realtime'                // Real-time voice conversation
+  | 'voice.multilingual'            // Multi-language voice support (11 SA languages)
   
   // Homework capabilities
   | 'homework.assign'               // Create and assign homework
@@ -55,6 +65,7 @@ export type DashCapability =
   | 'homework.grade.bulk'           // Batch grading for 100+ submissions
   | 'homework.rubric'               // Auto-generate grading rubrics
   | 'homework.feedback'             // Personalized feedback generation
+  | 'homework.plagiarism'           // Plagiarism detection
   
   // Lesson capabilities
   | 'lessons.basic'                 // Basic lesson help and guidance
@@ -62,6 +73,24 @@ export type DashCapability =
   | 'lessons.adaptive'              // Step-by-step adaptive lessons
   | 'lessons.trends'                // Trend-based lesson generation
   | 'lessons.personalized'          // Student-specific customization
+  | 'lessons.interactive'           // Interactive lesson elements (quizzes, activities)
+  | 'lessons.multimedia'            // Generate lessons with multimedia content
+  
+  // Exam Prep capabilities (NEW)
+  | 'exam.practice'                 // Generate practice tests
+  | 'exam.revision'                 // Create revision materials
+  | 'exam.flashcards'               // Generate flashcards
+  | 'exam.studyguide'               // Create study guides
+  | 'exam.pastpapers'               // Access past papers database
+  | 'exam.marking'                  // Auto-mark exam responses
+  | 'exam.interactive'              // Interactive exam experience
+  
+  // Student capabilities (NEW - for K-12 students)
+  | 'student.tutor'                 // AI tutoring sessions
+  | 'student.explain'               // Explain concepts step-by-step
+  | 'student.practice'              // Practice problems with hints
+  | 'student.progress'              // Track learning progress
+  | 'student.goals'                 // Set and track learning goals
   
   // Insights & Analytics
   | 'insights.basic'                // Basic statistics and metrics
@@ -69,23 +98,27 @@ export type DashCapability =
   | 'insights.predictive'           // Predictive analytics and forecasts
   | 'insights.custom'               // Custom report generation
   | 'insights.realtime'             // Real-time activity monitoring
+  | 'insights.learning'             // Learning analytics per student
   
   // Agent capabilities
   | 'agent.workflows'               // Multi-step task workflows
   | 'agent.autonomous'              // Autonomous task planning
   | 'agent.background'              // Background task processing
   | 'agent.scheduling'              // Automated scheduling
+  | 'agent.notifications'           // AI-triggered notifications
+  | 'agent.tools'                   // Access to agentic tools (DB queries, etc.)
   
   // Export capabilities
   | 'export.pdf.basic'              // Basic PDF generation
   | 'export.pdf.advanced'           // Advanced templates with branding
   | 'export.pdf.bulk'               // Batch PDF generation
   | 'export.conversation'           // Export conversation history
+  | 'export.reports'                // Export analytics reports
   
   // Processing capabilities
   | 'processing.priority'           // Priority queue access
   | 'processing.background'         // Background job processing
-  | 'processing.batch'              // Batch operations;
+  | 'processing.batch';             // Batch operations
 
 /**
  * Tier capability matrix - defines which capabilities are available per tier
@@ -95,105 +128,222 @@ export type DashCapability =
  */
 export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>> = {
   free: [
+    // Chat
     'chat.basic',
+    // Memory
     'memory.lite',
+    // Voice (limited)
+    'voice.input',
+    'voice.output',
+    // Lessons
     'lessons.basic',
+    // Exam prep (limited)
+    'exam.practice',
+    'exam.flashcards',
+    // Student features
+    'student.tutor',
+    'student.explain',
+    // Insights
     'insights.basic',
   ],
   
   starter: [
+    // Chat
     'chat.basic',
     'chat.streaming',
+    'chat.contextual',
+    // Memory
     'memory.lite',
     'memory.standard',
-    'multimodal.vision',         // Phase 2.1: Vision support for Starter tier (R299)
-    'multimodal.documents',      // Document processing for Starter tier
+    // Multimodal
+    'multimodal.vision',
+    'multimodal.documents',
+    // Voice
+    'voice.input',
+    'voice.output',
+    'voice.multilingual',
+    // Homework
     'homework.assign',
     'homework.grade.basic',
+    'homework.feedback',
+    // Lessons
     'lessons.basic',
     'lessons.curriculum',
+    'lessons.interactive',
+    // Exam prep
+    'exam.practice',
+    'exam.revision',
+    'exam.flashcards',
+    'exam.studyguide',
+    'exam.interactive',
+    // Student features
+    'student.tutor',
+    'student.explain',
+    'student.practice',
+    'student.progress',
+    // Insights
     'insights.basic',
+    // Agent (limited)
+    'agent.tools',
+    // Export
     'export.pdf.basic',
     'export.conversation',
   ],
   
-  
   premium: [
+    // Chat
     'chat.basic',
     'chat.streaming',
     'chat.thinking',
     'chat.priority',
+    'chat.contextual',
+    // Memory
     'memory.standard',
     'memory.advanced',
     'memory.patterns',
+    'memory.semantic',
+    // Multimodal
     'multimodal.vision',
     'multimodal.ocr',
     'multimodal.documents',
     'multimodal.handwriting',
+    'multimodal.audio',
+    'multimodal.diagrams',
+    // Voice
+    'voice.input',
+    'voice.output',
+    'voice.realtime',
+    'voice.multilingual',
+    // Homework
     'homework.assign',
     'homework.grade.basic',
     'homework.grade.advanced',
     'homework.grade.bulk',
     'homework.rubric',
     'homework.feedback',
+    'homework.plagiarism',
+    // Lessons
     'lessons.basic',
     'lessons.curriculum',
     'lessons.adaptive',
     'lessons.trends',
     'lessons.personalized',
+    'lessons.interactive',
+    'lessons.multimedia',
+    // Exam prep
+    'exam.practice',
+    'exam.revision',
+    'exam.flashcards',
+    'exam.studyguide',
+    'exam.pastpapers',
+    'exam.marking',
+    'exam.interactive',
+    // Student features
+    'student.tutor',
+    'student.explain',
+    'student.practice',
+    'student.progress',
+    'student.goals',
+    // Insights
     'insights.basic',
     'insights.proactive',
     'insights.predictive',
     'insights.realtime',
+    'insights.learning',
+    // Agent
     'agent.workflows',
     'agent.autonomous',
     'agent.background',
     'agent.scheduling',
+    'agent.notifications',
+    'agent.tools',
+    // Export
     'export.pdf.basic',
     'export.pdf.advanced',
     'export.pdf.bulk',
     'export.conversation',
+    'export.reports',
+    // Processing
     'processing.priority',
     'processing.background',
     'processing.batch',
   ],
   
   enterprise: [
+    // Chat - All capabilities
     'chat.basic',
     'chat.streaming',
     'chat.thinking',
     'chat.priority',
+    'chat.contextual',
+    // Memory - All capabilities
     'memory.standard',
     'memory.advanced',
     'memory.patterns',
+    'memory.semantic',
+    // Multimodal - All capabilities
     'multimodal.vision',
     'multimodal.ocr',
     'multimodal.documents',
     'multimodal.handwriting',
+    'multimodal.audio',
+    'multimodal.diagrams',
+    // Voice - All capabilities
+    'voice.input',
+    'voice.output',
+    'voice.realtime',
+    'voice.multilingual',
+    // Homework - All capabilities
     'homework.assign',
     'homework.grade.basic',
     'homework.grade.advanced',
     'homework.grade.bulk',
     'homework.rubric',
     'homework.feedback',
+    'homework.plagiarism',
+    // Lessons - All capabilities
     'lessons.basic',
     'lessons.curriculum',
     'lessons.adaptive',
     'lessons.trends',
     'lessons.personalized',
+    'lessons.interactive',
+    'lessons.multimedia',
+    // Exam prep - All capabilities
+    'exam.practice',
+    'exam.revision',
+    'exam.flashcards',
+    'exam.studyguide',
+    'exam.pastpapers',
+    'exam.marking',
+    'exam.interactive',
+    // Student features - All capabilities
+    'student.tutor',
+    'student.explain',
+    'student.practice',
+    'student.progress',
+    'student.goals',
+    // Insights - All capabilities including custom
     'insights.basic',
     'insights.proactive',
     'insights.predictive',
     'insights.custom',
     'insights.realtime',
+    'insights.learning',
+    // Agent - All capabilities
     'agent.workflows',
     'agent.autonomous',
     'agent.background',
     'agent.scheduling',
+    'agent.notifications',
+    'agent.tools',
+    // Export - All capabilities
     'export.pdf.basic',
     'export.pdf.advanced',
     'export.pdf.bulk',
     'export.conversation',
+    'export.reports',
+    // Processing - All capabilities
     'processing.priority',
     'processing.background',
     'processing.batch',
@@ -208,7 +358,7 @@ export interface CapabilityMetadata {
   name: string;
   description: string;
   requiredTier: Tier;
-  category: 'chat' | 'memory' | 'multimodal' | 'homework' | 'lessons' | 'insights' | 'agent' | 'export' | 'processing';
+  category: 'chat' | 'memory' | 'multimodal' | 'voice' | 'homework' | 'lessons' | 'exam' | 'student' | 'insights' | 'agent' | 'export' | 'processing';
 }
 
 /**

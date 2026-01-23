@@ -1,10 +1,11 @@
 /**
  * Financial Status Section Component
  * Shows outstanding fees, payment status, and transaction history
+ * Principals can mark payments as paid (cash/EFT/other)
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail, Transaction, formatCurrency } from './types';
 
@@ -14,6 +15,10 @@ interface FinancialStatusSectionProps {
   showDetails: boolean;
   onToggleDetails: () => void;
   theme: any;
+  /** Whether the current user is a principal (can mark payments) */
+  isPrincipal?: boolean;
+  /** Callback when a payment is marked as received */
+  onMarkPaymentReceived?: (amount: number, paymentMethod: string, notes: string) => Promise<void>;
 }
 
 export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
@@ -22,8 +27,52 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
   showDetails,
   onToggleDetails,
   theme,
+  isPrincipal = false,
+  onMarkPaymentReceived,
 }) => {
   const styles = createStyles(theme);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'eft' | 'card' | 'other'>('cash');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const outstandingAmount = student.outstanding_fees || 0;
+
+  const handleMarkAsPaid = async () => {
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid payment amount');
+      return;
+    }
+
+    if (!onMarkPaymentReceived) {
+      Alert.alert('Error', 'Payment recording is not available');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onMarkPaymentReceived(amount, paymentMethod, paymentNotes);
+      setShowPaymentModal(false);
+      setPaymentAmount('');
+      setPaymentNotes('');
+      setPaymentMethod('cash');
+      Alert.alert('Success', `Payment of ${formatCurrency(amount)} recorded successfully`);
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      Alert.alert('Error', 'Failed to record payment. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const paymentMethods = [
+    { id: 'cash', label: 'Cash', icon: 'cash-outline' },
+    { id: 'eft', label: 'EFT', icon: 'swap-horizontal-outline' },
+    { id: 'card', label: 'Card', icon: 'card-outline' },
+    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline' },
+  ];
 
   return (
     <View style={styles.section}>
@@ -44,9 +93,9 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
           <Text style={styles.feeLabel}>Outstanding Fees</Text>
           <Text style={[
             styles.feeAmount,
-            { color: (student.outstanding_fees || 0) > 0 ? '#EF4444' : '#10B981' }
+            { color: outstandingAmount > 0 ? '#EF4444' : '#10B981' }
           ]}>
-            {formatCurrency(student.outstanding_fees || 0)}
+            {formatCurrency(outstandingAmount)}
           </Text>
         </View>
         <View style={[
@@ -58,6 +107,20 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
           </Text>
         </View>
       </View>
+
+      {/* Principal: Mark as Paid Button */}
+      {isPrincipal && outstandingAmount > 0 && (
+        <TouchableOpacity 
+          style={styles.markPaidButton}
+          onPress={() => {
+            setPaymentAmount(outstandingAmount.toString());
+            setShowPaymentModal(true);
+          }}
+        >
+          <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+          <Text style={styles.markPaidButtonText}>Record Payment Received</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Transaction History (Expandable) */}
       {showDetails && (
@@ -86,6 +149,116 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
           )}
         </View>
       )}
+
+      {/* Payment Recording Modal */}
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Record Payment</Text>
+              <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
+                <Ionicons name="close" size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Recording payment for {student.first_name} {student.last_name}
+            </Text>
+
+            {/* Amount Input */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Amount (R)</Text>
+              <TextInput
+                style={[styles.textInput, { 
+                  backgroundColor: theme.background, 
+                  color: theme.text,
+                  borderColor: theme.border 
+                }]}
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={theme.textSecondary}
+              />
+            </View>
+
+            {/* Payment Method Selection */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Payment Method</Text>
+              <View style={styles.methodGrid}>
+                {paymentMethods.map((method) => (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={[
+                      styles.methodButton,
+                      { 
+                        backgroundColor: paymentMethod === method.id ? theme.primary : theme.background,
+                        borderColor: paymentMethod === method.id ? theme.primary : theme.border,
+                      }
+                    ]}
+                    onPress={() => setPaymentMethod(method.id as any)}
+                  >
+                    <Ionicons 
+                      name={method.icon as any} 
+                      size={20} 
+                      color={paymentMethod === method.id ? '#fff' : theme.textSecondary} 
+                    />
+                    <Text style={[
+                      styles.methodButtonText,
+                      { color: paymentMethod === method.id ? '#fff' : theme.text }
+                    ]}>
+                      {method.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Notes Input */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Notes (optional)</Text>
+              <TextInput
+                style={[styles.textInput, styles.notesInput, { 
+                  backgroundColor: theme.background, 
+                  color: theme.text,
+                  borderColor: theme.border 
+                }]}
+                value={paymentNotes}
+                onChangeText={setPaymentNotes}
+                placeholder="e.g., Received at parent meeting"
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { borderColor: theme.border }]}
+                onPress={() => setShowPaymentModal(false)}
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmButton, { opacity: isSubmitting ? 0.6 : 1 }]}
+                onPress={handleMarkAsPaid}
+                disabled={isSubmitting}
+              >
+                <Ionicons name="checkmark" size={20} color="#fff" />
+                <Text style={styles.confirmButtonText}>
+                  {isSubmitting ? 'Recording...' : 'Record Payment'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -186,5 +359,116 @@ const createStyles = (theme: any) => StyleSheet.create({
     textAlign: 'center',
     padding: 16,
     fontStyle: 'italic',
+  },
+  // Mark as Paid button
+  markPaidButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 16,
+    gap: 8,
+  },
+  markPaidButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  notesInput: {
+    height: 60,
+    textAlignVertical: 'top',
+  },
+  methodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  methodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
+  },
+  methodButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

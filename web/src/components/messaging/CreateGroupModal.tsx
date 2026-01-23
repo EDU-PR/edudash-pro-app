@@ -176,7 +176,7 @@ export function CreateGroupModal({
             guardian_id,
             first_name,
             last_name,
-            class:classes(name)
+            class:classes!students_class_id_fkey(name)
           `)
           .eq('preschool_id', preschoolId)
           .not('guardian_id', 'is', null);

@@ -106,7 +106,7 @@ export default function SettingsPage() {
       try {
         const { data, error } = await supabase
           .from('students')
-          .select('id, first_name, last_name, grade, class:classes(name)')
+          .select('id, first_name, last_name, grade, class:classes!students_class_id_fkey(name)')
           .eq('parent_id', userId);
         
         if (data && !error) {
