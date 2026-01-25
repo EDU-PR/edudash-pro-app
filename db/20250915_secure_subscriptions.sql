@@ -7,16 +7,34 @@ RETURNS TABLE (
   id uuid,
   name text,
   tier text,
+  description text,
   price_monthly numeric,
   price_annual numeric,
   max_teachers int,
   max_students int,
+  max_schools int,
+  features jsonb,
+  school_types text[],
+  sort_order int,
   is_active boolean
 ) LANGUAGE sql STABLE SECURITY DEFINER AS $$
-  select p.id, p.name, p.tier, p.price_monthly, p.price_annual, p.max_teachers, p.max_students, coalesce(p.is_active, true)
+  select
+    p.id,
+    p.name,
+    p.tier,
+    p.description,
+    p.price_monthly,
+    p.price_annual,
+    p.max_teachers,
+    p.max_students,
+    p.max_schools,
+    p.features,
+    p.school_types,
+    p.sort_order,
+    coalesce(p.is_active, true)
   from public.subscription_plans p
   where coalesce(p.is_active, true) = true
-  order by p.price_monthly nulls last;
+  order by p.sort_order nulls last, p.price_monthly nulls last;
 $$;
 
 REVOKE ALL ON FUNCTION public.public_list_plans FROM public;

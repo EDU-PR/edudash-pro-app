@@ -229,7 +229,7 @@ export default function ParentRegistrationScreen() {
                     organization_id: selectedOrgId,
                     role: 'parent', // Set role to parent for this context
                   })
-                  .eq('id', user.id);
+                  .eq('auth_user_id', user.id);
                 
                 // Store active organization in AsyncStorage
                 await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
@@ -276,7 +276,7 @@ export default function ParentRegistrationScreen() {
               organization_id: selectedOrgId,
               role: 'parent',
             })
-            .eq('id', user.id);
+            .eq('auth_user_id', user.id);
           
           // Store active organization in AsyncStorage
           await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({

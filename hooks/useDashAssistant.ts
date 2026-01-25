@@ -29,6 +29,7 @@ import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
+import { getChatUIPrefs, getVoiceChatPrefs } from '@/lib/ai/dashSettings';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -65,6 +66,10 @@ interface UseDashAssistantReturn {
   isInitialized: boolean;
   enterToSend: boolean;
   setEnterToSend: (value: boolean) => void;
+  voiceEnabled: boolean;
+  showTypingIndicator: boolean;
+  autoSuggestQuestions: boolean;
+  contextualHelp: boolean;
   selectedAttachments: DashAttachment[];
   isUploading: boolean;
   isNearBottom: boolean;
@@ -130,6 +135,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [dashInstance, setDashInstance] = useState<IDashAIAssistant | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [enterToSend, setEnterToSend] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState(false);
+  const [showTypingIndicator, setShowTypingIndicator] = useState(true);
+  const [autoSuggestQuestions, setAutoSuggestQuestions] = useState(true);
+  const [contextualHelp, setContextualHelp] = useState(true);
+  const [streamingEnabledPref, setStreamingEnabledPref] = useState(false);
   const [selectedAttachments, setSelectedAttachments] = useState<DashAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -211,6 +222,34 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, []);
 
+  const loadChatPrefs = useCallback(async () => {
+    try {
+      const [voiceChatPrefs, chatUiPrefs] = await Promise.all([
+        getVoiceChatPrefs(),
+        getChatUIPrefs(),
+      ]);
+      setVoiceEnabled(voiceChatPrefs.voiceEnabled ?? true);
+      setAutoSpeakResponses(voiceChatPrefs.autoSpeak ?? false);
+      setShowTypingIndicator(chatUiPrefs.showTypingIndicator ?? true);
+      setAutoSuggestQuestions(chatUiPrefs.autoSuggestQuestions ?? true);
+      setContextualHelp(chatUiPrefs.contextualHelp ?? true);
+      if (typeof chatUiPrefs.enterToSend === 'boolean') {
+        setEnterToSend(chatUiPrefs.enterToSend);
+      }
+      try {
+        const streamingPref = await AsyncStorage.getItem('@dash_streaming_enabled');
+        setStreamingEnabledPref(streamingPref === 'true');
+      } catch {}
+    } catch {
+      try {
+        const enterToSendSetting = await AsyncStorage.getItem('@dash_ai_enter_to_send');
+        if (enterToSendSetting !== null) {
+          setEnterToSend(enterToSendSetting === 'true');
+        }
+      } catch {}
+    }
+  }, []);
+
   // Attachment progress updater
   const updateAttachmentProgress = useCallback((attachmentId: string, progress: number, status?: DashAttachment['status']) => {
     setSelectedAttachments(prev => prev.map(att => 
@@ -278,9 +317,18 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       scrollToBottom({ animated: true, delay: 120 });
 
       const userText = text || 'Attached files';
-      const streamingEnabled = Platform.OS === 'web' && 
-        (process.env.EXPO_PUBLIC_AI_STREAMING_ENABLED === 'true' || 
-         process.env.EXPO_PUBLIC_ENABLE_AI_STREAMING === 'true');
+      const localUserMessage: DashMessage = {
+        id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'user',
+        content: userText,
+        timestamp: Date.now(),
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+      };
+      setMessages(prev => [...prev, localUserMessage]);
+      const envStreamingEnabled = 
+        process.env.EXPO_PUBLIC_AI_STREAMING_ENABLED === 'true' || 
+        process.env.EXPO_PUBLIC_ENABLE_AI_STREAMING === 'true';
+      const streamingEnabled = Platform.OS === 'web' && (streamingEnabledPref || envStreamingEnabled);
       
       let response: DashMessage;
       
@@ -327,6 +375,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           uploadedAttachments.length > 0 ? uploadedAttachments : undefined
         );
       }
+
+      // Add assistant message locally for immediate UI feedback
+      setMessages(prev => [...prev, response]);
       
       setLoadingStatus('responding');
       setStatusStartTime(Date.now());
@@ -359,8 +410,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       
       // Update messages
       const updatedConv = await dashInstance.getConversation(dashInstance.getCurrentConversationId()!);
-      if (updatedConv) {
-        setMessages(updatedConv.messages);
+      if (updatedConv && Array.isArray(updatedConv.messages) && updatedConv.messages.length > 0) {
+        setMessages(prev => (updatedConv.messages.length >= prev.length ? updatedConv.messages : prev));
         setConversation(updatedConv);
         scrollToBottom({ animated: true, delay: 150 });
       }
@@ -382,7 +433,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } catch {}
 
       // Auto-speak if enabled
-      speakResponse(response);
+      if (autoSpeakResponses && voiceEnabled) {
+        speakResponse(response);
+      }
 
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -397,7 +450,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsLoading(false);
       setLoadingStatus(null);
     }
-  }, [dashInstance, conversation, scrollToBottom, updateAttachmentProgress, setLayout, wantsLessonGenerator, showAlert]);
+  }, [dashInstance, conversation, scrollToBottom, updateAttachmentProgress, setLayout, wantsLessonGenerator, showAlert, speakResponse, autoSpeakResponses, voiceEnabled, streamingEnabledPref]);
 
   // Process queue
   const processQueue = useCallback(async () => {
@@ -460,6 +513,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   // Speech functions
   const speakResponse = useCallback(async (message: DashMessage) => {
     if (!dashInstance || message.type !== 'assistant') return;
+
+    if (!voiceEnabled) {
+      showAlert({
+        title: 'Voice Responses Disabled',
+        message: 'Enable Voice Responses in Dash AI Settings to hear spoken replies.',
+        type: 'info',
+        icon: 'volume-mute-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
+      return;
+    }
 
     // Check tier for TTS access
     if (!hasTTSAccess()) {
@@ -535,7 +599,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
-  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert]);
+  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled]);
 
   const stopSpeaking = useCallback(async () => {
     if (!dashInstance) return;
@@ -941,13 +1005,8 @@ You can also use text input to chat with Dash.`;
           }
         }
 
-        // Load enterToSend setting
-        try {
-          const enterToSendSetting = await AsyncStorage.getItem('@dash_ai_enter_to_send');
-          if (enterToSendSetting !== null) {
-            setEnterToSend(enterToSendSetting === 'true');
-          }
-        } catch {}
+        // Load chat/voice preferences
+        await loadChatPrefs();
 
         // Send initial message or add greeting
         if (initialMessage && initialMessage.trim()) {
@@ -968,7 +1027,7 @@ You can also use text input to chat with Dash.`;
     };
 
     initializeDash();
-  }, [conversationId, initialMessage]);
+  }, [conversationId, initialMessage, loadChatPrefs]);
 
   // Auto-scroll effects
   useEffect(() => {
@@ -1001,6 +1060,7 @@ You can also use text input to chat with Dash.`;
   // Focus effect for conversation refresh
   useFocusEffect(
     useCallback(() => {
+      loadChatPrefs();
       if (dashInstance && conversation) {
         dashInstance.getConversation(conversation.id).then((updatedConv: any) => {
           if (updatedConv && updatedConv.messages.length !== messages.length) {
@@ -1016,7 +1076,7 @@ You can also use text input to chat with Dash.`;
           dashInstance.stopSpeaking().catch(() => {});
         }
       };
-    }, [dashInstance, conversation, messages.length, isSpeaking])
+    }, [dashInstance, conversation, messages.length, isSpeaking, loadChatPrefs])
   );
 
   // Cleanup on unmount
@@ -1067,6 +1127,10 @@ You can also use text input to chat with Dash.`;
     isInitialized,
     enterToSend,
     setEnterToSend,
+    voiceEnabled,
+    showTypingIndicator,
+    autoSuggestQuestions,
+    contextualHelp,
     selectedAttachments,
     isUploading,
     isNearBottom,

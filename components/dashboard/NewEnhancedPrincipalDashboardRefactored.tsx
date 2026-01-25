@@ -187,7 +187,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* Welcome Section */}
+        {/* 1. Welcome Section - Always first */}
         <View style={[styles.section, styles.firstSection, Platform.OS === 'web' && styles.firstSectionWeb]}>
           <PrincipalWelcomeSection
             userName={user?.user_metadata?.first_name}
@@ -196,35 +196,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           />
         </View>
 
-        {/* PWA-Style Search Bar */}
-        <View style={styles.section}>
-          <SearchBar
-            placeholder={t('common.search', { defaultValue: 'Search dashboard...' })}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmit={(query) => {
-              const match = searchSuggestions.find(s => 
-                s.label.toLowerCase().includes(query.toLowerCase())
-              );
-              if (match) handleSearchNavigation(match.id);
-            }}
-            suggestions={searchSuggestions}
-            onSuggestionPress={(suggestion) => handleSearchNavigation(suggestion.id)}
-          />
-        </View>
-
-        {/* Metrics Sections */}
-        <View style={styles.section}>
-          <PrincipalMetricsSection
-            stats={data.stats}
-            studentsCount={data.stats?.students?.total ?? 0}
-            classesCount={data.stats?.classes?.total ?? 0}
-            collapsedSections={collapsedSections}
-            onToggleSection={toggleSection}
-          />
-        </View>
-
-        {/* Quick Actions */}
+        {/* 2. Quick Actions - Urgent tasks requiring attention */}
         <View style={styles.section}>
           <PrincipalQuickActions
             stats={data.stats}
@@ -236,7 +208,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           />
         </View>
 
-        {/* Parent Link Requests */}
+        {/* 3. Parent Link Requests - Pending approvals need attention */}
         <View style={styles.section}>
           <CollapsibleSection 
             title={t('dashboard.parent_requests', { defaultValue: 'Parent Requests' })} 
@@ -249,7 +221,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           </CollapsibleSection>
         </View>
 
-        {/* Upcoming Birthdays */}
+        {/* 4. Upcoming Birthdays - Time-sensitive celebrations */}
         <View style={styles.section}>
           <CollapsibleSection 
             title={birthdays?.today?.length 
@@ -273,7 +245,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           </CollapsibleSection>
         </View>
 
-        {/* Recent Activity */}
+        {/* 5. Recent Activity - What just happened */}
         <View style={styles.section}>
           <PrincipalRecentActivity
             stats={data.stats}
@@ -282,7 +254,43 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
           />
         </View>
 
-        {/* Quick Tips Section - Help principals get started */}
+        {/* 6. Metrics/Stats Overview - Summary data */}
+        <View style={styles.section}>
+          <PrincipalMetricsSection
+            stats={data.stats}
+            studentsCount={data.stats?.students?.total ?? 0}
+            classesCount={data.stats?.classes?.total ?? 0}
+            collapsedSections={collapsedSections}
+            onToggleSection={toggleSection}
+          />
+        </View>
+
+        {/* 7. Search Bar - Utility for navigation */}
+        <View style={styles.section}>
+          <CollapsibleSection 
+            title={t('common.search', { defaultValue: 'Search Dashboard' })} 
+            sectionId="search" 
+            icon="🔍"
+            defaultCollapsed={collapsedSections.has('search')}
+            onToggle={toggleSection}
+          >
+            <SearchBar
+              placeholder={t('common.search_placeholder', { defaultValue: 'Search for anything...' })}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmit={(query) => {
+                const match = searchSuggestions.find(s => 
+                  s.label.toLowerCase().includes(query.toLowerCase())
+                );
+                if (match) handleSearchNavigation(match.id);
+              }}
+              suggestions={searchSuggestions}
+              onSuggestionPress={(suggestion) => handleSearchNavigation(suggestion.id)}
+            />
+          </CollapsibleSection>
+        </View>
+
+        {/* 8. Quick Tips Section - Help principals get started */}
         <View style={styles.section}>
           <CollapsibleSection 
             title={t('dashboard.quick_tips', { defaultValue: 'Quick Tips' })} 

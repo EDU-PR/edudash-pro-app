@@ -48,7 +48,7 @@ import {
   useAddMemberSubmit,
   useFormValidation,
   RegistrationResult,
-} from './add-member-modules';
+} from './_add-member-modules';
 
 export default function AddMemberScreen() {
   const { theme } = useTheme();

@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePendingApprovals, useApprovalStats, useProcessApproval, APPROVAL_TYPE_CONFIG, ApprovalRequest } from '@/hooks/membership/usePendingApprovals';
-import { styles } from './pending-approvals.styles';
+import { styles } from './_pending-approvals.styles';
 
 const TABS = [
   { id: 'pending', label: 'Pending' },

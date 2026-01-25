@@ -4,7 +4,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initAndMigrate, setVoicePrefs, normalizeLanguageCode, resolveDefaultVoiceId } from '@/lib/ai/dashSettings';
+import { 
+  initAndMigrate, 
+  getVoicePrefs,
+  getVoiceChatPrefs,
+  getChatUIPrefs,
+  setVoicePrefs, 
+  setVoiceChatPrefs,
+  setChatUIPrefs,
+  normalizeLanguageCode, 
+  resolveDefaultVoiceId 
+} from '@/lib/ai/dashSettings';
 import { AISettings, DEFAULT_SETTINGS, TEST_MESSAGES, LANGUAGE_NAMES } from './types';
 
 interface UseAISettingsReturn {
@@ -38,13 +48,23 @@ export function useAISettings(): UseAISettingsReturn {
       userContext: s.userContext?.trim() || '',
       teachingStyle: s.teachingStyle,
       voice: {
+        enabled: !!s.voiceEnabled,
+        responseLanguage: normalizeLanguageCode(s.responseLanguage || s.voiceLanguage),
+        strictLanguageMode: !!s.strictLanguageMode,
         language: langNorm,
         voiceType: s.voiceType,
         rate: Number(s.voiceRate?.toFixed?.(2) ?? s.voiceRate),
         pitch: Number(s.voicePitch?.toFixed?.(2) ?? s.voicePitch),
         volume: Number(s.voiceVolume?.toFixed?.(2) ?? s.voiceVolume),
       },
-      chat: { autoSpeak: !!s.autoReadResponses },
+      chat: { 
+        autoSpeak: !!s.autoReadResponses,
+        autoVoiceReply: !!s.autoVoiceReply,
+        enterToSend: !!s.enterToSend,
+        showTypingIndicator: !!s.showTypingIndicator,
+        autoSuggestQuestions: !!s.autoSuggestQuestions,
+        contextualHelp: !!s.contextualHelp,
+      },
     });
   }, []);
 
@@ -83,20 +103,46 @@ export function useAISettings(): UseAISettingsReturn {
         await dashAIInstance.initialize();
         try { await initAndMigrate(); } catch (e) { if (__DEV__) console.warn('[useAISettings] migration warn', e); }
         
+        const [voicePrefs, voiceChatPrefs, chatUiPrefs] = await Promise.all([
+          getVoicePrefs().catch(() => null),
+          getVoiceChatPrefs().catch(() => null),
+          getChatUIPrefs().catch(() => null),
+        ]);
+
         const personality = dashAIInstance.getPersonality?.() || {};
         const memory = (typeof dashAIInstance.getMemoryItems === 'function')
           ? dashAIInstance.getMemoryItems()
           : (typeof dashAIInstance.getMemory === 'function' ? dashAIInstance.getMemory() : []);
         
+        const defaultSettings = { ...DEFAULT_SETTINGS, localProcessing: Platform.OS === 'ios' };
+        const voiceLanguage = normalizeLanguageCode(
+          voicePrefs?.language || personality.voice_settings?.language || defaultSettings.voiceLanguage
+        );
+        const responseLanguage = normalizeLanguageCode(
+          personality.response_language || voicePrefs?.language || personality.voice_settings?.language || defaultSettings.responseLanguage
+        );
+        const autoSpeak = voiceChatPrefs?.autoSpeak ?? defaultSettings.autoReadResponses;
+        const voiceEnabled = voiceChatPrefs?.voiceEnabled ?? defaultSettings.voiceEnabled;
+        
         const loadedSettings: AISettings = {
-          ...settings,
+          ...defaultSettings,
           personality: (personality.response_style === 'professional' ? 'professional' : 
                         personality.response_style === 'casual' ? 'casual' : 
                         personality.response_style === 'formal' ? 'formal' : 'encouraging'),
-          voiceLanguage: normalizeLanguageCode(personality.voice_settings?.language) || 'en',
-          voiceType: personality.voice_settings?.voice || 'male',
-          voiceRate: personality.voice_settings?.rate || 1.0,
-          voicePitch: personality.voice_settings?.pitch || 1.0,
+          voiceLanguage,
+          responseLanguage,
+          strictLanguageMode: !!personality.strict_language_mode,
+          voiceType: personality.voice_settings?.voice || defaultSettings.voiceType,
+          voiceRate: voicePrefs?.speaking_rate ?? personality.voice_settings?.rate ?? defaultSettings.voiceRate,
+          voicePitch: voicePrefs?.pitch ?? personality.voice_settings?.pitch ?? defaultSettings.voicePitch,
+          voiceVolume: voicePrefs?.volume ?? personality.voice_settings?.volume ?? defaultSettings.voiceVolume,
+          voiceEnabled,
+          autoReadResponses: autoSpeak,
+          autoVoiceReply: autoSpeak,
+          enterToSend: chatUiPrefs?.enterToSend ?? defaultSettings.enterToSend,
+          showTypingIndicator: chatUiPrefs?.showTypingIndicator ?? defaultSettings.showTypingIndicator,
+          autoSuggestQuestions: chatUiPrefs?.autoSuggestQuestions ?? defaultSettings.autoSuggestQuestions,
+          contextualHelp: chatUiPrefs?.contextualHelp ?? defaultSettings.contextualHelp,
           memoryEnabled: memory && memory.length > 0,
           customInstructions: personality.personality_traits?.join(', ') || '',
         };
@@ -117,6 +163,12 @@ export function useAISettings(): UseAISettingsReturn {
   const handleSettingsChange = useCallback((key: string, value: any) => {
     setSettings(prev => {
       if ((prev as any)[key] === value) return prev;
+      if (key === 'autoVoiceReply') {
+        return { ...prev, autoVoiceReply: value, autoReadResponses: value };
+      }
+      if (key === 'autoReadResponses') {
+        return { ...prev, autoReadResponses: value, autoVoiceReply: value };
+      }
       return { ...prev, [key]: value };
     });
   }, []);
@@ -177,8 +229,25 @@ export function useAISettings(): UseAISettingsReturn {
       }
 
       try {
-        const { setVoiceChatPrefs } = await import('@/lib/ai/dashSettings');
-        await setVoiceChatPrefs({ autoSpeak: !!settings.autoReadResponses });
+        const autoSpeak = !!(settings.autoReadResponses || settings.autoVoiceReply);
+        await setVoiceChatPrefs({ 
+          autoSpeak, 
+          voiceEnabled: !!settings.voiceEnabled 
+        });
+      } catch (e) {
+        if (__DEV__) console.warn('[useAISettings] Failed to persist voice chat prefs:', e);
+      }
+
+      try {
+        await setChatUIPrefs({
+          enterToSend: !!settings.enterToSend,
+          showTypingIndicator: !!settings.showTypingIndicator,
+          autoSuggestQuestions: !!settings.autoSuggestQuestions,
+          contextualHelp: !!settings.contextualHelp,
+        });
+        // Legacy key for compatibility
+        await AsyncStorage.setItem('@dash_ai_enter_to_send', settings.enterToSend ? 'true' : 'false');
+        await AsyncStorage.setItem('@dash_ai_show_typing_indicator', settings.showTypingIndicator ? 'true' : 'false');
       } catch (e) {
         if (__DEV__) console.warn('[useAISettings] Failed to persist chat prefs:', e);
       }

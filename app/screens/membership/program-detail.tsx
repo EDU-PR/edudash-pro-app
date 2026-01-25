@@ -21,7 +21,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { STATUS_CONFIG, CATEGORY_ICONS } from '@/hooks/membership/useYouthPrograms';
-import { styles } from './program-detail.styles';
+import { styles } from './_program-detail.styles';
 
 interface YouthProgramDetail {
   id: string;

@@ -10,7 +10,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { createCheckout } from '@/lib/payments';
-import { adminUpdateSubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
+import { adminUpdateSubscriptionPlan, listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
 import { SubscriptionPlan, UPGRADE_REASONS, DEFAULT_REASON, UpgradeReason } from './types';
@@ -75,11 +75,7 @@ export function useSubscriptionUpgrade({
       setLoading(true);
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const { data, error } = await assertSupabase()
-        .from('subscription_plans')
-        .select('*')
-        .eq('is_active', true)
-        .order('price_monthly', { ascending: true });
+      const data = await listActivePlans(assertSupabase());
 
       clearTimeout(timeoutId);
 
@@ -88,14 +84,19 @@ export function useSubscriptionUpgrade({
         return;
       }
 
-      if (error) throw new Error(error.message || 'Failed to fetch plans');
-      
       const plansData = Array.isArray(data) ? data : [];
+      const normalizedPlans = plansData.map((plan: any) => ({
+        ...plan,
+        features: Array.isArray(plan.features)
+          ? plan.features.map((feature: any) => (typeof feature === 'string' ? feature : String(feature?.name || feature)))
+          : [],
+        school_types: Array.isArray(plan.school_types) ? plan.school_types : [],
+      }));
       const userRole = profile?.role?.toLowerCase() || '';
       const isParentOrStudent = userRole === 'parent' || userRole === 'student' || userRole === 'learner';
       const currentTierLower = currentTier.toLowerCase();
       
-      const filteredPlans = plansData.filter(plan => {
+      const filteredPlans = normalizedPlans.filter(plan => {
         if (!plan || !plan.tier) return false;
         const planTier = plan.tier.toLowerCase();
         if (planTier === currentTierLower) return false;

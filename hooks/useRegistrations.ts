@@ -414,14 +414,14 @@ export function useRegistrations(): UseRegistrationsReturn {
       return true;
     }
     
-    // EduSite registrations need proof of payment
+    // EduSite registrations need proof of payment verified
     if (item.source === 'edusite') {
-      return !!item.proof_of_payment_url;
+      return !!item.proof_of_payment_url && !!item.payment_verified;
     }
     
-    // In-app registrations with registration fee need POP uploaded
+    // In-app registrations with registration fee need POP uploaded + verified
     if (item.registration_fee_amount && item.registration_fee_amount > 0) {
-      return !!item.proof_of_payment_url;
+      return !!item.proof_of_payment_url && !!item.payment_verified;
     }
     
     // In-app registrations without fee can be approved directly
@@ -955,6 +955,45 @@ export function useRegistrations(): UseRegistrationsReturn {
               const feeAmount = registration.registration_fee_amount || 200;
               const discountAmount = registration.discount_amount || 0;
               const finalAmount = feeAmount - discountAmount;
+              const paymentReference = registration.payment_reference || `REG-${registration.id.slice(0, 8).toUpperCase()}`;
+
+              // Fetch banking details for the school/preschool
+              const { data: primaryBank } = await supabase
+                .from('organization_bank_accounts')
+                .select('bank_name, account_name, account_number, account_number_masked, branch_code, swift_code')
+                .eq('organization_id', registration.organization_id)
+                .eq('is_primary', true)
+                .maybeSingle();
+
+              let bankDetails = primaryBank;
+              if (!bankDetails) {
+                const { data: anyBank } = await supabase
+                  .from('organization_bank_accounts')
+                  .select('bank_name, account_name, account_number, account_number_masked, branch_code, swift_code')
+                  .eq('organization_id', registration.organization_id)
+                  .eq('is_active', true)
+                  .limit(1);
+                bankDetails = anyBank?.[0];
+              }
+
+              if (!bankDetails) {
+                const { data: paymentMethod } = await supabase
+                  .from('organization_payment_methods')
+                  .select('bank_name, account_name, account_number, branch_code')
+                  .eq('organization_id', registration.organization_id)
+                  .eq('method_name', 'bank_transfer')
+                  .maybeSingle();
+                bankDetails = paymentMethod as any;
+              }
+
+              const accountNumber = bankDetails?.account_number || bankDetails?.account_number_masked || 'Contact school';
+              const branchCode = bankDetails?.branch_code || '';
+              const swiftCode = (bankDetails as any)?.swift_code || '';
+              const bankName = bankDetails?.bank_name || 'Contact school';
+              const accountName = bankDetails?.account_name || schoolName;
+
+              const appBaseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://app.edudashpro.org.za';
+              const popUploadUrl = `${appBaseUrl}/screens/parent-pop-upload?ref=${encodeURIComponent(paymentReference)}&amount=${encodeURIComponent(finalAmount.toFixed(2))}`;
               
               // Create email body
               const emailBody = `
@@ -989,12 +1028,55 @@ export function useRegistrations(): UseRegistrationsReturn {
             <td style="padding: 12px 0; font-weight: 700; color: #333;">Amount Due:</td>
             <td style="padding: 12px 0; text-align: right; font-weight: 700; color: #333; font-size: 18px;">R${finalAmount.toFixed(2)}</td>
           </tr>
+          <tr>
+            <td style="padding: 8px 0;">Payment Reference:</td>
+            <td style="padding: 8px 0; text-align: right; font-weight: 600;">${paymentReference}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background: #f1f5f9; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">School Banking Details</h3>
+        <table style="width: 100%; font-size: 14px; color: #555;">
+          <tr>
+            <td style="padding: 6px 0;">Bank:</td>
+            <td style="padding: 6px 0; text-align: right; font-weight: 600;">${bankName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0;">Account Name:</td>
+            <td style="padding: 6px 0; text-align: right; font-weight: 600;">${accountName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0;">Account Number:</td>
+            <td style="padding: 6px 0; text-align: right; font-weight: 600;">${accountNumber}</td>
+          </tr>
+          ${branchCode ? `
+          <tr>
+            <td style="padding: 6px 0;">Branch Code:</td>
+            <td style="padding: 6px 0; text-align: right; font-weight: 600;">${branchCode}</td>
+          </tr>
+          ` : ''}
+          ${swiftCode ? `
+          <tr>
+            <td style="padding: 6px 0;">SWIFT Code:</td>
+            <td style="padding: 6px 0; text-align: right; font-weight: 600;">${swiftCode}</td>
+          </tr>
+          ` : ''}
         </table>
       </div>
 
       <p style="margin: 20px 0; font-size: 15px; color: #555; line-height: 1.6;">
         Please upload your proof of payment via the EduDash Pro app or respond to this email with the payment receipt attached.
       </p>
+
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${popUploadUrl}" style="display: inline-block; padding: 12px 20px; background: #4F46E5; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600;">
+          Upload Proof of Payment
+        </a>
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #888;">
+          If the button doesn’t open, use your app and select Upload POP, then enter the reference above.
+        </p>
+      </div>
 
       <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; font-size: 14px; color: #856404;">

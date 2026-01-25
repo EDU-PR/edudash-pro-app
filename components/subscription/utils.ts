@@ -45,8 +45,9 @@ export const getPlanColor = (tier: string): string => {
  * Convert price from cents to rands
  */
 export const convertPrice = (price: number): number => {
-  // If price >= 100, assume it's in cents, otherwise assume rands
-  return price >= 100 ? price / 100 : price;
+  // Subscription prices are stored in rands (decimal). Keep as-is.
+  // If your database stores cents, fix the data instead of applying heuristics.
+  return Number.isFinite(price) ? price : 0;
 };
 
 /**

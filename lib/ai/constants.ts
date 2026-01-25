@@ -17,10 +17,11 @@ export const VOICE_SETTINGS = {
 } as const;
 
 /**
- * Welcome Message
- * Shown once when user first opens Dash AI
+ * Welcome Messages by Role
+ * Each role gets a tailored greeting and capability list
  */
-export const DASH_WELCOME_MESSAGE = `Hey! 👋 I'm **Dash**, your AI assistant for EduDash Pro.
+export const DASH_WELCOME_MESSAGES: Record<string, string> = {
+  super_admin: `Hey! 👋 I'm **Dash**, your AI assistant for EduDash Pro.
 
 I can help you with:
 
@@ -42,13 +43,134 @@ I can help you with:
 • Database queries
 • Platform configuration
 
-💡 **Quick Actions**
-• \`View subscription details\`
-• \`Check user activity\`
-• \`Show platform stats\`
-• \`Trigger Android build\`
+What would you like to do?`,
 
-What would you like to do?`;
+  principal: `Hey! 👋 I'm **Dash**, your AI assistant.
+
+I can help you with:
+
+📊 **School Analytics**
+• Enrollment statistics
+• Attendance reports
+• Staff performance insights
+• Parent engagement metrics
+
+👥 **Staff Management**
+• Teacher schedules
+• Performance reviews
+• Training recommendations
+
+📋 **Administration**
+• Generate reports
+• Draft communications
+• Policy compliance checks
+
+How can I assist you today?`,
+
+  teacher: `Hey! 👋 I'm **Dash**, your teaching assistant.
+
+I can help you with:
+
+📚 **Lesson Planning**
+• Generate lesson plans
+• Create activities
+• Find teaching resources
+
+📝 **Assessment**
+• Create quizzes & worksheets
+• Grade assignments
+• Track student progress
+
+👨‍👩‍👧‍👦 **Student Support**
+• Identify struggling learners
+• Personalized recommendations
+• Parent communication drafts
+
+What would you like help with?`,
+
+  parent: `Hey! 👋 I'm **Dash**, your EduDash assistant.
+
+I can help you with:
+
+📈 **Your Child's Progress**
+• View grades and reports
+• Track attendance
+• See upcoming assignments
+
+📅 **School Activities**
+• Check event calendar
+• View announcements
+• School contact info
+
+💬 **Communication**
+• Message teachers
+• View report cards
+• Get homework help tips
+
+How can I help you today?`,
+
+  student: `Hey! 👋 I'm **Dash**, your study buddy!
+
+I can help you with:
+
+📚 **Learning**
+• Explain difficult concepts
+• Help with homework
+• Study tips & techniques
+
+📅 **Schoolwork**
+• View your assignments
+• Check your grades
+• See your schedule
+
+🎯 **Goals**
+• Track your progress
+• Set study reminders
+• Exam preparation tips
+
+What would you like help with?`,
+
+  learner: `Hey! 👋 I'm **Dash**, your learning companion!
+
+I can help you with:
+
+📚 **Your Courses**
+• View program materials
+• Track your progress
+• Access resources
+
+📝 **Assignments**
+• Check due dates
+• Get help with submissions
+• Review feedback
+
+🎓 **Career Path**
+• Portfolio building
+• Certification tracking
+• Job placement support
+
+How can I assist you today?`,
+
+  default: `Hey! 👋 I'm **Dash**, your AI assistant for EduDash Pro.
+
+I can help you navigate the platform, answer questions, and assist with your tasks.
+
+What would you like help with?`,
+};
+
+/**
+ * Get welcome message based on user role
+ */
+export const getWelcomeMessage = (role: string): string => {
+  const normalizedRole = role?.toLowerCase() || 'default';
+  return DASH_WELCOME_MESSAGES[normalizedRole] || DASH_WELCOME_MESSAGES.default;
+};
+
+/**
+ * Legacy export for backward compatibility
+ * @deprecated Use getWelcomeMessage(role) instead
+ */
+export const DASH_WELCOME_MESSAGE = DASH_WELCOME_MESSAGES.super_admin;
 
 /**
  * System Prompt for Dash AI

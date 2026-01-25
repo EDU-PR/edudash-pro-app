@@ -1,6 +1,4 @@
-import { StyleSheet, Dimensions } from 'react-native';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   orbContainer: {
@@ -27,7 +25,7 @@ export const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   blurOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -36,9 +34,9 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   chatContainer: {
-    height: SCREEN_HEIGHT * 0.75,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    flex: 1,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
     overflow: 'hidden',
   },
   chatHeader: {
@@ -48,6 +46,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
+  },
+  headerSafeArea: {
+    backgroundColor: 'transparent',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -148,12 +149,38 @@ export const styles = StyleSheet.create({
   quickActionsContainer: {
     marginTop: 16,
   },
+  quickActionsHeader: {
+    marginBottom: 12,
+  },
   quickActionsTitle: {
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  quickActionsSubtitle: {
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  quickActionsChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  quickActionChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  quickActionInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
   },
   quickActionsGrid: {
     flexDirection: 'row',
@@ -177,6 +204,11 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
     marginBottom: 8,
+  },
+  quickActionsReturn: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    alignItems: 'flex-start',
   },
   inputContainer: {
     flexDirection: 'row',

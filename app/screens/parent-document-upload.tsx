@@ -144,14 +144,17 @@ export default function ParentDocumentUploadScreen() {
           .single();
         student = data;
       } else {
-        const { data } = await supabase
-          .from('students')
-          .select('*')
-          .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-        student = data;
+        const parentId = profile?.id || user?.id;
+        if (parentId) {
+          const { data } = await supabase
+            .from('students')
+            .select('*')
+            .or(`parent_id.eq.${parentId},guardian_id.eq.${parentId}`)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          student = data;
+        }
       }
 
       setRegistrationData(registration);
@@ -191,7 +194,7 @@ export default function ParentDocumentUploadScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, registrationId, studentId]);
+  }, [user?.id, profile?.id, registrationId, studentId]);
 
   useEffect(() => {
     loadDocuments();

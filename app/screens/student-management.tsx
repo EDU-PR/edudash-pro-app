@@ -172,7 +172,7 @@ export default function StudentManagementScreen() {
         .from('classes')
         .select('id, name, grade_level, teacher_id')
         .eq('preschool_id', preschoolId)
-        .eq('is_active', true)
+        .eq('active', true)
         .order('name');
 
       setClasses(classesData || []);
@@ -194,6 +194,7 @@ export default function StudentManagementScreen() {
           classes (name)
         `)
         .eq('preschool_id', preschoolId)
+        .eq('is_active', true)
         .order('first_name');
 
       if (studentsError) {

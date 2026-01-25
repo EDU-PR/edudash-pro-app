@@ -64,11 +64,11 @@ export function useTeacherSchool(): TeacherSchool {
         if (!schoolId) {
           const supabase = assertSupabase();
           
-          // Try profiles table first (profiles.id = auth_user_id)
+          // Try profiles table first (auth_user_id links to auth.users.id)
           const { data: profileData } = await supabase
             .from('profiles')
             .select('id, preschool_id, organization_id')
-            .eq('id', user.id)
+            .eq('auth_user_id', user.id)
             .maybeSingle();
           
           if (profileData?.preschool_id || profileData?.organization_id) {

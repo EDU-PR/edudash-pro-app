@@ -69,7 +69,7 @@ export function useTenantInfo(): {
         const { data: userProfile, error: userError } = await assertSupabase()
           .from('profiles')
           .select('preschool_id, role')
-          .eq('id', user.id)
+          .eq('auth_user_id', user.id)
           .single();
 
         if (userError) {

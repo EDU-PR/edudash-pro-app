@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('first_name, last_name, role, preschool_id')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .maybeSingle();
 
     if (profileError) {

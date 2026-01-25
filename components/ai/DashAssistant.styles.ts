@@ -353,6 +353,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  attachButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   inputWrapper: {
     flex: 1,
     flexDirection: 'row',
@@ -361,15 +367,6 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     position: 'relative',
     minHeight: 40,
-  },
-  inputLeftIcon: {
-    position: 'absolute',
-    left: 10,
-    zIndex: 1,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   textInput: {
     flex: 1,

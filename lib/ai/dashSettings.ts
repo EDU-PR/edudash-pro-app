@@ -5,6 +5,7 @@ import type { SupportedLanguage, VoicePreference } from '@/lib/voice/types';
 
 const CACHE_KEY = '@dash_ai_cache.voice_preferences';
 const VOICE_CHAT_PREFS_KEY = '@dash_voice_prefs';
+const CHAT_UI_PREFS_KEY = '@dash_ai_chat_ui_prefs';
 const MIGRATION_FLAG = '@dash_ai_migrated_v1';
 
 export type VoiceChatPrefs = {
@@ -12,13 +13,29 @@ export type VoiceChatPrefs = {
   autoSpeak: boolean;
   autoSilenceMs: number; // when unlocked
   listenCapMs: number;   // hard cap when locked
+  voiceEnabled: boolean;
 };
 
 const DEFAULT_CHAT_PREFS: VoiceChatPrefs = {
   defaultLock: false,
-  autoSpeak: true,
+  autoSpeak: false,
   autoSilenceMs: 7000,
   listenCapMs: 15000,
+  voiceEnabled: true,
+};
+
+export type ChatUIPrefs = {
+  enterToSend: boolean;
+  showTypingIndicator: boolean;
+  autoSuggestQuestions: boolean;
+  contextualHelp: boolean;
+};
+
+const DEFAULT_CHAT_UI_PREFS: ChatUIPrefs = {
+  enterToSend: true,
+  showTypingIndicator: true,
+  autoSuggestQuestions: true,
+  contextualHelp: true,
 };
 
 // Map various legacy language codes to supported SA set
@@ -87,6 +104,35 @@ export async function setVoiceChatPrefs(prefs: Partial<VoiceChatPrefs>): Promise
   try { await AsyncStorage.setItem(VOICE_CHAT_PREFS_KEY, JSON.stringify(next)); } catch { /* Intentional: cache write failure is non-fatal */ }
 }
 
+export async function getChatUIPrefs(): Promise<ChatUIPrefs> {
+  try {
+    const raw = await AsyncStorage.getItem(CHAT_UI_PREFS_KEY);
+    if (raw) return { ...DEFAULT_CHAT_UI_PREFS, ...(JSON.parse(raw) as ChatUIPrefs) };
+
+    // Legacy fallback keys
+    const [enterToSend, showTyping] = await Promise.all([
+      AsyncStorage.getItem('@dash_ai_enter_to_send'),
+      AsyncStorage.getItem('@dash_ai_show_typing_indicator'),
+    ]);
+    const legacyPrefs: ChatUIPrefs = {
+      ...DEFAULT_CHAT_UI_PREFS,
+      enterToSend: enterToSend === null ? DEFAULT_CHAT_UI_PREFS.enterToSend : enterToSend === 'true',
+      showTypingIndicator: showTyping === null ? DEFAULT_CHAT_UI_PREFS.showTypingIndicator : showTyping === 'true',
+    };
+    try {
+      await AsyncStorage.setItem(CHAT_UI_PREFS_KEY, JSON.stringify(legacyPrefs));
+    } catch { /* Intentional: cache write failure is non-fatal */ }
+    return legacyPrefs;
+  } catch { /* Intentional: cache read failure returns defaults */ }
+  return DEFAULT_CHAT_UI_PREFS;
+}
+
+export async function setChatUIPrefs(prefs: Partial<ChatUIPrefs>): Promise<void> {
+  const current = await getChatUIPrefs();
+  const next = { ...current, ...prefs };
+  try { await AsyncStorage.setItem(CHAT_UI_PREFS_KEY, JSON.stringify(next)); } catch { /* Intentional: cache write failure is non-fatal */ }
+}
+
 export function getPersonality() {
   return DashAIAssistant.getInstance().getPersonality();
 }
@@ -113,9 +159,10 @@ export async function initAndMigrate(): Promise<void> {
     // Consolidate chat prefs
     const chatPrefs: VoiceChatPrefs = {
       defaultLock: vdl === 'true',
-      autoSpeak: vas === null ? true : vas === 'true',
+      autoSpeak: vas === null ? DEFAULT_CHAT_PREFS.autoSpeak : vas === 'true',
       autoSilenceMs: asMs && !Number.isNaN(Number(asMs)) ? Math.max(2000, Number(asMs)) : DEFAULT_CHAT_PREFS.autoSilenceMs,
       listenCapMs: capMs && !Number.isNaN(Number(capMs)) ? Math.max(5000, Number(capMs)) : DEFAULT_CHAT_PREFS.listenCapMs,
+      voiceEnabled: DEFAULT_CHAT_PREFS.voiceEnabled,
     };
     await setVoiceChatPrefs(chatPrefs);
 

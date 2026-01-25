@@ -42,6 +42,12 @@ const STEP_DEFINITIONS: Record<AuthFlowStep, AuthProgressStep> = {
     description: 'Configure your institution details',
     required: true
   },
+  organization_selection: {
+    key: 'organization_selection',
+    title: 'Select Organization',
+    description: 'Choose your school or institution',
+    required: true
+  },
   security_setup: {
     key: 'security_setup',
     title: 'Security Setup',

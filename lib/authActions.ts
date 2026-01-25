@@ -9,9 +9,9 @@ let signOutStartTime = 0;
 const STALE_SIGNOUT_THRESHOLD = 10000; // Consider sign-out stale after 10 seconds
 
 // Timeout constants for sign-out operations
-const TOKEN_DEACTIVATION_TIMEOUT = 3000; // 3 seconds (reduced from 5)
-const SIGNOUT_TIMEOUT = 3000; // 3 seconds (reduced from 5)
-const OVERALL_SIGNOUT_TIMEOUT = 8000; // 8 seconds max total (reduced from 15)
+const TOKEN_DEACTIVATION_TIMEOUT = 6000; // 6 seconds
+const SIGNOUT_TIMEOUT = 8000; // 8 seconds
+const OVERALL_SIGNOUT_TIMEOUT = 15000; // 15 seconds max total
 const FORCE_SIGNOUT_DELAY = 5000; // Show force button after 5 seconds
 
 /**
@@ -43,12 +43,19 @@ export function isSignOutInProgress(): boolean {
 /**
  * Helper to wrap a promise with a timeout
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, operation: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, operation: string, fallback: T, silent = false): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
-    )
+    new Promise<T>((resolve) =>
+      setTimeout(() => {
+        if (!silent) {
+          console.warn(`[authActions] ${operation} timed out after ${ms}ms - continuing`);
+        } else if (__DEV__) {
+          console.debug(`[authActions] ${operation} timed out after ${ms}ms - continuing`);
+        }
+        resolve(fallback);
+      }, ms)
+    ),
   ]);
 }
 
@@ -124,7 +131,9 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
           await withTimeout(
             deactivateCurrentUserTokens(session.user.id),
             TOKEN_DEACTIVATION_TIMEOUT,
-            'Token deactivation'
+            'Token deactivation',
+            null as any,
+            true
           );
         }
       } catch (tokenErr) {
@@ -135,7 +144,7 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
     
     // Perform complete sign-out with timeout (clears Supabase session + storage)
     console.log('[authActions] Performing complete sign-out...');
-    await withTimeout(signOut(), SIGNOUT_TIMEOUT, 'Sign-out');
+    await withTimeout(signOut(), SIGNOUT_TIMEOUT, 'Sign-out', undefined);
     console.log('[authActions] Sign-out successful');
     
     // Clear overall timeout since we succeeded
@@ -224,4 +233,3 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
     console.log('[authActions] Sign-out flag reset, ready for new sign-in');
   }
 }
-

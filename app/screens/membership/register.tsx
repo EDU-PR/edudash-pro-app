@@ -472,7 +472,7 @@ export default function MemberRegistrationScreen() {
             first_name: formData.first_name,
             last_name: formData.last_name,
           })
-          .eq('id', user.id);
+          .eq('auth_user_id', user.id);
         
         if (profileUpdateError) {
           console.error('[Register] Error updating profile with org:', profileUpdateError);

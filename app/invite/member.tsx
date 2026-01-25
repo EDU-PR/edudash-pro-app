@@ -115,7 +115,7 @@ export default function MemberInviteScreen() {
           organization_id: inviteDetails.organization_id,
           // member_type is stored in organization_members table, not profiles
         })
-        .eq('id', user.id);
+        .eq('auth_user_id', user.id);
 
       showAlert({
         type: 'success',

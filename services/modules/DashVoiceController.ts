@@ -79,6 +79,7 @@ export class DashVoiceController {
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
       const shortCode = this.mapLanguageCode(language);
+      const allowDeviceFallback = shortCode === 'en';
       
       // Routing decision based on language support:
       // - en, af, zu: Use native device TTS (excellent support)
@@ -111,6 +112,10 @@ export class DashVoiceController {
         
         // Final fallback: try device TTS even for Azure languages
         if (!useNativeTTS) {
+          if (!allowDeviceFallback) {
+            callbacks?.onError?.(azureError);
+            return;
+          }
           try {
             await this.speakWithDeviceTTS(normalizedText, voiceSettings, callbacks);
             return;

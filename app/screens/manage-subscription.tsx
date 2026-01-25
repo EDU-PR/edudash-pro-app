@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,12 +10,13 @@ import { useTranslation } from 'react-i18next';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { SubscriptionStatusCard } from '@/components/ui/SubscriptionStatusCard';
 import { Card } from '@/components/ui/Card';
+import { cancelSubscription } from '@/lib/payments';
 
 export default function ManageSubscriptionScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { profile } = useAuth();
-  const { tier, ready: subscriptionReady } = useSubscription();
+  const { tier, ready: subscriptionReady, refresh: refreshSubscription } = useSubscription();
   const styles = createStyles(theme);
 
   const isFreeTier = !tier || tier === 'free';
@@ -24,31 +25,43 @@ export default function ManageSubscriptionScreen() {
     Alert.alert(
       t('settings.billing.cancel_subscription', { defaultValue: 'Cancel Subscription' }),
       t('settings.billing.cancel_confirm', { 
-        defaultValue: 'To cancel your subscription, please contact our support team. Your subscription will remain active until the end of your current billing period.' 
+        defaultValue: 'Are you sure you want to cancel your subscription? You will keep access until the end of your current billing period.' 
       }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
-          text: t('settings.billing.email_support', { defaultValue: 'Email Support' }),
-          onPress: () => {
-            const subject = encodeURIComponent('Subscription Cancellation Request');
-            const body = encodeURIComponent(`Hi EduDash Pro Support,\n\nI would like to cancel my subscription.\n\nAccount Email: ${profile?.email || 'N/A'}\nUser ID: ${profile?.id || 'N/A'}\nCurrent Plan: ${tier || 'Unknown'}\n\nPlease process my cancellation request.\n\nThank you.`);
-            Linking.openURL(`mailto:support@edudashpro.org.za?subject=${subject}&body=${body}`);
-          },
-        },
-        {
-          text: t('settings.billing.whatsapp_support', { defaultValue: 'WhatsApp' }),
-          onPress: () => {
-            const message = encodeURIComponent(`Hi, I would like to cancel my EduDash Pro subscription.\n\nEmail: ${profile?.email || 'N/A'}\nPlan: ${tier || 'Unknown'}`);
-            Linking.openURL(`https://wa.me/27123456789?text=${message}`);
-          },
+          text: t('settings.billing.cancel_subscription', { defaultValue: 'Cancel Subscription' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const scope: 'user' | 'school' = profile?.role === 'parent' ? 'user' : 'school';
+              const result = await cancelSubscription({
+                scope,
+                userId: scope === 'user' ? profile?.id : undefined,
+                schoolId: scope === 'school' ? (profile as any)?.preschool_id : undefined,
+              });
+
+              if (result.error) {
+                Alert.alert('Error', result.error);
+                return;
+              }
+
+              Alert.alert(
+                t('settings.billing.cancel_success', { defaultValue: 'Cancellation requested' }),
+                t('settings.billing.cancel_success_message', { defaultValue: 'Your subscription has been cancelled. You will retain access until the end of your current billing period.' })
+              );
+              refreshSubscription();
+            } catch (err) {
+              Alert.alert('Error', 'Failed to cancel subscription. Please try again.');
+            }
+          }
         },
       ]
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: t('settings.billing.manage_subscription', { defaultValue: 'Manage Subscription' }),

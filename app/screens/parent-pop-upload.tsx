@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -9,8 +9,9 @@ import { assertSupabase } from '@/lib/supabase';
 export default function ParentPoPUploadScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const [ref, setRef] = useState('');
-  const [amount, setAmount] = useState('');
+  const params = useLocalSearchParams<{ ref?: string; amount?: string }>();
+  const [ref, setRef] = useState(params.ref ? String(params.ref) : '');
+  const [amount, setAmount] = useState(params.amount ? String(params.amount) : '');
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {

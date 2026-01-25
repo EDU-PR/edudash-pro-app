@@ -573,6 +573,8 @@ export class DashVoiceService {
         const speaking_rate = Math.round(((voiceSettings.rate ?? 1.0) - 1.0) * 100);
         const pitch = Math.round(((voiceSettings.pitch ?? 1.0) - 1.0) * 100);
 
+        const allowDeviceFallback = shortLang === 'en';
+
         // Try Edge Function (Azure/Google)
         try {
           const resp = await voiceService.synthesize({
@@ -598,6 +600,10 @@ export class DashVoiceService {
           if (edgeError?.code !== 'DEVICE_FALLBACK') {
             console.warn('[DashVoice] Edge TTS failed or unavailable, falling back to device TTS');
           }
+          if (!allowDeviceFallback) {
+            callbacks?.onError?.(new Error('TTS unavailable for this language right now.'));
+            return;
+          }
           // Fall through to device TTS below
         }
       } catch (mapErr) {
@@ -622,6 +628,11 @@ export class DashVoiceService {
       } catch {
         const base = String(voiceSettings.language || '').toLowerCase();
         effectiveLang = base ? (base.startsWith('en') ? 'en-ZA' : base) : 'en-ZA';
+      }
+
+      if (!String(effectiveLang).toLowerCase().startsWith('en')) {
+        callbacks?.onError?.(new Error('TTS unavailable for this language right now.'));
+        return;
       }
 
       // Device TTS fallback
@@ -804,6 +815,9 @@ export class DashVoiceService {
     
     // Handle mathematical expressions (only in math contexts)
     normalized = this.normalizeMathExpressions(normalized);
+
+    // Clean up punctuation that TTS reads awkwardly
+    normalized = this.normalizePunctuationForSpeech(normalized);
     
     // Remove emojis and special characters (simplified for ES5 compatibility)
     normalized = normalized
@@ -929,11 +943,13 @@ export class DashVoiceService {
   private normalizeBulletPoints(text: string): string {
     return text
       // Handle bullet points at start of lines
-      .replace(/^[\s]*[-•*+]\s+/gm, '') // Remove bullet at line start
-      .replace(/\n[\s]*[-•*+]\s+/g, '\n') // Remove bullet after newlines
+      .replace(/^[\s]*[-•*+]\s*/gm, '') // Remove bullet at line start
+      .replace(/\n[\s]*[-•*+]\s*/g, '\n') // Remove bullet after newlines
       // Handle numbered lists
       .replace(/^[\s]*(\d+)[.)\s]+/gm, '') // Remove "1. " or "1) " at line start
       .replace(/\n[\s]*(\d+)[.)\s]+/g, '\n') // Remove numbered bullets after newlines
+      // Remove any remaining bullet glyphs
+      .replace(/[•◦▪︎·]/g, '')
       // Handle dashes in educational content (not math contexts)
       .replace(/([a-zA-Z])\s*-\s*([A-Z][a-z])/g, '$1, $2') // "Students - They will" -> "Students, They will"
       // Handle number ranges with dashes (e.g., "5-6 years" -> "5 to 6 years")
@@ -943,6 +959,25 @@ export class DashVoiceService {
       .replace(/\n\s*\n/g, '. ') // Double newlines become sentence breaks
       .replace(/\n/g, '. ') // Single newlines become sentence breaks
       .replace(/\s+/g, ' ') // Multiple spaces become single space
+      .trim();
+  }
+
+  /**
+   * Normalize punctuation to avoid awkward TTS reading (e.g., "quote dot")
+   */
+  private normalizePunctuationForSpeech(text: string): string {
+    return text
+      // Remove quote characters (TTS often reads "quote")
+      .replace(/[“”"«»]/g, '')
+      // Remove curly single quotes
+      .replace(/[‘’]/g, '')
+      // Remove brackets and parentheses
+      .replace(/[()[\]{}<>]/g, '')
+      // Normalize stray punctuation clusters
+      .replace(/\s*([.!?])\s*["”]+/g, '$1 ')
+      .replace(/["“]+\s*([.!?])/g, '$1')
+      .replace(/\s*[,;:]\s*/g, ', ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 

@@ -242,7 +242,7 @@ export function K12AdminDashboard() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Header */}
+      {/* 1. Header - Welcome section always first */}
       <LinearGradient
         colors={['#1E3A5F', '#0F172A']}
         style={styles.header}
@@ -257,13 +257,13 @@ export function K12AdminDashboard() {
         </View>
       </LinearGradient>
 
-      {/* Stats Overview */}
-      <K12StatsOverview stats={stats} theme={theme} />
+      {/* 2. Quick Actions - Urgent tasks requiring attention (badges show pending items) */}
+      <K12QuickActions actions={quickActions} theme={theme} />
 
-      {/* Grade Breakdown */}
-      <K12GradeBreakdown gradeBreakdown={gradeBreakdown} theme={theme} />
+      {/* 3. Recent Registrations - What needs review now */}
+      <K12RecentRegistrations registrations={recentRegistrations} theme={theme} />
 
-      {/* Upcoming Birthdays */}
+      {/* 4. Upcoming Birthdays - Time-sensitive celebrations */}
       <View style={styles.section}>
         <UpcomingBirthdaysCard
           birthdays={birthdays}
@@ -273,11 +273,11 @@ export function K12AdminDashboard() {
         />
       </View>
 
-      {/* Quick Actions */}
-      <K12QuickActions actions={quickActions} theme={theme} />
+      {/* 5. Stats Overview - Summary metrics */}
+      <K12StatsOverview stats={stats} theme={theme} />
 
-      {/* Recent Registrations */}
-      <K12RecentRegistrations registrations={recentRegistrations} theme={theme} />
+      {/* 6. Grade Breakdown - Reference data */}
+      <K12GradeBreakdown gradeBreakdown={gradeBreakdown} theme={theme} />
 
       {/* Bottom padding */}
       <View style={{ height: 100 }} />

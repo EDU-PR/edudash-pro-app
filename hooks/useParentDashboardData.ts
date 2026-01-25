@@ -151,11 +151,11 @@ export function useParentDashboardData() {
         let studentsData: any[] = [];
         
         try {
-          // profiles.id = auth_user_id
+          // profiles.auth_user_id links to the auth.users.id
           const { data: me } = await client
             .from('profiles')
             .select('id, preschool_id, organization_id')
-            .eq('id', user.id)
+            .eq('auth_user_id', user.id)
             .single();
           const internalUserId = me?.id;
           const mySchoolId = me?.preschool_id || me?.organization_id || (profile as any)?.organization_id || null;

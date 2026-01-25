@@ -33,11 +33,22 @@ const EnhancedQuickAction: React.FC<EnhancedQuickActionProps> = ({
   const { width } = Dimensions.get('window')
   const cardWidth = (width - 48) / 2
   const { tier } = useSubscription()
+  const normalizedTier = String(tier || '').toLowerCase().replace(/-/g, '_')
   
   // Check if feature is premium-gated and user doesn't have a paid tier
-  // For parents: parent-starter or parent-plus unlock premium features
+  // For parents: parent_starter or parent_plus unlock premium features
   // For schools: premium or enterprise unlock premium features
-  const isPaidTier = tier === 'parent-starter' || tier === 'parent-plus' || tier === 'premium' || tier === 'enterprise' || tier === 'pro'
+  const isPaidTier = [
+    'parent_starter',
+    'parent_plus',
+    'premium',
+    'enterprise',
+    'pro',
+    'starter',
+    'school_starter',
+    'school_premium',
+    'school_pro',
+  ].includes(normalizedTier)
   const isPremiumBlocked = isPremium && !isPaidTier
   
   const handlePress = () => {

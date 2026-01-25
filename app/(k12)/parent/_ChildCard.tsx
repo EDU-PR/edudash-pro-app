@@ -9,7 +9,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { track } from '@/lib/analytics';
-import { styles } from './dashboard.styles';
+import { styles } from './_dashboard.styles';
 
 export interface Child {
   id: string;

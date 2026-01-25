@@ -39,20 +39,27 @@ export default function NotFound() {
   // Smart fallback navigation based on user state
   const getSmartFallback = () => {
     if (!user) return '/(auth)/sign-in';
+
+    const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
+    const schoolType = profile?.organization_membership?.school_type;
+    const isK12 = schoolType ? k12Types.has(String(schoolType).toLowerCase()) : false;
     
     // Route based on user role
     switch (profile?.role) {
       case 'super_admin':
       case 'superadmin':
-        return '/(super-admin)/dashboard';
+        return '/screens/super-admin-dashboard';
       case 'principal':
       case 'principal_admin':
-        return '/(tabs)/principal-hub';
+        return '/screens/principal-dashboard';
       case 'teacher':
-        return '/(tabs)/teacher-hub';
+        return '/screens/teacher-dashboard';
+      case 'student':
+      case 'learner':
+        return isK12 ? '/(k12)/student/dashboard' : '/screens/learner-dashboard';
       case 'parent':
       default:
-        return '/(tabs)/parent-hub';
+        return isK12 ? '/(k12)/parent/dashboard' : '/screens/parent-dashboard';
     }
   };
   

@@ -119,7 +119,7 @@ class ProfileImageService {
       const { error: profileError } = await assertSupabase()
         .from('profiles')
         .update({ avatar_url: publicUrl })
-        .eq('id', user.id);
+        .eq('auth_user_id', user.id);
 
       if (profileError) {
         console.warn('Profile update error:', profileError);

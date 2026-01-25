@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { EARLY_BIRD_DISCOUNT } from '@/lib/tiers'
 
 // Enhanced responsive comparison table for React Native
 // This table is static marketing UI; values mirror lib/ai/limits.ts DEFAULT_MONTHLY_QUOTAS
@@ -8,6 +9,59 @@ import { Ionicons } from '@expo/vector-icons'
 
 const { width } = Dimensions.get('window')
 const isTablet = width >= 768
+
+const PROMO_ACTIVE = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate
+const PROMO_MULTIPLIER = (100 - EARLY_BIRD_DISCOUNT.discountPercent) / 100
+
+const BASE_PRICING: Record<PlanId, { monthly?: number; annual?: number; custom?: boolean }> = {
+  'free': { monthly: 0, annual: 0 },
+  'parent-starter': { monthly: 99, annual: 950 },
+  'parent-plus': { monthly: 199, annual: 1910 },
+  'private-teacher': { monthly: 299, annual: 2990 },
+  'pro': { monthly: 599, annual: 5990 },
+  'preschool-pro': { custom: true },
+  'enterprise': { custom: true },
+}
+
+const isParentPlan = (planId: PlanId) => planId === 'parent-starter' || planId === 'parent-plus'
+
+const getPlanPricing = (planId: PlanId, annual: boolean) => {
+  const pricing = BASE_PRICING[planId]
+  if (!pricing || pricing.custom) {
+    return {
+      isCustom: true,
+      label: annual ? 'Custom (annual)' : 'Custom',
+      promoEligible: false,
+      originalValue: null,
+      displayValue: null,
+      periodLabel: annual ? 'year' : 'month',
+    }
+  }
+
+  const baseValue = annual ? (pricing.annual ?? pricing.monthly ?? 0) : (pricing.monthly ?? 0)
+  const promoEligible = PROMO_ACTIVE && isParentPlan(planId) && !annual
+  const displayValue = promoEligible ? baseValue * PROMO_MULTIPLIER : baseValue
+
+  if (baseValue === 0) {
+    return {
+      isCustom: false,
+      label: annual ? 'R0 / year' : 'R0 / month',
+      promoEligible: false,
+      originalValue: null,
+      displayValue: 0,
+      periodLabel: annual ? 'year' : 'month',
+    }
+  }
+
+  return {
+    isCustom: false,
+    label: `R${displayValue.toFixed(2)} / ${annual ? 'year' : 'month'}`,
+    promoEligible,
+    originalValue: promoEligible ? baseValue : null,
+    displayValue,
+    periodLabel: annual ? 'year' : 'month',
+  }
+}
 
 export type PlanId =
   | 'free'
@@ -40,30 +94,7 @@ export function ComparisonTable({
 }) {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['ai', 'core'])
   const [viewMode, setViewMode] = useState<'cards' | 'table'>(isTablet ? 'table' : 'cards')
-  const priceStr = (plan: PlanId): string => {
-    switch (plan) {
-      case 'free':
-        return annual ? 'R0 / year' : 'R0 / month'
-      case 'parent-starter':
-        // Monthly: R49.50 (promo), Annual: R475 (promo) - matching pricing.tsx
-        return annual ? 'R475 / year' : 'R49.50 / month'
-      case 'parent-plus':
-        // Monthly: R99.50 (promo), Annual: R955 (promo) - matching pricing.tsx
-        return annual ? 'R955 / year' : 'R99.50 / month'
-      case 'private-teacher':
-        // School Starter: Monthly R299, Annual: R2,990 (matching pricing.tsx)
-        return annual ? 'R2,990 / year' : 'R299 / month'
-      case 'pro':
-        // School Premium: Monthly R599, Annual: R5,990 (matching pricing.tsx)
-        return annual ? 'R5,990 / year' : 'R599 / month'
-      case 'preschool-pro':
-        return annual ? 'Custom (annual)' : 'Custom'
-      case 'enterprise':
-        return 'Custom pricing'
-      default:
-        return ''
-    }
-  }
+  const priceStr = (plan: PlanId): string => getPlanPricing(plan, annual).label
 
   // Group plans: Parents, then Schools/Organizations
   const parentPlans: PlanId[] = ['free', 'parent-starter', 'parent-plus'];
@@ -226,11 +257,21 @@ export function ComparisonTable({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.cardsContainer}
       >
-        {plans.map((planId) => (
+        {plans.map((planId) => {
+          const priceInfo = getPlanPricing(planId, annual)
+          return (
           <View key={planId} style={styles.planCard}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardPlanName}>{planName[planId]}</Text>
-              <Text style={styles.cardPrice}>{priceStr(planId)}</Text>
+              {priceInfo.promoEligible && priceInfo.originalValue !== null && (
+                <Text style={styles.originalPriceText}>R{priceInfo.originalValue.toFixed(2)}</Text>
+              )}
+              <Text style={styles.cardPrice}>{priceInfo.label}</Text>
+              {priceInfo.promoEligible && (
+                <View style={styles.promoPill}>
+                  <Text style={styles.promoPillText}>50% OFF</Text>
+                </View>
+              )}
               {onSelectPlan && (
                 <TouchableOpacity
                   style={styles.cardCTA}
@@ -293,7 +334,8 @@ export function ComparisonTable({
               ))}
             </ScrollView>
           </View>
-        ))}
+        )
+        })}
       </ScrollView>
     </View>
   )
@@ -327,7 +369,9 @@ export function ComparisonTable({
             <View style={[styles.cell, styles.featureCol]}>
               <Text style={[styles.headerText, styles.featureText]}>Feature</Text>
             </View>
-              {plans.map((p) => (
+              {plans.map((p) => {
+                const priceInfo = getPlanPricing(p, annual)
+                return (
               <View key={p} style={[styles.cell, styles.planCol]}>
                 <Text style={styles.headerText}>{planName[p]}</Text>
                 {p === 'parent-starter' && (
@@ -336,9 +380,15 @@ export function ComparisonTable({
                 {p === 'pro' && (
                   <View style={styles.badge}><Text style={styles.badgeText}>BEST FOR SCHOOLS</Text></View>
                 )}
-                <Text style={styles.priceText}>{priceStr(p)}</Text>
+                {priceInfo.promoEligible && (
+                  <View style={styles.promoBadge}><Text style={styles.promoBadgeText}>50% OFF</Text></View>
+                )}
+                {priceInfo.promoEligible && priceInfo.originalValue !== null && (
+                  <Text style={styles.originalPriceText}>R{priceInfo.originalValue.toFixed(2)}</Text>
+                )}
+                <Text style={styles.priceText}>{priceInfo.label}</Text>
               </View>
-            ))}
+            )})}
           </View>
 
           {/* Category sections */}
@@ -596,6 +646,11 @@ const styles = StyleSheet.create({
   featureText: { color: '#9CA3AF', fontWeight: '700' },
   badge: { backgroundColor: '#00f5ff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, alignSelf: 'flex-start', marginTop: 6 },
   badgeText: { color: '#000', fontWeight: '800', fontSize: 10 },
+  promoBadge: { backgroundColor: '#22c55e', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, alignSelf: 'flex-start', marginTop: 6 },
+  promoBadgeText: { color: '#fff', fontWeight: '800', fontSize: 10 },
+  promoPill: { backgroundColor: '#22c55e', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, alignSelf: 'center', marginTop: 6 },
+  promoPillText: { color: '#fff', fontWeight: '800', fontSize: 10 },
+  originalPriceText: { color: '#9CA3AF', fontSize: 12, textDecorationLine: 'line-through', marginTop: 4 },
   categoryText: {
     color: '#00f5ff',
     fontWeight: '800',
@@ -642,4 +697,3 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 })
-

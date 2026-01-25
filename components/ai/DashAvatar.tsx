@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle } from 'react-native-svg';
 import { BrandGradients, BrandColors } from '@/components/branding';
 
 export type DashAvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -44,6 +45,26 @@ interface DashAvatarProps {
    * Custom style for container
    */
   style?: any;
+
+  /**
+   * Optional progress ring (0-1). Use for AI quota/usage.
+   */
+  progress?: number;
+
+  /**
+   * Progress ring color
+   */
+  progressColor?: string;
+
+  /**
+   * Progress track color
+   */
+  progressTrackColor?: string;
+
+  /**
+   * Progress ring width
+   */
+  progressWidth?: number;
 }
 
 const SIZE_MAP = {
@@ -78,11 +99,19 @@ export const DashAvatar: React.FC<DashAvatarProps> = ({
   animated = false,
   showGlow = false,
   style,
+  progress,
+  progressColor = BrandColors.turquoise,
+  progressTrackColor = 'rgba(255,255,255,0.15)',
+  progressWidth = 3,
 }) => {
   const avatarSize = SIZE_MAP[size];
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const ringSize = avatarSize + 10;
+  const ringRadius = (ringSize - progressWidth) / 2;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const clampedProgress = typeof progress === 'number' ? Math.max(0, Math.min(1, progress)) : null;
   
   useEffect(() => {
     if (!animated) return;
@@ -177,6 +206,35 @@ export const DashAvatar: React.FC<DashAvatarProps> = ({
   
   return (
     <View style={[styles.container, style]}>
+      {/* Progress ring */}
+      {typeof clampedProgress === 'number' && (
+        <Svg
+          width={ringSize}
+          height={ringSize}
+          style={styles.progressRing}
+        >
+          <Circle
+            cx={ringSize / 2}
+            cy={ringSize / 2}
+            r={ringRadius}
+            stroke={progressTrackColor}
+            strokeWidth={progressWidth}
+            fill="none"
+          />
+          <Circle
+            cx={ringSize / 2}
+            cy={ringSize / 2}
+            r={ringRadius}
+            stroke={progressColor}
+            strokeWidth={progressWidth}
+            strokeDasharray={`${ringCircumference} ${ringCircumference}`}
+            strokeDashoffset={ringCircumference * (1 - clampedProgress)}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </Svg>
+      )}
+
       {/* Animated glow effect */}
       {showGlow && (
         <Animated.View

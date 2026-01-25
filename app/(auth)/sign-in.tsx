@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/lib/storage';
 import { secureStore } from '@/lib/secure-store';
 import { signInWithSession } from '@/lib/sessionManager';
+import { resetSignOutState } from '@/lib/authActions';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { LinearGradient } from 'expo-linear-gradient';
 import { marketingTokens } from '@/components/marketing/tokens';
@@ -252,6 +253,9 @@ console.log('[SignIn] Component rendering, theme:', theme);
       });
       return;
     }
+
+    // Clear any stale sign-out flag before attempting sign-in
+    resetSignOutState();
 
     setLoading(true);
     let signInSuccess = false;

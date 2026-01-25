@@ -11,10 +11,11 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { assertSupabase } from '@/lib/supabase';
+import { routeAfterLogin } from '@/lib/routeAfterLogin';
 
 export default function OnboardingCompleteScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { state, resetOnboarding } = useOnboarding();
   const [isUpdating, setIsUpdating] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -39,7 +40,7 @@ export default function OnboardingCompleteScreen() {
           // Note: age_group will be auto-computed by trigger
           // guardian_profile_id will be set when guardian accepts invite
         })
-        .eq('id', user.id);
+        .eq('auth_user_id', user.id);
 
       if (updateError) throw updateError;
 
@@ -54,13 +55,20 @@ export default function OnboardingCompleteScreen() {
     }
   };
 
-  const handleGetStarted = () => {
-    // Navigate based on role
-    if (state.role === 'teacher' || state.role === 'parent') {
-      router.replace('/(parent)');
-    } else {
-      router.replace('/screens/parent-hub');
+  const handleGetStarted = async () => {
+    try {
+      if (user) {
+        await routeAfterLogin(user, profile || undefined);
+        return;
+      }
+    } catch (error) {
+      console.warn('[OnboardingComplete] routeAfterLogin failed, using fallback:', error);
     }
+
+    const fallback = state.role === 'teacher'
+      ? '/screens/teacher-dashboard'
+      : '/screens/parent-dashboard';
+    router.replace(fallback as any);
   };
 
   if (isUpdating) {

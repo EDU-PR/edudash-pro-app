@@ -155,7 +155,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       const { data: profileData } = await supabase
         .from('profiles')
         .select('preschool_id')
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .maybeSingle();
 
       setHasOrganization(!!profileData?.preschool_id);

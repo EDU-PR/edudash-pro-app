@@ -24,7 +24,7 @@ export const useMobileWebGuard = () => {
  */
 export const useAuthGuard = () => {
   const pathname = usePathname();
-  const { user, loading, profile } = useAuth();
+  const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
   
   useEffect(() => {
@@ -61,6 +61,10 @@ export const useAuthGuard = () => {
     
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute && !hasNavigated.current) {
+      // If profile is still loading, let AuthContext handle routing first
+      if (profileLoading) {
+        return;
+      }
       // Don't redirect if on reset-password (user might be changing password)
       if (pathname.includes('reset-password')) {
         return;
@@ -69,23 +73,34 @@ export const useAuthGuard = () => {
       console.log('[AuthGuard] User authenticated, redirecting from auth route:', pathname);
       hasNavigated.current = true;
       
-      // Route based on role
-      const role = profile?.role;
+      // Route based on role + school type
+      const role = profile?.role || (user.user_metadata as any)?.role;
+      const schoolType =
+        profile?.organization_membership?.school_type ||
+        (user.user_metadata as any)?.school_type ||
+        (user.user_metadata as any)?.organization_type;
+      const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
+      const isK12 = schoolType ? k12Types.has(String(schoolType).toLowerCase()) : false;
+
       switch (role) {
         case 'super_admin':
         case 'superadmin':
-          router.replace('/(super-admin)/dashboard');
+          router.replace('/screens/super-admin-dashboard');
           break;
         case 'principal':
         case 'principal_admin':
-          router.replace('/(tabs)/principal-hub');
+          router.replace('/screens/principal-dashboard');
           break;
         case 'teacher':
-          router.replace('/(tabs)/teacher-hub');
+          router.replace('/screens/teacher-dashboard');
+          break;
+        case 'student':
+        case 'learner':
+          router.replace(isK12 ? '/(k12)/student/dashboard' : '/screens/learner-dashboard');
           break;
         case 'parent':
         default:
-          router.replace('/(tabs)/parent-hub');
+          router.replace(isK12 ? '/(k12)/parent/dashboard' : '/screens/parent-dashboard');
           break;
       }
     }

@@ -3,6 +3,7 @@ import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { WakeWordModelLoader } from '@/lib/services/WakeWordModelLoader';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 
 /**
  * DashWakeWordListener
@@ -50,6 +51,10 @@ export default function DashWakeWordListener() {
       }
     });
 
+    const wakeWordSub = DeviceEventEmitter.addListener('dash:wake_word_toggle', (value: boolean) => {
+      setEnabled(!!value);
+    });
+
     // Start if already active and enabled
     if (appStateRef.current === 'active' && enabled) {
       startListening().catch(() => { /* Intentional: error handled */ });
@@ -58,6 +63,7 @@ export default function DashWakeWordListener() {
     return () => {
       mounted = false;
       sub.remove();
+      wakeWordSub?.remove?.();
       stopListening().catch(() => { /* Intentional: error handled */ });
       release().catch(() => { /* Intentional: error handled */ });
     };

@@ -10,8 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -52,6 +52,10 @@ interface ChatModalProps {
   isProcessing: boolean;
   showQuickActions: boolean;
   onQuickAction: (action: QuickAction) => void;
+  quickActionAge?: string;
+  onQuickActionAgeChange?: (ageGroup: string) => void;
+  quickActionPrompt?: string;
+  onQuickActionPromptChange?: (value: string) => void;
   onBackToQuickActions?: () => void; // Navigate back to quick actions
   isSpeaking?: boolean;
   voiceEnabled?: boolean;
@@ -60,6 +64,7 @@ interface ChatModalProps {
   onMicPress?: () => void;
   wakeWordEnabled?: boolean;
   onToggleWakeWord?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({
@@ -72,6 +77,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   isProcessing,
   showQuickActions,
   onQuickAction,
+  quickActionAge,
+  onQuickActionAgeChange,
+  quickActionPrompt,
+  onQuickActionPromptChange,
   onBackToQuickActions,
   isSpeaking = false,
   voiceEnabled = true,
@@ -80,6 +89,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onMicPress,
   wakeWordEnabled = false,
   onToggleWakeWord,
+  onOpenSettings,
 }) => {
   const { theme } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -95,81 +105,89 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     <Modal
       visible={visible}
       animationType="slide"
-      transparent
+      transparent={false}
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={styles.modalContainer}
+        style={[styles.modalContainer, { backgroundColor: theme.surface }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <BlurView intensity={20} style={styles.blurOverlay}>
-          <TouchableOpacity 
-            style={styles.dismissArea} 
-            activeOpacity={1}
-            onPress={onClose}
-          />
-        </BlurView>
-        
         <View style={[styles.chatContainer, { backgroundColor: theme.surface }]}>
           {/* Header */}
-          <View style={[styles.chatHeader, { borderBottomColor: theme.border }]}>
-            <View style={styles.headerLeft}>
-              <LinearGradient
-                colors={['#8b5cf6', '#6366f1']}
-                style={styles.headerOrb}
-              >
-                <Ionicons name="sparkles" size={20} color="#fff" />
-              </LinearGradient>
-              <View style={styles.headerText}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>Dash AI</Text>
-                <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                  {isSpeaking ? '🔊 Speaking...' : isProcessing ? '💭 Thinking...' : '✨ Online'}
-                </Text>
+          <SafeAreaView edges={['top']} style={[styles.headerSafeArea, { backgroundColor: theme.surface }]}>
+            <View style={[styles.chatHeader, { borderBottomColor: theme.border }]}>
+              <View style={styles.headerLeft}>
+                <LinearGradient
+                  colors={['#8b5cf6', '#6366f1']}
+                  style={styles.headerOrb}
+                >
+                  <Ionicons name="sparkles" size={20} color="#fff" />
+                </LinearGradient>
+                <View style={styles.headerText}>
+                  <Text style={[styles.headerTitle, { color: theme.text }]}>Dash AI</Text>
+                  <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                    {isSpeaking ? '🔊 Speaking...' : isProcessing ? '💭 Thinking...' : '✨ Online'}
+                  </Text>
+                </View>
               </View>
+              {onBackToQuickActions && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onBackToQuickActions();
+                  }}
+                  style={[styles.closeButton, { marginRight: 6 }]}
+                >
+                  <Ionicons name="grid-outline" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+              {onToggleVoice && Platform.OS !== 'web' && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onToggleVoice();
+                  }}
+                  onLongPress={() => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setShowWakeWordHelp(true);
+                    setTimeout(() => setShowWakeWordHelp(false), 3000);
+                  }}
+                  style={[styles.closeButton, { marginRight: 8 }]}
+                >
+                  <Ionicons 
+                    name={voiceEnabled ? 'volume-high' : 'volume-mute'} 
+                    size={22} 
+                    color={voiceEnabled ? theme.primary : theme.textSecondary} 
+                  />
+                </TouchableOpacity>
+              )}
+              {onOpenSettings && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onOpenSettings();
+                  }}
+                  style={[styles.closeButton, { marginRight: 4 }]}
+                >
+                  <Ionicons
+                    name="settings-outline"
+                    size={22}
+                    color={theme.textSecondary}
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onClose();
+                }}
+                style={styles.closeButton}
+              >
+                <Ionicons name="chevron-down" size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
             </View>
-            {onBackToQuickActions && messages.length > 1 && (
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onBackToQuickActions();
-                }}
-                style={[styles.backButton, { backgroundColor: theme.primary + '15', marginRight: 8 }]}
-              >
-                <Ionicons name="apps" size={20} color={theme.primary} />
-                <Text style={[styles.backButtonText, { color: theme.primary }]}>Quick Actions</Text>
-              </TouchableOpacity>
-            )}
-            {onToggleVoice && Platform.OS !== 'web' && (
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onToggleVoice();
-                }}
-                onLongPress={() => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  setShowWakeWordHelp(true);
-                  setTimeout(() => setShowWakeWordHelp(false), 3000);
-                }}
-                style={[styles.closeButton, { marginRight: 8 }]}
-              >
-                <Ionicons 
-                  name={voiceEnabled ? 'volume-high' : 'volume-mute'} 
-                  size={22} 
-                  color={voiceEnabled ? theme.primary : theme.textSecondary} 
-                />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onClose();
-              }}
-              style={styles.closeButton}
-            >
-              <Ionicons name="chevron-down" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          </SafeAreaView>
           
           {/* Wake Word Help Tooltip */}
           {showWakeWordHelp && (
@@ -241,9 +259,32 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             
             {/* Quick Actions */}
             {showQuickActions && messages.length > 0 && (
-              <QuickActions onAction={onQuickAction} />
+              <QuickActions
+                onAction={onQuickAction}
+                ageGroup={quickActionAge}
+                onAgeGroupChange={onQuickActionAgeChange}
+                customPrompt={quickActionPrompt}
+                onCustomPromptChange={onQuickActionPromptChange}
+              />
             )}
           </ScrollView>
+
+          {!showQuickActions && onBackToQuickActions && (
+            <View style={styles.quickActionsReturn}>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onBackToQuickActions();
+                }}
+                style={[styles.backButton, { backgroundColor: theme.background }]}
+              >
+                <Ionicons name="grid-outline" size={16} color={theme.primary} />
+                <Text style={[styles.backButtonText, { color: theme.primary }]}>
+                  Quick Actions
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Input */}
           <View style={[styles.inputContainer, { borderTopColor: theme.border }]}>

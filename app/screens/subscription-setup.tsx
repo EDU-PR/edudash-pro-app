@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
+import { listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
 import { track } from '@/lib/analytics';
 import { createCheckout } from '@/lib/payments';
 import { navigateTo } from '@/lib/navigation/router-utils';
@@ -22,18 +23,10 @@ import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
 // RevenueCat removed - all payments now use PayFast
 
-interface SubscriptionPlan {
-  id: string;
-  name: string;
-  tier: string;
-  price_monthly: number;
-  price_annual: number;
-  max_teachers: number;
-  max_students: number;
+type NormalizedPlan = SubscriptionPlan & {
   features: string[];
-  is_active: boolean;
   school_types: string[];
-}
+};
 
 interface RouteParams {
   planId?: string;
@@ -65,8 +58,8 @@ export default function SubscriptionSetupScreen() {
   const { profile } = useAuth();
   const { refresh: refreshSubscription } = useSubscription();
   const params = useLocalSearchParams() as Partial<RouteParams>;
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [allPlans, setAllPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<NormalizedPlan[]>([]);
+  const [allPlans, setAllPlans] = useState<NormalizedPlan[]>([]);
   const [schoolInfo, setSchoolInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
@@ -74,6 +67,13 @@ export default function SubscriptionSetupScreen() {
   const [creating, setCreating] = useState(false);
   const [existingSubscription, setExistingSubscription] = useState<any>(null);
   const autoStartedRef = React.useRef(false);
+
+  const showSupportAlert = (title: string, message: string) => {
+    Alert.alert(title, message, [
+      { text: 'OK', style: 'cancel' },
+      { text: 'Contact Support', onPress: () => navigateTo.contact() },
+    ]);
+  };
 
   // Determine if this is a parent subscription
   const isParent = profile?.role === 'parent';
@@ -155,18 +155,23 @@ export default function SubscriptionSetupScreen() {
 
   async function loadPlans() {
     try {
-      const { data, error } = await assertSupabase()
-        .from('subscription_plans')
-        .select('*')
-        .eq('is_active', true)
-        .order('price_monthly', { ascending: true });
+      const data = await listActivePlans(assertSupabase());
+      const normalized = (data || []).map((plan) => ({
+        ...plan,
+        features: Array.isArray(plan.features)
+          ? plan.features.map((feature) => (typeof feature === 'string' ? feature : String((feature as any)?.name || feature)))
+          : [],
+        school_types: Array.isArray(plan.school_types) ? plan.school_types : [],
+      }));
 
-      if (error) throw error;
-      setAllPlans(data || []);
+      setAllPlans(normalized);
       // Initial filter - will be updated when school info loads
-      setPlans(data || []);
+      setPlans(normalized);
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to load subscription plans');
+      showSupportAlert(
+        'Unable to load plans',
+        'We could not load subscription plans right now. Please try again. If this keeps happening, contact support.'
+      );
       track('subscription_setup_load_failed', { error: error.message });
     } finally {
       setLoading(false);
@@ -196,7 +201,7 @@ export default function SubscriptionSetupScreen() {
   // Filter plans based on user type (parent vs school)
   useEffect(() => {
     if (allPlans.length > 0) {
-      let filteredPlans: SubscriptionPlan[];
+      let filteredPlans: NormalizedPlan[];
       
       if (isParent) {
         // For parents, only show parent plans and free plan
@@ -268,7 +273,10 @@ export default function SubscriptionSetupScreen() {
     const plan = plans.find(p => p.id === planId);
     
     if (!plan) {
-      Alert.alert('Error', 'Selected plan not found');
+      showSupportAlert(
+        'Plan unavailable',
+        'That plan is not available right now. Please refresh and try again.'
+      );
       return;
     }
     
@@ -316,7 +324,10 @@ export default function SubscriptionSetupScreen() {
         // For schools, ensure a free subscription exists
         const schoolId = await getSchoolId();
         if (!schoolId) {
-          Alert.alert('Error', 'School information not found for free plan setup');
+          showSupportAlert(
+            'School info missing',
+            'We could not find your school information. Please sign out and back in, or contact support.'
+          );
           return;
         }
 
@@ -336,19 +347,16 @@ export default function SubscriptionSetupScreen() {
           // Fallback: direct insert/upsert using the new schema
           try {
             // Resolve the free plan id
-            const { data: planRow, error: planErr } = await assertSupabase()
-              .from('subscription_plans')
-              .select('id')
-              .eq('tier', 'free')
-              .maybeSingle();
-            if (planErr || !planRow?.id) throw planErr || new Error('Free plan not found');
+            const plans = await listActivePlans(assertSupabase());
+            const freePlan = plans.find((p) => p.tier === 'free');
+            if (!freePlan?.id) throw new Error('Free plan not found');
 
             // Upsert an active subscription for this school
             const { error: upsertErr } = await assertSupabase()
               .from('subscriptions')
               .insert({
                 school_id: schoolId,
-                plan_id: planRow.id,
+                plan_id: freePlan.id,
                 status: 'active',
                 billing_frequency: 'monthly',
                 seats_total: plan.max_teachers || 1,
@@ -442,7 +450,7 @@ export default function SubscriptionSetupScreen() {
       }
       
       if (!result.redirect_url) {
-        throw new Error('No payment URL received');
+        throw new Error('We could not start checkout right now. Please try again.');
       }
       
       // Track checkout redirect
@@ -467,7 +475,10 @@ export default function SubscriptionSetupScreen() {
       }
       
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to start checkout');
+      showSupportAlert(
+        'Checkout error',
+        error.message || 'We could not start checkout right now. Please try again.'
+      );
       track('checkout_failed', {
         plan_tier: plan.tier,
         error: error.message,
@@ -605,7 +616,7 @@ export default function SubscriptionSetupScreen() {
 
           {plans.length === 0 && (
             <View style={styles.noPlansCard}>
-              <Text style={styles.noPlansText}>No subscription plans available</Text>
+                <Text style={styles.noPlansText}>No plans available right now. Please try again later.</Text>
               <Text style={styles.noPlansSubtext}>
                 Contact support to set up subscription plans for your school
               </Text>
@@ -617,7 +628,7 @@ export default function SubscriptionSetupScreen() {
 }
 
 interface PlanCardProps {
-  plan: SubscriptionPlan;
+  plan: NormalizedPlan;
   annual: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -631,28 +642,9 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
   const tierLower = (plan.tier || '').toLowerCase();
   const isParentTier = tierLower.startsWith('parent-') || tierLower === 'parent_starter' || tierLower === 'parent_plus';
   
-  // Handle prices: subscription_plans stores prices in cents
-  // If price is > 1000, it's definitely in cents (R10+ = 1000+ cents)
-  // If price is 0, it's free
-  // Otherwise, check if it looks like cents (integer >= 100) vs rands (decimal < 100)
   const rawPrice = annual ? plan.price_annual : plan.price_monthly;
-  let priceInRands: number;
-  
-  if (rawPrice === 0) {
-    priceInRands = 0;
-  } else if (rawPrice >= 1000) {
-    // Definitely in cents (R10.00+)
-    priceInRands = rawPrice / 100;
-  } else if (rawPrice >= 100 && Number.isInteger(rawPrice)) {
-    // Likely in cents (R1.00+)
-    priceInRands = rawPrice / 100;
-  } else {
-    // Likely already in rands (e.g., 99.50)
-    priceInRands = rawPrice;
-  }
-  
-  // Ensure we never show less than 0.01
-  priceInRands = Math.max(0.01, priceInRands);
+  // Subscription prices are stored in rands (decimal). Keep as-is.
+  const priceInRands = rawPrice === 0 ? 0 : Math.max(0.01, rawPrice);
   const rawYearlySavings = annual ? Math.round((plan.price_monthly * 12 - plan.price_annual) / 12) : 0;
   const savings = rawYearlySavings > 100 ? rawYearlySavings / 100 : rawYearlySavings;
   const isFree = rawPrice === 0;

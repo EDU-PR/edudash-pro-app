@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { OrganizationMember, STATUS_COLORS, MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { useYouthMembers } from '@/hooks/membership/useYouthMembers';
-import { styles } from './members-list.styles';
+import { styles } from './_members-list.styles';
 
 type FilterType = 'all' | 'active' | 'pending' | 'suspended';
 

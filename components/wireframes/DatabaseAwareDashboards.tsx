@@ -524,7 +524,7 @@ export const TeacherDashboardDatabase: React.FC = () => {
         const { data: profileData } = await assertSupabase()
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('auth_user_id', user.id)
           .single();
         
         setProfile(profileData);
@@ -707,7 +707,7 @@ export const ParentDashboardDatabase: React.FC = () => {
         const { data: profileData } = await assertSupabase()
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('auth_user_id', user.id)
           .single();
         
         setProfile(profileData);

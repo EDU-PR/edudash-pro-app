@@ -23,6 +23,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 interface AssignedLesson {
   id: string;
@@ -54,17 +55,16 @@ export default function ParentAssignedLessonsScreen() {
 
   // Fetch children
   const { data: children = [] } = useQuery({
-    queryKey: ['parent-children', user?.id],
+    queryKey: ['parent-children', profile?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await assertSupabase()
-        .from('students')
-        .select('id, first_name, last_name, class_id, preschool_id')
-        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`);
-      if (error) throw error;
-      return data || [];
+      if (!profile?.id) return [];
+      const children = await fetchParentChildren(profile.id, {
+        includeInactive: false,
+        schoolId: profile.preschool_id || profile.organization_id || undefined,
+      });
+      return children || [];
     },
-    enabled: !!user?.id,
+    enabled: !!profile?.id,
   });
 
   // Fetch assigned lessons for all children

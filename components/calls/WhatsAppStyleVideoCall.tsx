@@ -884,7 +884,7 @@ export function WhatsAppStyleVideoCall({
             const { data: callerProfile } = await getSupabase()
               .from('profiles')
               .select('first_name, last_name')
-              .eq('id', user.id)
+              .eq('auth_user_id', user.id)
               .maybeSingle();
 
             const callerName = callerProfile

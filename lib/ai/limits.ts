@@ -239,7 +239,7 @@ export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<
     const { data: profile, error: profileError } = await client
       .from('profiles')
       .select('id, preschool_id, organization_id, role')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .maybeSingle()
     
     if (profileError) {

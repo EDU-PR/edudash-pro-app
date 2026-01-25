@@ -10,17 +10,7 @@ import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { QASection } from '@/components/marketing/sections/QASection';
 import { supabase } from '@/lib/supabase';
-
-/** Database plan row from subscription_plans table */
-interface DBPlan {
-  id?: string;
-  name: string;
-  tier: string;
-  price_monthly: number | null;
-  features: unknown;
-  is_active: boolean;
-  description?: string | null;
-}
+import { listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
 
 /** Feature item in a plan */
 interface PlanFeature {
@@ -174,16 +164,11 @@ export default function PricingPage() {
       try {
         let mapped: MappedPlan[] | null = null;
 
-        // Fetch from subscription_plans table
-        const { data, error } = await supabase
-          .from('subscription_plans')
-          .select('id,name,tier,price_monthly,description,features,is_active')
-          .eq('is_active', true)
-          .order('tier', { ascending: true });
+        const data = await listActivePlans(supabase);
 
-        if (!error && Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           // Map database plans to display format
-          mapped = data.map((p: DBPlan) => {
+          mapped = data.map((p: SubscriptionPlan) => {
             const isParent = p.tier.includes('parent');
             const isEnterprise = p.tier === 'enterprise';
             const isFree = p.tier === 'free';
@@ -231,7 +216,7 @@ export default function PricingPage() {
                 ? 'BEST FOR SCHOOLS' 
                 : null,
               tier: p.tier,
-              sortOrder: tierOrder[p.tier] || 99,
+              sortOrder: (p.sort_order ?? tierOrder[p.tier]) || 99,
             };
           });
           

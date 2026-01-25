@@ -91,7 +91,7 @@ serve(async (req) => {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, organization_id, role')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .single();
 
     console.log('[create-organization-member v18] Profile lookup result:', {

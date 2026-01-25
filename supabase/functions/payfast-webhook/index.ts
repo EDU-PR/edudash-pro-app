@@ -18,6 +18,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function encodePayfastValue(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%[0-9a-f]{2}/gi, (m) => m.toUpperCase())
+    .replace(/%20/g, '+');
+}
+
 interface PayFastITNData {
   m_payment_id: string;
   pf_payment_id: string;
@@ -43,43 +50,39 @@ interface PayFastITNData {
 
 /**
  * Validate PayFast signature
- * CRITICAL: Production mode uses passphrase, sandbox does not
  */
 function validateSignature(
   data: Record<string, string>,
   signature: string,
-  passphrase: string | undefined,
-  isProduction: boolean
+  passphrase: string | undefined
 ): boolean {
-  // Build param string from received data (excluding signature)
-  const sortedKeys = Object.keys(data).filter(k => k !== 'signature').sort();
-  let paramString = '';
-  
+  const sortedKeys = Object.keys(data).filter((k) => k !== 'signature').sort();
+  const parts: string[] = [];
+
   for (const key of sortedKeys) {
     const value = data[key];
     if (value !== undefined && value !== null && value !== '') {
-      const encodedValue = encodeURIComponent(String(value).trim()).replace(/%20/g, '+');
-      paramString += `${key}=${encodedValue}&`;
+      const encodedValue = encodePayfastValue(String(value).trim());
+      parts.push(`${key}=${encodedValue}`);
     }
   }
-  
-  paramString = paramString.slice(0, -1);
-  
-  // Add passphrase for production
-  if (isProduction && passphrase && passphrase.trim() !== '') {
-    paramString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
+
+  let paramString = parts.join('&');
+
+  // Include passphrase if configured in PayFast (sandbox or production)
+  if (passphrase && passphrase.trim() !== '') {
+    paramString += `&passphrase=${encodePayfastValue(passphrase.trim())}`;
   }
-  
+
   const calculatedSig = createHash('md5').update(paramString).digest('hex');
-  
+
   console.log('[payfast-webhook] Signature validation:', {
-    isProduction,
-    hasPassphrase: isProduction && !!passphrase,
+    hasPassphrase: !!passphrase,
     receivedSig: signature,
     calculatedSig,
     match: calculatedSig === signature,
   });
-  
+
   return calculatedSig === signature;
 }
 
@@ -157,8 +160,9 @@ Deno.serve(async (req) => {
     // Get environment configuration
     const payfastMode = Deno.env.get('PAYFAST_MODE') || 'sandbox';
     const isProduction = payfastMode === 'production';
-    const passphrase = Deno.env.get('PAYFAST_PASSPHRASE');
-    const merchantId = Deno.env.get('PAYFAST_MERCHANT_ID');
+    const passphraseRaw = Deno.env.get('PAYFAST_PASSPHRASE');
+    const passphrase = passphraseRaw && passphraseRaw.trim() !== '' ? passphraseRaw.trim() : undefined;
+    const merchantId = (Deno.env.get('PAYFAST_MERCHANT_ID') || '').trim();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
@@ -169,7 +173,7 @@ Deno.serve(async (req) => {
     }
     
     // Validate signature
-    if (!validateSignature(pfData, pfData.signature, passphrase, isProduction)) {
+    if (!validateSignature(pfData, pfData.signature, passphrase)) {
       console.error('[payfast-webhook] Signature validation failed!');
       return new Response('Invalid signature', { status: 400 });
     }
@@ -235,6 +239,11 @@ Deno.serve(async (req) => {
       seats,
     });
     
+    const nowIso = new Date().toISOString();
+    const periodEnd = billing === 'annual'
+      ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    
     // Update based on scope
     if (scope === 'user' && userId) {
       // User-scoped subscription (parent plans)
@@ -243,7 +252,7 @@ Deno.serve(async (req) => {
         .from('profiles')
         .update({ 
           subscription_tier: tier,
-          updated_at: new Date().toISOString(),
+          updated_at: nowIso,
         })
         .eq('id', userId);
       
@@ -259,13 +268,76 @@ Deno.serve(async (req) => {
         .upsert({
           user_id: userId,
           tier_name: tier,
-          updated_at: new Date().toISOString(),
+          updated_at: nowIso,
         }, {
           onConflict: 'user_id'
         });
       
       if (aiTierError) {
         console.warn('[payfast-webhook] Failed to update user_ai_tiers:', aiTierError);
+      }
+      
+      // Create/Update subscription record for user (for cancellation & history)
+      const { data: plan } = await supabase
+        .from('subscription_plans')
+        .select('id')
+        .ilike('tier', tier!)
+        .maybeSingle();
+      
+      if (plan) {
+        const { data: existingUserSub } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingUserSub?.id) {
+          const { error: userSubUpdateError } = await supabase
+            .from('subscriptions')
+            .update({
+              plan_id: plan.id,
+              status: 'active',
+              billing_frequency: billing,
+              seats_total: 1,
+              seats_used: 0,
+              payfast_token: subscriptionToken,
+              payfast_payment_id: pfPaymentId,
+              start_date: nowIso,
+              end_date: periodEnd,
+              next_billing_date: periodEnd,
+              updated_at: nowIso,
+              owner_type: 'user',
+            })
+            .eq('id', existingUserSub.id);
+
+          if (userSubUpdateError) {
+            console.warn('[payfast-webhook] Failed to update user subscription:', userSubUpdateError);
+          }
+        } else {
+          const { error: userSubInsertError } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: userId,
+              plan_id: plan.id,
+              status: 'active',
+              billing_frequency: billing,
+              seats_total: 1,
+              seats_used: 0,
+              payfast_token: subscriptionToken,
+              payfast_payment_id: pfPaymentId,
+              start_date: nowIso,
+              end_date: periodEnd,
+              next_billing_date: periodEnd,
+              updated_at: nowIso,
+              owner_type: 'user',
+            });
+
+          if (userSubInsertError) {
+            console.warn('[payfast-webhook] Failed to insert user subscription:', userSubInsertError);
+          }
+        }
       }
       
     } else if (scope === 'school' && schoolId) {
@@ -288,11 +360,12 @@ Deno.serve(async (req) => {
             billing_frequency: billing,
             seats_total: seats,
             payfast_token: subscriptionToken,
-            current_period_start: new Date().toISOString(),
-            current_period_end: billing === 'annual' 
-              ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
+            payfast_payment_id: pfPaymentId,
+            start_date: nowIso,
+            end_date: periodEnd,
+            next_billing_date: periodEnd,
+            updated_at: nowIso,
+            owner_type: 'school',
           }, {
             onConflict: 'school_id'
           });
@@ -306,7 +379,11 @@ Deno.serve(async (req) => {
           .from('preschools')
           .update({ 
             subscription_tier: tier,
-            updated_at: new Date().toISOString(),
+            subscription_status: 'active',
+            subscription_start_date: nowIso,
+            subscription_end_date: periodEnd,
+            payfast_token: subscriptionToken,
+            updated_at: nowIso,
           })
           .eq('id', schoolId);
         

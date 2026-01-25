@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,8 @@ import { salesOrPricingPath } from '@/lib/sales';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
+import { createCheckout } from '@/lib/payments';
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING } from '@/lib/tiers';
 
 type UserType = 'parents' | 'schools';
 
@@ -22,10 +24,77 @@ export default function PricingScreen() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isOnTrial, setIsOnTrial] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { profile } = useAuth();
+  const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const { profile, user } = useAuth();
   const roleNorm = normalizeRole(String(profile?.role || ''));
   const canRequestEnterprise = roleNorm === 'principal_admin' || roleNorm === 'super_admin';
   const isParent = profile?.role === 'parent';
+  const promoActive = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate;
+  const promoMultiplier = (100 - EARLY_BIRD_DISCOUNT.discountPercent) / 100;
+
+  const showSupportAlert = (title: string, message: string) => {
+    Alert.alert(title, message, [
+      { text: 'OK', style: 'cancel' },
+      { text: 'Contact Support', onPress: () => navigateTo.contact() },
+    ]);
+  };
+
+  /**
+   * Handle direct subscription checkout - goes straight to PayFast
+   */
+  const handleSubscribe = async (planKey: string, billing: 'monthly' | 'annual') => {
+    if (!isLoggedIn || !user?.id) {
+      Alert.alert('Sign In Required', 'Please sign in to subscribe to a plan.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in' as any) },
+      ]);
+      return;
+    }
+
+    setProcessingPlan(planKey);
+
+    try {
+      // Map plan keys to database tier names
+      let planTier = planKey;
+      if (planKey === 'parent-starter') planTier = 'parent_starter';
+      if (planKey === 'parent-plus') planTier = 'parent_plus';
+      if (planKey === 'starter') planTier = 'school_starter';
+      if (planKey === 'premium') planTier = 'school_premium';
+
+      const result = await createCheckout({
+        scope: userType === 'parents' ? 'user' : 'school',
+        userId: user.id,
+        planTier,
+        billing,
+        email_address: user.email || undefined,
+      });
+
+      if (result.error) {
+        showSupportAlert(
+          'Checkout error',
+          result.error || 'We could not start checkout right now. Please try again.'
+        );
+        return;
+      }
+
+      if (result.redirect_url) {
+        // Open PayFast in browser
+        const canOpen = await Linking.canOpenURL(result.redirect_url);
+        if (canOpen) {
+          await Linking.openURL(result.redirect_url);
+        } else {
+          Alert.alert('Error', 'Unable to open payment page. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      showSupportAlert(
+        'Checkout error',
+        error?.message || 'We could not start checkout right now. Please try again.'
+      );
+    } finally {
+      setProcessingPlan(null);
+    }
+  };
 
   useEffect(() => {
     const checkAuthAndTrial = async () => {
@@ -75,6 +144,19 @@ export default function PricingScreen() {
     return `R${monthly.toFixed(2)} / month`;
   };
 
+  const parentStarterBase = TIER_PRICING.parent_starter;
+  const parentPlusBase = TIER_PRICING.parent_plus;
+  const schoolStarterBase = TIER_PRICING.school_starter;
+  const schoolPremiumBase = TIER_PRICING.school_premium;
+
+  const parentStarterMonthly = parentStarterBase?.monthly ?? 0;
+  const parentStarterAnnual = parentStarterBase?.annual ?? 0;
+  const parentPlusMonthly = parentPlusBase?.monthly ?? 0;
+  const parentPlusAnnual = parentPlusBase?.annual ?? 0;
+
+  const parentStarterPromoMonthly = promoActive ? parentStarterMonthly * promoMultiplier : parentStarterMonthly;
+  const parentPlusPromoMonthly = promoActive ? parentPlusMonthly * promoMultiplier : parentPlusMonthly;
+
   // Parent plans matching PWA exactly
   const parentPlans = [
     {
@@ -97,10 +179,10 @@ export default function PricingScreen() {
     {
       key: 'parent-starter',
       name: 'Parent Starter',
-      price: 49.50,
-      priceAnnual: 475.00,
-      originalPrice: 99.00,
-      originalPriceAnnual: 950.00,
+      price: parentStarterPromoMonthly,
+      priceAnnual: parentStarterAnnual,
+      originalPrice: promoActive ? parentStarterMonthly : undefined,
+      originalPriceAnnual: undefined,
       popular: true,
       features: [
         '30 Homework Helper/month',
@@ -114,10 +196,10 @@ export default function PricingScreen() {
     {
       key: 'parent-plus',
       name: 'Parent Plus',
-      price: 99.50,
-      priceAnnual: 955.00,
-      originalPrice: 199.00,
-      originalPriceAnnual: 1910.00,
+      price: parentPlusPromoMonthly,
+      priceAnnual: parentPlusAnnual,
+      originalPrice: promoActive ? parentPlusMonthly : undefined,
+      originalPriceAnnual: undefined,
       popular: false,
       features: [
         '100 Homework Helper/month',
@@ -152,8 +234,8 @@ export default function PricingScreen() {
     {
       key: 'starter',
       name: 'Starter Plan',
-      price: 299,
-      priceAnnual: 2990,
+      price: schoolStarterBase?.monthly ?? 299,
+      priceAnnual: schoolStarterBase?.annual ?? 2990,
       originalPrice: undefined,
       originalPriceAnnual: undefined,
       popular: true,
@@ -169,8 +251,8 @@ export default function PricingScreen() {
     {
       key: 'premium',
       name: 'Premium Plan',
-      price: 599,
-      priceAnnual: 5990,
+      price: schoolPremiumBase?.monthly ?? 599,
+      priceAnnual: schoolPremiumBase?.annual ?? 5990,
       originalPrice: undefined,
       originalPriceAnnual: undefined,
       popular: false,
@@ -219,7 +301,7 @@ export default function PricingScreen() {
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Promo Banner for Parents */}
-        {userType === 'parents' && (
+        {userType === 'parents' && promoActive && (
           <LinearGradient
             colors={['rgb(99, 102, 241)', 'rgb(139, 92, 246)']}
             style={styles.promoBanner}
@@ -292,6 +374,7 @@ export default function PricingScreen() {
             const originalPrice = annual ? plan.originalPriceAnnual : plan.originalPrice;
             const isEnterprise = plan.price === null;
             const hasPromo = Boolean(userType === 'parents' && originalPrice && originalPrice > (price || 0));
+            const isProcessing = processingPlan === plan.key;
             
             return (
               <View key={plan.key} style={styles.planCardWrapper}>
@@ -307,7 +390,10 @@ export default function PricingScreen() {
                   features={plan.features}
                   userType={userType}
                   isLoggedIn={isLoggedIn}
+                  isProcessing={isProcessing}
                   onPress={() => {
+                    if (isProcessing) return;
+                    
                     if (isEnterprise) {
                       if (!canRequestEnterprise) {
                         Alert.alert('Restricted', 'Only principals or school admins can request Enterprise plans.');
@@ -324,15 +410,8 @@ export default function PricingScreen() {
                       }
                       return;
                     }
-                    // Map plan keys to subscription plan tier names (database uses underscores)
-                    let planId = plan.key;
-                    // Map parent plan keys (with hyphens) to tier names (with underscores)
-                    if (plan.key === 'parent-starter') planId = 'parent_starter';
-                    if (plan.key === 'parent-plus') planId = 'parent_plus';
-                    // Map school plan keys
-                    if (plan.key === 'starter') planId = 'school_starter';
-                    if (plan.key === 'premium') planId = 'school_premium';
-                    navigateTo.subscriptionSetup({ planId, billing: annual ? 'annual' : 'monthly', auto: true });
+                    // Go directly to PayFast checkout - no redundant subscription setup screen
+                    handleSubscribe(plan.key, annual ? 'annual' : 'monthly');
                   }}
                 />
               </View>
@@ -366,7 +445,16 @@ export default function PricingScreen() {
                 router.push(`/sales/contact?plan=${planId}` as `/${string}`);
                 return;
               }
-              navigateTo.subscriptionSetup({ planId: planId, billing: annual ? 'annual' : 'monthly' });
+              if (planId === 'free') {
+                if (isLoggedIn) {
+                  router.push('/screens/parent-dashboard' as `/${string}`);
+                } else {
+                  router.push('/(auth)/sign-in' as `/${string}`);
+                }
+                return;
+              }
+              // Go directly to PayFast checkout
+              handleSubscribe(planId, annual ? 'annual' : 'monthly');
             }}
           />
         </View>
@@ -387,6 +475,7 @@ function PlanCard({
   features,
   userType,
   isLoggedIn,
+  isProcessing,
   onPress,
 }: {
   name: string;
@@ -400,10 +489,11 @@ function PlanCard({
   features: string[];
   userType: UserType;
   isLoggedIn: boolean;
+  isProcessing?: boolean;
   onPress: () => void;
 }) {
-  const displayPrice = price === null ? null : (annual ? price : price);
-  const displayOriginalPrice = originalPrice ? (annual ? originalPrice * 12 * 0.8 : originalPrice) : null;
+  const displayPrice = price === null ? null : price;
+  const displayOriginalPrice = originalPrice ?? null;
 
   return (
     <View style={[styles.card, popular && styles.cardPopular]}>
@@ -470,12 +560,22 @@ function PlanCard({
       </View>
 
       <TouchableOpacity
-        style={[styles.cta, popular && styles.ctaPopular]}
+        style={[styles.cta, popular && styles.ctaPopular, isProcessing && styles.ctaDisabled]}
         onPress={onPress}
+        disabled={isProcessing}
       >
-        <Text style={[styles.ctaText, popular && styles.ctaTextPopular]}>
-          {isEnterprise ? 'Contact Sales' : displayPrice === 0 ? (isLoggedIn ? 'Get Started Free' : 'Sign In to Subscribe') : 'Subscribe Now'}
-        </Text>
+        {isProcessing ? (
+          <View style={styles.ctaLoadingContainer}>
+            <ActivityIndicator size="small" color={popular ? '#000' : '#fff'} />
+            <Text style={[styles.ctaText, popular && styles.ctaTextPopular, { marginLeft: 8 }]}>
+              Processing...
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.ctaText, popular && styles.ctaTextPopular]}>
+            {isEnterprise ? 'Contact Sales' : displayPrice === 0 ? (isLoggedIn ? 'Get Started Free' : 'Sign In to Subscribe') : 'Subscribe Now'}
+          </Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -790,6 +890,14 @@ const styles = StyleSheet.create({
   },
   ctaTextPopular: {
     color: '#fff',
+  },
+  ctaDisabled: {
+    opacity: 0.7,
+  },
+  ctaLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   
   // Trust Badges

@@ -37,7 +37,7 @@ export async function getTenantContext(): Promise<ServerTenantContext | null> {
         capabilities,
         preschools!inner(id, name)
       `)
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .single();
 
     if (profileError || !profile) {

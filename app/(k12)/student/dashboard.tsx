@@ -29,6 +29,7 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
 const { width } = Dimensions.get('window');
 
@@ -96,6 +97,7 @@ export default function K12StudentDashboardScreen() {
   const [todaysClasses, setTodaysClasses] = useState(mockTodaysClasses);
   const [upcomingAssignments, setUpcomingAssignments] = useState(mockUpcomingAssignments);
   const [metrics, setMetrics] = useState(mockMetrics);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile
   const schoolName = (profile as any)?.organization_membership?.organization_name || 'Your School';
@@ -190,14 +192,23 @@ export default function K12StudentDashboardScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={[styles.greeting, { color: theme.colors.textSecondary }]}>
-              {getGreeting()},
-            </Text>
-            <Text style={[styles.userName, { color: theme.colors.text }]}>{userName}</Text>
-            <Text style={[styles.schoolName, { color: theme.colors.textSecondary }]}>
-              {grade} • {schoolName}
-            </Text>
+          <View style={styles.headerLeftSection}>
+            <TouchableOpacity
+              style={styles.hamburgerButton}
+              onPress={() => setIsDrawerOpen(true)}
+              accessibilityLabel="Open navigation menu"
+            >
+              <Ionicons name="menu" size={28} color={theme.colors.text} />
+            </TouchableOpacity>
+            <View style={styles.headerLeft}>
+              <Text style={[styles.greeting, { color: theme.colors.textSecondary }]}>
+                {getGreeting()},
+              </Text>
+              <Text style={[styles.userName, { color: theme.colors.text }]}>{userName}</Text>
+              <Text style={[styles.schoolName, { color: theme.colors.textSecondary }]}>
+                {grade} • {schoolName}
+              </Text>
+            </View>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity 
@@ -414,6 +425,24 @@ export default function K12StudentDashboardScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Mobile Navigation Drawer */}
+      <MobileNavDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        navItems={[
+          { id: 'home', label: 'Dashboard', icon: 'home', route: '/(k12)/student/dashboard' },
+          { id: 'classes', label: 'Classes', icon: 'grid', route: '/(k12)/student/classes' },
+          { id: 'assignments', label: 'Assignments', icon: 'document-text', route: '/(k12)/student/assignments' },
+          { id: 'grades', label: 'Grades', icon: 'ribbon', route: '/(k12)/student/grades' },
+          { id: 'schedule', label: 'Schedule', icon: 'calendar', route: '/(k12)/student/schedule' },
+          { id: 'library', label: 'Library', icon: 'library', route: '/(k12)/library' },
+          { id: 'ai', label: 'AI Study Buddy', icon: 'sparkles', route: '/(k12)/ai-tutor' },
+          { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/(k12)/student/messages' },
+          { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+          { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -439,6 +468,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 20,
+  },
+  headerLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    gap: 12,
+  },
+  hamburgerButton: {
+    padding: 4,
+    marginTop: 4,
   },
   headerLeft: {
     flex: 1,

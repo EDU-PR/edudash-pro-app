@@ -18,6 +18,7 @@
 
 import { Tool, ToolCategory, RiskLevel, ToolParameter, ToolExecutionContext, ToolExecutionResult } from '../types';
 import { assertSupabase } from '@/lib/supabase';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 const UserContextTool: Tool = {
   id: 'user_context',
@@ -114,25 +115,20 @@ const UserContextTool: Tool = {
       
       // Get children for parent users
       if (params.include_children && profile.role === 'parent') {
-        const { data: children } = await supabase
-          .from('parent_child_relationships')
-          .select(`
-            child:profiles!parent_child_relationships_child_id_fkey (
-              id,
-              full_name,
-              display_name,
-              grade_level,
-              avatar_url
-            )
-          `)
-          .eq('parent_id', userId);
-        
-        userContext.children = children?.map((rel: any) => ({
-          id: rel.child?.id,
-          name: rel.child?.full_name || rel.child?.display_name,
-          gradeLevel: rel.child?.grade_level,
-          avatarUrl: rel.child?.avatar_url,
-        })).filter((c: any) => c.id) || [];
+        const schoolId = profile.organization_id || profile.preschool_id;
+        const children = await fetchParentChildren(userId, { includeInactive: false, schoolId });
+
+        userContext.children = (children || []).map((child: any) => {
+          const classData = Array.isArray(child.classes) ? child.classes[0] : child.classes;
+          const gradeLevel = child.grade_level || child.grade || classData?.grade_level || null;
+          return {
+            id: child.id,
+            name: `${child.first_name} ${child.last_name}`.trim(),
+            gradeLevel,
+            className: classData?.name || null,
+            avatarUrl: child.avatar_url || null,
+          };
+        }).filter((c: any) => c.id);
       }
       
       // Get recent activity
