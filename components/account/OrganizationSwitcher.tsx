@@ -177,7 +177,8 @@ export function OrganizationSwitcher({
           .from('profiles')
           .update({ 
             preschool_id: org.id,
-            organization_id: null, // Clear SOA org when switching to preschool
+            // Keep canonical organization_id aligned with preschool_id.
+            organization_id: org.id,
           })
           .eq('id', user!.id);
       } else {

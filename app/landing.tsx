@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
+import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 
 // Central landing handler for deep links
 // Supports flows:
@@ -68,48 +69,27 @@ export default function LandingHandler() {
       try {
         const flow = (query.flow || query.type || '').toLowerCase();
         
-        // PASSWORD RECOVERY: Redirect to web browser for password reset
-        // This avoids complex deep-linking issues - all password resets happen on web
+        // PASSWORD RECOVERY: Route to native recovery flow when inside the app.
         if (flow === 'recovery' || query.type === 'recovery') {
-          console.log('[Landing] Password recovery flow detected, redirecting to web browser');
+          console.log('[Landing] Password recovery flow detected');
           setMessage(t('landing.opening_password_reset', { defaultValue: 'Opening password reset...' }));
-          
-          // Build the web URL with all the original params (token_hash, token, etc.)
-          const webParams = new URLSearchParams();
+
+          // Build params once so we can reuse them for web and native routing.
+          const recoveryParams = new URLSearchParams();
           Object.entries(query).forEach(([k, v]) => {
-            if (v) webParams.set(k, v);
+            if (v) recoveryParams.set(k, v);
           });
-          const webUrl = `https://www.edudashpro.org.za/landing?${webParams.toString()}`;
-          
-          // Open in external browser (not in-app browser) so Supabase can set cookies properly
-          // On native, we want to completely exit to the browser
+          const recoveryQuery = recoveryParams.toString();
+
           if (!isWeb) {
-            try {
-              // Use Linking.openURL to open in external browser
-              // This ensures the web handles the recovery flow completely
-              await Linking.openURL(webUrl);
-              
-              // After opening the browser, navigate to sign-in so when user returns they're ready
-              setMessage(t('landing.password_reset_in_browser', { 
-                defaultValue: 'Password reset opened in browser. Return here after resetting your password.' 
-              }));
-              setStatus('done');
-              
-              // Navigate to sign-in after a delay (user will complete reset in browser)
-              setTimeout(() => {
-                router.replace('/(auth)/sign-in');
-              }, 2000);
-            } catch (e) {
-              console.error('[Landing] Failed to open browser for password reset:', e);
-              setStatus('error');
-              setMessage(t('landing.browser_open_failed', { 
-                defaultValue: 'Could not open browser. Please try the password reset link from your email again.' 
-              }));
-            }
+            // Ensure AuthContext does not auto-route away from recovery.
+            try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+            router.replace(`/auth-callback${recoveryQuery ? `?${recoveryQuery}` : ''}` as `/${string}`);
             return;
           }
           
-          // On web platform, redirect directly
+          // Web: redirect directly.
+          const webUrl = `https://www.edudashpro.org.za/landing?${recoveryQuery}`;
           window.location.href = webUrl;
           return;
         }
@@ -138,8 +118,75 @@ export default function LandingHandler() {
         const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
         setOpenAppPath(query.token_hash ? `(auth)/sign-in?emailVerified=true${inviteParam}` : '/');
 
-        // EMAIL CONFIRMATION: verify via token_hash if provided
+        // EMAIL FLOWS: verify via token_hash if provided
         const tokenHash = query.token_hash || query.token || '';
+
+        // EMAIL CHANGE: confirm and then force a clean sign-in.
+        if ((flow === 'email-change' || query.type === 'email_change') && tokenHash) {
+          setMessage(
+            t('landing.verifying_email_change', {
+              defaultValue: 'Confirming your new email address...',
+            })
+          );
+          try {
+            const supabase = assertSupabase();
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'email_change',
+            });
+            if (error) throw error;
+
+            if (data.user?.id && data.user.email) {
+              // Keep profiles.email aligned with auth email.
+              await supabase
+                .from('profiles')
+                .update({ email: data.user.email, updated_at: new Date().toISOString() })
+                .eq('id', data.user.id);
+            }
+
+            setMessage(
+              t('landing.email_change_success', {
+                defaultValue: 'Email updated. Please sign in again.',
+              })
+            );
+            setStatus('done');
+
+            await supabase.auth.signOut();
+
+            const nextEmail = data.user?.email || '';
+            const emailParam = nextEmail ? `&email=${encodeURIComponent(nextEmail)}` : '';
+
+            if (!isWeb) {
+              setTimeout(() => {
+                router.replace(`/(auth)/sign-in?emailChanged=true${emailParam}` as `/${string}`);
+              }, 800);
+              return;
+            }
+
+            setTimeout(() => {
+              window.location.href = `/sign-in?emailChanged=true${emailParam}`;
+            }, 600);
+            return;
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error
+                ? e.message
+                : t('landing.email_change_failed', {
+                    defaultValue: 'Email change failed. Please try again.',
+                  });
+            setStatus('error');
+            setMessage(message);
+            if (isWeb) {
+              setTimeout(() => {
+                setOpenAppPath('(auth)/sign-in?emailChangeFailed=true');
+                tryOpenApp('(auth)/sign-in?emailChangeFailed=true');
+              }, 2000);
+            }
+            return;
+          }
+        }
+
+        // EMAIL CONFIRMATION: verify via token_hash if provided
         if ((flow === 'email-confirm' || query.type === 'email' || query.type === 'signup') && tokenHash) {
           setMessage(t('landing.verifying_email', { defaultValue: 'Verifying your email...' }));
           try {

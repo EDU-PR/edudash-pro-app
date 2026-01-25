@@ -59,6 +59,9 @@ export interface DashMessage {
     confidence?: number;
     detected_language?: string;
     suggested_actions?: string[];
+    tutor_phase?: string;
+    tutor_question?: boolean;
+    tutor_question_text?: string;
     
     /** References to database entities */
     references?: Array<{

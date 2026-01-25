@@ -264,18 +264,16 @@ export async function approveTeacher(
       if (insertError) throw insertError;
     }
 
-    // 2. Update profile with teacher role and preschool
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        role: 'teacher',
-        preschool_id: preschoolId,
-        organization_id: preschoolId,
-      })
-      .eq('id', teacherId);
+    // 2. Update profile with teacher role and school via secure RPC.
+    // Principals cannot UPDATE profiles directly due to RLS.
+    const { error: profileError } = await supabase.rpc('link_profile_to_school', {
+      p_target_profile_id: teacherId,
+      p_school_id: preschoolId,
+      p_role: 'teacher',
+    });
 
     if (profileError) {
-      console.warn('[TeacherApproval] Profile update warning:', profileError);
+      console.warn('[TeacherApproval] Profile linkage RPC warning:', profileError);
     }
 
     // 3. Assign seat if requested

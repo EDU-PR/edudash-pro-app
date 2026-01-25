@@ -18,6 +18,10 @@ export const TEST_AD_UNIT_IDS = {
   NATIVE: 'ca-app-pub-3940256099942544/2247696110',
 } as const;
 
+function isValidAdUnitId(value?: string): value is string {
+  return typeof value === 'string' && value.startsWith('ca-app-pub-');
+}
+
 /**
  * Get ad unit ID for a specific placement
  * Returns test IDs in development, production IDs otherwise
@@ -48,7 +52,23 @@ export function getAdUnitId(placementKey: string): string {
   // Production: get from environment variable
   const productionAdUnitId = process.env[placement.adUnitEnvVar];
   
-  if (!productionAdUnitId) {
+  if (!isValidAdUnitId(productionAdUnitId)) {
+    // Try legacy env var fallbacks by ad type before giving up.
+    const legacyFallbacks: Record<typeof placement.type, string[]> = {
+      banner: ['EXPO_PUBLIC_ADMOB_ANDROID_BANNER_UNIT_ID'],
+      interstitial: ['EXPO_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_UNIT_ID', 'ADMOB_INTERSTITIAL_ANDROID'],
+      rewarded: ['EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_UNIT_ID', 'ADMOB_REWARDED_ANDROID'],
+      native: ['EXPO_PUBLIC_ADMOB_ADUNIT_NATIVE_PARENT_FEED'],
+    };
+
+    for (const fallbackVar of legacyFallbacks[placement.type]) {
+      const fallbackValue = process.env[fallbackVar];
+      if (isValidAdUnitId(fallbackValue)) {
+        console.log(`[AdConfig] Using legacy ad unit ID from ${fallbackVar} for ${placementKey}`);
+        return fallbackValue;
+      }
+    }
+
     console.warn(`[AdConfig] Missing production ad unit ID for ${placementKey}. Using test ID.`);
     const testIdMap = {
       banner: TEST_AD_UNIT_IDS.BANNER,

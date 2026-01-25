@@ -20,6 +20,23 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 const navigationLocks: Map<string, number> = new Map();
 const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
 
+// EduDash Pro Community School must always use K-12 dashboards.
+export const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
+
+const K12_SCHOOL_TYPES = new Set([
+  'k12',
+  'k12_school',
+  'combined',
+  'primary',
+  'secondary',
+  'community_school',
+]);
+
+function isK12SchoolType(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return K12_SCHOOL_TYPES.has(String(value).toLowerCase());
+}
+
 function isNavigationLocked(userId: string): boolean {
   const lockTime = navigationLocks.get(userId);
   // #region agent log
@@ -146,13 +163,13 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
 
   // Wrap entire function in timeout to prevent hanging
   const overallTimeout = setTimeout(() => {
-    console.error('🚦 [ROUTE] routeAfterLogin overall timeout (8s) - forcing fallback navigation');
+    console.error('🚦 [ROUTE] routeAfterLogin overall timeout (15s) - forcing fallback navigation');
     // #region agent log
     console.log('[DEBUG_AGENT] RouteAfterLogin-TIMEOUT', JSON.stringify({userId,timestamp:Date.now()}));
     // #endregion
     clearNavigationLock(userId);
     router.replace('/profiles-gate');
-  }, 8000); // 8 second overall timeout (reduced from 15s)
+  }, 15000);
 
   try {
     // CRITICAL FIX: Clear any stale locks before checking
@@ -184,7 +201,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       // Add timeout protection to prevent infinite hanging
       const fetchPromise = fetchEnhancedUserProfile(userId);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 9000)
       );
       
       try {
@@ -617,9 +634,15 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     case 'parent':
       // Check school_type to route to appropriate parent dashboard
       const parentSchoolType = (profile as any)?.organization_membership?.school_type;
+      const isCommunitySchoolParent = profile.organization_id === COMMUNITY_SCHOOL_ID;
+      const resolvedParentSchoolType = parentSchoolType || (isCommunitySchoolParent ? 'community_school' : undefined);
+      const normalizedParentSchoolType = resolvedParentSchoolType ? String(resolvedParentSchoolType).toLowerCase() : undefined;
       // #region agent log
       console.log('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
         parentSchoolType,
+        resolvedParentSchoolType,
+        normalizedParentSchoolType,
+        isCommunitySchoolParent,
         organization_membership: (profile as any)?.organization_membership,
         organization_id: profile.organization_id,
         hasOrgMembership: !!(profile as any)?.organization_membership,
@@ -627,13 +650,16 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         timestamp: Date.now()
       }));
       // #endregion
-      console.log('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType);
+      console.log('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType, 'resolved:', normalizedParentSchoolType);
       
       // K-12 related school types route to K-12 parent dashboard
-      const isK12Parent = parentSchoolType && ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'].includes(parentSchoolType);
+      const isK12Parent = isK12SchoolType(normalizedParentSchoolType);
       if (isK12Parent) {
         console.log('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
-        return { path: '/(k12)/parent/dashboard', params: { schoolType: parentSchoolType, mode: 'k12' } };
+        return {
+          path: '/(k12)/parent/dashboard',
+          params: { schoolType: normalizedParentSchoolType || 'k12', mode: 'k12' },
+        };
       }
       // Default to preschool parent dashboard
       return { path: '/screens/parent-dashboard' };
@@ -641,15 +667,21 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     case 'student':
       // Check school_type to route to appropriate student dashboard
       const studentSchoolType = (profile as any)?.organization_membership?.school_type;
-      console.log('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType);
+      const isCommunitySchoolStudent = profile.organization_id === COMMUNITY_SCHOOL_ID;
+      const resolvedStudentSchoolType = studentSchoolType || (isCommunitySchoolStudent ? 'community_school' : undefined);
+      const normalizedStudentSchoolType = resolvedStudentSchoolType ? String(resolvedStudentSchoolType).toLowerCase() : undefined;
+      console.log('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType, 'resolved:', normalizedStudentSchoolType);
       
       // Students with organization_id go to appropriate dashboard
       if (hasOrganization) {
         // K-12 related school types route to K-12 student dashboard
-        const isK12Student = studentSchoolType && ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'].includes(studentSchoolType);
+        const isK12Student = isK12SchoolType(normalizedStudentSchoolType);
         if (isK12Student) {
           console.log('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
-          return { path: '/(k12)/student/dashboard', params: { schoolType: studentSchoolType, mode: 'k12' } };
+          return {
+            path: '/(k12)/student/dashboard',
+            params: { schoolType: normalizedStudentSchoolType || 'k12', mode: 'k12' },
+          };
         }
         // Default to learner dashboard for preschool/other types
         console.log('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
@@ -722,4 +754,3 @@ export function getRouteForRole(role: Role | string | null): string {
       return '/landing';
   }
 }
-

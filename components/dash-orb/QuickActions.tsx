@@ -1,11 +1,14 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { isSuperAdmin } from '@/lib/roleUtils';
+import { TIER_HIERARCHY, type SubscriptionTier } from '@/lib/ai/models';
 import { styles } from './DashOrb.styles';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export interface QuickAction {
   id: string;
@@ -17,6 +20,8 @@ export interface QuickAction {
   category: 'devops' | 'platform' | 'users' | 'analytics' | 'ai' | 'education';
   /** If true, only super_admin can see this action */
   superAdminOnly?: boolean;
+  /** Minimum subscription tier required for this action */
+  minTier?: SubscriptionTier;
 }
 
 // Comprehensive quick actions for all platform features
@@ -44,11 +49,11 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'health-check', label: 'System Health', icon: 'pulse', color: '#22c55e', command: 'Run a system health check on all services', category: 'platform', superAdminOnly: true },
   
   // Education Content Generation - AVAILABLE TO ALL (with quota gating at API level)
-  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false },
-  { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false },
-  { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false },
-  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false },
-  { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false },
+  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'starter' },
+  { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter' },
+  { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium' },
+  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'starter' },
+  { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false, minTier: 'premium' },
 ];
 
 interface QuickActionsProps {
@@ -80,6 +85,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 }) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
+  const { tierStatus } = useRealtimeTier();
   
   // Check if user is super admin - use useMemo to ensure recalculation when profile changes
   const userRole = profile?.role || '';
@@ -105,6 +111,20 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       educationActions: visibleActions.filter(a => a.category === 'education'),
     };
   }, [isUserSuperAdmin]);
+
+  const normalizedTier = React.useMemo(
+    () => normalizeTier(tierStatus?.isActive ? tierStatus?.tier : 'free'),
+    [tierStatus?.tier, tierStatus?.isActive]
+  );
+  const tierRank = TIER_HIERARCHY[normalizedTier];
+
+  const handleActionPress = (action: QuickAction) => {
+    if (isActionLocked(action, tierRank, isUserSuperAdmin)) {
+      router.push('/screens/plan-management');
+      return;
+    }
+    onAction(action);
+  };
 
   return (
     <View style={styles.quickActionsContainer}>
@@ -187,16 +207,32 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <>
           <Text style={[styles.categoryLabel, { color: theme.primary }]}>📊 Analytics</Text>
           <View style={styles.quickActionsGrid}>
-            {analyticsActions.map((action) => (
+            {analyticsActions.map((action) => {
+              const locked = isActionLocked(action, tierRank, isUserSuperAdmin);
+              const lockLabel = locked ? formatTierLabel(action.minTier) : null;
+              return (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickAction, { backgroundColor: theme.background }]}
-                onPress={() => onAction(action)}
+                style={[
+                  styles.quickAction,
+                  { backgroundColor: theme.background },
+                  locked && styles.quickActionLocked,
+                ]}
+                onPress={() => handleActionPress(action)}
               >
-                <Ionicons name={action.icon as any} size={18} color={action.color} />
-                <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                <View style={styles.quickActionContent}>
+                  <Ionicons name={action.icon as any} size={18} color={action.color} />
+                  <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                </View>
+                {locked && (
+                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                    <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
+                    <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </>
       )}
@@ -206,16 +242,32 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <>
           <Text style={[styles.categoryLabel, { color: theme.primary }]}>🏫 Platform</Text>
           <View style={styles.quickActionsGrid}>
-            {platformActions.slice(0, 4).map((action) => (
+            {platformActions.slice(0, 4).map((action) => {
+              const locked = isActionLocked(action, tierRank, isUserSuperAdmin);
+              const lockLabel = locked ? formatTierLabel(action.minTier) : null;
+              return (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickAction, { backgroundColor: theme.background }]}
-                onPress={() => onAction(action)}
+                style={[
+                  styles.quickAction,
+                  { backgroundColor: theme.background },
+                  locked && styles.quickActionLocked,
+                ]}
+                onPress={() => handleActionPress(action)}
               >
-                <Ionicons name={action.icon as any} size={18} color={action.color} />
-                <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                <View style={styles.quickActionContent}>
+                  <Ionicons name={action.icon as any} size={18} color={action.color} />
+                  <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                </View>
+                {locked && (
+                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                    <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
+                    <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </>
       )}
@@ -225,16 +277,32 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <>
           <Text style={[styles.categoryLabel, { color: theme.primary }]}>🔨 DevOps</Text>
           <View style={styles.quickActionsGrid}>
-            {devopsActions.slice(0, 4).map((action) => (
+            {devopsActions.slice(0, 4).map((action) => {
+              const locked = isActionLocked(action, tierRank, isUserSuperAdmin);
+              const lockLabel = locked ? formatTierLabel(action.minTier) : null;
+              return (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickAction, { backgroundColor: theme.background }]}
-                onPress={() => onAction(action)}
+                style={[
+                  styles.quickAction,
+                  { backgroundColor: theme.background },
+                  locked && styles.quickActionLocked,
+                ]}
+                onPress={() => handleActionPress(action)}
               >
-                <Ionicons name={action.icon as any} size={18} color={action.color} />
-                <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                <View style={styles.quickActionContent}>
+                  <Ionicons name={action.icon as any} size={18} color={action.color} />
+                  <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                </View>
+                {locked && (
+                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                    <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
+                    <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </>
       )}
@@ -244,19 +312,57 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         <>
           <Text style={[styles.categoryLabel, { color: theme.primary }]}>📚 Education tools</Text>
           <View style={styles.quickActionsGrid}>
-            {educationActions.map((action) => (
+            {educationActions.map((action) => {
+              const locked = isActionLocked(action, tierRank, isUserSuperAdmin);
+              const lockLabel = locked ? formatTierLabel(action.minTier) : null;
+              return (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickAction, { backgroundColor: theme.background }]}
-                onPress={() => onAction(action)}
+                style={[
+                  styles.quickAction,
+                  { backgroundColor: theme.background },
+                  locked && styles.quickActionLocked,
+                ]}
+                onPress={() => handleActionPress(action)}
               >
-                <Ionicons name={action.icon as any} size={18} color={action.color} />
-                <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                <View style={styles.quickActionContent}>
+                  <Ionicons name={action.icon as any} size={18} color={action.color} />
+                  <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
+                </View>
+                {locked && (
+                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                    <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
+                    <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </>
       )}
     </View>
   );
+};
+
+const normalizeTier = (tier?: string | null): SubscriptionTier => {
+  const value = (tier || 'free').toLowerCase();
+  if (['enterprise', 'school_enterprise'].includes(value)) return 'enterprise';
+  if (['premium', 'parent_plus', 'teacher_pro', 'school_premium', 'school_pro', 'pro'].includes(value)) return 'premium';
+  if (['starter', 'parent_starter', 'teacher_starter', 'school_starter', 'basic', 'trial'].includes(value)) return 'starter';
+  return 'free';
+};
+
+const formatTierLabel = (tier?: SubscriptionTier) => {
+  if (!tier) return 'Upgrade';
+  if (tier === 'starter') return 'Starter+';
+  if (tier === 'premium') return 'Premium';
+  if (tier === 'enterprise') return 'Enterprise';
+  return 'Upgrade';
+};
+
+const isActionLocked = (action: QuickAction, tierRank: number, isSuperAdminUser: boolean) => {
+  if (isSuperAdminUser) return false;
+  if (!action.minTier) return false;
+  return tierRank < TIER_HIERARCHY[action.minTier];
 };

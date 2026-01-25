@@ -348,98 +348,148 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
    */
   static async getOverview(preschoolId?: string): Promise<FinanceOverviewData> {
     try {
-      // Get monthly trend data for the last 12 months
-      const trendData: MonthlyTrendData[] = [];
-      const revenueMonthly: number[] = [];
-      const expensesMonthly: number[] = [];
-      
+      const now = new Date();
+      const expenseTypes = ['expense', 'operational_expense', 'salary', 'purchase'] as const;
+      const expenseStatuses = ['approved', 'completed'] as const;
+      const revenueStatuses = ['completed', 'approved'] as const;
+
+      const formatMonthKey = (date: Date): string =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      const monthWindows: { key: string; start: Date; end: Date }[] = [];
       for (let i = 11; i >= 0; i--) {
-        const date = new Date();
-        date.setMonth(date.getMonth() - i);
-        const month = date.getMonth() + 1;
-        const year = date.getFullYear();
-        const monthStart = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const nextMonthStart = `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
-
-        // Get revenue for this month
-        let revenueQuery = assertSupabase()
-          .from('payments')
-          .select('amount')
-          .in('status', ['completed', 'approved'])
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
-          
-        if (preschoolId) {
-          revenueQuery = revenueQuery.eq('preschool_id', preschoolId);
-        }
-        
-        const { data: monthlyRevenueData } = await revenueQuery;
-
-        // Get expenses for this month  
-        let expensesQuery = assertSupabase()
-          .from('petty_cash_transactions')
-          .select('amount')
-          .eq('type', 'expense')
-          .eq('status', 'approved')
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
-          
-        if (preschoolId) {
-          expensesQuery = expensesQuery.eq('school_id', preschoolId);
-        }
-        
-        const { data: monthlyExpensesData } = await expensesQuery;
-
-        const revenue = monthlyRevenueData?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-const petty = monthlyExpensesData?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
-let otherExp = 0;
-try {
-  const { data: monthOther } = await assertSupabase()
-    .from('financial_transactions')
-    .select('amount, type, status, created_at')
-    .gte('created_at', monthStart)
-    .lt('created_at', nextMonthStart)
-    .in('type', ['expense','operational_expense','salary','purchase'])
-    .in('status', ['approved','completed'])
-    // Scope by preschool if provided
-    // Note: revenue/expense queries above also scope conditionally
-    ;
-  otherExp = (monthOther || []).reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
-} catch { /* Intentional: non-fatal */ }
-const expenses = petty + otherExp;
-        
-        revenueMonthly.push(revenue);
-        expensesMonthly.push(expenses);
+        const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        monthWindows.push({ key: formatMonthKey(start), start, end });
       }
-      
-      // Get categories breakdown
-      let categoriesQuery = assertSupabase()
-        .from('petty_cash_transactions')
-        .select('category, amount')
-        .eq('type', 'expense')
-        .eq('status', 'approved');
-        
-      if (preschoolId) {
-        categoriesQuery = categoriesQuery.eq('school_id', preschoolId);
-      }
-      
-      const { data: categoriesData } = await categoriesQuery;
-      
+
+      const monthIndexByKey = new Map<string, number>(
+        monthWindows.map((window, index) => [window.key, index])
+      );
+
+      const revenueMonthly = monthWindows.map(() => 0);
+      const expensesMonthly = monthWindows.map(() => 0);
       const categoriesMap = new Map<string, number>();
-      (categoriesData || []).forEach((item: any) => {
-        const category = item.category || 'Other';
-        const currentAmount = categoriesMap.get(category) || 0;
-        categoriesMap.set(category, currentAmount + Math.abs(item.amount || 0));
+
+      const rangeStartIso = monthWindows[0]?.start.toISOString();
+      const rangeEndIso = monthWindows[monthWindows.length - 1]?.end.toISOString();
+
+      if (!rangeStartIso || !rangeEndIso) {
+        throw new Error('Failed to compute financial overview date range');
+      }
+
+      let paymentsQuery = assertSupabase()
+        .from('payments')
+        .select('amount, created_at')
+        .in('status', revenueStatuses as unknown as string[])
+        .gte('created_at', rangeStartIso)
+        .lt('created_at', rangeEndIso);
+
+      if (preschoolId) {
+        paymentsQuery = paymentsQuery.eq('preschool_id', preschoolId);
+      }
+
+      let pettyCashQuery = assertSupabase()
+        .from('petty_cash_transactions')
+        .select('amount, created_at, category')
+        .eq('type', 'expense')
+        .in('status', expenseStatuses as unknown as string[])
+        .gte('created_at', rangeStartIso)
+        .lt('created_at', rangeEndIso);
+
+      if (preschoolId) {
+        pettyCashQuery = pettyCashQuery.eq('school_id', preschoolId);
+      }
+
+      let financialExpenseQuery = assertSupabase()
+        .from('financial_transactions')
+        .select(`
+          amount,
+          created_at,
+          type,
+          expense_categories(name)
+        `)
+        .in('type', expenseTypes as unknown as string[])
+        .in('status', expenseStatuses as unknown as string[])
+        .gte('created_at', rangeStartIso)
+        .lt('created_at', rangeEndIso);
+
+      if (preschoolId) {
+        financialExpenseQuery = financialExpenseQuery.eq('preschool_id', preschoolId);
+      }
+
+      const [paymentsResult, pettyCashResult, financialExpenseResult] = await Promise.allSettled([
+        paymentsQuery,
+        pettyCashQuery,
+        financialExpenseQuery,
+      ]);
+
+      type PaymentRow = { amount: number | null; created_at: string | null };
+      type PettyCashRow = { amount: number | null; created_at: string | null; category: string | null };
+      type ExpenseCategoryRow = { name?: string | null } | null;
+      type FinancialExpenseRow = {
+        amount: number | null;
+        created_at: string | null;
+        type: string | null;
+        expense_categories?: ExpenseCategoryRow[] | ExpenseCategoryRow;
+      };
+
+      const toMonthIndex = (createdAt: string | null): number | null => {
+        if (!createdAt) return null;
+        const date = new Date(createdAt);
+        if (Number.isNaN(date.getTime())) return null;
+        const key = formatMonthKey(date);
+        const index = monthIndexByKey.get(key);
+        return index === undefined ? null : index;
+      };
+
+      const paymentsData: PaymentRow[] = paymentsResult.status === 'fulfilled'
+        ? (paymentsResult.value.data as PaymentRow[] | null) || []
+        : [];
+      const pettyCashData: PettyCashRow[] = pettyCashResult.status === 'fulfilled'
+        ? (pettyCashResult.value.data as PettyCashRow[] | null) || []
+        : [];
+      const financialExpenseData: FinancialExpenseRow[] = financialExpenseResult.status === 'fulfilled'
+        ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || []
+        : [];
+
+      paymentsData.forEach((payment) => {
+        const monthIndex = toMonthIndex(payment.created_at);
+        if (monthIndex === null) return;
+        revenueMonthly[monthIndex] += Number(payment.amount) || 0;
       });
-      
+
+      pettyCashData.forEach((expense) => {
+        const monthIndex = toMonthIndex(expense.created_at);
+        if (monthIndex === null) return;
+        const amount = Math.abs(Number(expense.amount) || 0);
+        expensesMonthly[monthIndex] += amount;
+
+        const categoryName = expense.category || 'Other';
+        categoriesMap.set(categoryName, (categoriesMap.get(categoryName) || 0) + amount);
+      });
+
+      financialExpenseData.forEach((expense) => {
+        const monthIndex = toMonthIndex(expense.created_at);
+        if (monthIndex === null) return;
+        const amount = Math.abs(Number(expense.amount) || 0);
+        expensesMonthly[monthIndex] += amount;
+
+        const categoryData = Array.isArray(expense.expense_categories)
+          ? expense.expense_categories[0]
+          : expense.expense_categories;
+        const categoryName = categoryData?.name || expense.type || 'Expense';
+        categoriesMap.set(categoryName, (categoriesMap.get(categoryName) || 0) + amount);
+      });
+
       const categoriesBreakdown = Array.from(categoriesMap.entries())
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
-        .slice(0, 6); // Top 6 categories
+        .slice(0, 6);
 
       const currentRevenue = revenueMonthly[revenueMonthly.length - 1] || 0;
       const currentExpenses = expensesMonthly[expensesMonthly.length - 1] || 0;
-      
+
       return {
         revenueMonthly,
         expensesMonthly,

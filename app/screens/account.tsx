@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from "expo-image-picker";
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import {
   getEnabled as getBiometricsEnabled,
   setEnabled as setBiometricsEnabled,
@@ -477,6 +477,10 @@ export default function AccountScreen() {
         onToggleBiometric={toggleBiometric}
         onOpenThemeSettings={() => { setShowSettingsMenu(false); setShowThemeSettings(true); }}
         onOpenOrgSwitcher={() => { setShowSettingsMenu(false); setShowOrgSwitcher(true); }}
+        onOpenChangeEmail={() => {
+          setShowSettingsMenu(false);
+          router.push('/screens/change-email');
+        }}
         hasMultipleOrgs={hasMultipleOrgs}
         theme={theme}
         styles={styles}

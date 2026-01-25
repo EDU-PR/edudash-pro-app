@@ -508,7 +508,7 @@ export class DashAICore {
       const langDirective = this.promptBuilder.buildLanguageDirective(strictLanguageMode);
       const shouldStream = typeof onStreamChunk === 'function';
       const userProfile = this.getUserProfile();
-      const languageOverride = this.detectLanguageOverride(userInput);
+      const languageOverride = strictLanguageMode ? null : this.detectLanguageOverride(userInput);
       const languageOverrideDirective = languageOverride
         ? `LANGUAGE OVERRIDE: Respond fully in Afrikaans (af-ZA) with Afrikaans examples.`
         : null;
@@ -519,7 +519,7 @@ export class DashAICore {
       }
 
       const tutoringGuidance = (userProfile?.role === 'parent' || userProfile?.role === 'student')
-        ? `Tutoring guidance: For homework/math help, use the student_tutor tool. Ask for the exact question and confirm grade/age before proceeding. If the parent has multiple children, ask which child to focus on. Teach step-by-step, include worked examples, then give short practice and ask a follow-up question. Avoid inventing specific tests unless requested.`
+        ? `Tutoring guidance: For homework/math help, use the student_tutor tool. Ask for the exact question and confirm grade/age before proceeding. If the parent has multiple children, ask which child to focus on. Teach step-by-step, include worked examples, then give short practice and ask a follow-up question. IMPORTANT: Ask ONE question at a time and STOP. Do not continue to the next question until the learner answers. Do not include placeholders like "[Wait for the learner's response]". Avoid inventing specific tests unless requested.`
         : '';
 
       const contextParts = [

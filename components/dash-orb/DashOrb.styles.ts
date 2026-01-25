@@ -266,6 +266,31 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     gap: 8,
+    justifyContent: 'space-between',
+  },
+  quickActionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  quickActionLocked: {
+    opacity: 0.55,
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   quickActionText: {
     fontSize: 13,

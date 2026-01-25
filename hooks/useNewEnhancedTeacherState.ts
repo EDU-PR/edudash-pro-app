@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { 
   TEACHER_ROUTES, 
   TEACHER_QUICK_ACTIONS, 
@@ -121,7 +122,13 @@ export const useNewEnhancedTeacherState = () => {
    * Uses TEACHER_QUICK_ACTIONS array for ordering
    */
   const buildQuickActions = () => {
+    const flags = getFeatureFlagsSync();
+    const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
+
     return TEACHER_QUICK_ACTIONS.map(actionKey => {
+      if (actionKey === 'start_live_lesson' && !canLiveLessons) return null;
+      if (actionKey === 'call_parent' && !(flags.voice_calls_enabled || flags.video_calls_enabled)) return null;
+
       const route = TEACHER_ROUTES[actionKey];
       if (!route) return null;
       

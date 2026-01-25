@@ -11,6 +11,7 @@ import { GradientButton } from '@/components/marketing/GradientButton';
 import { QASection } from '@/components/marketing/sections/QASection';
 import { supabase } from '@/lib/supabase';
 import { listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, type TierNameAligned } from '@/lib/tiers';
 
 /** Feature item in a plan */
 interface PlanFeature {
@@ -37,7 +38,7 @@ const fallbackPlans = [
   // Parent Plans
   {
     name: 'Parent Starter',
-    price: 'R49.99',
+    price: 'R49.50',
     period: 'per month',
     description: 'Perfect for parents managing 1-2 children',
     features: [
@@ -55,7 +56,7 @@ const fallbackPlans = [
   },
   {
     name: 'Parent Plus',
-    price: 'R149.99',
+    price: 'R99.50',
     period: 'per month',
     description: 'For parents with 3+ children or extended features',
     features: [
@@ -169,9 +170,12 @@ export default function PricingPage() {
         if (Array.isArray(data) && data.length > 0) {
           // Map database plans to display format
           mapped = data.map((p: SubscriptionPlan) => {
-            const isParent = p.tier.includes('parent');
-            const isEnterprise = p.tier === 'enterprise';
-            const isFree = p.tier === 'free';
+            const normalizedTier = String(p.tier || '').toLowerCase().replace(/-/g, '_') as TierNameAligned;
+            const isEnterprise = normalizedTier === 'school_enterprise' || normalizedTier === 'enterprise';
+            const isFree = normalizedTier === 'free';
+            const promoActive = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate;
+            const basePricing = TIER_PRICING[normalizedTier];
+            const promoPricing = promoActive && normalizedTier.startsWith('parent_') ? getEarlyBirdPrice(normalizedTier) : null;
             
             // Handle pricing display
             let price = 'Custom';
@@ -180,22 +184,25 @@ export default function PricingPage() {
             if (isFree) {
               price = 'R0';
               period = 'forever';
-            } else if (isEnterprise || !p.price_monthly || p.price_monthly === 0) {
-              price = 'Custom';
-              period = 'contact us';
             } else {
-              price = `R${p.price_monthly.toLocaleString('en-ZA')}`;
-              period = 'per month';
+              const monthly = promoPricing?.monthly ?? basePricing?.monthly ?? p.price_monthly;
+              if (!monthly || monthly === 0 || isEnterprise) {
+                price = 'Custom';
+                period = 'contact us';
+              } else {
+                price = `R${monthly.toFixed(2)}`;
+                period = 'per month';
+              }
             }
             
             // Determine sort order
             const tierOrder: { [key: string]: number } = {
-              'parent-starter': 1,
-              'parent-plus': 2,
+              'parent_starter': 1,
+              'parent_plus': 2,
               'free': 3,
-              'starter': 4,
-              'premium': 5,
-              'enterprise': 6,
+              'school_starter': 4,
+              'school_premium': 5,
+              'school_enterprise': 6,
             };
             
             return {
@@ -209,14 +216,14 @@ export default function PricingPage() {
                   )
                 : [],
               cta: isEnterprise || price === 'Custom' ? 'Contact Sales' : isFree ? 'Get Started' : 'Start Free Trial',
-              featured: p.tier === 'parent-starter' || p.tier === 'premium',
-              badge: p.tier === 'parent-starter' 
+              featured: normalizedTier === 'parent_starter' || normalizedTier === 'school_premium',
+              badge: normalizedTier === 'parent_starter' 
                 ? 'MOST POPULAR' 
-                : p.tier === 'premium' 
+                : normalizedTier === 'school_premium' 
                 ? 'BEST FOR SCHOOLS' 
                 : null,
-              tier: p.tier,
-              sortOrder: (p.sort_order ?? tierOrder[p.tier]) || 99,
+              tier: normalizedTier,
+              sortOrder: (p.sort_order ?? tierOrder[normalizedTier]) || 99,
             };
           });
           

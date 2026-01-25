@@ -19,6 +19,7 @@
  */
 
 import { Tool, ToolCategory, RiskLevel, ToolParameter, ToolExecutionContext, ToolExecutionResult } from '../types';
+import { normalizeLanguageCode } from '@/lib/ai/dashSettings';
 
 // Teaching styles supported
 const TEACHING_STYLES = [
@@ -207,8 +208,14 @@ export const StudentTutorTool: Tool = {
         promptParts.push('Be encouraging and supportive. Celebrate small wins and normalize mistakes as part of learning.');
       }
       
-      if (language && language !== 'English' && language !== 'en-ZA') {
-        promptParts.push(`Respond in ${language}.`);
+      const normalizedLanguage = normalizeLanguageCode(language);
+      const languageName = normalizedLanguage === 'af'
+        ? 'Afrikaans'
+        : normalizedLanguage === 'zu'
+          ? 'isiZulu'
+          : 'English';
+      if (languageName !== 'English') {
+        promptParts.push(`Respond in ${languageName}.`);
       }
       
       // Teaching style instructions
@@ -340,7 +347,7 @@ export const StudentTutorTool: Tool = {
           question: question || null,
           teaching_style: teaching_style || 'direct',
           hint_level: hint_level || 'moderate',
-          language: language || 'English',
+          language: languageName,
           generated_prompt: generatedPrompt,
           message: `Ready to ${action} - ${topic || subject} for Grade ${grade}.`,
           encouragement: encourage_mode !== false 

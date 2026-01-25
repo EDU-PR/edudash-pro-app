@@ -61,6 +61,33 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  usageBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usageBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  usageProgress: {
+    width: 90,
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  usageProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
   iconButton: {
     width: screenWidth < 400 ? 32 : 36,
     height: screenWidth < 400 ? 32 : 36,

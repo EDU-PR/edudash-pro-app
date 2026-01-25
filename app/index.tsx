@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import MarketingLanding from '@/components/marketing/MarketingLanding';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { useTheme } from '@/contexts/ThemeContext';
+import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 
 // Default theme fallback (used before ThemeProvider mounts)
 const defaultTheme = {
@@ -78,12 +79,11 @@ export default function Index() {
               console.log('[Index] Detected initial deep link, routing to:', target);
               
               // Special handling for auth-related deep links
-              // Password reset should go to web - if we somehow got a reset-password deep link,
-              // redirect user to sign-in (they should use the web for password reset)
               if (path === '/reset-password' || path.includes('reset-password')) {
-                console.log('[Index] Password reset deep link detected - password reset should happen on web');
-                // Don't try to handle reset-password natively, go to sign-in
-                router.replace('/(auth)/sign-in');
+                console.log('[Index] Password reset deep link detected - routing to native reset flow');
+                // Set recovery flag early so AuthContext does not auto-route away.
+                try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+                router.replace(`/reset-password${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
                 return;
               }
               if (path === '/auth-callback' || path.includes('auth-callback')) {

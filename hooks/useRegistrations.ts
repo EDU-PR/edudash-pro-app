@@ -550,13 +550,18 @@ export function useRegistrations(): UseRegistrationsReturn {
                   console.warn('Failed to auto-assign fees (non-critical):', feeErr);
                 }
 
-                // Update parent's preschool_id if not set
+                // Ensure the parent is linked to this school via a secure RPC.
+                // Direct profile updates are blocked by RLS for principals.
                 if (regData.parent_id) {
-                  await supabase
-                    .from('profiles')
-                    .update({ preschool_id: regData.preschool_id })
-                    .eq('id', regData.parent_id)
-                    .is('preschool_id', null);
+                  try {
+                    await supabase.rpc('link_profile_to_school', {
+                      p_target_profile_id: regData.parent_id,
+                      p_school_id: regData.preschool_id,
+                      p_role: 'parent',
+                    });
+                  } catch (linkErr) {
+                    console.warn('[Registrations] Parent linkage RPC warning:', linkErr);
+                  }
                 }
 
                 // Update child_registration_requests table with student_id reference
@@ -621,14 +626,16 @@ export function useRegistrations(): UseRegistrationsReturn {
                     existingParent.preschool_id !== regData.organization_id;
                   
                   if (needsOrgUpdate) {
-                    console.log(`[Approve] Updating parent ${parentId} org from ${existingParent.organization_id} to ${regData.organization_id}`);
-                    await supabase
-                      .from('profiles')
-                      .update({ 
-                        organization_id: regData.organization_id,
-                        preschool_id: regData.organization_id 
-                      })
-                      .eq('id', parentId);
+                    console.log(`[Approve] Linking parent ${parentId} to school ${regData.organization_id}`);
+                    try {
+                      await supabase.rpc('link_profile_to_school', {
+                        p_target_profile_id: parentId,
+                        p_school_id: regData.organization_id,
+                        p_role: 'parent',
+                      });
+                    } catch (linkErr) {
+                      console.warn('[Approve] Parent linkage RPC warning:', linkErr);
+                    }
                   }
                 }
 

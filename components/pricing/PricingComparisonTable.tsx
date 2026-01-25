@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, type TierNameAligned } from '@/lib/tiers';
 // import { useTranslation } from 'react-i18n';
 
 // Temporary wrappers to allow className usage without type errors during migration
@@ -32,12 +33,34 @@ interface PricingPlan {
   target_audience: string;
 }
 
+const PLAN_TIER_MAP: Record<string, TierNameAligned | 'custom'> = {
+  free: 'free',
+  parent_starter: 'parent_starter',
+  parent_plus: 'parent_plus',
+  private_teacher: 'teacher_starter',
+  pro: 'school_premium',
+  preschool_pro: 'school_pro',
+  enterprise: 'school_enterprise',
+};
+
+const PROMO_ACTIVE = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate;
+
+const formatPrice = (tierKey: TierNameAligned | 'custom', annual: boolean): string => {
+  if (tierKey === 'custom') return 'Custom';
+  if (tierKey === 'free') return 'R0';
+  const base = TIER_PRICING[tierKey];
+  if (!base) return 'Custom';
+  const promo = PROMO_ACTIVE && tierKey.startsWith('parent_') ? getEarlyBirdPrice(tierKey) : null;
+  const value = annual ? (promo?.annual ?? base.annual) : (promo?.monthly ?? base.monthly);
+  return value ? `R${value.toFixed(2)}` : 'Custom';
+};
+
 const plans: PricingPlan[] = [
   {
     id: 'free',
     name: 'Free',
-    price_monthly: 'R0',
-    price_annual: 'R0',
+    price_monthly: formatPrice(PLAN_TIER_MAP.free, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.free, true),
     description: 'Basic tools for individual parents',
     cta_text: 'Get Started',
     target_audience: 'Individual Parents'
@@ -45,8 +68,8 @@ const plans: PricingPlan[] = [
   {
     id: 'parent_starter',
     name: 'Parent Starter',
-    price_monthly: 'R49',
-    price_annual: 'R490',
+    price_monthly: formatPrice(PLAN_TIER_MAP.parent_starter, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.parent_starter, true),
     description: 'Enhanced features for active parents',
     cta_text: 'Choose Starter',
     target_audience: 'Active Parents'
@@ -54,8 +77,8 @@ const plans: PricingPlan[] = [
   {
     id: 'parent_plus',
     name: 'Parent Plus',
-    price_monthly: 'R149',
-    price_annual: 'R1,490',
+    price_monthly: formatPrice(PLAN_TIER_MAP.parent_plus, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.parent_plus, true),
     description: 'Complete solution for engaged families',
     popular: true,
     cta_text: 'Choose Plus',
@@ -64,8 +87,8 @@ const plans: PricingPlan[] = [
   {
     id: 'private_teacher',
     name: 'Private Teacher',
-    price_monthly: 'R299',
-    price_annual: 'R2,990',
+    price_monthly: formatPrice(PLAN_TIER_MAP.private_teacher, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.private_teacher, true),
     description: 'Professional tools for individual educators',
     cta_text: 'For Teachers',
     target_audience: 'Private Educators'
@@ -73,8 +96,8 @@ const plans: PricingPlan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price_monthly: 'R599',
-    price_annual: 'R5,990',
+    price_monthly: formatPrice(PLAN_TIER_MAP.pro, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.pro, true),
     description: 'Advanced features for professional teachers',
     cta_text: 'Go Pro',
     target_audience: 'Professional Teachers'
@@ -82,8 +105,8 @@ const plans: PricingPlan[] = [
   {
     id: 'preschool_pro',
     name: 'Preschool Pro',
-    price_monthly: 'Custom',
-    price_annual: 'Custom',
+    price_monthly: formatPrice(PLAN_TIER_MAP.preschool_pro, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.preschool_pro, true),
     description: 'Complete solution for preschool management',
     cta_text: 'Contact Sales',
     target_audience: 'Preschools'
@@ -91,8 +114,8 @@ const plans: PricingPlan[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price_monthly: 'Custom',
-    price_annual: 'Custom',
+    price_monthly: formatPrice(PLAN_TIER_MAP.enterprise, false),
+    price_annual: formatPrice(PLAN_TIER_MAP.enterprise, true),
     description: 'Scalable solution for large organizations',
     cta_text: 'Contact Sales',
     target_audience: 'Large Organizations'

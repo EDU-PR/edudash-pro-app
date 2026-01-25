@@ -253,7 +253,7 @@ export const DashFloatingButtonEnhanced: React.FC<DashFloatingButtonEnhancedProp
             id: 'homework_help',
             title: 'Homework Help',
             subtitle: 'Get AI assistance',
-            icon: 'help-circle-outline',
+            icon: 'sparkles-outline',
             color: '#10B981',
             action: () => {
               setShowQuickActionsModal(false);

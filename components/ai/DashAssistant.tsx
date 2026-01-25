@@ -42,6 +42,7 @@ import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
+import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -58,10 +59,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   initialMessage
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
+  const { tierStatus } = useRealtimeTier();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
+  const remaining = tierStatus && tierStatus.quotaLimit > 0
+    ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
+    : null;
   
   // Keyboard listeners for reliable show/hide detection
   useEffect(() => {
@@ -388,6 +393,25 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             )}
           </View>
         </View>
+
+        {tierStatus && (
+          <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+            <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+            <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
+              {tierStatus.tierDisplayName} • {remaining === null ? 'Unlimited' : `${remaining} left today`}
+            </Text>
+            {tierStatus.quotaLimit > 0 && (
+              <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
+                <View
+                  style={[
+                    styles.usageProgressFill,
+                    { backgroundColor: theme.primary, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
+                  ]}
+                />
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Messages */}
         <DashAssistantMessages

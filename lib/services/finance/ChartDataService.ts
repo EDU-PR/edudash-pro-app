@@ -87,13 +87,12 @@ class ChartDataServiceImpl {
 
   // Format monthly comparison for bar chart
   formatMonthlyComparison(overview: FinanceOverviewData): BarChartData {
-    const currentMonth = new Date().getMonth();
-    const lastMonth = (currentMonth - 1 + 12) % 12;
-    
-    const currentRevenue = overview.revenueMonthly[currentMonth] || 0;
-    const lastRevenue = overview.revenueMonthly[lastMonth] || 0;
-    const currentExpenses = overview.expensesMonthly[currentMonth] || 0;
-    const lastExpenses = overview.expensesMonthly[lastMonth] || 0;
+    const revenue = overview.revenueMonthly;
+    const expenses = overview.expensesMonthly;
+    const currentRevenue = revenue[revenue.length - 1] || 0;
+    const lastRevenue = revenue[revenue.length - 2] || 0;
+    const currentExpenses = expenses[expenses.length - 1] || 0;
+    const lastExpenses = expenses[expenses.length - 2] || 0;
     
     return {
       labels: ['Last Month', 'This Month'],

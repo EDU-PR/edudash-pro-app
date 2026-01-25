@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
 
 // Auto-redirect delay (in ms) - reduced for better UX
 const AUTO_REDIRECT_DELAY = 300;
@@ -42,7 +43,9 @@ export default function NotFound() {
 
     const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
     const schoolType = profile?.organization_membership?.school_type;
-    const isK12 = schoolType ? k12Types.has(String(schoolType).toLowerCase()) : false;
+    const isCommunitySchool = profile?.organization_id === COMMUNITY_SCHOOL_ID;
+    const normalizedSchoolType = schoolType ? String(schoolType).toLowerCase() : undefined;
+    const isK12 = normalizedSchoolType ? k12Types.has(normalizedSchoolType) : isCommunitySchool;
     
     // Route based on user role
     switch (profile?.role) {

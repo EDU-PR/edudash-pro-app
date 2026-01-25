@@ -135,15 +135,11 @@ export class ParentJoinService {
           
           // ✅ Sync parent's preschool_id from student
           if (student.preschool_id) {
-            await assertSupabase()
-              .from('profiles')
-              .update({ 
-                preschool_id: student.preschool_id,
-                organization_id: student.preschool_id,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', parentProfileId)
-              .eq('role', 'parent');
+            await assertSupabase().rpc('link_profile_to_school', {
+              p_target_profile_id: parentProfileId,
+              p_school_id: student.preschool_id,
+              p_role: 'parent',
+            });
           }
         } else if (!student.guardian_id && parentProfileId !== student.parent_id) {
           // Use profile.id (NOT auth.users UUID) for guardian_id
@@ -151,15 +147,11 @@ export class ParentJoinService {
           
           // ✅ Sync guardian's preschool_id from student
           if (student.preschool_id) {
-            await assertSupabase()
-              .from('profiles')
-              .update({ 
-                preschool_id: student.preschool_id,
-                organization_id: student.preschool_id,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', parentProfileId)
-              .eq('role', 'parent');
+            await assertSupabase().rpc('link_profile_to_school', {
+              p_target_profile_id: parentProfileId,
+              p_school_id: student.preschool_id,
+              p_role: 'parent',
+            });
           }
         }
       }
