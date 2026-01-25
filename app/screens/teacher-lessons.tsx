@@ -196,7 +196,7 @@ export default function TeacherLessonsScreen() {
   }, []);
 
   const handleCreateLesson = useCallback(() => {
-    router.push('/screens/lesson-generator');
+    router.push('/screens/ai-lesson-generator');
   }, []);
 
   const renderFilterTabs = () => (

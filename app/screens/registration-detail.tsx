@@ -464,13 +464,17 @@ export default function RegistrationDetailScreen() {
         console.warn('Failed to auto-assign fees (non-critical):', feeErr);
       }
 
-      // Update parent preschool_id if needed
+      // Ensure the parent is linked to this school via secure RPC.
       if (regData.parent_id) {
-        await supabase
-          .from('profiles')
-          .update({ preschool_id: regData.preschool_id })
-          .eq('id', regData.parent_id)
-          .is('preschool_id', null);
+        try {
+          await supabase.rpc('link_profile_to_school', {
+            p_target_profile_id: regData.parent_id,
+            p_school_id: regData.preschool_id,
+            p_role: 'parent',
+          });
+        } catch (linkErr) {
+          console.warn('[RegistrationDetail] Parent linkage RPC warning:', linkErr);
+        }
       }
 
       // Update registration status
@@ -536,13 +540,15 @@ export default function RegistrationDetailScreen() {
         existingParent.preschool_id !== regData.organization_id;
 
       if (needsOrgUpdate) {
-        await supabase
-          .from('profiles')
-          .update({
-            organization_id: regData.organization_id,
-            preschool_id: regData.organization_id,
-          })
-          .eq('id', parentId);
+        try {
+          await supabase.rpc('link_profile_to_school', {
+            p_target_profile_id: parentId,
+            p_school_id: regData.organization_id,
+            p_role: 'parent',
+          });
+        } catch (linkErr) {
+          console.warn('[RegistrationDetail] Parent linkage RPC warning:', linkErr);
+        }
       }
     }
 

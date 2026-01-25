@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View, StyleSheet, Platform } from 'react-nativ
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
+import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 
 export default function AuthCallback() {
   const handled = useRef(false);
@@ -27,6 +28,40 @@ export default function AuthCallback() {
       console.log('[AuthCallback] Processing URL:', urlStr);
 
       const supabase = await assertSupabase();
+      const recoveryHint = urlStr.includes('type=recovery') || urlStr.includes('flow=recovery');
+      if (recoveryHint) {
+        // Set recovery flag early so AuthContext does not auto-route away.
+        try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+      }
+
+      const routeToResetPassword = (session: { access_token: string; refresh_token: string }) => {
+        const params = new URLSearchParams();
+        params.set('access_token', session.access_token);
+        params.set('refresh_token', session.refresh_token);
+        params.set('type', 'recovery');
+        router.replace(`/reset-password?${params.toString()}` as `/${string}`);
+      };
+
+      const handleEmailChange = async (session: {
+        access_token: string;
+        refresh_token: string;
+        user?: { id: string; email?: string | null };
+      }) => {
+        try {
+          const nextEmail = session.user?.email || '';
+          if (session.user?.id && nextEmail) {
+            await supabase
+              .from('profiles')
+              .update({ email: nextEmail, updated_at: new Date().toISOString() })
+              .eq('id', session.user.id);
+          }
+          await supabase.auth.signOut();
+          const emailParam = nextEmail ? `&email=${encodeURIComponent(nextEmail)}` : '';
+          router.replace(`/(auth)/sign-in?emailChanged=true${emailParam}` as `/${string}`);
+        } catch {
+          router.replace('/(auth)/sign-in?emailChanged=true' as `/${string}`);
+        }
+      };
 
       // Case 1: OAuth callback (hash fragment with tokens)
       if (urlStr.includes('#access_token') || urlStr.includes('access_token=')) {
@@ -142,19 +177,16 @@ export default function AuthCallback() {
           
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
-            if (type === 'recovery') {
-              // Password reset should happen on web, not in native app
-              // Sign out and redirect to sign-in - user should use web for password reset
-              console.log('[AuthCallback] Recovery type detected - password reset should happen on web');
-              supabase.auth.signOut().then(() => {
-                router.replace('/(auth)/sign-in');
-              }).catch(() => {
-                router.replace('/(auth)/sign-in');
-              });
+            if (type === 'recovery' && data.session) {
+              console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
+              routeToResetPassword(data.session);
+            } else if (type === 'email_change' && data.session) {
+              console.log('[AuthCallback] Email change detected - finalizing and signing out');
+              void handleEmailChange(data.session);
             } else {
               router.replace('/profiles-gate');
             }
-          }, 800);
+          }, 300);
           
           return;
         }
@@ -206,19 +238,16 @@ export default function AuthCallback() {
           
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
-            if (type === 'recovery') {
-              // Password reset should happen on web, not in native app
-              // Sign out and redirect to sign-in - user should use web for password reset
-              console.log('[AuthCallback] Recovery type detected - password reset should happen on web');
-              supabase.auth.signOut().then(() => {
-                router.replace('/(auth)/sign-in');
-              }).catch(() => {
-                router.replace('/(auth)/sign-in');
-              });
+            if (type === 'recovery' && sessionData.session) {
+              console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
+              routeToResetPassword(sessionData.session);
+            } else if (type === 'email_change' && sessionData.session) {
+              console.log('[AuthCallback] Email change detected - finalizing and signing out');
+              void handleEmailChange(sessionData.session);
             } else {
               router.replace('/profiles-gate');
             }
-          }, 800);
+          }, 300);
           
           return;
         }
@@ -331,4 +360,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-

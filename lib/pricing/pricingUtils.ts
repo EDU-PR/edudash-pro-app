@@ -4,6 +4,7 @@
  */
 
 import type { ColorValue } from 'react-native';
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, type TierNameAligned } from '@/lib/tiers';
 
 export interface PricingTier {
   id: string;
@@ -44,7 +45,7 @@ export interface TierConfig {
  * Get tier-specific configuration (features, colors, descriptions)
  */
 export const getTierConfig = (tier: string, isParent: boolean = false): TierConfig => {
-  const tierLower = tier.toLowerCase();
+  const tierLower = tier.toLowerCase().replace(/_/g, '-');
   
   const configs: Record<string, TierConfig> = {
     free: {
@@ -171,8 +172,17 @@ export const convertToDisplayTier = (
   isParent: boolean,
   t: (key: string, options?: any) => string
 ): PricingTier => {
-  const isEnterprise = plan.tier.toLowerCase() === 'enterprise';
-  const price = isAnnual ? (plan.price_annual || plan.price_monthly * 10) : plan.price_monthly;
+  const normalizedTier = plan.tier.toLowerCase().replace(/-/g, '_') as TierNameAligned;
+  const isEnterprise = normalizedTier === 'school_enterprise' || plan.tier.toLowerCase() === 'enterprise';
+  const basePricing = TIER_PRICING[normalizedTier];
+  const promoActive = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate;
+  const promoPricing = promoActive && normalizedTier.startsWith('parent_') ? getEarlyBirdPrice(normalizedTier) : null;
+
+  const fallbackPrice = isAnnual ? (plan.price_annual || plan.price_monthly * 10) : plan.price_monthly;
+  const priceValue = isAnnual
+    ? (promoPricing?.annual ?? basePricing?.annual ?? fallbackPrice)
+    : (promoPricing?.monthly ?? basePricing?.monthly ?? fallbackPrice);
+  const price = priceValue;
   
   const tierConfig = getTierConfig(plan.tier, isParent);
   const planFeatures = parseFeatures(plan.features);

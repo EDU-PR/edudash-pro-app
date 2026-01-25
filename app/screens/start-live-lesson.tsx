@@ -11,10 +11,13 @@ import { StartLiveLesson } from '@/components/calls/StartLiveLesson';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 
 export default function StartLiveLessonScreen() {
   const { profile } = useAuth();
   const { tier } = useSubscription();
+  const flags = getFeatureFlagsSync();
+  const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
 
   console.log('[StartLiveLessonScreen] Render with:', {
     profileId: profile?.id,
@@ -25,10 +28,15 @@ export default function StartLiveLessonScreen() {
   });
 
   const preschoolId = profile?.preschool_id || profile?.organization_id;
+  const role = ['principal', 'principal_admin', 'admin', 'super_admin', 'superadmin'].includes(
+    String(profile?.role || '').toLowerCase()
+  )
+    ? 'principal'
+    : 'teacher';
 
   if (!preschoolId) {
     return (
-      <DesktopLayout role="teacher">
+      <DesktopLayout role={role}>
         <Stack.Screen 
           options={{ 
             headerShown: false,
@@ -45,12 +53,32 @@ export default function StartLiveLessonScreen() {
       </DesktopLayout>
     );
   }
+
+  if (!canLiveLessons) {
+    return (
+      <DesktopLayout role={role}>
+        <Stack.Screen 
+          options={{ 
+            headerShown: false,
+            title: 'Start Live Lesson'
+          }} 
+        />
+        <View style={styles.container}>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              Live lessons are currently disabled. Enable live lessons in feature flags to continue.
+            </Text>
+          </View>
+        </View>
+      </DesktopLayout>
+    );
+  }
   const teacherName = profile.first_name && profile.last_name 
     ? `${profile.first_name} ${profile.last_name}`
     : profile.email || 'Teacher';
 
   return (
-    <DesktopLayout role="teacher">
+    <DesktopLayout role={role}>
       <Stack.Screen 
         options={{ 
           headerShown: false,

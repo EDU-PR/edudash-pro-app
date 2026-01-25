@@ -18,6 +18,8 @@
 
 import { Tool, ToolCategory, RiskLevel, ToolParameter, ToolExecutionContext, ToolExecutionResult } from '../types';
 import { assertSupabase } from '@/lib/supabase';
+import { getCurrentLanguage } from '@/lib/i18n';
+import { normalizeLanguageCode } from '@/lib/ai/dashSettings';
 import { fetchParentChildren } from '@/lib/parent-children';
 
 const UserContextTool: Tool = {
@@ -103,13 +105,22 @@ const UserContextTool: Tool = {
         };
       }
       
+      const uiLanguage = normalizeLanguageCode(getCurrentLanguage?.());
+      const profileLanguage = normalizeLanguageCode(profile.preferred_language || undefined);
+      const effectiveLanguage = ['en', 'af', 'zu'].includes(profileLanguage) ? profileLanguage : uiLanguage;
+      const languageLocale = effectiveLanguage === 'af'
+        ? 'af-ZA'
+        : effectiveLanguage === 'zu'
+          ? 'zu-ZA'
+          : 'en-ZA';
+
       const userContext: Record<string, any> = {
         name: profile.full_name || profile.display_name || 'User',
         firstName: profile.full_name?.split(' ')[0] || 'there',
         role: profile.role || context.role,
         tier: profile.subscription_tier || context.tier,
         gradeLevel: profile.grade_level,
-        language: profile.preferred_language || 'en',
+        language: languageLocale,
         organization: profile.organization_id,
       };
       

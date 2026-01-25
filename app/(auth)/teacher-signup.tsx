@@ -190,14 +190,31 @@ export default function TeacherSignUpScreen() {
         throw new Error('Failed to create account');
       }
 
-      // Update profile with role
+      // Update profile with role and school linkage when available.
+      const profileUpdate: {
+        role: 'teacher';
+        first_name: string;
+        last_name: string;
+        auth_user_id: string;
+        preschool_id?: string;
+        organization_id?: string;
+        seat_status?: 'pending';
+      } = {
+        role: 'teacher',
+        first_name: fullName.split(' ')[0],
+        last_name: fullName.split(' ').slice(1).join(' '),
+        auth_user_id: authData.user.id,
+      };
+
+      if (schoolInfo?.id) {
+        profileUpdate.preschool_id = schoolInfo.id;
+        profileUpdate.organization_id = schoolInfo.id;
+        profileUpdate.seat_status = 'pending';
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          role: 'teacher',
-          first_name: fullName.split(' ')[0],
-          last_name: fullName.split(' ').slice(1).join(' '),
-        })
+        .update(profileUpdate)
         .eq('id', authData.user.id);
 
       if (profileError) {

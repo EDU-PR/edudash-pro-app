@@ -81,7 +81,7 @@ export default function PrincipalReportsScreen() {
       description: 'Daily attendance records and trends',
       icon: 'calendar-outline',
       color: '#EC4899',
-      route: '/screens/attendance-reports',
+      route: '/screens/attendance-history',
     },
     {
       id: 'payments',

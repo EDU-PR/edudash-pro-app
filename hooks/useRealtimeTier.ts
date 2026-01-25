@@ -171,7 +171,8 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
         if (status === 'SUBSCRIBED') {
           console.log('[useRealtimeTier] Realtime subscription active');
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('[useRealtimeTier] Realtime subscription error');
+          console.warn('[useRealtimeTier] Realtime subscription error');
+          setError(new Error('Realtime subscription error'));
         }
       });
     

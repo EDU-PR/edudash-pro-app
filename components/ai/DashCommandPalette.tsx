@@ -56,7 +56,7 @@ export function DashCommandPalette({
     const items: CommandItem[] = [
       // AI
       { id: 'ai_lesson_generator', title: 'AI Lesson Generator', subtitle: 'Create AI-powered lesson plans', icon: 'sparkles', route: '/screens/ai-lesson-generator', section: 'AI' },
-      { id: 'ai_homework_helper', title: 'AI Homework Helper', subtitle: 'Assist students with homework', icon: 'help-circle-outline', route: '/screens/ai-homework-helper', section: 'AI' },
+      { id: 'ai_homework_helper', title: 'AI Homework Helper', subtitle: 'Assist students with homework', icon: 'sparkles-outline', route: '/screens/ai-homework-helper', section: 'AI' },
       { id: 'ai_grader', title: 'AI Grading Assistant', subtitle: 'Grade submissions with feedback', icon: 'checkmark-done-outline', route: '/screens/ai-homework-grader-live', section: 'AI' },
       { id: 'ai_progress', title: 'AI Progress Analysis', subtitle: 'Analyze student progress', icon: 'analytics-outline', route: '/screens/ai-progress-analysis', section: 'AI' },
 

@@ -13,6 +13,8 @@ import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { log, warn, debug, error as logError } from '@/lib/debug';
 import Constants from 'expo-constants';
+import { getAdUnitId as getPlacementAdUnitId } from '@/lib/ads/config';
+import { getPlacement } from '@/lib/ads/placements';
 
 /**
  * AdMob Test IDs for development - Google's official test IDs
@@ -77,7 +79,7 @@ function shouldUseProductionIds(): boolean {
 /**
  * Get appropriate ad unit ID based on testing mode
  */
-function getAdUnitId(adType: keyof typeof ADMOB_TEST_IDS.android): string {
+function getLegacyAdUnitId(adType: keyof typeof ADMOB_TEST_IDS.android): string {
   const platform = Platform.OS as 'android' | 'ios';
   
   if (shouldUseProductionIds()) {
@@ -94,6 +96,21 @@ function getAdUnitId(adType: keyof typeof ADMOB_TEST_IDS.android): string {
   }
   
   return ADMOB_TEST_IDS[platform][adType];
+}
+
+function resolveAdUnitId(
+  adType: keyof typeof ADMOB_TEST_IDS.android,
+  placementKey: string | undefined,
+  testId: string
+): string {
+  if (placementKey) {
+    const placement = getPlacement(placementKey);
+    if (placement && placement.type === adType) {
+      return getPlacementAdUnitId(placementKey);
+    }
+  }
+
+  return shouldUseProductionIds() ? getLegacyAdUnitId(adType) : testId;
 }
 
 /**
@@ -148,9 +165,7 @@ async function loadInterstitialAd(): Promise<boolean> {
   
   try {
     const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
-    const adUnitId = shouldUseProductionIds() 
-      ? getAdUnitId('interstitial')
-      : TestIds.INTERSTITIAL;
+    const adUnitId = resolveAdUnitId('interstitial', undefined, TestIds.INTERSTITIAL);
     
     interstitialAd = InterstitialAd.createForAdRequest(adUnitId, {
       requestNonPersonalizedAdsOnly: true,
@@ -180,7 +195,7 @@ async function loadInterstitialAd(): Promise<boolean> {
 /**
  * Show interstitial ad - Real implementation using react-native-google-mobile-ads
  */
-export async function showInterstitialAd(): Promise<boolean> {
+export async function showInterstitialAd(placementKey?: string): Promise<boolean> {
   const flags = getFeatureFlagsSync();
   
   // Skip on enterprise tier
@@ -194,9 +209,7 @@ export async function showInterstitialAd(): Promise<boolean> {
   
   try {
     const { InterstitialAd, AdEventType, TestIds } = require('react-native-google-mobile-ads');
-    const adUnitId = shouldUseProductionIds() 
-      ? getAdUnitId('interstitial')
-      : TestIds.INTERSTITIAL;
+    const adUnitId = resolveAdUnitId('interstitial', placementKey, TestIds.INTERSTITIAL);
     
     const ad = InterstitialAd.createForAdRequest(adUnitId, {
       requestNonPersonalizedAdsOnly: true,
@@ -260,9 +273,97 @@ export async function showInterstitialAd(): Promise<boolean> {
 }
 
 /**
+ * Show app open ad - uses AppOpenAd when available, falls back to interstitial.
+ */
+export async function showAppOpenAd(placementKey?: string): Promise<boolean> {
+  const flags = getFeatureFlagsSync();
+
+  if (flags.enterprise_tier_enabled) {
+    return false;
+  }
+
+  if (Platform.OS === 'web') return false;
+  if (Platform.OS !== 'android') return false;
+
+  try {
+    const { AppOpenAd, AppOpenAdOrientation, AdEventType, TestIds } = require('react-native-google-mobile-ads');
+
+    // If AppOpenAd is not available in this build, gracefully fall back.
+    if (!AppOpenAd) {
+      return showInterstitialAd(placementKey);
+    }
+
+    const adUnitId = resolveAdUnitId('interstitial', placementKey, TestIds.APP_OPEN);
+
+    const orientation = AppOpenAdOrientation?.PORTRAIT;
+    const ad = orientation !== undefined
+      ? AppOpenAd.createForAdRequest(
+          adUnitId,
+          { requestNonPersonalizedAdsOnly: true },
+          orientation
+        )
+      : AppOpenAd.createForAdRequest(adUnitId, { requestNonPersonalizedAdsOnly: true });
+
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const loadedListener = ad.addAdEventListener(AdEventType.LOADED, () => {
+        debug('AdMob: App open loaded, showing...');
+        ad.show();
+      });
+
+      const closedListener = ad.addAdEventListener(AdEventType.CLOSED, () => {
+        debug('AdMob: App open closed');
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(true);
+        }
+      });
+
+      const errorListener = ad.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
+        warn('AdMob: App open error:', error);
+        track('edudash.ads.app_open_error', {
+          platform: Platform.OS,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(false);
+        }
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          loadedListener();
+          closedListener();
+          errorListener();
+          resolve(false);
+        }
+      }, 12000);
+
+      ad.load();
+    });
+  } catch (error) {
+    warn('AdMob: Failed to show app open ad:', error);
+    track('edudash.ads.app_open_error', {
+      platform: Platform.OS,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return false;
+  }
+}
+
+/**
  * Show rewarded ad - Real implementation using react-native-google-mobile-ads
  */
-export async function showRewardedAd(): Promise<{
+export async function showRewardedAd(placementKey?: string): Promise<{
   shown: boolean;
   rewarded: boolean;
   reward?: { type: string; amount: number };
@@ -280,9 +381,7 @@ export async function showRewardedAd(): Promise<{
   
   try {
     const { RewardedAd, RewardedAdEventType, TestIds } = require('react-native-google-mobile-ads');
-    const adUnitId = shouldUseProductionIds() 
-      ? getAdUnitId('rewarded')
-      : TestIds.REWARDED;
+    const adUnitId = resolveAdUnitId('rewarded', placementKey, TestIds.REWARDED);
     
     const ad = RewardedAd.createForAdRequest(adUnitId, {
       requestNonPersonalizedAdsOnly: true,
@@ -384,7 +483,7 @@ export function isRewardedReady(): boolean {
  * Get banner ad unit ID for AdBanner component
  */
 export function getBannerAdUnitId(): string {
-  return getAdUnitId('banner');
+  return getLegacyAdUnitId('banner');
 }
 
 /**

@@ -28,6 +28,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { assertSupabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 
 // Extracted components
 import {
@@ -162,67 +163,86 @@ export function K12AdminDashboard() {
   }, [loadDashboardData, refreshBirthdays]);
 
   // Quick actions for K-12 admin
-  const quickActions: QuickAction[] = useMemo(() => [
-    {
-      id: 'aftercare',
-      title: 'Aftercare Registrations',
-      icon: 'time-outline',
-      color: '#8B5CF6',
-      badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
-      onPress: () => router.push('/screens/aftercare-admin'),
-    },
-    {
-      id: 'students',
-      title: 'Students',
-      icon: 'people-outline',
-      color: '#3B82F6',
-      badge: stats.enrolled,
-      onPress: () => router.push('/screens/student-management'),
-    },
-    {
-      id: 'attendance',
-      title: 'Attendance',
-      icon: 'checkbox-outline',
-      color: '#10B981',
-      onPress: () => router.push('/screens/attendance'),
-    },
-    {
-      id: 'payments',
-      title: 'Payments',
-      icon: 'card-outline',
-      color: '#F59E0B',
-      badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
-      onPress: () => router.push('/screens/financial-transactions'),
-    },
-    {
-      id: 'announcements',
-      title: 'Announcements',
-      icon: 'megaphone-outline',
-      color: '#EC4899',
-      onPress: () => router.push('/screens/announcements'),
-    },
-    {
-      id: 'calendar',
-      title: 'Calendar',
-      icon: 'calendar-outline',
-      color: '#06B6D4',
-      onPress: () => router.push('/screens/calendar'),
-    },
-    {
-      id: 'messages',
-      title: 'Messages',
-      icon: 'chatbubbles-outline',
-      color: '#6366F1',
-      onPress: () => router.push('/screens/messages'),
-    },
-    {
-      id: 'settings',
-      title: 'Settings',
-      icon: 'settings-outline',
-      color: '#64748B',
-      onPress: () => router.push('/screens/school-settings'),
-    },
-  ], [stats.pendingPayment, stats.enrolled]);
+  const quickActions: QuickAction[] = useMemo(() => {
+    const flags = getFeatureFlagsSync();
+    const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
+
+    return [
+      {
+        id: 'aftercare',
+        title: 'Aftercare Registrations',
+        icon: 'time-outline',
+        color: '#8B5CF6',
+        badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
+        onPress: () => router.push('/screens/aftercare-admin'),
+      },
+      {
+        id: 'students',
+        title: 'Students',
+        icon: 'people-outline',
+        color: '#3B82F6',
+        badge: stats.enrolled,
+        onPress: () => router.push('/screens/student-management'),
+      },
+      {
+        id: 'attendance',
+        title: 'Attendance',
+        icon: 'checkbox-outline',
+        color: '#10B981',
+        onPress: () => router.push('/screens/attendance'),
+      },
+      {
+        id: 'payments',
+        title: 'Payments',
+        icon: 'card-outline',
+        color: '#F59E0B',
+        badge: stats.pendingPayment > 0 ? stats.pendingPayment : undefined,
+        onPress: () => router.push('/screens/financial-transactions'),
+      },
+      {
+        id: 'announcements',
+        title: 'Announcements',
+        icon: 'megaphone-outline',
+        color: '#EC4899',
+        onPress: () => router.push('/screens/announcements'),
+      },
+      {
+        id: 'calendar',
+        title: 'Calendar',
+        icon: 'calendar-outline',
+        color: '#06B6D4',
+        onPress: () => router.push('/screens/calendar'),
+      },
+      ...(canLiveLessons ? [{
+        id: 'live-lessons',
+        title: 'Live Lessons',
+        icon: 'videocam-outline',
+        color: '#F97316',
+        onPress: () => router.push('/screens/start-live-lesson'),
+      }] : []),
+      {
+        id: 'groups',
+        title: 'Groups',
+        icon: 'people-circle-outline',
+        color: '#14B8A6',
+        onPress: () => router.push('/screens/group-management'),
+      },
+      {
+        id: 'messages',
+        title: 'Messages',
+        icon: 'chatbubbles-outline',
+        color: '#6366F1',
+        onPress: () => router.push('/screens/messages'),
+      },
+      {
+        id: 'settings',
+        title: 'Settings',
+        icon: 'settings-outline',
+        color: '#64748B',
+        onPress: () => router.push('/screens/school-settings'),
+      },
+    ];
+  }, [stats.pendingPayment, stats.enrolled]);
 
   if (loading) {
     return (

@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { initializeAdMob, showInterstitialAd, showRewardedAd } from '@/lib/adMob';
+import { useAuth } from '@/contexts/AuthContext';
+import { initializeAdMob, showAppOpenAd, showInterstitialAd, showRewardedAd } from '@/lib/adMob';
+import { isAdsEligibleUser } from '@/lib/ads/gating';
+import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import { track } from '@/lib/analytics';
 import { debug, warn } from '@/lib/debug';
+import { usePathname } from 'expo-router';
 
 interface AdsContextType {
   ready: boolean;
@@ -26,6 +30,8 @@ const STORAGE_KEYS = {
   interstitialCount: (date: string) => `ads:interstitialCount:${date}`,
   rewardedOffersCount: (date: string) => `ads:rewardedOffersCount:${date}`,
   appStartTime: 'ads:appStartTime',
+  lastAppOpenInterstitialAt: 'ads:lastAppOpenInterstitialAt',
+  appOpenInterstitialCount: (date: string) => `ads:appOpenInterstitialCount:${date}`,
 };
 
 // Rate limiting constants
@@ -34,24 +40,58 @@ const RATE_LIMITS = {
   interstitialMaxPerDay: 3,
   rewardedMaxPerDay: 2,
   initialGracePeriod: 60 * 1000, // 1 minute after app start
+  appOpenMinInterval: 4 * 60 * 60 * 1000, // 4 hours between app-open interstitials
+  appOpenMaxPerDay: 2,
+  appOpenDelay: 12 * 1000, // Show after 12 seconds to avoid jarring UX
 };
+
+function isAuthLikeRoute(pathname: string | null): boolean {
+  if (!pathname) return true;
+  return (
+    pathname.startsWith('/(auth)') ||
+    pathname === '/' ||
+    pathname.startsWith('/sign-in') ||
+    pathname.startsWith('/landing') ||
+    pathname.includes('auth-callback') ||
+    pathname.includes('reset-password') ||
+    pathname.includes('profiles-gate') ||
+    pathname.includes('onboarding')
+  );
+}
 
 export function AdsProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [appStartTime, setAppStartTime] = useState<number>(Date.now());
+  const appOpenAttemptedRef = useRef(false);
   const { ready: subscriptionReady, tier } = useSubscription();
+  const { user, profile, loading: authLoading, profileLoading } = useAuth();
+  const pathname = usePathname();
+
+  const authReady = !authLoading && !profileLoading;
+  const freeTierAdsEnabled = process.env.EXPO_PUBLIC_ENABLE_FREE_TIER_ADS !== 'false';
+  const adsEnabledEnv =
+    process.env.EXPO_PUBLIC_ENABLE_ADS !== '0' &&
+    freeTierAdsEnabled;
+  const roleEligible = isAdsEligibleUser(profile);
 
   // Determine if ads should be enabled
   const shouldEnableAds = useMemo(() => {
     return (
       subscriptionReady &&
+      authReady &&
       tier === 'free' &&
       Platform.OS === 'android' && // Respect Android-only development mode
-      process.env.EXPO_PUBLIC_ENABLE_ADS !== '0'
+      adsEnabledEnv &&
+      roleEligible
     );
-  }, [subscriptionReady, tier]);
+  }, [subscriptionReady, authReady, tier, adsEnabledEnv, roleEligible]);
 
   const canShowBanner = shouldEnableAds;
+
+  // Reset app-open attempt state when the user changes or ads become disabled.
+  useEffect(() => {
+    appOpenAttemptedRef.current = false;
+  }, [user?.id, shouldEnableAds]);
 
   useEffect(() => {
     let mounted = true;
@@ -159,6 +199,43 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const canShowAppOpenInterstitial = async (): Promise<{ allowed: boolean; reason?: string }> => {
+    if (!shouldEnableAds) {
+      return { allowed: false, reason: 'ads_disabled' };
+    }
+    if (!user?.id) {
+      return { allowed: false, reason: 'no_user' };
+    }
+    if (isAuthLikeRoute(pathname)) {
+      return { allowed: false, reason: 'auth_route' };
+    }
+
+    try {
+      const lastShownStr = await AsyncStorage.getItem(STORAGE_KEYS.lastAppOpenInterstitialAt);
+      if (lastShownStr) {
+        const lastShown = parseInt(lastShownStr, 10);
+        if (Number.isFinite(lastShown)) {
+          const elapsed = Date.now() - lastShown;
+          if (elapsed < RATE_LIMITS.appOpenMinInterval) {
+            return { allowed: false, reason: 'rate_limit' };
+          }
+        }
+      }
+
+      const today = getTodayString();
+      const dailyCountStr = await AsyncStorage.getItem(STORAGE_KEYS.appOpenInterstitialCount(today));
+      const dailyCount = dailyCountStr ? parseInt(dailyCountStr, 10) : 0;
+      if (dailyCount >= RATE_LIMITS.appOpenMaxPerDay) {
+        return { allowed: false, reason: 'daily_limit' };
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      warn('[AdsProvider] Error checking app-open limits:', error);
+      return { allowed: false, reason: 'error' };
+    }
+  };
+
   const canShowRewarded = async (): Promise<{ allowed: boolean; reason?: string }> => {
     if (!shouldEnableAds) {
       return { allowed: false, reason: 'ads_disabled' };
@@ -199,7 +276,7 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Attempt to show interstitial
-      const shown = await showInterstitialAd();
+      const shown = await showInterstitialAd(tag);
       
       if (shown) {
         // Update rate limiting storage
@@ -251,8 +328,13 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
         return { shown: false, rewarded: false };
       }
 
+      const rewardedPlacement =
+        tag.startsWith('ai_tool_') || tag.startsWith('premium_preview_')
+          ? PLACEMENT_KEYS.REWARDED_AI_PREVIEW
+          : PLACEMENT_KEYS.REWARDED_PARENT_PERKS;
+
       // Attempt to show rewarded ad
-      const result = await showRewardedAd();
+      const result = await showRewardedAd(rewardedPlacement);
       
       if (result.shown) {
         // Update daily count
@@ -290,6 +372,50 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       return { shown: false, rewarded: false };
     }
   };
+
+  // Show an interstitial shortly after app open for eligible free-tier users.
+  useEffect(() => {
+    if (!ready || !shouldEnableAds || !authReady || !user?.id) return;
+    if (isAuthLikeRoute(pathname)) return;
+    if (appOpenAttemptedRef.current) return;
+
+    appOpenAttemptedRef.current = true;
+
+    const timer = setTimeout(async () => {
+      const { allowed, reason } = await canShowAppOpenInterstitial();
+
+      track('ads.app_open_interstitial_attempt', {
+        allowed,
+        reason_blocked: reason,
+        tier,
+        platform: Platform.OS,
+        pathname,
+      });
+
+      if (!allowed) {
+        debug('[AdsProvider] App-open interstitial blocked', { reason, pathname });
+        return;
+      }
+
+      const shown = await showAppOpenAd(PLACEMENT_KEYS.INTERSTITIAL_APP_OPEN);
+      if (!shown) return;
+
+      const now = Date.now();
+      const today = getTodayString();
+      await AsyncStorage.setItem(STORAGE_KEYS.lastAppOpenInterstitialAt, now.toString());
+      const dailyCountStr = await AsyncStorage.getItem(STORAGE_KEYS.appOpenInterstitialCount(today));
+      const dailyCount = dailyCountStr ? parseInt(dailyCountStr, 10) : 0;
+      await AsyncStorage.setItem(STORAGE_KEYS.appOpenInterstitialCount(today), (dailyCount + 1).toString());
+
+      track('ads.app_open_interstitial_shown', {
+        tier,
+        platform: Platform.OS,
+        pathname,
+      });
+    }, RATE_LIMITS.appOpenDelay);
+
+    return () => clearTimeout(timer);
+  }, [ready, shouldEnableAds, authReady, user?.id, pathname, tier]);
 
   const value = useMemo<AdsContextType>(
     () => ({

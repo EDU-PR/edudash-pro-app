@@ -461,7 +461,7 @@ IMPORTANT: Always use tools to access real data. Never make up information. Neve
    * All other languages fallback to English for AI responses.
    */
   public buildLanguageDirective(strictMode?: boolean): string {
-    const replyLocale = (this.personality?.voice_settings?.language || 'en-ZA') as string;
+    const replyLocale = (this.personality?.response_language || this.personality?.voice_settings?.language || 'en-ZA') as string;
     
     // AI/TTS only supports these languages - everything else maps to English
     const AI_LANG_MAP: Record<string, string> = {

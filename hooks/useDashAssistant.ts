@@ -30,6 +30,9 @@ import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
 import { getChatUIPrefs, getVoiceChatPrefs } from '@/lib/ai/dashSettings';
+import { assertSupabase } from '@/lib/supabase';
+import { calculateAge } from '@/lib/date-utils';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -84,6 +87,7 @@ interface UseDashAssistantReturn {
   // Alert state for premium modals
   alertState: AlertState;
   hideAlert: () => void;
+  learnerContext: LearnerContext | null;
   
   // Refs
   flashListRef: React.RefObject<any>;
@@ -115,11 +119,55 @@ interface UseDashAssistantReturn {
 
 const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
 
+type TutorMode = 'diagnostic' | 'practice' | 'quiz' | 'explain';
+
+type TutorSession = {
+  id: string;
+  mode: TutorMode;
+  subject?: string | null;
+  grade?: string | null;
+  topic?: string | null;
+  awaitingAnswer: boolean;
+  currentQuestion?: string | null;
+  expectedAnswer?: string | null;
+  questionIndex: number;
+  totalQuestions: number;
+  correctCount: number;
+  maxQuestions: number;
+};
+
+type TutorPayload = {
+  question?: string;
+  expected_answer?: string;
+  subject?: string;
+  grade?: string;
+  topic?: string;
+  difficulty?: number;
+  next_step?: 'answer' | 'need_context';
+  is_correct?: boolean;
+  score?: number;
+  feedback?: string;
+  correct_answer?: string;
+  explanation?: string;
+  misconception?: string;
+  follow_up_question?: string;
+  next_expected_answer?: string;
+};
+
+type LearnerContext = {
+  learnerName?: string | null;
+  grade?: string | null;
+  ageYears?: number | null;
+  ageBand?: string | null;
+  schoolType?: string | null;
+  role?: string | null;
+};
+
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
   const { conversationId, initialMessage, onClose } = options;
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   
   // State
   const [messages, setMessages] = useState<DashMessage[]>([]);
@@ -145,6 +193,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isUploading, setIsUploading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
   
   // Voice input state
   const [isRecording, setIsRecording] = useState(false);
@@ -176,6 +227,143 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
   const isProcessingRef = useRef(false);
   const prevLengthRef = useRef<number>(0);
+  const tutorSessionRef = useRef<TutorSession | null>(null);
+  const tutorOverridesRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    tutorSessionRef.current = tutorSession;
+  }, [tutorSession]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadActiveChild = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('@edudash_active_child_id');
+        if (mounted) {
+          setActiveChildId(stored || null);
+        }
+      } catch {
+        if (mounted) setActiveChildId(null);
+      }
+    };
+    loadActiveChild();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!dashInstance || !user?.id) return;
+    let cancelled = false;
+
+    const applyLearnerContext = async () => {
+      const profileAny = profile as any;
+      const role = profile?.role || '';
+      const schoolType = profileAny?.school_type || profileAny?.organization_type || profileAny?.organization_membership?.school_type || null;
+
+      const setDefaultAgeBand = async (band: string | null) => {
+        if (!band) return;
+        try {
+          const stored = await AsyncStorage.getItem('@dash_ai_age_band');
+          if (!stored || stored === 'auto') {
+            await AsyncStorage.setItem('@dash_ai_age_band', band);
+          }
+        } catch {}
+      };
+
+      if (role === 'parent') {
+        const schoolId = profile?.organization_id || profile?.preschool_id;
+        const children = await fetchParentChildren(user.id, { includeInactive: false, schoolId });
+        const activeChild = children.find(child => child.id === activeChildId) || children[0];
+        if (!activeChild) return;
+
+        const classData = Array.isArray(activeChild.classes) ? activeChild.classes[0] : activeChild.classes;
+        const grade = activeChild.grade_level || activeChild.grade || classData?.grade_level || null;
+        const ageYears = calculateAge(activeChild.date_of_birth);
+        const ageBand = resolveAgeBand(ageYears, grade);
+        const learnerName = `${activeChild.first_name} ${activeChild.last_name}`.trim() || null;
+
+        const nextContext: LearnerContext = {
+          learnerName,
+          grade,
+          ageYears,
+          ageBand,
+          schoolType,
+          role: 'student',
+        };
+        if (!cancelled) setLearnerContext(nextContext);
+
+        const ageGroup = ageBand === 'adult'
+          ? 'adult'
+          : ageBand === '13-15' || ageBand === '16-18'
+            ? 'teen'
+            : ageBand
+              ? 'child'
+              : null;
+
+        dashInstance.updateUserContext({
+          age_group: ageGroup,
+          grade_levels: grade ? [String(grade)] : null,
+          organization_type: schoolType || null,
+          student_id: activeChild.id,
+          student_name: learnerName,
+        }).catch(() => {});
+
+        await setDefaultAgeBand(ageBand);
+        return;
+      }
+
+      if (role === 'student' || role === 'learner') {
+        const grade = profileAny?.grade_level || null;
+        const ageYears = calculateAge(profile?.date_of_birth);
+        const ageBand = resolveAgeBand(ageYears, grade);
+        const learnerName = profile?.full_name || profile?.first_name || null;
+
+        const nextContext: LearnerContext = {
+          learnerName,
+          grade,
+          ageYears,
+          ageBand,
+          schoolType,
+          role,
+        };
+        if (!cancelled) setLearnerContext(nextContext);
+
+        const ageGroup = ageBand === 'adult'
+          ? 'adult'
+          : ageBand === '13-15' || ageBand === '16-18'
+            ? 'teen'
+            : ageBand
+              ? 'child'
+              : null;
+
+        dashInstance.updateUserContext({
+          age_group: ageGroup,
+          grade_levels: grade ? [String(grade)] : null,
+          organization_type: schoolType || null,
+        }).catch(() => {});
+
+        await setDefaultAgeBand(ageBand);
+        return;
+      }
+    };
+
+    applyLearnerContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dashInstance,
+    user?.id,
+    profile?.role,
+    profile?.organization_id,
+    profile?.preschool_id,
+    profile?.full_name,
+    profile?.first_name,
+    profile?.date_of_birth,
+    activeChildId,
+    resolveAgeBand,
+  ]);
 
   // Scroll utility
   const scrollToBottom = useCallback((opts?: { animated?: boolean; delay?: number }) => {
@@ -221,6 +409,196 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       return [];
     }
   }, []);
+
+  const detectTutorIntent = useCallback((text: string): TutorMode | null => {
+    const value = (text || '').toLowerCase();
+    if (/diagnostic/.test(value)) return 'diagnostic';
+    if (/(quiz|test\s+me|assessment)/.test(value)) return 'quiz';
+    if (/(practice|help\s+me\s+solve|one\s+practice\s+question)/.test(value)) return 'practice';
+    if (/(explain|teach\s+me|walk\s+me\s+through)/.test(value)) return 'explain';
+    return null;
+  }, []);
+
+  const isTutorStopIntent = useCallback((text: string) => {
+    return /(stop|end\s+session|exit\s+tutor|cancel\s+quiz|new\s+topic)/i.test(text || '');
+  }, []);
+
+  const getMaxQuestions = useCallback((mode: TutorMode) => {
+    switch (mode) {
+      case 'diagnostic':
+      case 'quiz':
+        return 5;
+      case 'practice':
+        return 3;
+      case 'explain':
+      default:
+        return 1;
+    }
+  }, []);
+
+  const getTutorPhaseLabel = useCallback((mode: TutorMode) => {
+    switch (mode) {
+      case 'explain':
+        return 'Teach';
+      case 'practice':
+      case 'quiz':
+        return 'Practice';
+      case 'diagnostic':
+      default:
+        return 'Diagnose';
+    }
+  }, []);
+
+  const extractLearningContext = useCallback((text: string) => {
+    const value = (text || '').toLowerCase();
+    const gradeMatch = value.match(/grade\s*(r|[0-9]{1,2})/i);
+    const grade = gradeMatch ? gradeMatch[1].toUpperCase() : null;
+    const subjectMap: Array<{ key: RegExp; label: string }> = [
+      { key: /math|mathematics|algebra|geometry|numbers/, label: 'Mathematics' },
+      { key: /science|physics|chemistry|biology/, label: 'Science' },
+      { key: /english|reading|writing|language/, label: 'English' },
+      { key: /history|social\s+studies|geography/, label: 'Social Sciences' },
+      { key: /life\s+skills|life\s+orientation/, label: 'Life Skills' },
+    ];
+    const subject = subjectMap.find(entry => entry.key.test(value))?.label || null;
+    const topicMatch = value.match(/(?:topic|on|about)\s+([a-z0-9\s-]{3,})/i);
+    const topic = topicMatch ? topicMatch[1].trim() : null;
+    return { grade, subject, topic };
+  }, []);
+
+  const resolveAgeBand = useCallback((ageYears?: number | null, grade?: string | null): string | null => {
+    const raw = (grade || '').toString().toLowerCase();
+    const gradeNum = raw.startsWith('r')
+      ? 0
+      : (() => {
+          const match = raw.match(/(\d{1,2})/);
+          return match ? Number(match[1]) : null;
+        })();
+
+    if (typeof gradeNum === 'number' && !Number.isNaN(gradeNum)) {
+      if (gradeNum <= 1) return '3-5';
+      if (gradeNum <= 3) return '6-8';
+      if (gradeNum <= 7) return '9-12';
+      if (gradeNum <= 9) return '13-15';
+      if (gradeNum <= 12) return '16-18';
+      return 'adult';
+    }
+
+    if (typeof ageYears === 'number' && !Number.isNaN(ageYears)) {
+      if (ageYears <= 5) return '3-5';
+      if (ageYears <= 8) return '6-8';
+      if (ageYears <= 12) return '9-12';
+      if (ageYears <= 15) return '13-15';
+      if (ageYears <= 18) return '16-18';
+      return 'adult';
+    }
+
+    return null;
+  }, []);
+
+  const buildTutorQuestionPrompt = useCallback((session: TutorSession, userText: string) => {
+    const contextParts = [
+      'You are Dash, an interactive tutor for K-12 learners.',
+      `Mode: ${session.mode}.`,
+      session.subject ? `Subject: ${session.subject}.` : null,
+      session.grade ? `Grade: ${session.grade}.` : null,
+      session.topic ? `Topic: ${session.topic}.` : null,
+      'Ask ONE question only and stop. Do not add extra questions or commentary.',
+      'If grade or topic is missing, ask a single clarifying question instead.',
+      'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
+      'JSON keys: question, expected_answer, subject, grade, topic, difficulty, next_step.',
+    ].filter(Boolean).join('\n');
+
+    return `${contextParts}\nLearner request: ${userText}\n<TUTOR_PAYLOAD>{"question":"...","expected_answer":"...","subject":"...","grade":"...","topic":"...","difficulty":1,"next_step":"answer"}</TUTOR_PAYLOAD>`;
+  }, []);
+
+  const buildTutorEvaluationPrompt = useCallback((session: TutorSession, learnerAnswer: string) => {
+    const contextParts = [
+      'You are Dash, an interactive tutor for K-12 learners.',
+      `Mode: ${session.mode}.`,
+      session.subject ? `Subject: ${session.subject}.` : null,
+      session.grade ? `Grade: ${session.grade}.` : null,
+      session.topic ? `Topic: ${session.topic}.` : null,
+      `Question: ${session.currentQuestion || 'N/A'}`,
+      session.expectedAnswer ? `Expected answer: ${session.expectedAnswer}` : null,
+      `Learner answer: ${learnerAnswer}`,
+      'Evaluate the answer with short feedback and the correct answer.',
+      'If incorrect, provide a gentle hint or example and ask ONE follow-up question.',
+      'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
+      'JSON keys: is_correct, score (0-100), feedback, correct_answer, explanation, misconception, follow_up_question, next_expected_answer.',
+    ].filter(Boolean).join('\n');
+
+    return `${contextParts}\n<TUTOR_PAYLOAD>{"is_correct":true,"score":100,"feedback":"...","correct_answer":"...","explanation":"...","misconception":"...","follow_up_question":"...","next_expected_answer":"..."}</TUTOR_PAYLOAD>`;
+  }, []);
+
+  const parseTutorPayload = useCallback((content: string): TutorPayload | null => {
+    if (!content) return null;
+    const tagMatch = content.match(/<TUTOR_PAYLOAD>([\s\S]*?)<\/TUTOR_PAYLOAD>/i);
+    const jsonCandidate = tagMatch ? tagMatch[1] : null;
+    const fallbackMatch = !jsonCandidate ? content.match(/\{[\s\S]*\}/) : null;
+    const raw = (jsonCandidate || fallbackMatch?.[0] || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as TutorPayload;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const buildTutorDisplayContent = useCallback((payload: TutorPayload, isQuestionStep: boolean) => {
+    if (isQuestionStep) {
+      const question = payload.question?.trim();
+      if (!question) return null;
+      return question;
+    }
+
+    const lines: string[] = [];
+    if (typeof payload.is_correct === 'boolean') {
+      lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
+    }
+    if (payload.feedback) lines.push(payload.feedback.trim());
+    if (payload.correct_answer) {
+      lines.push(`Correct answer: ${payload.correct_answer}`);
+    }
+    if (payload.explanation) lines.push(payload.explanation.trim());
+    if (payload.follow_up_question) {
+      lines.push(`\nNext question:\n${payload.follow_up_question.trim()}`);
+    }
+    return lines.filter(Boolean).join('\n\n');
+  }, []);
+
+  const logTutorAttempt = useCallback(async (session: TutorSession, payload: TutorPayload, learnerAnswer: string) => {
+    if (!user?.id) return;
+    try {
+      const studentId = profile?.role === 'parent' ? activeChildId : null;
+      const insertPayload = {
+        user_id: user.id,
+        student_id: studentId,
+        session_id: session.id,
+        mode: session.mode,
+        subject: payload.subject || session.subject || null,
+        grade: payload.grade || session.grade || null,
+        topic: payload.topic || session.topic || null,
+        question: session.currentQuestion || null,
+        expected_answer: session.expectedAnswer || null,
+        learner_answer: learnerAnswer,
+        is_correct: payload.is_correct ?? null,
+        score: typeof payload.score === 'number' ? payload.score : null,
+        feedback: payload.feedback || null,
+        correct_answer: payload.correct_answer || null,
+        metadata: {
+          explanation: payload.explanation || null,
+          misconception: payload.misconception || null,
+        },
+      };
+
+      await (assertSupabase() as any)
+        .from('dash_ai_tutor_attempts')
+        .insert(insertPayload);
+    } catch (error) {
+      console.warn('[useDashAssistant] Failed to log tutor attempt:', error);
+    }
+  }, [user?.id, profile?.role, activeChildId]);
 
   const loadChatPrefs = useCallback(async () => {
     try {
@@ -317,10 +695,48 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       scrollToBottom({ animated: true, delay: 120 });
 
       const userText = text || 'Attached files';
+      let outgoingText = userText;
+      let displayText = userText;
+      let tutorAction: 'start' | 'evaluate' | null = null;
+      let tutorModeForMetadata: TutorMode | null = null;
+
+      const activeSession = tutorSessionRef.current;
+      const stopTutor = isTutorStopIntent(userText);
+      if (stopTutor && activeSession) {
+        setTutorSession(null);
+      }
+
+      const tutorIntent = detectTutorIntent(userText);
+      if (activeSession?.awaitingAnswer && !stopTutor) {
+        tutorAction = 'evaluate';
+        tutorModeForMetadata = activeSession.mode;
+        outgoingText = buildTutorEvaluationPrompt(activeSession, userText);
+      } else if (tutorIntent && !stopTutor) {
+        const context = extractLearningContext(userText);
+        const fallbackGrade = learnerContext?.grade || null;
+        const newSession: TutorSession = {
+          id: `tutor_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          mode: tutorIntent,
+          subject: context.subject,
+          grade: context.grade || fallbackGrade,
+          topic: context.topic,
+          awaitingAnswer: false,
+          currentQuestion: null,
+          expectedAnswer: null,
+          questionIndex: 0,
+          totalQuestions: 0,
+          correctCount: 0,
+          maxQuestions: getMaxQuestions(tutorIntent),
+        };
+        setTutorSession(newSession);
+        tutorAction = 'start';
+        tutorModeForMetadata = newSession.mode;
+        outgoingText = buildTutorQuestionPrompt(newSession, userText);
+      }
       const localUserMessage: DashMessage = {
         id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'user',
-        content: userText,
+        content: displayText,
         timestamp: Date.now(),
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
       };
@@ -346,7 +762,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setMessages(prev => [...prev, tempStreamingMessage]);
         
         response = await dashInstance.sendMessage(
-          userText, 
+          outgoingText, 
           undefined, 
           uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
           (chunk: string) => {
@@ -370,10 +786,89 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setMessages(prev => prev.filter(msg => msg.id !== tempStreamingMsgId));
       } else {
         response = await dashInstance.sendMessage(
-          userText, 
+          outgoingText, 
           undefined, 
           uploadedAttachments.length > 0 ? uploadedAttachments : undefined
         );
+      }
+
+      const tutorPayload = parseTutorPayload(response?.content || '');
+      if (tutorPayload && tutorAction === 'start' && tutorPayload.question) {
+        const displayContent = buildTutorDisplayContent(tutorPayload, true);
+        if (displayContent) {
+          tutorOverridesRef.current[response.id] = displayContent;
+          response = {
+            ...response,
+            content: displayContent,
+            metadata: {
+              ...(response.metadata || {}),
+              tutor_phase: tutorModeForMetadata ? getTutorPhaseLabel(tutorModeForMetadata) : getTutorPhaseLabel('diagnostic'),
+              tutor_question: true,
+              tutor_question_text: tutorPayload.question,
+            },
+          };
+        }
+
+        setTutorSession(prev => {
+          if (!prev) return prev;
+          const needsContext = tutorPayload.next_step === 'need_context';
+          return {
+            ...prev,
+            subject: tutorPayload.subject || prev.subject,
+            grade: tutorPayload.grade || prev.grade,
+            topic: tutorPayload.topic || prev.topic,
+            awaitingAnswer: true,
+            currentQuestion: tutorPayload.question || prev.currentQuestion,
+            expectedAnswer: tutorPayload.expected_answer || prev.expectedAnswer,
+            questionIndex: needsContext ? prev.questionIndex : prev.questionIndex + 1,
+          };
+        });
+      } else if (tutorPayload && tutorAction === 'evaluate') {
+        const displayContent = buildTutorDisplayContent(tutorPayload, false);
+        if (displayContent) {
+          tutorOverridesRef.current[response.id] = displayContent;
+          response = {
+            ...response,
+            content: displayContent,
+            metadata: {
+              ...(response.metadata || {}),
+              tutor_phase: tutorModeForMetadata ? getTutorPhaseLabel(tutorModeForMetadata) : getTutorPhaseLabel('practice'),
+              tutor_question: !!tutorPayload.follow_up_question,
+              tutor_question_text: tutorPayload.follow_up_question || undefined,
+            },
+          };
+        }
+
+        if (activeSession) {
+          await logTutorAttempt(activeSession, tutorPayload, userText);
+          setTutorSession(prev => {
+            if (!prev) return prev;
+            const totalQuestions = prev.totalQuestions + 1;
+            const correctCount = prev.correctCount + (tutorPayload.is_correct ? 1 : 0);
+            const followUp = tutorPayload.follow_up_question || null;
+            const followExpected = tutorPayload.next_expected_answer || null;
+            const completed = totalQuestions >= prev.maxQuestions && !followUp;
+            if (completed) {
+              const summary: DashMessage = {
+                id: `tutor_summary_${Date.now()}`,
+                type: 'assistant',
+                content: `Session complete! Score: ${correctCount}/${totalQuestions}.\nI logged your performance so we can track progress over time.`,
+                timestamp: Date.now(),
+              };
+              setMessages(messages => [...messages, summary]);
+              return null;
+            }
+
+            return {
+              ...prev,
+              totalQuestions,
+              correctCount,
+              awaitingAnswer: !!followUp,
+              currentQuestion: followUp,
+              expectedAnswer: followExpected,
+            };
+          });
+        }
       }
 
       // Add assistant message locally for immediate UI feedback
@@ -411,7 +906,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Update messages
       const updatedConv = await dashInstance.getConversation(dashInstance.getCurrentConversationId()!);
       if (updatedConv && Array.isArray(updatedConv.messages) && updatedConv.messages.length > 0) {
-        setMessages(prev => (updatedConv.messages.length >= prev.length ? updatedConv.messages : prev));
+        const overrideMap = tutorOverridesRef.current;
+        const merged = updatedConv.messages.map(msg => {
+          const override = overrideMap[msg.id];
+          return override ? { ...msg, content: override } : msg;
+        });
+        setMessages(prev => (merged.length >= prev.length ? merged : prev));
         setConversation(updatedConv);
         scrollToBottom({ animated: true, delay: 150 });
       }
@@ -450,7 +950,30 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsLoading(false);
       setLoadingStatus(null);
     }
-  }, [dashInstance, conversation, scrollToBottom, updateAttachmentProgress, setLayout, wantsLessonGenerator, showAlert, speakResponse, autoSpeakResponses, voiceEnabled, streamingEnabledPref]);
+  }, [
+    dashInstance,
+    conversation,
+    scrollToBottom,
+    updateAttachmentProgress,
+    setLayout,
+    wantsLessonGenerator,
+    showAlert,
+    speakResponse,
+    autoSpeakResponses,
+    voiceEnabled,
+    streamingEnabledPref,
+    detectTutorIntent,
+    isTutorStopIntent,
+    extractLearningContext,
+    getMaxQuestions,
+    buildTutorQuestionPrompt,
+    buildTutorEvaluationPrompt,
+    parseTutorPayload,
+    buildTutorDisplayContent,
+    logTutorAttempt,
+    getTutorPhaseLabel,
+    learnerContext,
+  ]);
 
   // Process queue
   const processQueue = useCallback(async () => {

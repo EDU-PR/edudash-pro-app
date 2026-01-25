@@ -8,6 +8,26 @@
 import { AdPlacement } from './types';
 
 export const AD_PLACEMENTS: Record<string, AdPlacement> = {
+  // App open interstitial for free-tier users (shown shortly after launch)
+  interstitial_app_open: {
+    key: 'interstitial_app_open',
+    type: 'interstitial',
+    screen: 'app_open',
+    position: 'navigation_break',
+    adUnitEnvVar: 'EXPO_PUBLIC_ADMOB_ADUNIT_INTERSTITIAL_APP_OPEN',
+    frequencyPolicy: {
+      minInterval: 14400, // 4 hours between app-open interstitials
+      dailyLimit: 2,
+      minSessionsBeforeFirst: 1,
+    },
+    keywords: [
+      'education', 'learning', 'parenting', 'student tools', 'tutoring',
+    ],
+    contentRating: 'general',
+    description: 'Interstitial shown shortly after app launch for free-tier users',
+    enabled: true,
+  },
+
   // Banner ad at the bottom of parent dashboard
   banner_parent_dashboard_bottom: {
     key: 'banner_parent_dashboard_bottom',
@@ -112,6 +132,28 @@ export const AD_PLACEMENTS: Record<string, AdPlacement> = {
     ],
     contentRating: 'parental',
     description: 'Rewarded video to unlock premium perks',
+    enabled: true,
+  },
+
+  // Rewarded ads used to preview/temporarily unlock premium AI tools
+  rewarded_ai_preview: {
+    key: 'rewarded_ai_preview',
+    type: 'rewarded',
+    screen: 'ai_tools',
+    position: 'perk_unlock',
+    adUnitEnvVar: 'EXPO_PUBLIC_ADMOB_ADUNIT_REWARDED_AI_PREVIEW',
+    frequencyPolicy: {
+      minInterval: 600, // 10 minutes between AI preview rewards
+      dailyLimit: 6,
+      userInitiated: true,
+      minSessionsBeforeFirst: 1,
+    },
+    keywords: [
+      'ai tutoring', 'education technology', 'study tools', 'learning support',
+      'homework help', 'exam preparation',
+    ],
+    contentRating: 'educational',
+    description: 'Rewarded ad to temporarily unlock premium AI features',
     enabled: true,
   },
 
@@ -262,12 +304,14 @@ export function isValidPlacement(key: string): boolean {
  * Get placement keys for easy access
  */
 export const PLACEMENT_KEYS = {
+  INTERSTITIAL_APP_OPEN: 'interstitial_app_open',
   BANNER_PARENT_DASHBOARD: 'banner_parent_dashboard_bottom',
   BANNER_PARENT_MESSAGES: 'banner_parent_messages',
   NATIVE_PARENT_FEED: 'native_parent_feed_inline',
   NATIVE_PARENT_LIST: 'native_parent_list_middle',
   INTERSTITIAL_PARENT_NAV: 'interstitial_parent_navigation',
   REWARDED_PARENT_PERKS: 'rewarded_parent_perks',
+  REWARDED_AI_PREVIEW: 'rewarded_ai_preview',
   BANNER_MEMBERSHIP_DASHBOARD: 'banner_membership_dashboard',
   INTERSTITIAL_MEMBERSHIP_DASHBOARD_ENTER: 'interstitial_membership_dashboard_enter',
   // Learner/student placements

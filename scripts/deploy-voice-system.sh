@@ -65,12 +65,18 @@ if [ ! -f "package.json" ]; then
 fi
 print_success "In project root directory"
 
-# Check if TTS proxy function exists
+# Check if required voice functions exist
 if [ ! -f "supabase/functions/tts-proxy/index.ts" ]; then
     print_error "TTS proxy function not found at supabase/functions/tts-proxy/index.ts"
     exit 1
 fi
 print_success "TTS proxy function exists"
+
+if [ ! -f "supabase/functions/azure-speech-token/index.ts" ]; then
+    print_error "Azure speech token function not found at supabase/functions/azure-speech-token/index.ts"
+    exit 1
+fi
+print_success "Azure speech token function exists"
 
 # Check if .env.local exists and get project URL
 if [ ! -f ".env.local" ]; then
@@ -185,13 +191,21 @@ supabase secrets list --project-ref $PROJECT_REF
 # Step 5: Deploy Edge Function
 ##############################################################################
 
-print_header "Step 5: Deploying TTS Proxy Edge Function"
+print_header "Step 5: Deploying Voice Edge Functions"
 
-print_info "Deploying function to Supabase..."
+print_info "Deploying tts-proxy..."
 if supabase functions deploy tts-proxy --project-ref $PROJECT_REF; then
-    print_success "Function deployed successfully!"
+    print_success "tts-proxy deployed successfully!"
 else
-    print_error "Function deployment failed"
+    print_error "tts-proxy deployment failed"
+    exit 1
+fi
+
+print_info "Deploying azure-speech-token..."
+if supabase functions deploy azure-speech-token --project-ref $PROJECT_REF; then
+    print_success "azure-speech-token deployed successfully!"
+else
+    print_error "azure-speech-token deployment failed"
     exit 1
 fi
 

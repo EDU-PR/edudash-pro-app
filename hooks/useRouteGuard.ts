@@ -109,5 +109,5 @@ export const useAuthGuard = () => {
     return () => {
       hasNavigated.current = false;
     };
-  }, [pathname, user, loading, profile?.role]);
+  }, [pathname, user, loading, profile?.role, profileLoading]);
 };

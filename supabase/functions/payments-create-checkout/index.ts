@@ -66,6 +66,42 @@ interface PayFastPaymentData {
   cycles?: string;
 }
 
+// PayFast custom integration signature order (matches docs attribute order).
+// Using this explicit list avoids ambiguous ordering and signature mismatches.
+const PAYFAST_SIGNATURE_ORDER: string[] = [
+  'merchant_id',
+  'merchant_key',
+  'return_url',
+  'cancel_url',
+  'notify_url',
+  'name_first',
+  'name_last',
+  'email_address',
+  'cell_number',
+  'm_payment_id',
+  'amount',
+  'item_name',
+  'item_description',
+  'custom_int1',
+  'custom_int2',
+  'custom_int3',
+  'custom_int4',
+  'custom_int5',
+  'custom_str1',
+  'custom_str2',
+  'custom_str3',
+  'custom_str4',
+  'custom_str5',
+  'email_confirmation',
+  'confirmation_address',
+  'payment_method',
+  'subscription_type',
+  'billing_date',
+  'recurring_amount',
+  'frequency',
+  'cycles',
+];
+
 /**
  * PayFast-compatible encoding (urlencode + spaces as +)
  */
@@ -86,13 +122,10 @@ function buildParamString(
   orderedKeys?: string[]
 ): string {
   const parts: string[] = [];
-  const seen = new Set<string>(orderedKeys ?? []);
-
   const baseKeys = (orderedKeys && orderedKeys.length > 0
     ? orderedKeys
-    : Object.keys(data)
-        .filter((key) => key !== 'signature')
-        .sort());
+    : PAYFAST_SIGNATURE_ORDER);
+  const seen = new Set<string>(baseKeys);
 
   const remainingKeys = Object.keys(data)
     .filter((key) => key !== 'signature' && !seen.has(key))
@@ -271,12 +304,14 @@ Deno.serve(async (req) => {
     // PayFast is sensitive to parameter ordering for signatures; use
     // a deterministic alphabetical order for both the signature and URL.
     const debugParamString = buildParamString(
-      paymentData as unknown as Record<string, string | number | undefined>
+      paymentData as unknown as Record<string, string | number | undefined>,
+      PAYFAST_SIGNATURE_ORDER
     );
 
     const signature = generatePayFastSignature(
       paymentData as unknown as Record<string, string | number | undefined>,
-      passphrase
+      passphrase,
+      PAYFAST_SIGNATURE_ORDER
     );
 
     // TEMP DEBUG: log signature inputs (no passphrase)

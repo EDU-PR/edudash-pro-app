@@ -204,9 +204,24 @@ export const usePrincipalHub = () => {
     if (profile?.organization_id) {
       return profile.organization_id as string;
     }
-    const userMetaPreschoolId = user?.user_metadata?.preschool_id;
-    return userMetaPreschoolId ?? null;
-  }, [profile?.organization_id, user?.user_metadata?.preschool_id]);
+
+    const profilePreschoolId = (
+      profile as { preschool_id?: string | null } | null
+    )?.preschool_id ?? null;
+    if (profilePreschoolId) {
+      return profilePreschoolId;
+    }
+
+    const metadata = user?.user_metadata as
+      | { preschool_id?: string | null; organization_id?: string | null }
+      | undefined;
+
+    return metadata?.organization_id ?? metadata?.preschool_id ?? null;
+  }, [
+    profile?.organization_id,
+    (profile as { preschool_id?: string | null } | null)?.preschool_id,
+    user?.user_metadata,
+  ]);
 
   const isMountedRef = useRef(true);
   const inFlightRef = useRef(false);
@@ -283,8 +298,10 @@ export const usePrincipalHub = () => {
         preschoolResult,
         pendingReportsResult,
         pendingRegistrationsResult,
+        pendingChildRegistrationsResult,
         pendingPaymentsResult,
         registrationFeesResult,
+        childRegistrationFeesResult,
         pendingPOPUploadsResult
       ] = await Promise.allSettled([
         // Get students count
@@ -347,6 +364,7 @@ export const usePrincipalHub = () => {
         assertSupabase()
           .from('attendance')
           .select('status')
+          .eq('organization_id', preschoolId)
           .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
           .limit(1000),
           
@@ -371,11 +389,17 @@ export const usePrincipalHub = () => {
           .eq('preschool_id', preschoolId)
           .or('approval_status.eq.pending_review,status.eq.pending_review'),
           
-        // Get pending registrations count (try registration_requests first, then child_registrations)
+        // Get pending registrations count across both request tables
         assertSupabase()
           .from('registration_requests')
           .select('id', { count: 'exact', head: true })
           .eq('organization_id', preschoolId)
+          .eq('status', 'pending'),
+
+        assertSupabase()
+          .from('child_registration_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
           .eq('status', 'pending'),
           
         // Get pending payments count (from parent_payments table)
@@ -385,11 +409,16 @@ export const usePrincipalHub = () => {
           .eq('preschool_id', preschoolId)
           .eq('status', 'pending'),
           
-        // Get registration fees from registration_requests (like PWA)
+        // Get registration fees from both request tables (like PWA)
         assertSupabase()
           .from('registration_requests')
           .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
           .eq('organization_id', preschoolId),
+
+        assertSupabase()
+          .from('child_registration_requests')
+          .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
+          .eq('preschool_id', preschoolId),
           
         // Get pending POP uploads count (proof of payment submissions to review)
         assertSupabase()
@@ -412,31 +441,60 @@ export const usePrincipalHub = () => {
       const preschoolCapacity = capacityResult.status === 'fulfilled' ? (capacityResult.value.data || {}) : {} as any;
       const preschoolInfo = preschoolResult.status === 'fulfilled' ? (preschoolResult.value.data || {}) : {} as any;
       const pendingReportsCount = pendingReportsResult.status === 'fulfilled' ? (pendingReportsResult.value.count || 0) : 0;
-      const pendingRegistrationsCount = pendingRegistrationsResult.status === 'fulfilled' ? (pendingRegistrationsResult.value.count || 0) : 0;
+      const pendingRegistrationsFromRequests = pendingRegistrationsResult.status === 'fulfilled'
+        ? (pendingRegistrationsResult.value.count || 0)
+        : 0;
+      const pendingRegistrationsFromChildRequests = pendingChildRegistrationsResult.status === 'fulfilled'
+        ? (pendingChildRegistrationsResult.value.count || 0)
+        : 0;
+      const pendingRegistrationsCount = pendingRegistrationsFromRequests + pendingRegistrationsFromChildRequests;
       const pendingPaymentsCount = pendingPaymentsResult.status === 'fulfilled' ? (pendingPaymentsResult.value.count || 0) : 0;
       const pendingPOPUploadsCount = pendingPOPUploadsResult.status === 'fulfilled' ? (pendingPOPUploadsResult.value.count || 0) : 0;
       
+      type RegistrationFeeRow = {
+        registration_fee_amount: string | number | null;
+        registration_fee_paid?: boolean | null;
+        payment_verified: boolean | null;
+        status: string | null;
+      };
+
       // Calculate registration fees collected (like PWA does)
-      const registrationFeesData = registrationFeesResult.status === 'fulfilled' ? (registrationFeesResult.value.data || []) : [];
+      const registrationFeesFromRequests: RegistrationFeeRow[] = registrationFeesResult.status === 'fulfilled'
+        ? ((registrationFeesResult.value.data as RegistrationFeeRow[] | null) || [])
+        : [];
+      const registrationFeesFromChildRequests: RegistrationFeeRow[] = childRegistrationFeesResult.status === 'fulfilled'
+        ? ((childRegistrationFeesResult.value.data as RegistrationFeeRow[] | null) || [])
+        : [];
+      const registrationFeesData: RegistrationFeeRow[] = [
+        ...registrationFeesFromRequests,
+        ...registrationFeesFromChildRequests,
+      ];
       let registrationFeesCollected = 0;
       let pendingRegistrationPayments = 0;
       
       if (registrationFeesData.length > 0) {
         // Only count verified payments from approved registrations
-        const paidAndVerified = registrationFeesData.filter((r: any) => 
-          r.payment_verified && r.status === 'approved'
+        const paidAndVerified = registrationFeesData.filter(
+          (r) => Boolean(r.payment_verified) && r.status === 'approved'
         );
         
         // Pending = approved but not verified, or have amount but not paid
-        const pending = registrationFeesData.filter((r: any) => 
-          !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
+        const pending = registrationFeesData.filter(
+          (r) => !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
         );
         
-        registrationFeesCollected = paidAndVerified.reduce((sum: number, r: any) => 
-          sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
-        );
+        registrationFeesCollected = paidAndVerified.reduce((sum, r) => {
+          const rawAmount = r.registration_fee_amount;
+          const numericAmount = typeof rawAmount === 'number'
+            ? rawAmount
+            : parseFloat(rawAmount ?? '0');
+          return sum + (Number.isFinite(numericAmount) ? numericAmount : 0);
+        }, 0);
         pendingRegistrationPayments = pending.length;
       }
+
+      const combinedPendingPayments =
+        pendingPaymentsCount + pendingRegistrationPayments + pendingPOPUploadsCount;
       
       logger.info('📊 REAL DATA FETCHED:', {
         studentsCount,
@@ -445,7 +503,10 @@ export const usePrincipalHub = () => {
         applicationsCount,
         pendingReportsCount,
         pendingRegistrationsCount,
+        pendingRegistrationsFromRequests,
+        pendingRegistrationsFromChildRequests,
         pendingPaymentsCount,
+        combinedPendingPayments,
         registrationFeesCollected,
         pendingRegistrationPayments,
         attendanceRecords: attendanceData.length,
@@ -691,9 +752,9 @@ export const usePrincipalHub = () => {
           trend: pendingRegistrationsCount > 5 ? t('trends.high') : pendingRegistrationsCount > 2 ? t('trends.up') : t('trends.stable')
         },
         pendingPayments: {
-          // Combine parent_payments + POP uploads pending review
-          total: (pendingPaymentsCount || pendingRegistrationPayments) + pendingPOPUploadsCount,
-          trend: ((pendingPaymentsCount || pendingRegistrationPayments) + pendingPOPUploadsCount) > 5 ? t('trends.high') : ((pendingPaymentsCount || pendingRegistrationPayments) + pendingPOPUploadsCount) > 2 ? t('trends.up') : t('trends.stable')
+          // Combine parent payments, pending registration fees, and POP uploads.
+          total: combinedPendingPayments,
+          trend: combinedPendingPayments > 5 ? t('trends.high') : combinedPendingPayments > 2 ? t('trends.up') : t('trends.stable')
         },
         pendingPOPUploads: {
           total: pendingPOPUploadsCount,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { EARLY_BIRD_DISCOUNT } from '@/lib/tiers'
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, type TierNameAligned } from '@/lib/tiers'
 
 // Enhanced responsive comparison table for React Native
 // This table is static marketing UI; values mirror lib/ai/limits.ts DEFAULT_MONTHLY_QUOTAS
@@ -11,23 +11,22 @@ const { width } = Dimensions.get('window')
 const isTablet = width >= 768
 
 const PROMO_ACTIVE = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate
-const PROMO_MULTIPLIER = (100 - EARLY_BIRD_DISCOUNT.discountPercent) / 100
 
-const BASE_PRICING: Record<PlanId, { monthly?: number; annual?: number; custom?: boolean }> = {
-  'free': { monthly: 0, annual: 0 },
-  'parent-starter': { monthly: 99, annual: 950 },
-  'parent-plus': { monthly: 199, annual: 1910 },
-  'private-teacher': { monthly: 299, annual: 2990 },
-  'pro': { monthly: 599, annual: 5990 },
-  'preschool-pro': { custom: true },
-  'enterprise': { custom: true },
+const PLAN_TIER_MAP: Record<PlanId, TierNameAligned | 'custom'> = {
+  'free': 'free',
+  'parent-starter': 'parent_starter',
+  'parent-plus': 'parent_plus',
+  'private-teacher': 'teacher_starter',
+  'pro': 'school_premium',
+  'preschool-pro': 'school_pro',
+  'enterprise': 'school_enterprise',
 }
 
 const isParentPlan = (planId: PlanId) => planId === 'parent-starter' || planId === 'parent-plus'
 
 const getPlanPricing = (planId: PlanId, annual: boolean) => {
-  const pricing = BASE_PRICING[planId]
-  if (!pricing || pricing.custom) {
+  const tierKey = PLAN_TIER_MAP[planId]
+  if (tierKey === 'custom') {
     return {
       isCustom: true,
       label: annual ? 'Custom (annual)' : 'Custom',
@@ -38,9 +37,24 @@ const getPlanPricing = (planId: PlanId, annual: boolean) => {
     }
   }
 
-  const baseValue = annual ? (pricing.annual ?? pricing.monthly ?? 0) : (pricing.monthly ?? 0)
+  const basePricing = TIER_PRICING[tierKey]
+  if (!basePricing) {
+    return {
+      isCustom: true,
+      label: annual ? 'Custom (annual)' : 'Custom',
+      promoEligible: false,
+      originalValue: null,
+      displayValue: null,
+      periodLabel: annual ? 'year' : 'month',
+    }
+  }
+
   const promoEligible = PROMO_ACTIVE && isParentPlan(planId) && !annual
-  const displayValue = promoEligible ? baseValue * PROMO_MULTIPLIER : baseValue
+  const promoPricing = promoEligible ? getEarlyBirdPrice(tierKey) : basePricing
+  const baseValue = annual ? (basePricing.annual ?? basePricing.monthly ?? 0) : (basePricing.monthly ?? 0)
+  const displayValue = annual
+    ? (promoPricing?.annual ?? baseValue)
+    : (promoPricing?.monthly ?? baseValue)
 
   if (baseValue === 0) {
     return {

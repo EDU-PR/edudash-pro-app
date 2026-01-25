@@ -14,6 +14,7 @@ interface SettingsModalProps {
   onToggleBiometric: () => void;
   onOpenThemeSettings: () => void;
   onOpenOrgSwitcher?: () => void;
+  onOpenChangeEmail?: () => void;
   hasMultipleOrgs?: boolean;
   theme: {
     text: string;
@@ -48,6 +49,7 @@ export function SettingsModal({
   onToggleBiometric,
   onOpenThemeSettings,
   onOpenOrgSwitcher,
+  onOpenChangeEmail,
   hasMultipleOrgs,
   theme,
   styles,
@@ -146,6 +148,26 @@ export function SettingsModal({
                     {hasMultipleOrgs
                       ? t('settings.switch_organization_desc', { defaultValue: 'Switch between schools & organizations' })
                       : t('settings.view_memberships', { defaultValue: 'View your memberships' })}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+
+          {/* Change Email */}
+          {onOpenChangeEmail && (
+            <TouchableOpacity style={styles.settingItem} onPress={onOpenChangeEmail}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="mail-outline" size={24} color={theme.primary} />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>
+                    {t('account.change_email_title', { defaultValue: 'Change Email' })}
+                  </Text>
+                  <Text style={styles.settingSubtitle}>
+                    {t('account.change_email_subtitle', {
+                      defaultValue: 'Update the email you use to sign in',
+                    })}
                   </Text>
                 </View>
               </View>

@@ -99,6 +99,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'info',
     category: 'communication',
   },
+  manage_groups: {
+    path: '/screens/group-management' as Href,
+    title: 'Groups',
+    titleKey: 'teacher.manage_groups',
+    icon: 'people',
+    color: '#06B6D4',
+    category: 'communication',
+  },
   call_parent: {
     path: '/screens/calls' as Href,
     title: 'Call Parent',
@@ -177,6 +185,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'my_class',
   'birthday_chart',
   'messages',
+  'manage_groups',
   'student_reports',
   'ai_assistant',
   'call_parent',

@@ -185,8 +185,8 @@ const DEFAULT_FLAGS: FeatureFlags = {
   // Video/Voice Calls (Daily.co) - Requires prebuild for native modules
   video_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS !== 'false',
   voice_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_VOICE_CALLS !== 'false',
-  group_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_GROUP_CALLS === 'true',
-  live_lessons_enabled: process.env.EXPO_PUBLIC_ENABLE_LIVE_LESSONS === 'true',
+  group_calls_enabled: process.env.EXPO_PUBLIC_ENABLE_GROUP_CALLS !== 'false',
+  live_lessons_enabled: process.env.EXPO_PUBLIC_ENABLE_LIVE_LESSONS !== 'false',
   
   // E-Books Library - PDF viewing with offline support
   ebooks_enabled: process.env.EXPO_PUBLIC_ENABLE_EBOOKS === 'true',

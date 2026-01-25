@@ -30,6 +30,7 @@ import ToastProvider from '../components/ui/ToastProvider';
 import { QueryProvider } from '../lib/query/queryClient';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
+import { AdsProvider } from '../contexts/AdsContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DashboardPreferencesProvider } from '../contexts/DashboardPreferencesContext';
 import { UpdatesProvider } from '../contexts/UpdatesProvider';
@@ -58,6 +59,10 @@ import { useFABVisibility } from '../hooks/useFABVisibility';
 import { setupPWAMetaTags } from '../lib/utils/pwa';
 import { injectWebStyles } from '../lib/utils/web-styles';
 import * as Linking from 'expo-linking';
+import { setPasswordRecoveryInProgress } from '../lib/sessionManager';
+import { patchNativeEventEmitterModules } from '../lib/nativeEventEmitterPatch';
+
+patchNativeEventEmitterModules();
 
 // Inner component with access to AuthContext
 function LayoutContent() {
@@ -192,29 +197,31 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <SubscriptionProvider>
-              <UpdatesProvider>
-                <AppPreferencesProvider>
-                  <NotificationProvider>
-                    <CallProvider>
-                      <OnboardingProvider>
-                        <OrganizationBrandingProvider>
-                        <DashboardPreferencesProvider>
-                        <TermsProvider>
-                          <ToastProvider>
-                            <AlertProvider>
-                              <GestureHandlerRootView style={{ flex: 1 }}>
-                                <RootLayoutContent />
-                              </GestureHandlerRootView>
-                            </AlertProvider>
-                          </ToastProvider>
-                        </TermsProvider>
-                      </DashboardPreferencesProvider>
-                      </OrganizationBrandingProvider>
-                      </OnboardingProvider>
-                    </CallProvider>
-                  </NotificationProvider>
-                </AppPreferencesProvider>
-              </UpdatesProvider>
+              <AdsProvider>
+                <UpdatesProvider>
+                  <AppPreferencesProvider>
+                    <NotificationProvider>
+                      <CallProvider>
+                        <OnboardingProvider>
+                          <OrganizationBrandingProvider>
+                          <DashboardPreferencesProvider>
+                          <TermsProvider>
+                            <ToastProvider>
+                              <AlertProvider>
+                                <GestureHandlerRootView style={{ flex: 1 }}>
+                                  <RootLayoutContent />
+                                </GestureHandlerRootView>
+                              </AlertProvider>
+                            </ToastProvider>
+                          </TermsProvider>
+                        </DashboardPreferencesProvider>
+                        </OrganizationBrandingProvider>
+                        </OnboardingProvider>
+                      </CallProvider>
+                    </NotificationProvider>
+                  </AppPreferencesProvider>
+                </UpdatesProvider>
+              </AdsProvider>
             </SubscriptionProvider>
           </AuthProvider>
         </ThemeProvider>
@@ -263,11 +270,15 @@ function RootLayoutContent() {
         const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
 
         // Handle reset-password deep links (warm start)
-        // Password reset should happen on web - redirect to sign-in instead
         if (normalized === '/reset-password' || normalized.includes('reset-password')) {
-          console.log('[_layout] Password reset deep link detected - password reset should happen on web');
-          // Don't try to handle reset-password natively, go to sign-in
-          router.replace('/(auth)/sign-in');
+          const search = new URLSearchParams();
+          for (const [k, v] of Object.entries(qp)) {
+            if (v === undefined || v === null) continue;
+            search.set(k, String(v));
+          }
+          console.log('[_layout] Password reset deep link detected - routing to native reset flow');
+          try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+          router.replace(`/reset-password${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
           return;
         }
 

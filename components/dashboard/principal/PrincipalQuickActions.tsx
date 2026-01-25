@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { QuickActionCard } from '../shared/QuickActionCard';
 import { CollapsibleSection } from '../shared/CollapsibleSection';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -43,6 +44,8 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   const { t } = useTranslation();
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const flags = getFeatureFlagsSync();
+  const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
 
   // Quick Actions matching PWA Principal Dashboard
   const quickActions = [
@@ -114,11 +117,23 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       icon: 'calendar',
       color: '#EC4899',
     },
+    ...(canLiveLessons ? [{
+      id: 'live-lessons',
+      title: t('dashboard.live_lessons', { defaultValue: 'Live Lessons' }),
+      icon: 'videocam',
+      color: '#EC4899',
+    }] : []),
     {
       id: 'teachers',
       title: t('dashboard.manage_teachers', { defaultValue: 'Manage Teachers' }),
       icon: 'people',
       color: '#06B6D4',
+    },
+    {
+      id: 'groups',
+      title: t('dashboard.manage_groups', { defaultValue: 'Manage Groups' }),
+      icon: 'people-circle',
+      color: '#14B8A6',
     },
     {
       id: 'classes',
@@ -235,7 +250,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/teacher-lessons');
         break;
       case 'create-lesson':
-        router.push('/screens/lesson-generator');
+        router.push('/screens/ai-lesson-generator');
         break;
       case 'assign-lessons':
         router.push('/screens/assign-lesson');
@@ -249,8 +264,14 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       case 'calendar':
         router.push('/screens/calendar-management');
         break;
+      case 'live-lessons':
+        router.push('/screens/start-live-lesson');
+        break;
       case 'teachers':
         router.push('/screens/teacher-management');
+        break;
+      case 'groups':
+        router.push('/screens/group-management');
         break;
       case 'classes':
         router.push('/screens/class-teacher-management');

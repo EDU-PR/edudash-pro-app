@@ -36,7 +36,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     let sessionUserId: string | null = null;
     let storedSession: import('@/lib/sessionManager').UserSession | null = null;
     
-    const SESSION_CHECK_TIMEOUT = 2000;
+    const SESSION_CHECK_TIMEOUT = 6000;
     
     // Try stored session first (fastest)
     log('[Profile] Checking stored session first...');
@@ -54,7 +54,35 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       log('[Profile] getCurrentSession() failed:', e);
     }
     
-    // Try getUser() if no stored session
+    // Try Supabase in-memory session next (fast, no network)
+    if (!sessionUserId) {
+      log('[Profile] No stored session, trying auth.getSession()...');
+      try {
+        const getSessionPromise = assertSupabase().auth.getSession();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getSession timeout')), 2500)
+        );
+        const { data: { session: currentSession } } = await Promise.race([
+          getSessionPromise,
+          timeoutPromise,
+        ]) as any;
+        if (currentSession?.user?.id) {
+          sessionUserId = currentSession.user.id;
+          log('[Profile] auth.getSession() result: SUCCESS, user:', sessionUserId);
+          session = {
+            user: {
+              id: currentSession.user.id,
+              email: currentSession.user.email ?? undefined,
+            },
+            access_token: currentSession.access_token,
+          };
+        }
+      } catch (e) {
+        log('[Profile] auth.getSession() failed or timed out:', e);
+      }
+    }
+
+    // Try getUser() if no stored or in-memory session
     if (!sessionUserId) {
       log('[Profile] No stored session, trying getUser()...');
       try {
@@ -119,7 +147,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     // Avoid maybeSingle() here: it sets Accept=object+json and turns
     // "no rows" into a 406 error, which can wedge profile loading.
     const rpcCall = () => supabase.rpc('get_my_profile');
-    const rpcTimeoutMs = 5000;
+    const rpcTimeoutMs = 8000;
     const rpcTimeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('RPC timeout')), rpcTimeoutMs)
     );

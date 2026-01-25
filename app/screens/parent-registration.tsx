@@ -7,6 +7,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import EnhancedRegistrationForm from '@/components/auth/EnhancedRegistrationForm';
 import { EnhancedRegistration } from '@/types/auth-enhanced';
 import { assertSupabase } from '@/lib/supabase';
+import { routeAfterLogin, COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
 
 const ACTIVE_ORG_KEY = '@active_organization';
 
@@ -309,12 +310,29 @@ export default function ParentRegistrationScreen() {
         );
       }
 
-      // Navigate to parent dashboard or child registration
+      // Prefer centralized routing to avoid sending K-12/community schools
+      // to the preschool parent dashboard.
+      if (user) {
+        try {
+          await routeAfterLogin(user);
+          return;
+        } catch (routeError) {
+          console.warn('[ParentRegistration] routeAfterLogin failed, using fallback:', routeError);
+        }
+      }
+
+      // Fallback navigation
       if (codeToUse) {
         router.replace('/screens/parent-children');
-      } else {
-        router.replace('/screens/parent-dashboard');
+        return;
       }
+
+      if (selectedOrgId === COMMUNITY_SCHOOL_ID) {
+        router.replace('/(k12)/parent/dashboard');
+        return;
+      }
+
+      router.replace('/screens/parent-dashboard');
     } catch (error: any) {
       console.error('[ParentRegistration] Registration error:', error);
       handleRegistrationError(error.message || 'Registration failed');

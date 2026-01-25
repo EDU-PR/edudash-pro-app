@@ -129,6 +129,14 @@ console.log('[SignIn] Component rendering, theme:', theme);
     console.log('[SignIn] Card layout:', { x, y, width, height });
   };
 
+  // Prefill email when provided via deep link flows (email change, invites, etc.)
+  useEffect(() => {
+    const emailParam = typeof searchParams.email === 'string' ? searchParams.email : '';
+    if (emailParam && email !== emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchParams.email, email]);
+
   // Check for verification success message
   useEffect(() => {
     if (searchParams.verified === 'true' || searchParams.emailVerified === 'true') {
@@ -141,10 +149,28 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // Auto-dismiss after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
     }
+    if (searchParams.emailChanged === 'true' || searchParams.emailChanged === '1') {
+      setSuccessMessage(
+        t('auth.email_changed_success', {
+          defaultValue: 'Email updated successfully. Please sign in with your new email.',
+        })
+      );
+      setTimeout(() => setSuccessMessage(null), 6000);
+    }
     if (searchParams.emailVerificationFailed === 'true') {
       showAlert({
         title: t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
         message: t('auth.verification_failed_message', { defaultValue: 'Email verification failed. Please try signing in to request a new verification email.' }),
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
+    if (searchParams.emailChangeFailed === 'true') {
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('auth.email_change_failed', {
+          defaultValue: 'We could not confirm your email change. Please try again from Account Settings.',
+        }),
         type: 'error',
         buttons: [{ text: 'OK', style: 'default' }],
       });

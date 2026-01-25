@@ -76,12 +76,27 @@ export class TeacherInviteService {
         .eq('id', params.authUserId)
         .maybeSingle();
       if (existing) {
-        await assertSupabase().from('profiles').update({ role: 'teacher', preschool_id: invite.school_id }).eq('id', existing.id);
+        await assertSupabase()
+          .from('profiles')
+          .update({
+            role: 'teacher',
+            preschool_id: invite.school_id,
+            organization_id: invite.school_id,
+            auth_user_id: params.authUserId,
+          })
+          .eq('id', existing.id);
       } else {
         // Create new profile if doesn't exist
         await assertSupabase()
           .from('profiles')
-          .upsert({ id: params.authUserId, role: 'teacher', preschool_id: invite.school_id, email: params.email });
+          .upsert({
+            id: params.authUserId,
+            auth_user_id: params.authUserId,
+            role: 'teacher',
+            preschool_id: invite.school_id,
+            organization_id: invite.school_id,
+            email: params.email,
+          });
       }
       // Ensure organization membership with active seat
       try {

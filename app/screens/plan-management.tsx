@@ -229,25 +229,20 @@ export default function PlanManagementScreen() {
       const data = await listActivePlans(assertSupabase());
 
       // Filter plans based on available tiers for the role
-      const filteredPlans = (data || []).map((plan: any) => ({
-        ...plan,
-        features: Array.isArray(plan.features)
-          ? plan.features.map((feature: any) => (typeof feature === 'string' ? feature : String(feature?.name || feature)))
-          : [],
-      })).filter(plan => {
-        const planTier = plan.tier.toLowerCase().replace(/-/g, '_');
-        // Show plans that match available tiers (with some flexibility for naming)
-        return availableTiers.some(t => 
-          planTier === t || 
-          planTier.includes(t) || 
-          t.includes(planTier) ||
-          (planTier === 'free' && t === 'free') ||
-          (planTier === 'starter' && t.includes('starter')) ||
-          (planTier === 'premium' && t.includes('premium')) ||
-          (planTier === 'pro' && t.includes('pro')) ||
-          (planTier === 'enterprise' && t.includes('enterprise'))
-        );
-      });
+      const filteredPlans = (data || [])
+        .map((plan: any) => ({
+          ...plan,
+          features: Array.isArray(plan.features)
+            ? plan.features.map((feature: any) => (typeof feature === 'string' ? feature : String(feature?.name || feature)))
+            : [],
+        }))
+        .filter((plan) => {
+          const planTier = String(plan.tier || '').toLowerCase().replace(/-/g, '_');
+          if (!planTier) return false;
+
+          // Strict match against available tiers to avoid cross-role leakage
+          return availableTiers.includes(planTier as TierNameAligned);
+        });
 
       setPlans(filteredPlans);
       

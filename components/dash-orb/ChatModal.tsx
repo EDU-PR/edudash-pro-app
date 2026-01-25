@@ -249,22 +249,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                       Processing...
                     </Text>
-                    {message.toolCalls && (
-                      <View style={styles.toolCallsContainer}>
-                        {message.toolCalls.map((tool, idx) => (
-                          <View key={idx} style={styles.toolCall}>
-                            <Ionicons 
-                              name="construct" 
-                              size={12} 
-                              color={theme.primary} 
-                            />
-                            <Text style={[styles.toolCallText, { color: theme.textSecondary }]}>
-                              {tool.name.replace('_', ' ')}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
                   </View>
                 ) : message.role === 'user' ? (
                   <Text style={[styles.messageText, { color: '#fff' }]}>

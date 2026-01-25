@@ -178,7 +178,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     try {
       setProfileLoading(true);
-      const enhancedProfile = await fetchEnhancedUserProfile(userId);
+      const PROFILE_FETCH_TIMEOUT_MS = 12000;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<EnhancedUserProfile | null>((resolve) => {
+        timeoutId = setTimeout(() => resolve(null), PROFILE_FETCH_TIMEOUT_MS);
+      });
+      const enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
+        fetchEnhancedUserProfile(userId),
+        timeoutPromise,
+      ]);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (!enhancedProfile) {
+        console.warn('[AuthContext] fetchProfile timed out or returned null');
+      }
       setProfile(enhancedProfile);
       setPermissions(createPermissionChecker(enhancedProfile));
       
@@ -508,7 +522,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           if (event === 'SIGNED_IN' && s?.user) {
             // Fetch enhanced profile on sign in (non-blocking for routing)
-            const QUICK_PROFILE_TIMEOUT_MS = 2000;
+            const QUICK_PROFILE_TIMEOUT_MS = 5000;
             let enhancedProfile: EnhancedUserProfile | null = null;
             let usedFallback = false;
 
