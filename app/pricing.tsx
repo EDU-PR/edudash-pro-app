@@ -78,6 +78,7 @@ export default function PricingScreen() {
       }
 
       if (result.redirect_url) {
+        console.log('[Pricing] PayFast redirect_url:', result.redirect_url);
         // Open PayFast in browser
         const canOpen = await Linking.canOpenURL(result.redirect_url);
         if (canOpen) {
