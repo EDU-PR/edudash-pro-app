@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -96,6 +96,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onOpenSettings,
 }) => {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const [showWakeWordHelp, setShowWakeWordHelp] = React.useState(false);
   const { tierStatus } = useRealtimeTier({ enabled: visible });
@@ -103,11 +104,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
 
+  const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+
   useEffect(() => {
-    if (visible) {
+    if (visible && !showQuickActions) {
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [visible, messages]);
+  }, [visible, messages, showQuickActions]);
 
   return (
     <Modal
@@ -116,10 +119,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       transparent={false}
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
+      <Container
         style={[styles.modalContainer, { backgroundColor: theme.surface }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        {...(Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: insets.top } : {})}
       >
         <View style={[styles.chatContainer, { backgroundColor: theme.surface }]}>
           {/* Header */}
@@ -147,7 +149,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   }}
                   style={[styles.closeButton, { marginRight: 6 }]}
                 >
-                  <Ionicons name="grid-outline" size={22} color={theme.textSecondary} />
+                  <Ionicons name={showQuickActions ? 'chatbubble-ellipses-outline' : 'grid-outline'} size={22} color={theme.textSecondary} />
                 </TouchableOpacity>
               )}
               {onToggleVoice && Platform.OS !== 'web' && (
@@ -225,51 +227,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </View>
           )}
 
-          {/* Messages */}
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.messagesContainer}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {messages.map((message) => {
-              const markdownStyles = getMarkdownStyles(theme);
-              return (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageBubble,
-                  message.role === 'user' ? styles.userMessage : styles.assistantMessage,
-                  { backgroundColor: message.role === 'user' ? theme.primary : theme.background },
-                ]}
-              >
-                {message.isLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={theme.primary} />
-                    <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-                      Processing...
-                    </Text>
-                  </View>
-                ) : message.role === 'user' ? (
-                  <Text style={[styles.messageText, { color: '#fff' }]}>
-                    {message.content}
-                  </Text>
-                ) : (
-                  // Use Markdown for assistant messages on native
-                  Markdown ? (
-                    <Markdown style={markdownStyles}>{message.content}</Markdown>
-                  ) : (
-                    <Text style={[styles.messageText, { color: theme.text }]}>
-                      {message.content}
-                    </Text>
-                  )
-                )}
-              </View>
-            );
-            })}
-            
-            {/* Quick Actions */}
-            {showQuickActions && (
+          {/* Content */}
+          {showQuickActions ? (
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+            >
               <QuickActions
                 onAction={onQuickAction}
                 ageGroup={quickActionAge}
@@ -278,28 +243,61 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 onCustomPromptChange={onQuickActionPromptChange}
                 onSendPrompt={onSendPrompt}
               />
-            )}
-          </ScrollView>
-
-          {!showQuickActions && onBackToQuickActions && (
-            <View style={styles.quickActionsReturn}>
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  onBackToQuickActions();
-                }}
-                style={[styles.backButton, { backgroundColor: theme.background }]}
-              >
-                <Ionicons name="grid-outline" size={16} color={theme.primary} />
-                <Text style={[styles.backButtonText, { color: theme.primary }]}>
-                  Quick Actions
-                </Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
+          ) : (
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {messages.length === 0 && (
+                <View style={{ paddingVertical: 24 }}>
+                  <Text style={[styles.loadingText, { color: theme.textSecondary, textAlign: 'center' }]}>
+                    Start a conversation or tap the grid to open Quick Actions.
+                  </Text>
+                </View>
+              )}
+              {messages.map((message) => {
+                const markdownStyles = getMarkdownStyles(theme);
+                return (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.messageBubble,
+                    message.role === 'user' ? styles.userMessage : styles.assistantMessage,
+                    { backgroundColor: message.role === 'user' ? theme.primary : theme.background },
+                  ]}
+                >
+                  {message.isLoading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={theme.primary} />
+                      <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+                        Processing...
+                      </Text>
+                    </View>
+                  ) : message.role === 'user' ? (
+                    <Text style={[styles.messageText, { color: '#fff' }]}>
+                      {message.content}
+                    </Text>
+                  ) : (
+                    // Use Markdown for assistant messages on native
+                    Markdown ? (
+                      <Markdown style={markdownStyles}>{message.content}</Markdown>
+                    ) : (
+                      <Text style={[styles.messageText, { color: theme.text }]}>
+                        {message.content}
+                      </Text>
+                    )
+                  )}
+                </View>
+              );
+              })}
+            </ScrollView>
           )}
 
           {/* Input */}
-          <View style={[styles.inputContainer, { borderTopColor: theme.border }]}>
+          <View style={[styles.inputContainer, { borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom) }]}>
             {/* Voice controls */}
             <View style={styles.voiceControls}>
               {onMicPress && (
@@ -378,7 +376,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </Container>
     </Modal>
   );
 };

@@ -6,11 +6,11 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, Linking, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '../DashAssistant.styles';
 import { useTheme } from '@/contexts/ThemeContext';
-import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
+import type { DashMessage } from '@/services/dash-ai/types';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 
@@ -25,6 +25,7 @@ interface DashMessageBubbleProps {
   onSpeak: (message: DashMessage) => void;
   onRetry: (content: string) => void;
   onSendFollowUp: (text: string) => void;
+  onSendTutorAnswer?: (text: string, sourceMessageId?: string) => void;
   extractFollowUps: (text: string) => string[];
 }
 
@@ -39,10 +40,16 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   onSpeak,
   onRetry,
   onSendFollowUp,
+  onSendTutorAnswer,
   extractFollowUps,
 }) => {
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
+  const [inlineAnswer, setInlineAnswer] = React.useState('');
+
+  React.useEffect(() => {
+    setInlineAnswer('');
+  }, [message.id]);
 
   const getTutorPhase = () => {
     const explicitPhase = (message.metadata as any)?.tutor_phase || (message.metadata as any)?.phase;
@@ -95,12 +102,35 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const url = !isUser ? extractUrl(message.content || '') : undefined;
   const isPdf = url ? /\.pdf(\?|$)/i.test(url) : false;
 
+  const isLatestMessage = index === totalMessages - 1;
+  const hasTutorQuestion = !!message.metadata?.tutor_question || !!message.metadata?.tutor_question_text;
+  const showInlineAnswer = !isUser && isLatestMessage && !isLoading && hasTutorQuestion;
+
+  const handleInlineSend = () => {
+    const trimmed = inlineAnswer.trim();
+    if (!trimmed) return;
+    if (onSendTutorAnswer) {
+      onSendTutorAnswer(trimmed, message.id);
+    } else {
+      onSendFollowUp(trimmed);
+    }
+    setInlineAnswer('');
+  };
+
   // Get suggestions from metadata or extract from content
-  const suggestions = !isUser && showFollowUps && (
+  const suggestions = !isUser && showFollowUps && !message.metadata?.tutor_question && (
     (message.metadata?.suggested_actions && message.metadata.suggested_actions.length > 0)
       ? message.metadata.suggested_actions
       : extractFollowUps(message.content)
   );
+
+  const sanitizeAssistantContent = (content: string) => {
+    return (content || '')
+      .split(/\n+/)
+      .filter(line => !/^\s*User:\s*/i.test(line))
+      .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
+      .join('\n');
+  };
 
   return (
     <View
@@ -150,10 +180,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             selectable={true}
             selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
           >
-            {isUser 
-              ? message.content 
-              : (message.content || '').split(/\n+/).filter(line => !/^\s*User:\s*/i.test(line)).join('\n')
-            }
+            {isUser ? message.content : sanitizeAssistantContent(message.content || '')}
           </Text>
           
           {isUser && isLastUserMessage && !isLoading && (
@@ -227,6 +254,36 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {showInlineAnswer && (
+          <View style={[styles.inlineAnswerContainer, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+            <Text style={[styles.inlineAnswerLabel, { color: theme.textSecondary }]}>Your answer</Text>
+            <View style={styles.inlineAnswerRow}>
+              <TextInput
+                style={[styles.inlineAnswerInput, { color: theme.text }]}
+                placeholder="Type your answer…"
+                placeholderTextColor={theme.textTertiary}
+                value={inlineAnswer}
+                onChangeText={setInlineAnswer}
+                editable={!isLoading}
+                onSubmitEditing={handleInlineSend}
+                returnKeyType="send"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.inlineAnswerSend,
+                  { backgroundColor: inlineAnswer.trim() ? theme.primary : theme.border }
+                ]}
+                onPress={handleInlineSend}
+                disabled={!inlineAnswer.trim()}
+                accessibilityLabel="Send answer"
+                accessibilityRole="button"
+              >
+                <Ionicons name="send" size={14} color={inlineAnswer.trim() ? theme.onPrimary : theme.textTertiary} />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         

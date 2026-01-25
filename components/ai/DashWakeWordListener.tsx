@@ -89,6 +89,11 @@ export default function DashWakeWordListener() {
 
       if (!accessKey) {
         console.debug('[DashWakeWord] No Picovoice access key provided; wake word disabled');
+        setEnabled(false);
+        try {
+          await AsyncStorage.setItem('@dash_ai_in_app_wake_word', 'false');
+        } catch {}
+        DeviceEventEmitter.emit('dash:wake_word_toggle', false);
         return false;
       }
 
@@ -122,6 +127,11 @@ export default function DashWakeWordListener() {
       return true;
     } catch (e) {
       console.debug('[DashWakeWord] Wake word engine not available or failed to init:', e);
+      setEnabled(false);
+      try {
+        await AsyncStorage.setItem('@dash_ai_in_app_wake_word', 'false');
+      } catch {}
+      DeviceEventEmitter.emit('dash:wake_word_toggle', false);
       return false;
     }
   };

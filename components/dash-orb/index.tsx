@@ -51,12 +51,18 @@ interface DashOrbProps {
   size?: number;
   /** Callback when a command is executed */
   onCommandExecuted?: (command: string, result: unknown) => void;
+  /** Start expanded (useful for full-screen mode) */
+  autoOpen?: boolean;
+  /** Hide floating button (useful for full-screen mode) */
+  hideButton?: boolean;
 }
 
 export default function DashOrb({
   position = 'bottom-right',
   size = 60,
   onCommandExecuted,
+  autoOpen = false,
+  hideButton = false,
 }: DashOrbProps) {
   // Get user profile for role-based AI endpoint selection
   const { profile } = useAuth();
@@ -64,7 +70,7 @@ export default function DashOrb({
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(!!autoOpen);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -77,6 +83,7 @@ export default function DashOrb({
   const [lastDetectedLanguage, setLastDetectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA' | null>(null);
   const [quickActionAge, setQuickActionAge] = useState('auto');
   const [quickActionPrompt, setQuickActionPrompt] = useState('');
+  const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
     if (!lang) return null;
@@ -137,7 +144,7 @@ export default function DashOrb({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       handleWakeWordDetected();
     },
-    enabled: wakeWordEnabled,
+    enabled: wakeWordEnabled && wakeWordAvailable,
     useFallback: false, // Use Porcupine for "Hey Dash" wake word detection
   });
   
@@ -174,6 +181,12 @@ export default function DashOrb({
     
     pan.setValue({ x: initialX, y: initialY });
   }, [position, size]);
+
+  useEffect(() => {
+    if (autoOpen) {
+      setIsExpanded(true);
+    }
+  }, [autoOpen]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -834,54 +847,61 @@ export default function DashOrb({
   return (
     <>
       {/* Floating Orb Button */}
-      <Animated.View
-        style={[
-          styles.orbContainer,
-          {
-            transform: [
-              { translateX: pan.x },
-              { translateY: pan.y },
-              { scale: pulseAnim }
-            ],
-            // Remove fixed positioning as we use transform
-            bottom: undefined,
-            right: undefined,
-            left: undefined,
-            top: undefined,
-          },
-        ]}
-        {...panResponder.panHandlers}
-      >
-        <TouchableOpacity
-          onPress={handleOrbPress}
-          activeOpacity={0.9}
-          style={{ width: size, height: size }}
+      {!hideButton && (
+        <Animated.View
+          style={[
+            styles.orbContainer,
+            {
+              transform: [
+                { translateX: pan.x },
+                { translateY: pan.y },
+                { scale: pulseAnim }
+              ],
+              // Remove fixed positioning as we use transform
+              bottom: undefined,
+              right: undefined,
+              left: undefined,
+              top: undefined,
+            },
+          ]}
+          {...panResponder.panHandlers}
         >
-          <CosmicOrb size={size} isProcessing={isProcessing} isSpeaking={isSpeaking} />
-          
-          {/* Center icon */}
-          <View
-            style={{
-              position: 'absolute',
-              width: size,
-              height: size,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+          <TouchableOpacity
+            onPress={handleOrbPress}
+            activeOpacity={0.9}
+            style={{ width: size, height: size }}
           >
-            <Ionicons 
-              name={isSpeaking ? 'mic' : isProcessing ? 'sync' : 'sparkles'} 
-              size={size * 0.35} 
-              color="#ffffff" 
-            />
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
+            <CosmicOrb size={size} isProcessing={isProcessing} isSpeaking={isSpeaking} />
+            
+            {/* Center icon */}
+            <View
+              style={{
+                position: 'absolute',
+                width: size,
+                height: size,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons 
+                name={isSpeaking ? 'mic' : isProcessing ? 'sync' : 'sparkles'} 
+                size={size * 0.35} 
+                color="#ffffff" 
+              />
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* Expanded Chat Modal */}
       <ChatModal
         visible={isExpanded}
-        onClose={() => setIsExpanded(false)}
+        onClose={() => {
+          setIsExpanded(false);
+          if (hideButton) {
+            router.back();
+          }
+        }}
         messages={messages}
         inputText={inputText}
         setInputText={setInputText}
@@ -914,7 +934,7 @@ export default function DashOrb({
           processCommand(enhanced, label || customHint || 'Quick action');
         }}
         onBackToQuickActions={() => {
-          setShowQuickActions(true);
+          setShowQuickActions(prev => !prev);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }}
         isSpeaking={isSpeaking}
@@ -927,6 +947,15 @@ export default function DashOrb({
         onMicPress={handleMicPress}
         wakeWordEnabled={wakeWordEnabled}
         onToggleWakeWord={() => {
+          if (!wakeWordEnabled && !wakeWordAvailable) {
+            setMessages(prev => [...prev, {
+              id: `wakeword-unavailable-${Date.now()}`,
+              role: 'system',
+              content: 'Wake word requires a Picovoice access key. Add EXPO_PUBLIC_PICOVOICE_ACCESS_KEY to enable "Hey Dash".',
+              timestamp: new Date(),
+            }]);
+            return;
+          }
           const newState = !wakeWordEnabled;
           setWakeWordEnabled(newState);
           if (newState) {

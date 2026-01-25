@@ -267,6 +267,40 @@ export const styles = StyleSheet.create({
     marginTop: 8,
     gap: 6,
   },
+  inlineAnswerContainer: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  inlineAnswerLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  inlineAnswerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineAnswerInput: {
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    fontSize: 14,
+  },
+  inlineAnswerSend: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   messageAttachment: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -741,6 +775,21 @@ export const styles = StyleSheet.create({
   },
   sectionBlock: {
     marginBottom: 16,
+  },
+  profileHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  profileHintText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 12,

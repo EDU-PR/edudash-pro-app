@@ -22,8 +22,9 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Keyboard,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './DashAssistant.styles';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,7 +36,6 @@ import {
 } from './dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
-import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
@@ -59,11 +59,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   initialMessage
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { tierStatus } = useRealtimeTier();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
+  const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
@@ -100,12 +102,23 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       }
     };
     loadWakeWord();
+    const sub = DeviceEventEmitter.addListener('dash:wake_word_toggle', (value: boolean) => {
+      if (mounted) setWakeWordEnabled(!!value);
+    });
     return () => {
       mounted = false;
+      sub?.remove?.();
     };
   }, []);
 
   const toggleWakeWord = useCallback(async () => {
+    if (!wakeWordEnabled && !wakeWordAvailable) {
+      Alert.alert(
+        'Wake Word Unavailable',
+        'Wake word requires a Picovoice access key. Add EXPO_PUBLIC_PICOVOICE_ACCESS_KEY to enable "Hey Dash".'
+      );
+      return;
+    }
     const next = !wakeWordEnabled;
     setWakeWordEnabled(next);
     try {
@@ -163,9 +176,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     partialTranscript,
     alertState,
     hideAlert,
+    learnerContext,
     flashListRef,
     inputRef,
     sendMessage,
+    sendTutorAnswer,
     speakResponse,
     stopSpeaking,
     scrollToBottom,
@@ -205,6 +220,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         onSpeak={speakResponse}
         onRetry={(content) => sendMessage(content)}
         onSendFollowUp={(text) => sendMessage(text)}
+        onSendTutorAnswer={(text, sourceMessageId) => sendTutorAnswer(text, sourceMessageId)}
         extractFollowUps={extractFollowUps}
       />
     );
@@ -255,7 +271,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       const displayMap: Record<string, string> = {
         'switch_to_enhanced': '✨ Enhanced Dashboard',
         'switch_to_classic': '📊 Classic Dashboard',
-        'dashboard_help': '❓ Dashboard Help',
+        'dashboard_help': 'Dashboard Help',
         'dashboard_settings': '⚙️ Settings',
         'view_enhanced_features': '🌟 Enhanced Features',
         'view_classic_features': '📋 Classic Features',
@@ -315,12 +331,12 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     );
   }
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
-      <KeyboardAvoidingView 
+    const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
+      <Container 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        {...(Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: insets.top } : {})}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         
@@ -356,6 +372,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onPress={() => router.push('/screens/dash-conversations-history')}
             >
               <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              accessibilityLabel="Open Dash Orb"
+              onPress={() => router.push('/screens/dash-orb')}
+            >
+              <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconButton}
@@ -430,6 +453,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           renderSuggestedActions={renderSuggestedActions}
           onSendMessage={(text) => sendMessage(text)}
           onAgeBandChange={handleAgeBandChange}
+          learnerContext={learnerContext}
         />
 
         {/* Jump to end FAB */}
@@ -469,6 +493,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onAttachFile={handleAttachFile}
           onRemoveAttachment={handleRemoveAttachment}
           onQuickAction={(text) => sendMessage(text)}
+          bottomInset={insets.bottom}
         />
 
         {/* Command Palette Modal */}
@@ -484,7 +509,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           buttons={alertState.buttons}
           onClose={hideAlert}
         />
-      </KeyboardAvoidingView>
+      </Container>
     </SafeAreaView>
   );
 };

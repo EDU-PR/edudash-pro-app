@@ -10,6 +10,13 @@ interface TutorHomeProps {
   theme: any;
   onSendMessage?: (text: string) => void;
   onAgeBandChange?: (ageBand: string) => void;
+  learnerContext?: {
+    learnerName?: string | null;
+    grade?: string | null;
+    ageBand?: string | null;
+    schoolType?: string | null;
+    role?: string | null;
+  } | null;
 }
 
 export const TutorHome: React.FC<TutorHomeProps> = ({
@@ -17,6 +24,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   theme,
   onSendMessage,
   onAgeBandChange,
+  learnerContext,
 }) => {
   const [ageBand, setAgeBand] = useState('auto');
   const [ageBandLoaded, setAgeBandLoaded] = useState(false);
@@ -69,6 +77,11 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
       mounted = false;
     };
   }, [ageChips]);
+
+  useEffect(() => {
+    if (!learnerContext?.ageBand) return;
+    setAgeBand(prev => (prev === 'auto' ? learnerContext.ageBand || prev : prev));
+  }, [learnerContext?.ageBand]);
 
   useEffect(() => {
     if (!ageBandLoaded) return;
@@ -136,6 +149,16 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
 
       <View style={styles.sectionBlock}>
         <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Age & grade</Text>
+        {learnerContext && (learnerContext.grade || learnerContext.learnerName || learnerContext.schoolType) && (
+          <View style={[styles.profileHint, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Ionicons name="person-circle-outline" size={16} color={theme.primary} />
+            <Text style={[styles.profileHintText, { color: theme.textSecondary }]}>
+              {learnerContext.learnerName ? `${learnerContext.learnerName}` : 'Learner profile'}
+              {learnerContext.grade ? ` · Grade ${learnerContext.grade}` : ''}
+              {learnerContext.schoolType ? ` · ${learnerContext.schoolType}` : ''}
+            </Text>
+          </View>
+        )}
         <View style={styles.chipRow}>
           {ageChips.map((chip) => {
             const active = chip.id === ageBand;
