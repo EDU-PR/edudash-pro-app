@@ -20,7 +20,7 @@ const corsHeaders = {
 
 function encodePayfastValue(value: string): string {
   return encodeURIComponent(value)
-    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/[!'()*~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
     .replace(/%[0-9a-f]{2}/gi, (m) => m.toUpperCase())
     .replace(/%20/g, '+');
 }

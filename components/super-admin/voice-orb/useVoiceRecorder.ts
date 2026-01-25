@@ -48,6 +48,7 @@ export function useVoiceRecorder(
   
   const recorder = useAudioRecorder(recordingOptions);
   const recorderState = useAudioRecorderState(recorder, 150);
+  const preparedRef = useRef(false);
   
   // Refs for silence detection
   const lastSoundTime = useRef<number>(Date.now());
@@ -111,6 +112,11 @@ export function useVoiceRecorder(
         console.error('[VoiceRecorder] Recording permission denied');
         return false;
       }
+
+      if (recorderState.isRecording) {
+        console.warn('[VoiceRecorder] Recorder already active, skipping prepare');
+        return false;
+      }
       
       // Reset state
       speechDetected.current = false;
@@ -120,16 +126,27 @@ export function useVoiceRecorder(
       lastSoundTime.current = Date.now();
       lastUpdateTime.current = 0;
       
-      await recorder.prepareToRecordAsync();
+      if (!preparedRef.current) {
+        await recorder.prepareToRecordAsync();
+        preparedRef.current = true;
+      }
       recorder.record();
       
       console.log('[VoiceRecorder] Recording started');
       return true;
     } catch (error) {
       console.error('[VoiceRecorder] Error starting recording:', error);
+      const message = String(error);
+      if (message.includes('already been prepared')) {
+        try {
+          preparedRef.current = true;
+          recorder.record();
+          return true;
+        } catch {}
+      }
       return false;
     }
-  }, [recorder]);
+  }, [recorder, recorderState.isRecording]);
 
   // Stop recording
   const stopRecording = useCallback(async (): Promise<string | null> => {
@@ -143,6 +160,7 @@ export function useVoiceRecorder(
       
       console.log('[VoiceRecorder] Stopping recording...');
       await recorder.stop();
+      preparedRef.current = false;
       
       const uri = recorder.uri;
       console.log('[VoiceRecorder] Recording stopped, URI:', uri ? 'obtained' : 'null');

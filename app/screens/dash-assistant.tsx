@@ -16,8 +16,9 @@ import { normalizeRole } from '@/lib/rbac';
 export default function DashAssistantScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const params = useLocalSearchParams<{ initialMessage?: string }>();
+  const params = useLocalSearchParams<{ initialMessage?: string; conversationId?: string }>();
   const initialMessage = typeof params?.initialMessage === 'string' ? params.initialMessage : undefined;
+  const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
 
   const getFallbackPath = () => {
     const role = normalizeRole(String(profile?.role || ''));
@@ -58,6 +59,7 @@ export default function DashAssistantScreen() {
       <DashAssistant 
         onClose={handleClose}
         initialMessage={initialMessage}
+        conversationId={conversationId}
       />
     </View>
   );

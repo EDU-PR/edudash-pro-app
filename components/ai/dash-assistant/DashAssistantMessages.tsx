@@ -1,8 +1,7 @@
 import React from 'react';
-import { Platform, View, Text, TouchableOpacity } from 'react-native';
+import { Platform, View, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import TutorHome from './TutorHome';
 
 export interface DashAssistantMessagesProps {
   flashListRef: any;
@@ -19,6 +18,7 @@ export interface DashAssistantMessagesProps {
   renderTypingIndicator: () => React.ReactElement | null;
   renderSuggestedActions: () => React.ReactElement | null;
   onSendMessage?: (text: string) => void;
+  onAgeBandChange?: (ageBand: string) => void;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -35,69 +35,42 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   renderTypingIndicator,
   renderSuggestedActions,
   onSendMessage,
+  onAgeBandChange,
 }) => {
-  // Empty state component
+  const getTutorPhase = (message: any) => {
+    const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
+    if (explicitPhase) {
+      return String(explicitPhase);
+    }
+    const content = (message?.content || '').toLowerCase();
+    if (!content) return null;
+    if (/(quiz|practice|exercise|try it|solve|work through)/.test(content)) {
+      return 'Practice';
+    }
+    if (/(diagnose|check in|quick check|question|assess)/.test(content) || (content.endsWith('?') && content.length < 180)) {
+      return 'Diagnose';
+    }
+    if (/(explain|example|step|here's how|why this works)/.test(content)) {
+      return 'Teach';
+    }
+    return null;
+  };
+
+  const currentPhase = React.useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg?.type === 'assistant') {
+        return getTutorPhase(msg);
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const phaseOrder = ['Diagnose', 'Teach', 'Practice'];
+  const phaseIndex = currentPhase ? phaseOrder.indexOf(currentPhase) : -1;
+
   const renderEmptyState = () => (
-    <View style={styles.emptyStateContainer}>
-      <LinearGradient
-        colors={['#0a0a0f', '#1a0a2e', '#0a0a0f']}
-        style={styles.emptyStateGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        {/* Dash Logo */}
-        <View style={[styles.emptyStateLogo, { backgroundColor: theme.primary }]}>
-          <Ionicons name="sparkles" size={40} color="#fff" />
-        </View>
-        
-        {/* Welcome Text */}
-        <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-          Hi! I'm Dash
-        </Text>
-        <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-          Ask me anything! I can help with homework, explain concepts, solve problems, and more.
-        </Text>
-        
-        {/* Quick Action Buttons */}
-        <View style={styles.quickActionsContainer}>
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => onSendMessage?.('Help me with a math problem')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="calculator-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Help with math</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => onSendMessage?.('Explain a concept to me')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="bulb-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Explain a concept</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            activeOpacity={0.7}
-            onPress={() => onSendMessage?.('Give me study guidance and tips')}
-          >
-            <View style={styles.actionButtonContent}>
-              <Ionicons name="book-outline" size={20} color={theme.primary} />
-              <Text style={[styles.actionButtonText, { color: theme.text }]}>Study guidance</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    </View>
+    <TutorHome styles={styles} theme={theme} onSendMessage={onSendMessage} onAgeBandChange={onAgeBandChange} />
   );
 
   return (
@@ -128,6 +101,25 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
           scrollToBottom({ animated: true, delay: 80 });
         }
       }}
+      ListHeaderComponent={
+        messages.length > 0 ? (
+          <View style={[styles.phaseRailContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.phaseRailTrack, { backgroundColor: theme.border }]} />
+            {phaseOrder.map((phase, index) => {
+              const active = index === phaseIndex;
+              const completed = phaseIndex >= 0 && index < phaseIndex;
+              const dotColor = active ? theme.primary : completed ? theme.primary : theme.border;
+              const labelColor = active ? theme.primary : completed ? theme.text : theme.textTertiary;
+              return (
+                <View key={phase} style={styles.phaseRailStep}>
+                  <View style={[styles.phaseRailDot, { backgroundColor: dotColor }]} />
+                  <Text style={[styles.phaseRailLabel, { color: labelColor }]}>{phase}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null
+      }
       ListEmptyComponent={messages.length === 0 ? renderEmptyState : null}
       ListFooterComponent={
         <>

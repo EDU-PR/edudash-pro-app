@@ -83,6 +83,7 @@ export interface IDashAIAssistant {
   getLanguage(): string | undefined;
   getPersonality(): any;
   savePersonality(partial: any): Promise<void>;
+  updateUserContext(context: Record<string, any>): Promise<void>;
   exportConversation(conversationId: string): Promise<string>;
 
   // Voice response
@@ -247,6 +248,7 @@ export class DashAIAssistant implements IDashAIAssistant {
   getLanguage(): string | undefined { return this.core.getLanguage(); }
   getPersonality(): any { return this.core.getPersonality(); }
   async savePersonality(partial: any): Promise<void> { return this.core.savePersonality(partial); }
+  async updateUserContext(context: Record<string, any>): Promise<void> { return this.core.updateUserContext(context); }
   async exportConversation(conversationId: string): Promise<string> { return this.core.conversation.exportConversation(conversationId); }
 
   // Screen context (simple default for tools)

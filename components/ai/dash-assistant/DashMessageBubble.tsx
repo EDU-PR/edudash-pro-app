@@ -43,6 +43,34 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 }) => {
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
+
+  const getTutorPhase = () => {
+    const explicitPhase = (message.metadata as any)?.tutor_phase || (message.metadata as any)?.phase;
+    if (explicitPhase) {
+      return String(explicitPhase);
+    }
+    const content = (message.content || '').toLowerCase();
+    if (!content) return null;
+    if (/(quiz|practice|exercise|try it|solve|work through)/.test(content)) {
+      return 'Practice';
+    }
+    if (/(diagnose|check in|quick check|question|assess)/.test(content) || (content.endsWith('?') && content.length < 180)) {
+      return 'Diagnose';
+    }
+    if (/(explain|example|step|here's how|why this works)/.test(content)) {
+      return 'Teach';
+    }
+    return null;
+  };
+
+  const phase = !isUser ? getTutorPhase() : null;
+  const phaseColors = phase
+    ? {
+        Diagnose: { bg: theme.warning + '22', text: theme.warning || '#f59e0b' },
+        Teach: { bg: theme.primary + '22', text: theme.primary },
+        Practice: { bg: theme.success + '22', text: theme.success || '#16a34a' },
+      }[phase as 'Diagnose' | 'Teach' | 'Practice'] || { bg: theme.surfaceVariant, text: theme.textSecondary }
+    : null;
   
   // Check if this is the last user message (for retry button)
   const isLastUserMessage = isUser && (() => {
@@ -98,6 +126,21 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           }
         ]}
       >
+        {!isUser && (
+          <View style={styles.messageHeaderRow}>
+            <View style={styles.messageHeaderLeft}>
+              <View style={[styles.inlineAvatar, { backgroundColor: theme.primary }]}>
+                <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
+              </View>
+              <Text style={[styles.messageRoleLabel, { color: theme.text }]}>Dash Tutor</Text>
+            </View>
+            {phase && (
+              <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg }]}>
+                <Text style={[styles.phaseText, { color: phaseColors?.text }]}>{phase}</Text>
+              </View>
+            )}
+          </View>
+        )}
         <View style={styles.messageContentRow}>
           <Text
             style={[
@@ -242,10 +285,6 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
         <View style={styles.messageBubbleFooter}>
           {!isUser && (
             <>
-              {/* Avatar inside bubble next to speaker icon */}
-              <View style={[styles.inlineAvatar, { backgroundColor: theme.primary }]}>
-                <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
-              </View>
               <TouchableOpacity
                 style={[
                   styles.inlineSpeakButton, 

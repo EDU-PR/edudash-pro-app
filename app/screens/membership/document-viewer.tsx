@@ -22,7 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import * as Sharing from 'expo-sharing';
-import { documentViewerStyles as styles } from './_document-viewer.styles';
+import { documentViewerStyles as styles } from '@/components/membership/styles/document-viewer.styles';
 
 interface DocumentData {
   id: string;

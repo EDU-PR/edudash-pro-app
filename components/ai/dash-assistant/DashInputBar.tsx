@@ -13,7 +13,8 @@ import {
   ScrollView, 
   Text,
   ActivityIndicator,
-  Platform
+  Platform,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -21,6 +22,7 @@ import { styles } from '../DashAssistant.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashAttachment } from '@/services/dash-ai/types';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
 interface DashInputBarProps {
   inputRef: React.RefObject<TextInput>;
@@ -31,12 +33,14 @@ interface DashInputBarProps {
   isLoading: boolean;
   isUploading: boolean;
   isRecording?: boolean;
+  isSpeaking?: boolean;
   partialTranscript?: string;
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
   onAttachFile: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onQuickAction?: (text: string) => void;
 }
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
@@ -48,14 +52,19 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   isLoading,
   isUploading,
   isRecording = false,
+  isSpeaking = false,
   partialTranscript = '',
   onSend,
   onMicPress,
   onTakePhoto,
   onAttachFile,
   onRemoveAttachment,
+  onQuickAction,
 }) => {
   const { theme } = useTheme();
+  const { width: screenWidth } = Dimensions.get('window');
+  const orbSize = screenWidth < 360 ? 38 : screenWidth < 400 ? 40 : 42;
+  const orbRingSize = orbSize + 10;
 
   const renderAttachmentChips = () => {
     if (selectedAttachments.length === 0) return null;
@@ -145,11 +154,54 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   };
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
+  const canShowTutorChips = !hasContent && !isRecording && !isLoading;
+
+  const quickChips = [
+    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this step-by-step in simple language. Ask one diagnostic question first.' },
+    { id: 'practice', label: 'Practice', icon: 'pencil-outline', prompt: 'Give me one practice question and wait for my answer before continuing.' },
+    { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: 'Quiz me with 5 questions, starting easy and getting harder.' },
+    { id: 'summary', label: 'Summarize', icon: 'sparkles-outline', prompt: 'Summarize the key ideas in 5 bullet points and ask one quick check question.' },
+  ];
 
   return (
     <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
       {/* Attachment chips */}
       {renderAttachmentChips()}
+
+      {(isRecording || partialTranscript) && (
+        <View style={[styles.voiceStatusRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+          <Ionicons name={isRecording ? 'mic' : 'chatbubble-ellipses-outline'} size={14} color={isRecording ? theme.error : theme.primary} />
+          <Text style={[styles.voiceStatusText, { color: theme.textSecondary }]}>
+            {isRecording ? 'Listening…' : 'Transcript'}
+          </Text>
+          {!!partialTranscript && (
+            <Text style={[styles.voiceTranscript, { color: theme.text }]} numberOfLines={1}>
+              {partialTranscript}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Tutor quick chips */}
+      {canShowTutorChips && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tutorChipRow}
+        >
+          {quickChips.map((chip) => (
+            <TouchableOpacity
+              key={chip.id}
+              style={[styles.tutorChip, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={() => onQuickAction?.(chip.prompt)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={chip.icon as any} size={14} color={theme.primary} />
+              <Text style={[styles.tutorChipText, { color: theme.text }]}>{chip.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
       
       <View style={styles.inputRow}>
         {/* Camera button (outside input) */}
@@ -238,8 +290,33 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
           />
         </View>
         
-        {/* Send or Mic button */}
-        {hasContent ? (
+        {/* Dash Orb (voice) */}
+        <TouchableOpacity
+          style={[
+            styles.orbButton,
+            { opacity: isLoading ? 0.6 : 1, width: orbSize + 4, height: orbSize + 4 }
+          ]}
+          onPress={onMicPress}
+          disabled={isLoading}
+          accessibilityLabel={isRecording ? "Stop recording" : "Speak to Dash"}
+          accessibilityRole="button"
+          activeOpacity={0.85}
+        >
+          <CosmicOrb size={orbSize} isProcessing={isRecording || isLoading} isSpeaking={isSpeaking} />
+          <View style={[
+            styles.orbPulseRing,
+            { 
+              width: orbRingSize,
+              height: orbRingSize,
+              borderRadius: orbRingSize / 2,
+              borderColor: isRecording ? theme.error : theme.primary,
+              opacity: isRecording ? 0.7 : 0.2,
+            }
+          ]} />
+        </TouchableOpacity>
+
+        {/* Send button */}
+        {hasContent && (
           <TouchableOpacity
             style={[styles.sendButton, { backgroundColor: theme.primary, opacity: (isLoading || isUploading) ? 0.5 : 1 }]}
             onPress={async () => {
@@ -258,31 +335,6 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             ) : (
               <Ionicons name="send" size={20} color={theme.onPrimary} />
             )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.recordButton, 
-              { 
-                backgroundColor: isRecording ? theme.error : theme.accent,
-                // Add pulsing animation effect for recording
-                shadowColor: isRecording ? theme.error : 'transparent',
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: isRecording ? 0.5 : 0,
-                shadowRadius: isRecording ? 8 : 0,
-                elevation: isRecording ? 8 : 0,
-              }
-            ]}
-            onPress={onMicPress}
-            disabled={isLoading}
-            accessibilityLabel={isRecording ? "Stop recording" : "Record voice message"}
-            accessibilityRole="button"
-          >
-            <Ionicons 
-              name={isRecording ? "stop" : "mic-outline"} 
-              size={20} 
-              color={isRecording ? '#fff' : theme.onAccent} 
-            />
           </TouchableOpacity>
         )}
       </View>

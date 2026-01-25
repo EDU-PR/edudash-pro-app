@@ -23,14 +23,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useAlert } from '@/components/ui/StyledAlert';
-import { createStyles } from './_youth-executive-invite.styles';
+import { createStyles } from '@/components/membership/styles/youth-executive-invite.styles';
 import { 
   EXECUTIVE_POSITIONS, 
   ExecutiveInvite, 
   ExecutivePosition,
   getStatusColor, 
   generateInviteCode 
-} from './_youth-executive-invite.constants';
+} from '@/components/membership/styles/youth-executive-invite.constants';
 
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }

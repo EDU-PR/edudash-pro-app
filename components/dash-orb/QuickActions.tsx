@@ -5,6 +5,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { styles } from './DashOrb.styles';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export interface QuickAction {
   id: string;
@@ -56,6 +57,7 @@ interface QuickActionsProps {
   onAgeGroupChange?: (ageGroup: string) => void;
   customPrompt?: string;
   onCustomPromptChange?: (value: string) => void;
+  onSendPrompt?: (prompt: string, displayLabel?: string) => void;
 }
 
 const AGE_OPTIONS = [
@@ -74,6 +76,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   onAgeGroupChange,
   customPrompt = '',
   onCustomPromptChange,
+  onSendPrompt,
 }) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -105,12 +108,51 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
   return (
     <View style={styles.quickActionsContainer}>
+      <LinearGradient
+        colors={['#0b1220', '#101b2d', '#0b1220']}
+        style={[styles.quickActionsHeroCard, { borderColor: theme.border }]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.quickActionsHeroTop}>
+          <View style={[styles.quickActionsHeroIcon, { backgroundColor: theme.primary }]}>
+            <Ionicons name="sparkles" size={20} color="#fff" />
+          </View>
+          <View style={styles.quickActionsHeroText}>
+            <Text style={[styles.quickActionsHeroTitle, { color: theme.text }]}>Your personal tutor</Text>
+            <Text style={[styles.quickActionsHeroSubtitle, { color: theme.textSecondary }]}>
+              Ask anything. I’ll diagnose, teach, and practice with you.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.quickActionsCtasRow}>
+          <TouchableOpacity
+            style={[styles.quickActionsCta, { backgroundColor: theme.primary }]}
+            onPress={() => onSendPrompt?.('Ask me one short diagnostic question first, then explain step-by-step in simple language.', 'Explain it')}
+          >
+            <Ionicons name="bulb-outline" size={16} color={theme.onPrimary || '#fff'} />
+            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Explain it</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.quickActionsCta, { backgroundColor: theme.success || '#16a34a' }]}
+            onPress={() => onSendPrompt?.('Give me one practice question to diagnose my level. Wait for my answer before continuing.', 'Help me solve')}
+          >
+            <Ionicons name="pencil-outline" size={16} color={theme.onPrimary || '#fff'} />
+            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Help me solve</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.quickActionsCta, { backgroundColor: theme.warning || '#f59e0b' }]}
+            onPress={() => onSendPrompt?.('Quiz me with 5 questions, starting easy and getting harder.', 'Test me')}
+          >
+            <Ionicons name="school-outline" size={16} color={theme.onPrimary || '#fff'} />
+            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Test me</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+
       <View style={styles.quickActionsHeader}>
-        <Text style={[styles.quickActionsTitle, { color: theme.textSecondary }]}>
-          Quick Actions
-        </Text>
-        <Text style={[styles.quickActionsSubtitle, { color: theme.textSecondary }]}>
-          Choose an age and add details to personalize
+        <Text style={[styles.quickActionsSectionTitle, { color: theme.textSecondary }]}>
+          Personalize
         </Text>
         <View style={styles.quickActionsChipsRow}>
           {AGE_OPTIONS.map((option) => {
@@ -120,11 +162,11 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 key={option.id}
                 style={[
                   styles.quickActionChip,
-                  { backgroundColor: selected ? theme.primary : theme.background, borderColor: theme.border },
+                  { backgroundColor: selected ? theme.primary + '22' : theme.background, borderColor: selected ? theme.primary : theme.border },
                 ]}
                 onPress={() => onAgeGroupChange?.(option.id)}
               >
-                <Text style={{ color: selected ? theme.onPrimary : theme.textSecondary, fontSize: 12 }}>
+                <Text style={{ color: selected ? theme.primary : theme.textSecondary, fontSize: 12 }}>
                   {option.label}
                 </Text>
               </TouchableOpacity>
@@ -200,7 +242,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       {/* Education Section - Available to All */}
       {educationActions.length > 0 && (
         <>
-          <Text style={[styles.categoryLabel, { color: theme.primary }]}>📚 Education</Text>
+          <Text style={[styles.categoryLabel, { color: theme.primary }]}>📚 Education tools</Text>
           <View style={styles.quickActionsGrid}>
             {educationActions.map((action) => (
               <TouchableOpacity

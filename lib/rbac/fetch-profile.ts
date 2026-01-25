@@ -90,35 +90,59 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       return null;
     }
     
+    // Keep a single client instance so any session sync applies to the RPC call.
+    const supabase = assertSupabase();
+
+    // If our custom session storage is populated but Supabase auth has no
+    // in-memory session yet, explicitly set it so auth.uid() resolves.
+    try {
+      const { data: { session: clientSession } } = await supabase.auth.getSession();
+      const missingClientSession = !clientSession?.access_token;
+      const hasStoredTokens = !!storedSession?.access_token && !!storedSession?.refresh_token;
+
+      if (missingClientSession && hasStoredTokens) {
+        debug('[Profile] Supabase session missing, restoring from stored session');
+        await supabase.auth.setSession({
+          access_token: storedSession!.access_token,
+          refresh_token: storedSession!.refresh_token,
+        });
+      }
+    } catch (sessionSyncError) {
+      debug('[Profile] Session sync failed (non-fatal):', sessionSyncError);
+    }
+
     // Fetch profile
     let profile = null;
     let profileError = null;
 
     log('[Profile] Calling get_my_profile RPC...');
-    const rpcCall = () => assertSupabase().rpc('get_my_profile').maybeSingle();
+    // Avoid maybeSingle() here: it sets Accept=object+json and turns
+    // "no rows" into a 406 error, which can wedge profile loading.
+    const rpcCall = () => supabase.rpc('get_my_profile');
     const rpcTimeoutMs = 5000;
     const rpcTimeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('RPC timeout')), rpcTimeoutMs)
     );
 
-    let rpcProfile: any = null;
+    let rpcData: any = null;
     let rpcError: any = null;
     
-    ({ data: rpcProfile, error: rpcError } = await Promise.race([rpcCall(), rpcTimeout]).catch(err => {
+    ({ data: rpcData, error: rpcError } = await Promise.race([rpcCall(), rpcTimeout]).catch(err => {
       log('[Profile] RPC call failed or timed out:', err.message);
       return { data: null, error: err };
     }) as any);
 
     // Single retry on timeout
-    if ((!rpcProfile || !(rpcProfile as any).id) && rpcError && String(rpcError.message || '').includes('timeout')) {
+    if ((!rpcData || (Array.isArray(rpcData) && rpcData.length === 0)) && rpcError && String(rpcError.message || '').includes('timeout')) {
       debug('Retrying get_my_profile RPC once after timeout...');
       await new Promise(res => setTimeout(res, 300));
-      ({ data: rpcProfile, error: rpcError } = await Promise.race([rpcCall(), rpcTimeout]).catch(err => {
+      ({ data: rpcData, error: rpcError } = await Promise.race([rpcCall(), rpcTimeout]).catch(err => {
         log('[Profile] RPC retry failed or timed out:', err.message);
         return { data: null, error: err };
       }) as any);
     }
 
+    const rpcProfile = Array.isArray(rpcData) ? rpcData[0] : rpcData;
     if (rpcProfile && (rpcProfile as any).id) {
       profile = rpcProfile as any;
       debug('RPC get_my_profile succeeded');
@@ -130,7 +154,7 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
       try {
         const { data: selfProfile } = await assertSupabase()
           .from('profiles')
-          .select('id,email,role,first_name,last_name,avatar_url,created_at,preschool_id,organization_id')
+          .select('id,auth_user_id,email,role,first_name,last_name,avatar_url,created_at,preschool_id,organization_id')
           .eq('id', userId)
           .maybeSingle();
         if (selfProfile && (selfProfile as any).id) {
@@ -139,6 +163,23 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
         }
       } catch (selfReadErr) {
         debug('Direct profiles read failed (non-fatal):', selfReadErr);
+      }
+
+      // Fallback 1b: Some deployments use profiles.auth_user_id instead of id
+      if (!profile) {
+        try {
+          const { data: authLinkedProfile } = await assertSupabase()
+            .from('profiles')
+            .select('id,auth_user_id,email,role,first_name,last_name,avatar_url,created_at,preschool_id,organization_id')
+            .eq('auth_user_id', userId)
+            .maybeSingle();
+          if (authLinkedProfile && (authLinkedProfile as any).id) {
+            profile = authLinkedProfile as any;
+            debug('Using profiles.auth_user_id lookup as fallback');
+          }
+        } catch (authLinkedErr) {
+          debug('profiles.auth_user_id lookup failed (non-fatal):', authLinkedErr);
+        }
       }
       
       // Fallback 2: Try debug RPC

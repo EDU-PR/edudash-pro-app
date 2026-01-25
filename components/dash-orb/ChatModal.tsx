@@ -15,8 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { styles, getMarkdownStyles } from './DashOrb.styles';
 import { QuickActions, QuickAction } from './QuickActions';
+import { CosmicOrb } from './CosmicOrb';
 
 // Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
@@ -57,6 +59,7 @@ interface ChatModalProps {
   quickActionPrompt?: string;
   onQuickActionPromptChange?: (value: string) => void;
   onBackToQuickActions?: () => void; // Navigate back to quick actions
+  onSendPrompt?: (prompt: string, displayLabel?: string) => void;
   isSpeaking?: boolean;
   voiceEnabled?: boolean;
   onToggleVoice?: () => void;
@@ -82,6 +85,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   quickActionPrompt,
   onQuickActionPromptChange,
   onBackToQuickActions,
+  onSendPrompt,
   isSpeaking = false,
   voiceEnabled = true,
   onToggleVoice,
@@ -94,6 +98,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const { theme } = useTheme();
   const scrollViewRef = useRef<ScrollView>(null);
   const [showWakeWordHelp, setShowWakeWordHelp] = React.useState(false);
+  const { tierStatus } = useRealtimeTier({ enabled: visible });
+  const remaining = tierStatus && tierStatus.quotaLimit > 0
+    ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
+    : null;
 
   useEffect(() => {
     if (visible) {
@@ -198,6 +206,25 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </View>
           )}
 
+          {tierStatus && (
+            <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.background }]}>
+              <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+              <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
+                {tierStatus.tierDisplayName} • {remaining === null ? 'Unlimited' : `${remaining} left today`}
+              </Text>
+              {tierStatus.quotaLimit > 0 && (
+                <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.usageProgressFill,
+                      { backgroundColor: theme.primary, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
+                    ]}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Messages */}
           <ScrollView
             ref={scrollViewRef}
@@ -258,13 +285,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             })}
             
             {/* Quick Actions */}
-            {showQuickActions && messages.length > 0 && (
+            {showQuickActions && (
               <QuickActions
                 onAction={onQuickAction}
                 ageGroup={quickActionAge}
                 onAgeGroupChange={onQuickActionAgeChange}
                 customPrompt={quickActionPrompt}
                 onCustomPromptChange={onQuickActionPromptChange}
+                onSendPrompt={onSendPrompt}
               />
             )}
           </ScrollView>
@@ -292,19 +320,18 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <View style={styles.voiceControls}>
               {onMicPress && (
                 <TouchableOpacity
-                  style={[
-                    styles.voiceButton,
-                    isListeningForCommand && styles.voiceButtonActive,
-                  ]}
+                  style={styles.orbControl}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     onMicPress();
                   }}
                 >
-                  <Ionicons 
-                    name={isListeningForCommand ? 'mic' : 'mic-outline'} 
-                    size={20} 
-                    color={isListeningForCommand ? '#ef4444' : theme.text} 
+                  <CosmicOrb size={36} isProcessing={isListeningForCommand || isProcessing} isSpeaking={isSpeaking} />
+                  <View
+                    style={[
+                      styles.orbControlRing,
+                      { borderColor: isListeningForCommand ? '#ef4444' : theme.primary },
+                    ]}
                   />
                 </TouchableOpacity>
               )}
@@ -329,19 +356,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                       name={wakeWordEnabled ? 'ear' : 'ear-outline'} 
                       size={20} 
                       color={wakeWordEnabled ? '#10b981' : theme.text} 
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setShowWakeWordHelp(!showWakeWordHelp);
-                    }}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons
-                      name="help-circle-outline"
-                      size={16}
-                      color={theme.textSecondary}
                     />
                   </TouchableOpacity>
                 </View>

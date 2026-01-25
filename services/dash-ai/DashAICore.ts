@@ -27,7 +27,7 @@ import {
   DashAINavigationFacade,
 } from './facades';
 
-import type { DashMessage, DashPersonality } from './types';
+import type { DashMessage, DashPersonality, DashUserProfile } from './types';
 
 /**
  * Default personality configuration
@@ -381,6 +381,12 @@ export class DashAICore {
       voiceSettings: { ...this.personality.voice_settings, language },
       supabaseClient: this.supabaseClient,
     });
+  }
+
+  public async updateUserContext(
+    context: Partial<DashUserProfile['context']> & Record<string, any>
+  ): Promise<void> {
+    await this.profileManager.updateContext(context);
   }
 
   public getLanguage(): string | undefined {

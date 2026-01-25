@@ -293,7 +293,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return null;
       try {
         setProfileLoading(true);
-        const enhancedProfile = await fetchEnhancedUserProfile(userId);
+        const PROFILE_FETCH_TIMEOUT_MS = 8000;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const timeoutPromise = new Promise<null>((resolve) => {
+          timeoutId = setTimeout(() => resolve(null), PROFILE_FETCH_TIMEOUT_MS);
+        });
+        const enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
+          fetchEnhancedUserProfile(userId),
+          timeoutPromise,
+        ]);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        if (!enhancedProfile) {
+          console.warn('[AuthContext] Profile fetch returned null or timed out');
+        }
         if (mounted) {
           setProfile(enhancedProfile);
           setPermissions(createPermissionChecker(enhancedProfile));

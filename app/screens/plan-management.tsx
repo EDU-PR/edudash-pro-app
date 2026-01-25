@@ -218,7 +218,9 @@ export default function PlanManagementScreen() {
   const [annual, setAnnual] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const userRole = profile?.role || 'principal';
+  const userRole = profile?.role || 'parent';
+  const roleNorm = String(userRole || '').toLowerCase();
+  const canManageSeats = ['principal', 'principal_admin', 'admin', 'super_admin', 'superadmin'].includes(roleNorm);
   const availableTiers = getAvailableTiersForRole(userRole);
 
   const loadPlans = useCallback(async () => {
@@ -397,7 +399,7 @@ export default function PlanManagementScreen() {
               </View>
             </View>
             
-            {seats && (
+            {canManageSeats && seats && (
               <View style={styles.seatsInfo}>
                 <Ionicons name="people-circle" size={20} color="#00f5ff" />
                 <Text style={styles.seatsText}>
@@ -410,15 +412,17 @@ export default function PlanManagementScreen() {
               </View>
             )}
             
-            <TouchableOpacity 
-              style={styles.manageSeatsButton}
-              onPress={handleManageSeats}
-            >
-              <Text style={styles.manageSeatsText}>
-                {t('plan.manage_seats', { defaultValue: 'Manage Teacher Seats' })}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color="#00f5ff" />
-            </TouchableOpacity>
+            {canManageSeats && (
+              <TouchableOpacity 
+                style={styles.manageSeatsButton}
+                onPress={handleManageSeats}
+              >
+                <Text style={styles.manageSeatsText}>
+                  {t('plan.manage_seats', { defaultValue: 'Manage Teacher Seats' })}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#00f5ff" />
+              </TouchableOpacity>
+            )}
           </LinearGradient>
         </View>
         
