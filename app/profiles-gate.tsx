@@ -21,9 +21,6 @@ import { reportError } from '@/lib/monitoring';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { assertSupabase } from '@/lib/supabase';
 
-// Routing lock key to prevent duplicate navigation
-const routingLock = '__EDUDASH_ROUTING_LOCK__';
-
 const ROLES = [
   {
     value: 'parent' as Role,
@@ -52,14 +49,18 @@ const ROLES = [
  * - Provides clear path forward for users with access issues
  */
 export default function ProfilesGateScreen() {
-  const { user, profile, refreshProfile, loading, signOut } = useAuth();
+  const { user, profile, refreshProfile, loading, profileLoading, signOut } = useAuth();
   const { isOnboardingComplete } = useOnboarding();
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRecoveringProfile, setIsRecoveringProfile] = useState(false);
   const [accessValidation, setAccessValidation] = useState<ReturnType<typeof validateUserAccess> | null>(null);
   const navigationInProgressRef = useRef(false);
+  const recoveryAttemptedRef = useRef(false);
 
   useEffect(() => {
+    if (loading || !user) return;
+
     // Check if user needs onboarding (missing DOB, org type, etc.)
     const checkOnboardingNeeded = async () => {
       if (!profile || !user) return;
@@ -76,48 +77,45 @@ export default function ProfilesGateScreen() {
       return false;
     };
 
-    // Special case: If user came from biometric login and has no profile data,
-    // they might be an existing user - try to detect their role
+    // Try a one-time profile recovery before showing the gate UI.
+    const attemptProfileRecovery = async () => {
+      if (recoveryAttemptedRef.current || profile) return;
+      recoveryAttemptedRef.current = true;
+      setIsRecoveringProfile(true);
+      console.log('Profiles-gate: No profile found, attempting refresh...');
+
+      const PROFILE_RECOVERY_TIMEOUT_MS = 6000;
+      try {
+        await Promise.race([
+          refreshProfile(),
+          new Promise<void>((resolve) => setTimeout(resolve, PROFILE_RECOVERY_TIMEOUT_MS)),
+        ]);
+      } catch (refreshError) {
+        console.error('Profiles-gate: Profile refresh failed:', refreshError);
+      } finally {
+        setIsRecoveringProfile(false);
+      }
+    };
+
+    // If profile is still missing after recovery, detect a likely role but
+    // avoid routing loops by not redirecting without a real profile.
     const handleExistingUser = async () => {
-      if (!profile && user) {
+      if (!profile && user && !selectedRole) {
         console.log('Profiles-gate: No profile found, checking if existing user...');
         try {
-          // Set routing lock
-          if (typeof window !== 'undefined') {
-            (window as unknown as Record<string, boolean>)[routingLock] = true;
-          }
-          
           // Try to detect user role from legacy methods
           const { detectRoleAndSchool } = await import('@/lib/routeAfterLogin');
           const { role } = await detectRoleAndSchool(user);
           
-          if (role && !navigationInProgressRef.current) {
+          if (role) {
             console.log('Profiles-gate: Found existing user role:', role);
-            navigationInProgressRef.current = true;
-            // Route based on detected role
-            const routes = {
-              'parent': '/screens/parent-dashboard',
-              'teacher': '/screens/teacher-dashboard', 
-              'principal_admin': '/screens/principal-dashboard',
-              'super_admin': '/screens/super-admin-dashboard'
-            };
-            const targetRoute = routes[role as keyof typeof routes] || '/(auth)/sign-in';
-            
-            // Use timeout to prevent blocking UI
-            setTimeout(() => {
-              router.replace(targetRoute as `/${string}`);
-            }, 100);
-            return;
+            const supportedRoles: Role[] = ['parent', 'teacher', 'principal_admin'];
+            if (supportedRoles.includes(role as Role) && !selectedRole) {
+              setSelectedRole(role as Role);
+            }
           }
         } catch (error) {
           console.error('Error detecting existing user role:', error);
-        } finally {
-          // Clear routing lock after delay
-          setTimeout(() => {
-            if (typeof window !== 'undefined') {
-              delete (window as unknown as Record<string, unknown>)[routingLock];
-            }
-          }, 2000);
         }
       }
     };
@@ -137,10 +135,14 @@ export default function ProfilesGateScreen() {
         }
       });
     } else {
+      if (!recoveryAttemptedRef.current) {
+        void attemptProfileRecovery();
+        return;
+      }
       // Try to handle existing users who may not have proper profile data
-      handleExistingUser();
+      void handleExistingUser();
     }
-  }, [profile, user, loading]);
+  }, [profile, user, loading, isOnboardingComplete, refreshProfile, selectedRole]);
 
   const handleRoleSelection = (role: Role) => {
     setSelectedRole(role);
@@ -267,13 +269,39 @@ export default function ProfilesGateScreen() {
     }
   };
 
-  if (loading) {
+  const isProfilePending =
+    !!user &&
+    !profile &&
+    (loading || profileLoading || isRecoveringProfile || !recoveryAttemptedRef.current);
+
+  if (isProfilePending) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <RoleBasedHeader title="Setting up your workspace" />
+
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading your profile...</Text>
+          <View style={styles.pendingCard}>
+            <Ionicons name="sparkles-outline" size={36} color="#007AFF" />
+            <Text style={styles.pendingTitle}>Restoring your account</Text>
+            <Text style={styles.pendingDescription}>
+              We are fetching your profile, permissions, and organization access.
+            </Text>
+            <View style={styles.pendingSpinnerRow}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.pendingSpinnerText}>Almost there...</Text>
+            </View>
+            <Text style={styles.pendingHint}>
+              If this takes too long, you can sign out and try again.
+            </Text>
+            <TouchableOpacity
+              style={styles.pendingActionButton}
+              onPress={handleSignOut}
+              accessibilityLabel="Sign out and return to sign in"
+            >
+              <Text style={styles.pendingActionText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -336,6 +364,13 @@ export default function ProfilesGateScreen() {
         <Text style={styles.description}>
           To get started, please let us know your role in education.
         </Text>
+
+        {isRecoveringProfile && (
+          <View style={styles.recoveringContainer}>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <Text style={styles.recoveringText}>Restoring your profile...</Text>
+          </View>
+        )}
         
         <View style={styles.rolesList}>
           {ROLES.map((role) => (
@@ -421,11 +456,61 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
-  loadingText: {
+  pendingCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#f7faff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e3efff',
+  },
+  pendingTitle: {
+    marginTop: 12,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0b1b34',
+    textAlign: 'center',
+  },
+  pendingDescription: {
+    marginTop: 8,
+    fontSize: 15,
+    color: '#4b5563',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  pendingSpinnerRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingSpinnerText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  pendingHint: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  pendingActionButton: {
     marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#0b6bff',
+  },
+  pendingActionText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   content: {
     flex: 1,
@@ -450,6 +535,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
+  },
+  recoveringContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recoveringText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   suggestion: {
     fontSize: 14,
@@ -563,4 +659,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-

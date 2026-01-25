@@ -35,6 +35,9 @@ import { ChildCard } from './_ChildCard';
 import { useK12ParentData } from './_useK12ParentData';
 import DashOrb from '@/components/dash-orb';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { TierBadge } from '@/components/ui/TierBadge';
+import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
+import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 
 // Quick action items for K-12 parent
 const quickActions = [
@@ -141,6 +144,10 @@ export default function K12ParentDashboardScreen() {
     return 'Good evening';
   };
 
+  const tierLower = String(tier || 'free').toLowerCase();
+  const isStarterTier = tierLower === 'parent_starter' || tierLower === 'starter';
+  const showGreetingUpgrade = tierLower === 'free' || isStarterTier;
+
   const normalizeTierForCapabilities = (value?: string | null): Tier => {
     const raw = String(value || 'free').toLowerCase().replace(/-/g, '_');
     if (raw === 'trial') return 'starter';
@@ -240,9 +247,28 @@ export default function K12ParentDashboardScreen() {
       >
         {/* Greeting Card */}
         <View style={[styles.greetingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-            {getGreeting()},
-          </Text>
+          <View style={styles.greetingRow}>
+            <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+              {getGreeting()},
+            </Text>
+            <View style={styles.greetingActions}>
+              <TierBadge
+                tier={tier || 'free'}
+                size="sm"
+                containerStyle={isStarterTier ? { opacity: 0.6 } : undefined}
+              />
+              {showGreetingUpgrade && (
+                <TouchableOpacity
+                  style={[styles.greetingUpgradeButton, { borderColor: theme.primary }]}
+                  onPress={() => router.push('/pricing')}
+                >
+                  <Text style={[styles.greetingUpgradeText, { color: theme.primary }]}>
+                    Upgrade
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
           <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
           <Text style={[styles.schoolName, { color: theme.textSecondary }]}>{schoolName}</Text>
         </View>
@@ -264,6 +290,17 @@ export default function K12ParentDashboardScreen() {
             </Text>
           </LinearGradient>
         </View>
+
+        {/* Upgrade Banner (Free tier parents) */}
+        <InlineUpgradeBanner
+          screen="k12_parent_dashboard"
+          feature="dashboard_upgrade"
+          title="Upgrade for more AI help"
+          description="Unlock more Dash AI help, practice tools, and remove limits."
+        />
+
+        {/* Ad Banner + Upgrade CTA (free tier only) */}
+        <AdBannerWithUpgrade screen="k12_parent_dashboard" showUpgradeCTA margin={10} />
 
         {/* Children Cards */}
         <View style={styles.section}>

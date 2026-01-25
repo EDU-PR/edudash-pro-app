@@ -8,3 +8,4 @@ export { DashAssistantMessages } from './DashAssistantMessages';
 export { DashMessageBubble } from './DashMessageBubble';
 export { DashInputBar } from './DashInputBar';
 export { DashTypingIndicator } from './DashTypingIndicator';
+export { TutorHome } from './TutorHome';

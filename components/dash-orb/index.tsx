@@ -61,13 +61,15 @@ export default function DashOrb({
   // Get user profile for role-based AI endpoint selection
   const { profile } = useAuth();
   const userRole = profile?.role?.toLowerCase() || '';
-  const isUserSuperAdmin = isSuperAdmin(userRole);
+  const normalizedRole = userRole || 'parent';
+  const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
+  const [pendingTutorIntent, setPendingTutorIntent] = useState<{ prompt: string; label?: string } | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isListeningForCommand, setIsListeningForCommand] = useState(false);
@@ -320,13 +322,15 @@ export default function DashOrb({
     
     setIsExpanded(true);
     if (messages.length === 0) {
-      // Add welcome message based on user role
-      setMessages([{
-        id: 'welcome',
-        role: 'assistant',
-        content: getWelcomeMessage(userRole),
-        timestamp: new Date(),
-      }]);
+      if (!showQuickActions) {
+        // Add welcome message based on user role
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: getWelcomeMessage(normalizedRole),
+          timestamp: new Date(),
+        }]);
+      }
     }
   };
 
@@ -373,7 +377,7 @@ export default function DashOrb({
                 setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
                 
                 // Process the voice command
-                await processCommand(transcriptResult.text);
+                await handleSend(transcriptResult.text);
               }
             }
             setIsListeningForCommand(false);
@@ -411,7 +415,23 @@ export default function DashOrb({
     }
   };
 
-  const processCommand = async (command: string) => {
+  const handleSend = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (pendingTutorIntent) {
+      const mergedPrompt = buildTutorPrompt(pendingTutorIntent.prompt, {
+        topicHint: trimmed,
+        requireDetails: false,
+      });
+      const label = pendingTutorIntent.label || 'Continue';
+      setPendingTutorIntent(null);
+      await processCommand(mergedPrompt, trimmed);
+      return;
+    }
+    await processCommand(trimmed);
+  };
+
+  const processCommand = async (command: string, displayOverride?: string) => {
     // Sanitize input
     const sanitized = sanitizeInput(command, 2000);
     
@@ -444,7 +464,7 @@ export default function DashOrb({
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: sanitized,
+      content: displayOverride ? sanitizeInput(displayOverride, 2000) : sanitized,
       timestamp: new Date(),
     };
     
@@ -570,13 +590,21 @@ export default function DashOrb({
         : `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
       
       // Build request body based on endpoint
-      const ageYears = (profile?.date_of_birth && ['student', 'learner'].includes(userRole))
+      const ageYears = (profile?.date_of_birth && ['student', 'learner'].includes(normalizedRole))
         ? calculateAge(profile.date_of_birth)
         : null;
 
       const ageContext = ageYears
         ? `User age: ${ageYears}. Provide age-appropriate, child-safe guidance.`
-        : (['student', 'learner'].includes(userRole) ? 'Provide age-appropriate, child-safe guidance.' : undefined);
+        : (['student', 'learner'].includes(normalizedRole) ? 'Provide age-appropriate, child-safe guidance.' : undefined);
+
+      const roleContext = isTutorRole
+        ? 'Role: Parent/Student tutor. Use diagnose → teach → practice. Start with one diagnostic question and WAIT. Ask one question at a time. Avoid teacher/admin-only sections.'
+        : (normalizedRole ? `Role: ${normalizedRole}. Provide role-appropriate guidance.` : undefined);
+
+      const lessonContext = isTutorRole
+        ? 'If asked for a lesson plan, output a learner-ready mini-lesson with examples, practice, and a quick check question. Add 1-2 tips for parents to help at home.'
+        : undefined;
 
       const requestBody = isUserSuperAdmin
         ? {
@@ -586,19 +614,21 @@ export default function DashOrb({
             max_tokens: 1024,
           }
         : {
-            scope: userRole || 'parent',
+            scope: normalizedRole || 'parent',
             service_type: 'dash_conversation',
             payload: {
               prompt: command,
               context: [
                 history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
                 ageContext,
+                roleContext,
+                lessonContext,
               ].filter(Boolean).join('\n\n') || undefined,
             },
             stream: false,
             enable_tools: true,
             metadata: {
-              role: userRole,
+              role: normalizedRole,
               source: 'dash_orb',
               age_years: ageYears ?? undefined,
             }
@@ -700,8 +730,9 @@ export default function DashOrb({
     }
   };
 
-  const handleQuickAction = (action: QuickAction) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+
+  const buildTutorPrompt = (basePrompt: string, options?: { topicHint?: string | null; requireDetails?: boolean }) => {
     const ageYears = profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null;
     const autoAgeGroup = quickActionAge === 'auto' ? resolveAgeGroupFromYears(ageYears) : null;
     const effectiveAgeGroup = quickActionAge === 'auto' ? (autoAgeGroup || 'auto') : quickActionAge;
@@ -716,25 +747,78 @@ export default function DashOrb({
       ? `${gradeBand}${ageLabel ? ` (${ageLabel})` : ''}`
       : (ageLabel || '');
 
+    const roleDirective = isTutorRole
+      ? 'Audience: parent/student. Use tutoring mode. Avoid teacher/admin-only sections. If generating a lesson, make it learner-ready with examples and practice plus 2 parent tips.'
+      : normalizedRole
+        ? `Audience: ${normalizedRole}. Provide role-appropriate guidance.`
+        : 'Audience: general.';
+
+    const interactionRules = isTutorRole
+      ? 'Diagnose → Teach → Practice loop. Start with ONE short diagnostic question and WAIT. Ask one question at a time; do not proceed until the learner answers.'
+      : 'Be concise and practical. Ask 1–2 clarifying questions if needed.';
+
+    const detailRule = options?.requireDetails
+      ? 'If topic or grade is missing, ask: "Which grade and topic should I use?" and wait.'
+      : '';
+
+    return [
+      'Start a NEW topic and ignore earlier context.',
+      basePrompt,
+      roleDirective,
+      learnerHint ? `Learner profile: ${learnerHint}.` : '',
+      options?.topicHint ? `Topic: ${options.topicHint}.` : '',
+      interactionRules,
+      detailRule,
+    ].filter(Boolean).join(' ');
+  };
+
+  const handleQuickAction = (action: QuickAction) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const customHint = quickActionPrompt.trim();
-    const topicHint = customHint || action.defaultTopic;
+    const tutorBasePrompt = isTutorRole ? (() => {
+      switch (action.id) {
+        case 'gen-lesson':
+          return 'Create a learner-friendly mini lesson (not a teacher lesson plan).';
+        case 'gen-stem':
+          return 'Design a hands-on STEM activity a parent/student can do at home.';
+        case 'gen-curriculum':
+          return 'Create a 4-week learning path for a learner with weekly goals and simple activities.';
+        case 'gen-worksheet':
+          return 'Create a short student worksheet with worked examples and answers.';
+        case 'gen-digital':
+          return 'Create a digital skills mini lesson for a learner.';
+        default:
+          return action.command;
+      }
+    })() : action.command;
+
+    const topicHint = customHint || (!isTutorRole ? action.defaultTopic : null);
+    const needsDetails = isTutorRole && !customHint;
+
+    if (action.category === 'education' && needsDetails) {
+      setPendingTutorIntent({ prompt: tutorBasePrompt, label: action.label });
+      setShowQuickActions(false);
+      setMessages(prev => [...prev, {
+        id: `clarify-${Date.now()}`,
+        role: 'assistant',
+        content: 'Great — which grade and topic should I use?',
+        timestamp: new Date(),
+      }]);
+      return;
+    }
 
     const enhancedCommand = action.category === 'education'
-      ? [
-          action.command,
-          learnerHint ? `Target learners: ${learnerHint}.` : '',
-          topicHint ? `Topic: ${topicHint}.` : '',
-          'Use CAPS documents and align to CAPS outcomes.',
-          'Be very explanatory with clear steps, multiple examples, and short practice tasks.',
-          'Ask 1-2 follow-up questions to tailor the next response.',
-        ].filter(Boolean).join(' ')
+      ? buildTutorPrompt(tutorBasePrompt, {
+          topicHint: topicHint || undefined,
+          requireDetails: false,
+        })
       : [
+          'Start a NEW topic and ignore earlier context.',
           action.command,
           customHint ? `Additional details: ${customHint}` : '',
         ].filter(Boolean).join(' ');
 
-    // All quick actions now go directly to the AI
-    processCommand(enhancedCommand);
+    processCommand(enhancedCommand, `${action.label}${customHint ? ` · ${customHint}` : ''}`);
   };
 
   const rotateInterpolate = rotateAnim.interpolate({
@@ -801,7 +885,7 @@ export default function DashOrb({
         messages={messages}
         inputText={inputText}
         setInputText={setInputText}
-        onSend={processCommand}
+        onSend={handleSend}
         isProcessing={isProcessing}
         showQuickActions={showQuickActions}
         onQuickAction={handleQuickAction}
@@ -809,6 +893,26 @@ export default function DashOrb({
         onQuickActionAgeChange={setQuickActionAge}
         quickActionPrompt={quickActionPrompt}
         onQuickActionPromptChange={setQuickActionPrompt}
+        onSendPrompt={(prompt, label) => {
+          const customHint = quickActionPrompt.trim();
+          const needsDetails = isTutorRole && !customHint;
+          if (needsDetails) {
+            setPendingTutorIntent({ prompt, label });
+            setShowQuickActions(false);
+            setMessages(prev => [...prev, {
+              id: `clarify-${Date.now()}`,
+              role: 'assistant',
+              content: 'Great — which grade and topic should I use?',
+              timestamp: new Date(),
+            }]);
+            return;
+          }
+          const enhanced = buildTutorPrompt(prompt, {
+            topicHint: customHint || undefined,
+            requireDetails: false,
+          });
+          processCommand(enhanced, label || customHint || 'Quick action');
+        }}
         onBackToQuickActions={() => {
           setShowQuickActions(true);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useYouthPrograms, YouthProgram, STATUS_CONFIG, CATEGORY_ICONS } from '@/hooks/membership/useYouthPrograms';
-import { styles } from './_programs.styles';
+import { styles } from '@/components/membership/styles/programs.styles';
 
 type FilterType = 'all' | 'active' | 'draft' | 'completed';
 const FILTERS: { key: FilterType; label: string }[] = [

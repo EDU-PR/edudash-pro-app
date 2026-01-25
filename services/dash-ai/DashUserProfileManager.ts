@@ -243,6 +243,32 @@ export class DashUserProfileManager {
   }
 
   /**
+   * Update user context (age group, grade levels, organization type, etc.)
+   */
+  public async updateContext(
+    contextUpdates: Partial<DashUserProfile['context']> & Record<string, any>
+  ): Promise<void> {
+    if (!this.userProfile) return;
+
+    if (!this.userProfile.context) {
+      this.userProfile.context = {};
+    }
+
+    Object.entries(contextUpdates).forEach(([key, value]) => {
+      if (value === null) {
+        delete (this.userProfile as any).context[key];
+        return;
+      }
+      if (typeof value !== 'undefined') {
+        (this.userProfile as any).context[key] = value;
+      }
+    });
+
+    await this.saveUserProfile();
+    console.log('[DashProfile] Updated user context');
+  }
+
+  /**
    * Get language preference
    */
   public getLanguage(): string | undefined {

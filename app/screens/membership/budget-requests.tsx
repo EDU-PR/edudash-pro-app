@@ -11,7 +11,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useBudgetRequests, BudgetRequest, STATUS_CONFIG } from '@/hooks/membership/useBudgetRequests';
 import { BudgetRequestForm } from '@/components/membership/BudgetRequestForm';
-import { styles } from './_budget-requests.styles';
+import { styles } from '@/components/membership/styles/budget-requests.styles';
 
 type FilterType = 'all' | 'pending' | 'approved' | 'rejected';
 const FILTERS: { key: FilterType; label: string }[] = [

@@ -71,23 +71,43 @@ interface PayFastPaymentData {
  */
 function encodePayfastValue(value: string): string {
   return encodeURIComponent(value)
-    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/[!'()*~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
     .replace(/%[0-9a-f]{2}/gi, (m) => m.toUpperCase())
     .replace(/%20/g, '+');
 }
 
 /**
- * Build alphabetically-sorted parameter string (PayFast requirement)
+ * Build a deterministic parameter string for PayFast signatures.
+ * PayFast signatures are sensitive to variable order, so default to
+ * alphabetical ordering unless a specific order is provided.
  */
-function buildParamString(data: Record<string, string | number | undefined>): string {
-  const sortedKeys = Object.keys(data).sort();
+function buildParamString(
+  data: Record<string, string | number | undefined>,
+  orderedKeys?: string[]
+): string {
   const parts: string[] = [];
-  for (const key of sortedKeys) {
+  const seen = new Set<string>(orderedKeys ?? []);
+
+  const baseKeys = (orderedKeys && orderedKeys.length > 0
+    ? orderedKeys
+    : Object.keys(data)
+        .filter((key) => key !== 'signature')
+        .sort());
+
+  const remainingKeys = Object.keys(data)
+    .filter((key) => key !== 'signature' && !seen.has(key))
+    .sort();
+
+  const finalKeys = [...baseKeys, ...remainingKeys];
+
+  for (const key of finalKeys) {
     const value = data[key];
-    if (value !== undefined && value !== null && value !== '' && key !== 'signature') {
-      parts.push(`${key}=${encodePayfastValue(String(value).trim())}`);
+    if (value === undefined || value === null || value === '' || key === 'signature') {
+      continue;
     }
+    parts.push(`${key}=${encodePayfastValue(String(value).trim())}`);
   }
+
   return parts.join('&');
 }
 
@@ -96,9 +116,10 @@ function buildParamString(data: Record<string, string | number | undefined>): st
  */
 function generatePayFastSignature(
   data: Record<string, string | number | undefined>,
-  passphrase: string | undefined
+  passphrase: string | undefined,
+  orderedKeys?: string[]
 ): string {
-  let paramString = buildParamString(data);
+  let paramString = buildParamString(data, orderedKeys);
 
   // Include passphrase if set in PayFast (sandbox or production)
   if (passphrase && passphrase.trim() !== '') {
@@ -141,7 +162,12 @@ Deno.serve(async (req) => {
       throw new Error('PayFast credentials not configured');
     }
     
-    // Passphrase is optional; include only if configured in PayFast
+    // Recurring billing on PayFast commonly requires a passphrase in production.
+    // Fail fast with a clear error instead of redirecting to a 400 on PayFast.
+    const requiresRecurring = input.billing !== 'annual';
+    if (isProduction && requiresRecurring && !passphrase) {
+      throw new Error('PAYFAST_PASSPHRASE is required for recurring payments in production mode');
+    }
     
     // Create Supabase client with service role
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -242,18 +268,32 @@ Deno.serve(async (req) => {
       paymentData.cycles = '0'; // Until cancelled
     }
     
-    // Generate signature
+    // PayFast is sensitive to parameter ordering for signatures; use
+    // a deterministic alphabetical order for both the signature and URL.
+    const debugParamString = buildParamString(
+      paymentData as unknown as Record<string, string | number | undefined>
+    );
+
     const signature = generatePayFastSignature(
       paymentData as unknown as Record<string, string | number | undefined>,
       passphrase
     );
+
+    // TEMP DEBUG: log signature inputs (no passphrase)
+    console.log('[payments-create-checkout] Signature debug:', {
+      paymentId,
+      merchant_id: merchantId,
+      hasPassphrase: !!passphrase,
+      paramString: debugParamString,
+      signature,
+    });
     
     // Build payment URL
     const baseUrl = isProduction 
       ? 'https://www.payfast.co.za/eng/process'
       : 'https://sandbox.payfast.co.za/eng/process';
     
-    const paramString = buildParamString(paymentData as Record<string, string | number | undefined>);
+    const paramString = debugParamString;
     const redirectUrl = `${baseUrl}?${paramString}&signature=${signature}`;
     
     // Create pending payment record

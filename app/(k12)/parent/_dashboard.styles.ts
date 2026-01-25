@@ -116,6 +116,29 @@ export const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  greetingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  greetingUpgradeButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  greetingUpgradeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
   schoolTypeBadge: {
     marginBottom: 16,
     alignSelf: 'flex-start',

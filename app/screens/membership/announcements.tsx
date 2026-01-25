@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAnnouncements, useCreateAnnouncement, ANNOUNCEMENT_TYPES, AUDIENCE_OPTIONS, Announcement } from '@/hooks/membership/useAnnouncements';
-import { styles } from './_announcements.styles';
+import { styles } from '@/components/membership/styles/announcements.styles';
 
 const FILTERS = [
   { id: 'all', label: 'All' },

@@ -100,6 +100,33 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
   },
+  usageBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  usageBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  usageProgress: {
+    width: 80,
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  usageProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
   messagesContainer: {
     flex: 1,
   },
@@ -152,15 +179,60 @@ export const styles = StyleSheet.create({
   quickActionsHeader: {
     marginBottom: 12,
   },
-  quickActionsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  quickActionsHeroCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 16,
   },
-  quickActionsSubtitle: {
+  quickActionsHeroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  quickActionsHeroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionsHeroText: {
+    flex: 1,
+  },
+  quickActionsHeroTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  quickActionsHeroSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  quickActionsCtasRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 14,
+  },
+  quickActionsCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  quickActionsCtaText: {
     fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  quickActionsSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
   quickActionsChipsRow: {
@@ -172,11 +244,11 @@ export const styles = StyleSheet.create({
   quickActionChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 999,
     borderWidth: 1,
   },
   quickActionInput: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -220,6 +292,20 @@ export const styles = StyleSheet.create({
   voiceControls: {
     flexDirection: 'row',
     gap: 8,
+  },
+  orbControl: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbControlRing: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    opacity: 0.25,
   },
   voiceButton: {
     width: 36,
