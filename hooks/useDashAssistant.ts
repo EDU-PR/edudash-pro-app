@@ -29,10 +29,11 @@ import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
-import { getChatUIPrefs, getVoiceChatPrefs } from '@/lib/ai/dashSettings';
+import { getChatUIPrefs, getVoiceChatPrefs, normalizeLanguageCode } from '@/lib/ai/dashSettings';
 import { assertSupabase } from '@/lib/supabase';
 import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
+import { getCurrentLanguage } from '@/lib/i18n';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -95,6 +96,7 @@ interface UseDashAssistantReturn {
   
   // Actions
   sendMessage: (text?: string) => Promise<void>;
+  sendTutorAnswer: (answer: string, sourceMessageId?: string) => Promise<void>;
   speakResponse: (message: DashMessage) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   scrollToBottom: (opts?: { animated?: boolean; delay?: number }) => void;
@@ -229,10 +231,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const prevLengthRef = useRef<number>(0);
   const tutorSessionRef = useRef<TutorSession | null>(null);
   const tutorOverridesRef = useRef<Record<string, string>>({});
+  const learnerContextRef = useRef<LearnerContext | null>(null);
 
   useEffect(() => {
     tutorSessionRef.current = tutorSession;
   }, [tutorSession]);
+
+  useEffect(() => {
+    learnerContextRef.current = learnerContext;
+  }, [learnerContext]);
 
   useEffect(() => {
     let mounted = true;
@@ -271,6 +278,40 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         } catch {}
       };
 
+      const toLocale = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' => {
+        const base = normalizeLanguageCode(lang || getCurrentLanguage?.());
+        if (base === 'af') return 'af-ZA';
+        if (base === 'zu') return 'zu-ZA';
+        return 'en-ZA';
+      };
+
+      const personality = dashInstance.getPersonality?.();
+      const uiLocale = toLocale(getCurrentLanguage?.());
+      const targetLocale = personality?.response_language
+        ? toLocale(personality.response_language)
+        : toLocale(personality?.voice_settings?.language || profileAny?.preferred_language || uiLocale);
+      const shouldForceStrict = role === 'parent' || role === 'student' || role === 'learner';
+
+      const needsLanguageUpdate =
+        personality?.response_language !== targetLocale ||
+        personality?.voice_settings?.language !== targetLocale ||
+        (shouldForceStrict && personality?.strict_language_mode !== true);
+
+      if (needsLanguageUpdate) {
+        try {
+          await dashInstance.savePersonality({
+            response_language: targetLocale,
+            strict_language_mode: shouldForceStrict ? true : personality?.strict_language_mode,
+            voice_settings: {
+              ...(personality?.voice_settings || {}),
+              language: targetLocale,
+            },
+          });
+        } catch (langErr) {
+          console.warn('[useDashAssistant] Failed to enforce language settings:', langErr);
+        }
+      }
+
       if (role === 'parent') {
         const schoolId = profile?.organization_id || profile?.preschool_id;
         const children = await fetchParentChildren(user.id, { includeInactive: false, schoolId });
@@ -283,15 +324,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const ageBand = resolveAgeBand(ageYears, grade);
         const learnerName = `${activeChild.first_name} ${activeChild.last_name}`.trim() || null;
 
-        const nextContext: LearnerContext = {
+        if (!cancelled) setLearnerContext({
           learnerName,
           grade,
           ageYears,
           ageBand,
           schoolType,
           role: 'student',
-        };
-        if (!cancelled) setLearnerContext(nextContext);
+        });
+
+        if (!activeChildId || activeChildId !== activeChild.id) {
+          setActiveChildId(activeChild.id);
+          try {
+            await AsyncStorage.setItem('@edudash_active_child_id', activeChild.id);
+          } catch {}
+        }
 
         const ageGroup = ageBand === 'adult'
           ? 'adult'
@@ -305,6 +352,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           age_group: ageGroup,
           grade_levels: grade ? [String(grade)] : null,
           organization_type: schoolType || null,
+          preferred_language: targetLocale,
           student_id: activeChild.id,
           student_name: learnerName,
         }).catch(() => {});
@@ -319,15 +367,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const ageBand = resolveAgeBand(ageYears, grade);
         const learnerName = profile?.full_name || profile?.first_name || null;
 
-        const nextContext: LearnerContext = {
+        if (!cancelled) setLearnerContext({
           learnerName,
           grade,
           ageYears,
           ageBand,
           schoolType,
           role,
-        };
-        if (!cancelled) setLearnerContext(nextContext);
+        });
 
         const ageGroup = ageBand === 'adult'
           ? 'adult'
@@ -341,6 +388,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           age_group: ageGroup,
           grade_levels: grade ? [String(grade)] : null,
           organization_type: schoolType || null,
+          preferred_language: targetLocale,
         }).catch(() => {});
 
         await setDefaultAgeBand(ageBand);
@@ -449,10 +497,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, []);
 
-  const extractLearningContext = useCallback((text: string) => {
+  const extractLearningContext = useCallback((text: string, fallback?: LearnerContext | null) => {
     const value = (text || '').toLowerCase();
     const gradeMatch = value.match(/grade\s*(r|[0-9]{1,2})/i);
-    const grade = gradeMatch ? gradeMatch[1].toUpperCase() : null;
+    const grade = gradeMatch
+      ? gradeMatch[1].toUpperCase()
+      : (fallback?.grade ? String(fallback.grade).toUpperCase() : null);
     const subjectMap: Array<{ key: RegExp; label: string }> = [
       { key: /math|mathematics|algebra|geometry|numbers/, label: 'Mathematics' },
       { key: /science|physics|chemistry|biology/, label: 'Science' },
@@ -463,7 +513,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const subject = subjectMap.find(entry => entry.key.test(value))?.label || null;
     const topicMatch = value.match(/(?:topic|on|about)\s+([a-z0-9\s-]{3,})/i);
     const topic = topicMatch ? topicMatch[1].trim() : null;
-    return { grade, subject, topic };
+    return {
+      grade,
+      subject,
+      topic,
+      ageBand: fallback?.ageBand || null,
+      ageYears: fallback?.ageYears || null,
+      schoolType: fallback?.schoolType || null,
+      learnerName: fallback?.learnerName || null,
+    };
   }, []);
 
   const resolveAgeBand = useCallback((ageYears?: number | null, grade?: string | null): string | null => {
@@ -494,6 +552,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
 
     return null;
+  }, []);
+
+  const resolveVoiceLocale = useCallback((lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' => {
+    const base = normalizeLanguageCode(lang || getCurrentLanguage?.());
+    if (base === 'af') return 'af-ZA';
+    if (base === 'zu') return 'zu-ZA';
+    return 'en-ZA';
   }, []);
 
   const buildTutorQuestionPrompt = useCallback((session: TutorSession, userText: string) => {
@@ -565,6 +630,25 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       lines.push(`\nNext question:\n${payload.follow_up_question.trim()}`);
     }
     return lines.filter(Boolean).join('\n\n');
+  }, []);
+
+  const extractTutorQuestionFromText = useCallback((content: string) => {
+    const cleaned = (content || '').trim();
+    if (!cleaned) return null;
+    const lines = cleaned
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (line.includes('?')) {
+        return line;
+      }
+    }
+    const fallback = cleaned.match(/(?:^|\n)([^\n]{0,140}\?)\s*$/);
+    if (fallback?.[1]) return fallback[1].trim();
+    const keywordMatch = cleaned.match(/(?:^|\n)(?:what|which|how|why|solve|calculate|find|name|explain|define)[^\n]{0,120}$/i);
+    return keywordMatch ? keywordMatch[0].trim() : null;
   }, []);
 
   const logTutorAttempt = useCallback(async (session: TutorSession, payload: TutorPayload, learnerAnswer: string) => {
@@ -712,13 +796,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         tutorModeForMetadata = activeSession.mode;
         outgoingText = buildTutorEvaluationPrompt(activeSession, userText);
       } else if (tutorIntent && !stopTutor) {
-        const context = extractLearningContext(userText);
-        const fallbackGrade = learnerContext?.grade || null;
+        const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
         const newSession: TutorSession = {
           id: `tutor_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           mode: tutorIntent,
           subject: context.subject,
-          grade: context.grade || fallbackGrade,
+          grade: context.grade,
           topic: context.topic,
           awaitingAnswer: false,
           currentQuestion: null,
@@ -869,6 +952,34 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             };
           });
         }
+      } else if (!tutorPayload && tutorAction && activeSession) {
+        const fallbackQuestion = extractTutorQuestionFromText(response?.content || '');
+        if (fallbackQuestion) {
+          response = {
+            ...response,
+            metadata: {
+              ...(response.metadata || {}),
+              tutor_phase: tutorModeForMetadata
+                ? getTutorPhaseLabel(tutorModeForMetadata)
+                : getTutorPhaseLabel(activeSession.mode),
+              tutor_question: true,
+              tutor_question_text: fallbackQuestion,
+            },
+          };
+          setTutorSession(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              subject: prev.subject,
+              grade: prev.grade,
+              topic: prev.topic,
+              awaitingAnswer: true,
+              currentQuestion: fallbackQuestion,
+              expectedAnswer: null,
+              questionIndex: tutorAction === 'start' ? prev.questionIndex + 1 : prev.questionIndex,
+            };
+          });
+        }
       }
 
       // Add assistant message locally for immediate UI feedback
@@ -970,6 +1081,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     buildTutorEvaluationPrompt,
     parseTutorPayload,
     buildTutorDisplayContent,
+    extractTutorQuestionFromText,
     logTutorAttempt,
     getTutorPhaseLabel,
     learnerContext,
@@ -1032,6 +1144,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setSelectedAttachments([]);
     processQueue();
   }, [inputText, selectedAttachments, dashInstance, user?.id, tier, processQueue]);
+
+  const sendTutorAnswer = useCallback(async (answer: string, sourceMessageId?: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+
+    const activeSession = tutorSessionRef.current;
+    if (activeSession) {
+      track('edudash.ai.tutor.answer', {
+        session_id: activeSession.id,
+        mode: activeSession.mode,
+        source_message_id: sourceMessageId,
+      });
+    }
+
+    await sendMessage(trimmed);
+  }, [sendMessage]);
 
   // Speech functions
   const speakResponse = useCallback(async (message: DashMessage) => {
@@ -1326,7 +1454,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       
       // Get voice provider
       if (!voiceProviderRef.current) {
-        voiceProviderRef.current = await getSingleUseVoiceProvider('en-ZA');
+        const preferredLang = dashInstance?.getPersonality?.()?.voice_settings?.language || profile?.preferred_language || null;
+        const voiceLocale = resolveVoiceLocale(preferredLang);
+        voiceProviderRef.current = await getSingleUseVoiceProvider(voiceLocale);
       }
       
       const provider = voiceProviderRef.current;
@@ -1372,8 +1502,10 @@ You can also use text input to chat with Dash.`;
       const session = provider.createSession();
       voiceSessionRef.current = session;
       
+      const preferredLang = dashInstance?.getPersonality?.()?.voice_settings?.language || profile?.preferred_language || null;
+      const voiceLocale = resolveVoiceLocale(preferredLang);
       const started = await session.start({
-        language: 'en-ZA',
+        language: voiceLocale,
         onPartial: (text: string) => {
           // Show partial transcript as user speaks
           setPartialTranscript(text);
@@ -1427,7 +1559,7 @@ You can also use text input to chat with Dash.`;
         buttons: [{ text: 'OK', style: 'default' }]
       });
     }
-  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert]);
+  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale]);
 
   // Cleanup voice session on unmount
   useEffect(() => {
@@ -1668,6 +1800,7 @@ You can also use text input to chat with Dash.`;
     // Alert state for premium modals
     alertState,
     hideAlert,
+    learnerContext,
     
     // Refs
     flashListRef,
@@ -1675,6 +1808,7 @@ You can also use text input to chat with Dash.`;
     
     // Actions
     sendMessage,
+    sendTutorAnswer,
     speakResponse,
     stopSpeaking,
     scrollToBottom,

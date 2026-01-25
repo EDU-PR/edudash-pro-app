@@ -4,6 +4,7 @@ export const styles = StyleSheet.create({
   orbContainer: {
     position: 'absolute',
     zIndex: 1000,
+    elevation: 1000,
     alignItems: 'center',
     justifyContent: 'center',
   },

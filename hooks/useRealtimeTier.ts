@@ -15,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
+import { getQuotaStatus } from '@/lib/ai/api';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -80,24 +81,39 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       // Determine effective tier
       const effectiveTier = tierData?.tier || usageData?.current_tier || contextTier || 'free';
       
-      // Get tier limits
+      // Get tier limits (daily chat quota)
       const { data: limitsData } = await supabase
         .from('ai_usage_tiers')
         .select('chat_messages_per_day, exams_per_month')
         .eq('tier_name', effectiveTier)
         .maybeSingle();
-      
-      const quotaLimit = limitsData?.chat_messages_per_day || 10;
-      const quotaUsed = usageData?.chat_messages_today || 0;
+
+      let quotaLimit = limitsData?.chat_messages_per_day || 10;
+      let quotaUsed = usageData?.chat_messages_today || 0;
+
+      // Prefer authoritative quota from Edge Function (ai-usage) when available
+      try {
+        const quotaStatus = await getQuotaStatus(userId, 'homework_help');
+        if (typeof quotaStatus?.limit === 'number') {
+          quotaLimit = quotaStatus.limit;
+        }
+        if (typeof quotaStatus?.used === 'number') {
+          quotaUsed = quotaStatus.used;
+        }
+      } catch (quotaErr) {
+        console.warn('[useRealtimeTier] Quota status fallback to local counters:', quotaErr);
+      }
+
+      const normalizedUsed = quotaLimit > 0 ? Math.min(quotaUsed, quotaLimit) : quotaUsed;
       
       const newStatus: TierStatus = {
         tier: effectiveTier,
         tierDisplayName: formatTierName(effectiveTier),
         isActive: !tierData?.expires_at || new Date(tierData.expires_at) > new Date(),
         expiresAt: tierData?.expires_at || null,
-        quotaUsed,
+        quotaUsed: normalizedUsed,
         quotaLimit,
-        quotaPercentage: quotaLimit > 0 ? (quotaUsed / quotaLimit) * 100 : 0,
+        quotaPercentage: quotaLimit > 0 ? (normalizedUsed / quotaLimit) * 100 : 0,
         lastUpdated: new Date(),
       };
       

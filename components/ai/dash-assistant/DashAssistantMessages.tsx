@@ -3,6 +3,14 @@ import { Platform, View, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import TutorHome from './TutorHome';
 
+type LearnerContext = {
+  learnerName?: string | null;
+  grade?: string | null;
+  ageBand?: string | null;
+  schoolType?: string | null;
+  role?: string | null;
+};
+
 export interface DashAssistantMessagesProps {
   flashListRef: any;
   messages: any[];
@@ -19,6 +27,7 @@ export interface DashAssistantMessagesProps {
   renderSuggestedActions: () => React.ReactElement | null;
   onSendMessage?: (text: string) => void;
   onAgeBandChange?: (ageBand: string) => void;
+  learnerContext?: LearnerContext | null;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -36,6 +45,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   renderSuggestedActions,
   onSendMessage,
   onAgeBandChange,
+  learnerContext,
 }) => {
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
@@ -70,7 +80,13 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   const phaseIndex = currentPhase ? phaseOrder.indexOf(currentPhase) : -1;
 
   const renderEmptyState = () => (
-    <TutorHome styles={styles} theme={theme} onSendMessage={onSendMessage} onAgeBandChange={onAgeBandChange} />
+    <TutorHome
+      styles={styles}
+      theme={theme}
+      onSendMessage={onSendMessage}
+      onAgeBandChange={onAgeBandChange}
+      learnerContext={learnerContext}
+    />
   );
 
   return (

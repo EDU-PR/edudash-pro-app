@@ -35,6 +35,7 @@ interface DashInputBarProps {
   isRecording?: boolean;
   isSpeaking?: boolean;
   partialTranscript?: string;
+  bottomInset?: number;
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
@@ -54,6 +55,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   isRecording = false,
   isSpeaking = false,
   partialTranscript = '',
+  bottomInset = 0,
   onSend,
   onMicPress,
   onTakePhoto,
@@ -164,7 +166,16 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   ];
 
   return (
-    <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+    <View
+      style={[
+        styles.inputContainer,
+        {
+          backgroundColor: theme.surface,
+          borderTopColor: theme.border,
+          paddingBottom: Math.max(12, bottomInset),
+        }
+      ]}
+    >
       {/* Attachment chips */}
       {renderAttachmentChips()}
 

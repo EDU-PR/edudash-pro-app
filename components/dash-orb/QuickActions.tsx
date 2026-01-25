@@ -49,10 +49,10 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'health-check', label: 'System Health', icon: 'pulse', color: '#22c55e', command: 'Run a system health check on all services', category: 'platform', superAdminOnly: true },
   
   // Education Content Generation - AVAILABLE TO ALL (with quota gating at API level)
-  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'starter' },
+  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'free' },
   { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter' },
   { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium' },
-  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'starter' },
+  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'free' },
   { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false, minTier: 'premium' },
 ];
 

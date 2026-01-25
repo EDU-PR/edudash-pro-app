@@ -78,6 +78,11 @@ const STALE_TIMES = {
   announcements: 60 * 1000, // 1 minute
 };
 
+const isNetworkError = (error: any) => {
+  const message = (error?.message || error?.toString?.() || '').toLowerCase();
+  return message.includes('network request failed') || message.includes('failed to fetch');
+};
+
 // ============================================================================
 // Context
 // ============================================================================
@@ -102,7 +107,11 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
     .eq('user_id', userId);
 
     if (participantError) {
-      console.error('[NotificationContext] Error fetching message participants:', participantError);
+      if (isNetworkError(participantError)) {
+        logger.warn('NotificationContext', 'Network error fetching message participants, returning 0.');
+      } else {
+        console.error('[NotificationContext] Error fetching message participants:', participantError);
+      }
       return 0;
     }
 
@@ -125,7 +134,11 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
       .is('deleted_at', null);
 
       if (messageError) {
-        logger.warn('NotificationContext', `Error counting messages for thread ${participant.thread_id}:`, messageError);
+        if (isNetworkError(messageError)) {
+          logger.warn('NotificationContext', `Network error counting messages for thread ${participant.thread_id}`);
+        } else {
+          logger.warn('NotificationContext', `Error counting messages for thread ${participant.thread_id}:`, messageError);
+        }
         continue;
       }
 
@@ -145,7 +158,11 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
 
   return totalUnread;
   } catch (error) {
-    console.error('[NotificationContext] Exception fetching unread messages:', error);
+    if (isNetworkError(error)) {
+      logger.warn('NotificationContext', 'Network error fetching unread messages (exception).');
+    } else {
+      console.error('[NotificationContext] Exception fetching unread messages:', error);
+    }
     return 0;
   }
 }
@@ -177,7 +194,11 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
     const { data, count, error } = await query;
     
     if (error) {
-      console.error('[NotificationContext] Error fetching missed calls:', error);
+      if (isNetworkError(error)) {
+        logger.warn('NotificationContext', 'Network error fetching missed calls.');
+      } else {
+        console.error('[NotificationContext] Error fetching missed calls:', error);
+      }
       return 0;
     }
     
@@ -201,7 +222,11 @@ async function fetchMissedCallsCount(userId: string): Promise<number> {
     
     return missedCount;
   } catch (error) {
-    console.error('[NotificationContext] Exception fetching missed calls:', error);
+    if (isNetworkError(error)) {
+      logger.warn('NotificationContext', 'Network error fetching missed calls (exception).');
+    } else {
+      console.error('[NotificationContext] Exception fetching missed calls:', error);
+    }
     return 0;
   }
 }
@@ -225,8 +250,24 @@ async function fetchUnreadAnnouncementsCount(userId: string): Promise<number> {
     query = query.gt('created_at', lastSeen);
   }
 
-  const { count } = await query;
-  return count || 0;
+  try {
+    const { count, error } = await query;
+    if (error) {
+      if (isNetworkError(error)) {
+        logger.warn('NotificationContext', 'Network error fetching announcements count.');
+        return 0;
+      }
+      throw error;
+    }
+    return count || 0;
+  } catch (error) {
+    if (isNetworkError(error)) {
+      logger.warn('NotificationContext', 'Network error fetching announcements count (exception).');
+      return 0;
+    }
+    console.error('[NotificationContext] Error fetching announcements count:', error);
+    return 0;
+  }
 }
 
 // ============================================================================

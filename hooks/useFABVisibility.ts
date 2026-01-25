@@ -54,6 +54,8 @@ export const useFABVisibility = (pathname: string | null) => {
     if (
       pathname.includes('dash-assistant') ||
       pathname.includes('/screens/dash-assistant') ||
+      pathname.includes('dash-orb') ||
+      pathname.includes('/screens/dash-orb') ||
       pathname.startsWith('/ai/dash') ||
       pathname.startsWith('/ai/assistant')
     ) {
