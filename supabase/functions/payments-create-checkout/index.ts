@@ -4,7 +4,7 @@
  * Creates PayFast payment URLs for subscription upgrades.
  * Supports both sandbox and production modes based on PAYFAST_MODE secret.
  * 
- * IMPORTANT: Production mode REQUIRES passphrase for signature generation.
+ * NOTE: If a PayFast passphrase is configured, it must be included in signatures.
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -26,6 +26,17 @@ interface CheckoutInput {
   return_url?: string;
   cancel_url?: string;
   email_address?: string;
+}
+
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  tier: string;
+  price_monthly: number;
+  price_annual: number;
+  max_teachers?: number;
+  max_students?: number;
+  is_active?: boolean;
 }
 
 interface PayFastPaymentData {
@@ -56,35 +67,44 @@ interface PayFastPaymentData {
 }
 
 /**
- * Generate MD5 signature for PayFast payment
- * CRITICAL: Sandbox does NOT use passphrase, Production REQUIRES it
+ * PayFast-compatible encoding (urlencode + spaces as +)
  */
-function generatePayFastSignature(
-  data: Record<string, string | number | undefined>,
-  passphrase: string | undefined,
-  isProduction: boolean
-): string {
-  // Build param string - must be alphabetically sorted
+function encodePayfastValue(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%[0-9a-f]{2}/gi, (m) => m.toUpperCase())
+    .replace(/%20/g, '+');
+}
+
+/**
+ * Build alphabetically-sorted parameter string (PayFast requirement)
+ */
+function buildParamString(data: Record<string, string | number | undefined>): string {
   const sortedKeys = Object.keys(data).sort();
-  let paramString = '';
-  
+  const parts: string[] = [];
   for (const key of sortedKeys) {
     const value = data[key];
     if (value !== undefined && value !== null && value !== '' && key !== 'signature') {
-      const encodedValue = encodeURIComponent(String(value).trim()).replace(/%20/g, '+');
-      paramString += `${key}=${encodedValue}&`;
+      parts.push(`${key}=${encodePayfastValue(String(value).trim())}`);
     }
   }
-  
-  // Remove trailing &
-  paramString = paramString.slice(0, -1);
-  
-  // CRITICAL: Only add passphrase for production mode
-  if (isProduction && passphrase && passphrase.trim() !== '') {
-    paramString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`;
+  return parts.join('&');
+}
+
+/**
+ * Generate MD5 signature for PayFast payment
+ */
+function generatePayFastSignature(
+  data: Record<string, string | number | undefined>,
+  passphrase: string | undefined
+): string {
+  let paramString = buildParamString(data);
+
+  // Include passphrase if set in PayFast (sandbox or production)
+  if (passphrase && passphrase.trim() !== '') {
+    paramString += `&passphrase=${encodePayfastValue(passphrase.trim())}`;
   }
-  
-  // Generate MD5 hash
+
   return createHash('md5').update(paramString).digest('hex');
 }
 
@@ -109,9 +129,10 @@ Deno.serve(async (req) => {
     // Get environment configuration
     const payfastMode = Deno.env.get('PAYFAST_MODE') || 'sandbox';
     const isProduction = payfastMode === 'production';
-    const merchantId = Deno.env.get('PAYFAST_MERCHANT_ID');
-    const merchantKey = Deno.env.get('PAYFAST_MERCHANT_KEY');
-    const passphrase = Deno.env.get('PAYFAST_PASSPHRASE');
+    const merchantId = (Deno.env.get('PAYFAST_MERCHANT_ID') || '').trim();
+    const merchantKey = (Deno.env.get('PAYFAST_MERCHANT_KEY') || '').trim();
+    const passphraseRaw = Deno.env.get('PAYFAST_PASSPHRASE');
+    const passphrase = passphraseRaw && passphraseRaw.trim() !== '' ? passphraseRaw.trim() : undefined;
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const webBaseUrl = Deno.env.get('WEB_BASE_URL') || 'https://www.edudashpro.org.za';
@@ -120,21 +141,41 @@ Deno.serve(async (req) => {
       throw new Error('PayFast credentials not configured');
     }
     
-    // Production requires passphrase
-    if (isProduction && !passphrase) {
-      throw new Error('PayFast passphrase required for production mode');
-    }
+    // Passphrase is optional; include only if configured in PayFast
     
     // Create Supabase client with service role
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Get subscription plan from database
-    const { data: plan, error: planError } = await supabase
-      .from('subscription_plans')
-      .select('*')
-      .ilike('tier', input.planTier)
-      .eq('is_active', true)
-      .maybeSingle();
+    const normalizedTier = String(input.planTier || '')
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, '_');
+
+    // Get subscription plan from database (RPC first for safer access)
+    let plan: SubscriptionPlan | null = null;
+    let planError: unknown | null = null;
+    try {
+      const { data, error } = await supabase.rpc('public_list_plans');
+      if (error) throw error;
+      if (Array.isArray(data)) {
+        const plans = data as SubscriptionPlan[];
+        plan = plans.find((p) => String(p.tier || '').toLowerCase().replace(/-/g, '_') === normalizedTier) || null;
+      }
+    } catch (err) {
+      planError = err;
+      plan = null;
+    }
+
+    if (!plan) {
+      const { data, error } = await supabase
+        .from('subscription_plans')
+        .select('*')
+        .ilike('tier', normalizedTier)
+        .eq('is_active', true)
+        .maybeSingle();
+      plan = data || null;
+      planError = error || planError;
+    }
     
     if (planError || !plan) {
       console.error('[payments-create-checkout] Plan not found:', planError);
@@ -149,15 +190,16 @@ Deno.serve(async (req) => {
       );
     }
     
-    // Calculate price
+    // Calculate price (prices are stored in rands)
     const isAnnual = input.billing === 'annual';
     let price = isAnnual ? plan.price_annual : plan.price_monthly;
     
-    // Apply launch promo (50% off monthly until Mar 31, 2026)
+    // Apply launch promo (50% off monthly parent tiers only until Mar 31, 2026)
     const promoEndDate = new Date('2026-03-31T23:59:59.999Z');
     const isPromoActive = new Date() <= promoEndDate;
-    if (isPromoActive && !isAnnual) {
-      price = Math.round(price * 0.5 * 100) / 100; // 50% off, round to 2 decimals
+    const isParentTier = normalizedTier.startsWith('parent_') || normalizedTier.startsWith('parent-');
+    if (isPromoActive && isParentTier && !isAnnual) {
+      price = Number((price * 0.5).toFixed(2));
     }
     
     if (!price || price <= 0) {
@@ -203,8 +245,7 @@ Deno.serve(async (req) => {
     // Generate signature
     const signature = generatePayFastSignature(
       paymentData as unknown as Record<string, string | number | undefined>,
-      passphrase,
-      isProduction
+      passphrase
     );
     
     // Build payment URL
@@ -212,15 +253,8 @@ Deno.serve(async (req) => {
       ? 'https://www.payfast.co.za/eng/process'
       : 'https://sandbox.payfast.co.za/eng/process';
     
-    const params = new URLSearchParams();
-    Object.entries(paymentData).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value));
-      }
-    });
-    params.append('signature', signature);
-    
-    const redirectUrl = `${baseUrl}?${params.toString()}`;
+    const paramString = buildParamString(paymentData as Record<string, string | number | undefined>);
+    const redirectUrl = `${baseUrl}?${paramString}&signature=${signature}`;
     
     // Create pending payment record
     const { error: txError } = await supabase

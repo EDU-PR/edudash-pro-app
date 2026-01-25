@@ -77,7 +77,7 @@ export const useParentDashboard = () => {
       const { data: parentUser, error: parentError } = await supabase
         .from('profiles')
         .select('id, preschool_id, first_name, last_name, role, organization_id')
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .maybeSingle();
 
       if (parentError) {

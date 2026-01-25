@@ -19,6 +19,7 @@ import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
+import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import DashOrb from '@/components/dash-orb';
 
@@ -264,14 +265,11 @@ export default function SuperAdminDashboardScreen() {
         // Get pricing data for revenue calculation
         const planIds = Array.from(new Set(subscriptions.map((s: any) => s.plan_id).filter(Boolean)));
         if (planIds.length > 0) {
-          const { data: plans } = await assertSupabase()
-            .from('subscription_plans')
-            .select('id, price_monthly, price_annual')
-            .in('id', planIds);
-            
+          const plans = await listActivePlans(assertSupabase());
+          const relevantPlans = (plans || []).filter((plan) => planIds.includes(plan.id));
           // Build price map like the old dashboard
           const priceByPlanId: Record<string, { monthly: number; annual: number | null }> = {};
-          (plans || []).forEach((p: any) => {
+          relevantPlans.forEach((p: any) => {
             priceByPlanId[p.id] = {
               monthly: Number(p.price_monthly || 0),
               annual: p.price_annual != null ? Number(p.price_annual) : null

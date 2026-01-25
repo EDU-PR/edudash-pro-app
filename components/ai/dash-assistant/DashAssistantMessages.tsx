@@ -106,7 +106,8 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       data={messages}
       keyExtractor={(item: any, index: number) => item.id || `msg-${index}`}
       renderItem={({ item, index }) => renderMessage(item, index)}
-      contentContainerStyle={styles.messagesContent}
+      style={[styles.messagesContainer, { backgroundColor: theme.background }]}
+      contentContainerStyle={[styles.messagesContent, { backgroundColor: theme.background, flexGrow: 1 }]}
       showsVerticalScrollIndicator={false}
       removeClippedSubviews={Platform.OS === 'android'}
       onScroll={(e: any) => {

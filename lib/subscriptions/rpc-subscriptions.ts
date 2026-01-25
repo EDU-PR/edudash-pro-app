@@ -13,10 +13,15 @@ export interface SubscriptionPlan {
   id: string;
   name: string;
   tier: string;
+  description?: string | null;
   price_monthly: number;
   price_annual: number;
   max_teachers: number;
   max_students: number;
+  max_schools?: number | null;
+  features?: unknown;
+  school_types?: string[] | null;
+  sort_order?: number | null;
   is_active: boolean;
 }
 

@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { assertSupabase } from '@/lib/supabase';
+import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { track } from '@/lib/analytics';
 import { 
   TIER_PRICING, 
@@ -223,16 +224,15 @@ export default function PlanManagementScreen() {
   const loadPlans = useCallback(async () => {
     try {
       setError(null);
-      const { data, error: fetchError } = await assertSupabase()
-        .from('subscription_plans')
-        .select('*')
-        .eq('is_active', true)
-        .order('price_monthly', { ascending: true });
-
-      if (fetchError) throw fetchError;
+      const data = await listActivePlans(assertSupabase());
 
       // Filter plans based on available tiers for the role
-      const filteredPlans = (data || []).filter(plan => {
+      const filteredPlans = (data || []).map((plan: any) => ({
+        ...plan,
+        features: Array.isArray(plan.features)
+          ? plan.features.map((feature: any) => (typeof feature === 'string' ? feature : String(feature?.name || feature)))
+          : [],
+      })).filter(plan => {
         const planTier = plan.tier.toLowerCase().replace(/-/g, '_');
         // Show plans that match available tiers (with some flexibility for naming)
         return availableTiers.some(t => 
@@ -358,7 +358,7 @@ export default function PlanManagementScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: t('plan.title', { defaultValue: 'Plan Management' }),

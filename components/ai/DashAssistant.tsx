@@ -24,6 +24,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './DashAssistant.styles';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -41,6 +42,7 @@ import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
+import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -58,6 +60,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const { theme, isDark } = useTheme();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
   
   // Keyboard listeners for reliable show/hide detection
   useEffect(() => {
@@ -76,6 +80,34 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadWakeWord = async () => {
+      try {
+        const value = await AsyncStorage.getItem('@dash_ai_in_app_wake_word');
+        if (mounted) {
+          setWakeWordEnabled(value === 'true');
+          setWakeWordLoaded(true);
+        }
+      } catch {
+        if (mounted) setWakeWordLoaded(true);
+      }
+    };
+    loadWakeWord();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toggleWakeWord = useCallback(async () => {
+    const next = !wakeWordEnabled;
+    setWakeWordEnabled(next);
+    try {
+      await AsyncStorage.setItem('@dash_ai_in_app_wake_word', next ? 'true' : 'false');
+    } catch {}
+    DeviceEventEmitter.emit('dash:wake_word_toggle', next);
+  }, [wakeWordEnabled]);
   
   // Use custom hook for all business logic
   const {
@@ -88,6 +120,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     speakingMessageId,
     dashInstance,
     isInitialized,
+    enterToSend,
+    voiceEnabled,
+    showTypingIndicator,
+    autoSuggestQuestions,
+    contextualHelp,
     selectedAttachments,
     isUploading,
     isNearBottom,
@@ -135,6 +172,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         totalMessages={messages.length}
         speakingMessageId={speakingMessageId}
         isLoading={isLoading}
+        voiceEnabled={voiceEnabled}
+        showFollowUps={autoSuggestQuestions}
         onSpeak={speakResponse}
         onRetry={(content) => sendMessage(content)}
         onSendFollowUp={(text) => sendMessage(text)}
@@ -145,16 +184,20 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
   // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
+    if (!showTypingIndicator) return null;
     return (
       <DashTypingIndicator 
         isLoading={isLoading} 
         loadingStatus={loadingStatus} 
       />
     );
-  }, [isLoading, loadingStatus]);
+  }, [isLoading, loadingStatus, showTypingIndicator]);
 
   // Render suggested actions
   const renderSuggestedActions = useCallback(() => {
+    if (!contextualHelp) {
+      return null;
+    }
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.type === 'user' || !lastMessage.metadata?.suggested_actions) {
       return null;
@@ -229,7 +272,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         </ScrollView>
       </View>
     );
-  }, [messages, theme, sendMessage]);
+  }, [messages, theme, sendMessage, contextualHelp]);
 
   // Loading state
   if (!isInitialized) {
@@ -285,6 +328,18 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               onPress={() => router.push('/screens/dash-conversations-history')}
             >
               <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              accessibilityLabel="Toggle wake word"
+              onPress={toggleWakeWord}
+              disabled={!wakeWordLoaded}
+            >
+              <Ionicons
+                name={wakeWordEnabled ? 'ear' : 'ear-outline'}
+                size={screenWidth < 400 ? 18 : 22}
+                color={wakeWordEnabled ? theme.success : theme.text}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconButton}
@@ -353,6 +408,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           inputRef={inputRef}
           inputText={inputText}
           setInputText={setInputText}
+          enterToSend={enterToSend}
           selectedAttachments={selectedAttachments}
           isLoading={isLoading}
           isUploading={isUploading}

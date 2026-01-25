@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { track } from '@/lib/analytics';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
@@ -135,14 +136,12 @@ export default function SuperAdminSchoolOnboardingWizard() {
 
   const loadPlans = async () => {
     try {
-      const { data, error } = await assertSupabase()
-        .from('subscription_plans')
-        .select('id, name, tier, price_monthly, max_teachers, max_students, school_types')
-        .eq('is_active', true)
-        .order('price_monthly', { ascending: true });
-
-      if (error) throw error;
-      setPlans(data || []);
+      const data = await listActivePlans(assertSupabase());
+      const normalized = (data || []).map((plan: any) => ({
+        ...plan,
+        school_types: Array.isArray(plan.school_types) ? plan.school_types : [],
+      }));
+      setPlans(normalized);
     } catch (error) {
       console.error('Failed to load subscription plans:', error);
     }

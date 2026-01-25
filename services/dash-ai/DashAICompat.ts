@@ -20,6 +20,22 @@ import type {
 import { assertSupabase } from '@/lib/supabase';
 import { getCurrentSession } from '@/lib/sessionManager';
 
+type AgeGroup = 'child' | 'teen' | 'adult';
+
+function computeAgeGroupFromDob(dob?: string | null): AgeGroup | undefined {
+  if (!dob) return undefined;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  if (age <= 12) return 'child';
+  if (age <= 17) return 'teen';
+  return 'adult';
+}
+
 // Re-export types for backward compatibility
 export type {
   DashMessage,
@@ -140,17 +156,23 @@ export class DashAIAssistant implements IDashAIAssistant {
             console.warn('[DashAICompat] Failed to fetch organization_id/preschool_id from profile:', profileError);
           }
 
-          // Fetch full profile to get correct role
+          // Fetch full profile to get correct role + age
           let userRole = 'student'; // Default to student for standalone users
+          let ageGroup: AgeGroup | undefined;
+          let dateOfBirth: string | undefined;
           try {
             const { data: fullProfile } = await initConfig.supabaseClient
               .from('profiles')
-              .select('role')
+              .select('role, date_of_birth, age_group')
               .eq('id', session.user_id)
               .maybeSingle();
             if (fullProfile?.role) {
               userRole = fullProfile.role;
             }
+            if (fullProfile?.date_of_birth) {
+              dateOfBirth = fullProfile.date_of_birth;
+            }
+            ageGroup = (fullProfile as any)?.age_group || computeAgeGroupFromDob(fullProfile?.date_of_birth);
           } catch (roleError) {
             console.warn('[DashAICompat] Failed to fetch role from profile, using default:', roleError);
           }
@@ -162,6 +184,8 @@ export class DashAIAssistant implements IDashAIAssistant {
             email: session.email,
             organizationId: organizationId || session.organization_id,
             preschoolId, // REQUIRED for tenant isolation (use organization_id if available)
+            ageGroup,
+            dateOfBirth,
           };
         }
       } catch (e) {

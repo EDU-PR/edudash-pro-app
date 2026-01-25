@@ -127,11 +127,11 @@ export function usePettyCash() {
     try {
       setLoading(true);
 
-      // Get user's preschool (profiles.id = auth_user_id)
+      // Get user's preschool (auth_user_id links to auth.users.id)
       const { data: userProfile } = await assertSupabase()
         .from('profiles')
         .select('preschool_id, organization_id')
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .single();
 
       const schoolId = userProfile?.preschool_id || userProfile?.organization_id;

@@ -8,7 +8,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
-import type { Child } from './ChildCard';
+import type { Child } from './_ChildCard';
 
 export interface RecentUpdate {
   id: string;
@@ -186,20 +186,25 @@ export function useK12ParentData(profileId: string | undefined, organizationId: 
       // Fetch upcoming events
       const { data: eventsData } = await supabase
         .from('school_events')
-        .select('id, title, event_date, start_time')
-        .eq('organization_id', organizationId)
-        .gte('event_date', new Date().toISOString().split('T')[0])
-        .order('event_date', { ascending: true })
+        .select('id, title, start_date, all_day')
+        .eq('preschool_id', organizationId)
+        .gte('start_date', new Date().toISOString())
+        .order('start_date', { ascending: true })
         .limit(5);
 
       if (eventsData && eventsData.length > 0) {
         setUpcomingEvents(
-          eventsData.map((event: any) => ({
-            id: event.id,
-            title: event.title,
-            date: new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            time: event.start_time || 'TBD',
-          }))
+          eventsData.map((event: any) => {
+            const startDate = new Date(event.start_date);
+            return {
+              id: event.id,
+              title: event.title,
+              date: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              time: event.all_day
+                ? 'All day'
+                : startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            };
+          })
         );
       } else {
         setUpcomingEvents([]);

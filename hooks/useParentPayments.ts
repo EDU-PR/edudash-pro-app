@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { fetchParentChildren } from '@/lib/parent-children';
 import type { PaymentChild, StudentFee, FeeStructure, PaymentMethod, POPUpload } from '@/types/payments';
 
 export function useParentPayments() {
@@ -28,25 +29,20 @@ export function useParentPayments() {
 
   // Load children linked to parent
   const loadChildren = useCallback(async () => {
-    if (!user?.id) return;
+    if (!profile?.id) return;
     
     try {
       setLoading(true);
       const supabase = assertSupabase();
 
-      const { data: directChildren, error } = await supabase
-        .from('students')
-        .select('id, student_id, first_name, last_name, preschool_id, registration_fee_amount, registration_fee_paid, payment_verified')
-        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`);
+      const linkedChildren = await fetchParentChildren(profile.id, {
+        includeInactive: false,
+        schoolId: profile.preschool_id || profile.organization_id || undefined,
+      });
 
-      if (error) {
-        console.error('[Payments] Error loading children:', error);
-        return;
-      }
-
-      if (directChildren && directChildren.length > 0) {
+      if (linkedChildren && linkedChildren.length > 0) {
         const childrenData: PaymentChild[] = await Promise.all(
-          directChildren.map(async (student) => {
+          linkedChildren.map(async (student: any) => {
             let schoolName = '';
             if (student.preschool_id) {
               // Try preschools first, then organizations (for membership orgs like SOA)
@@ -69,7 +65,7 @@ export function useParentPayments() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, selectedChildId]);
+  }, [profile?.id, profile?.preschool_id, profile?.organization_id, selectedChildId]);
 
   // Load fees for selected child
   const loadFees = useCallback(async () => {
@@ -148,8 +144,9 @@ export function useParentPayments() {
         setStudentFees(mappedFees);
       }
 
-      // Get fee structure for the school
+      // Get fee structure for the school (try school_fee_structures first, fallback to fee_structures)
       if (childPreschoolId) {
+        let resolvedFees: any[] = [];
         const { data: schoolFees } = await supabase
           .from('school_fee_structures')
           .select('*')
@@ -157,20 +154,45 @@ export function useParentPayments() {
           .eq('is_active', true);
 
         if (schoolFees && schoolFees.length > 0) {
-          setFeeStructure(schoolFees.map((f: any) => ({
-            id: f.id, fee_type: f.fee_category || f.name, amount: f.amount_cents / 100,
-            description: f.description || f.name, payment_frequency: f.billing_frequency, age_group: f.age_group,
-          })));
-          
+          resolvedFees = schoolFees.map((f: any) => ({
+            id: f.id,
+            fee_type: f.fee_category || f.name,
+            amount: f.amount_cents / 100,
+            description: f.description || f.name,
+            payment_frequency: f.billing_frequency,
+            age_group: f.age_group,
+          }));
+        } else {
+          const { data: legacyFees } = await supabase
+            .from('fee_structures')
+            .select('*')
+            .eq('preschool_id', childPreschoolId)
+            .eq('is_active', true);
+
+          if (legacyFees && legacyFees.length > 0) {
+            resolvedFees = legacyFees.map((f: any) => ({
+              id: f.id,
+              fee_type: f.fee_type || f.name,
+              amount: f.amount,
+              description: f.description || f.name,
+              payment_frequency: f.frequency,
+              age_group: Array.isArray(f.grade_levels) ? f.grade_levels.join(', ') : undefined,
+            }));
+          }
+        }
+
+        if (resolvedFees.length > 0) {
+          setFeeStructure(resolvedFees as FeeStructure[]);
+
           // Generate next month's fee if no fees exist
-          const monthlyFee = schoolFees.find((f: any) => f.fee_category === 'tuition');
+          const monthlyFee = resolvedFees.find((f: any) => String(f.fee_type || '').toLowerCase().includes('tuition'));
           if (monthlyFee && (!fees || fees.length === 0)) {
             const { month, year } = getNextFeeMonth();
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             setStudentFees([{
               id: `pending-${monthNames[month].toLowerCase()}-${year}`, student_id: selectedChildId, fee_type: 'monthly_tuition',
               description: `${monthNames[month]} ${year} School Fees${monthlyFee.age_group ? ` (${monthlyFee.age_group})` : ''}`,
-              amount: monthlyFee.amount_cents / 100, due_date: `${year}-${String(month + 1).padStart(2, '0')}-01`,
+              amount: monthlyFee.amount, due_date: `${year}-${String(month + 1).padStart(2, '0')}-01`,
               grace_period_days: 7, status: 'pending',
             }]);
           }

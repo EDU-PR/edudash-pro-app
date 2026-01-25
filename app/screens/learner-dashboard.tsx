@@ -286,6 +286,18 @@ export default function LearnerDashboard() {
           <QuickActions
             actions={[
               {
+                icon: 'sparkles',
+                title: t('dash_ai.ask', { defaultValue: 'Ask Dash AI' }),
+                subtitle: t('dash_ai.ask_subtitle', { defaultValue: 'Chat with your AI assistant' }),
+                onPress: () => router.push('/screens/dash-assistant'),
+              },
+              {
+                icon: 'bulb-outline',
+                title: t('dash_ai.explain', { defaultValue: 'Explain a Concept' }),
+                subtitle: t('dash_ai.explain_subtitle', { defaultValue: 'Get a simple explanation' }),
+                onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } }),
+              },
+              {
                 icon: 'help-circle-outline',
                 title: t('learner.assignment_help', { defaultValue: 'Assignment Help' }),
                 subtitle: t('learner.get_ai_help', { defaultValue: 'Get AI-powered help' }),

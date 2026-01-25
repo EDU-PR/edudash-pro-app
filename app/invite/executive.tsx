@@ -141,7 +141,7 @@ export default function ExecutiveInviteScreen() {
           organization_id: inviteDetails.organization_id,
           role: 'admin', // Executive members get admin role in profiles
         })
-        .eq('id', user.id);
+        .eq('auth_user_id', user.id);
 
       const positionLabel = POSITION_LABELS[position] || position;
       

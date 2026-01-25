@@ -26,7 +26,7 @@ import { PaymentUploadModal } from '@/components/payments';
 import { BankDetailRow } from '@/components/payments/BankDetailRow';
 import { BankSelectionSheet } from '@/components/payments/BankSelectionSheet';
 import { usePaymentFlow } from '@/hooks/usePaymentFlow';
-import { createStyles } from './payment-flow.styles';
+import { createStyles } from './_payment-flow.styles';
 import type { PaymentChild } from '@/types/payments';
 
 export default function PaymentFlowScreen() {

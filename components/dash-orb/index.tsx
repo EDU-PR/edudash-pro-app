@@ -24,11 +24,11 @@ import {
   View,
   Platform,
 } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '../../lib/supabase';
-import { LinearGradient } from 'expo-linear-gradient';
-import { DASH_WELCOME_MESSAGE } from '../../lib/ai/constants';
+import { getWelcomeMessage } from '../../lib/ai/constants';
 import { styles } from './DashOrb.styles';
 import { ChatModal, ChatMessage } from './ChatModal';
 import { QuickAction } from './QuickActions';
@@ -40,6 +40,7 @@ import { CosmicOrb } from './CosmicOrb';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../lib/roleUtils';
+import { calculateAge } from '../../lib/date-utils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -71,6 +72,44 @@ export default function DashOrb({
   const [isDragging, setIsDragging] = useState(false);
   const [isListeningForCommand, setIsListeningForCommand] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const [lastDetectedLanguage, setLastDetectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA' | null>(null);
+  const [quickActionAge, setQuickActionAge] = useState('auto');
+  const [quickActionPrompt, setQuickActionPrompt] = useState('');
+
+  const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
+    if (!lang) return null;
+    if (lang === 'en-ZA' || lang === 'af-ZA' || lang === 'zu-ZA') return lang;
+    return null;
+  };
+
+  const resolveAgeGroupFromYears = (ageYears?: number | null) => {
+    if (!ageYears && ageYears !== 0) return null;
+    if (ageYears <= 5) return '3-5';
+    if (ageYears <= 8) return '6-8';
+    if (ageYears <= 12) return '9-12';
+    if (ageYears <= 15) return '13-15';
+    if (ageYears <= 18) return '16-18';
+    return 'adult';
+  };
+
+  const resolveGradeBand = (ageGroup: string) => {
+    switch (ageGroup) {
+      case '3-5':
+        return 'Grade R / Reception';
+      case '6-8':
+        return 'Grades 1-3';
+      case '9-12':
+        return 'Grades 4-6';
+      case '13-15':
+        return 'Grades 7-9';
+      case '16-18':
+        return 'Grades 10-12';
+      case 'adult':
+        return 'Adult learners';
+      default:
+        return null;
+    }
+  };
   
   // Rate limiter for commands (10 requests per minute)
   const rateLimiter = useRef(new RateLimiter(10, 60000)).current;
@@ -281,11 +320,11 @@ export default function DashOrb({
     
     setIsExpanded(true);
     if (messages.length === 0) {
-      // Add welcome message with comprehensive capabilities
+      // Add welcome message based on user role
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: DASH_WELCOME_MESSAGE,
+        content: getWelcomeMessage(userRole),
         timestamp: new Date(),
       }]);
     }
@@ -325,9 +364,11 @@ export default function DashOrb({
             const audioUri = await voiceRecorderActions.stopRecording();
             if (audioUri) {
               // Transcribe the audio (default to South African English)
-              const transcriptResult = await voiceSTT.transcribe(audioUri, 'en-ZA');
+              const transcriptResult = await voiceSTT.transcribe(audioUri, 'auto');
               
               if (transcriptResult && transcriptResult.text && transcriptResult.text.trim()) {
+                const normalized = normalizeSupportedLanguage(transcriptResult.language);
+                if (normalized) setLastDetectedLanguage(normalized);
                 // Remove listening message
                 setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
                 
@@ -442,7 +483,8 @@ export default function DashOrb({
       
       // Speak the response if voice is enabled
       if (voiceEnabled && Platform.OS !== 'web') {
-        await speak(result);
+        const ttsLanguage = lastDetectedLanguage || 'en-ZA';
+        await speak(result, ttsLanguage);
       }
       
       onCommandExecuted?.(command, result);
@@ -528,6 +570,14 @@ export default function DashOrb({
         : `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
       
       // Build request body based on endpoint
+      const ageYears = (profile?.date_of_birth && ['student', 'learner'].includes(userRole))
+        ? calculateAge(profile.date_of_birth)
+        : null;
+
+      const ageContext = ageYears
+        ? `User age: ${ageYears}. Provide age-appropriate, child-safe guidance.`
+        : (['student', 'learner'].includes(userRole) ? 'Provide age-appropriate, child-safe guidance.' : undefined);
+
       const requestBody = isUserSuperAdmin
         ? {
             action: 'chat',
@@ -540,13 +590,17 @@ export default function DashOrb({
             service_type: 'dash_conversation',
             payload: {
               prompt: command,
-              context: history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : undefined,
+              context: [
+                history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
+                ageContext,
+              ].filter(Boolean).join('\n\n') || undefined,
             },
             stream: false,
             enable_tools: true,
             metadata: {
               role: userRole,
-              source: 'dash_orb'
+              source: 'dash_orb',
+              age_years: ageYears ?? undefined,
             }
           };
       
@@ -648,8 +702,39 @@ export default function DashOrb({
 
   const handleQuickAction = (action: QuickAction) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const ageYears = profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null;
+    const autoAgeGroup = quickActionAge === 'auto' ? resolveAgeGroupFromYears(ageYears) : null;
+    const effectiveAgeGroup = quickActionAge === 'auto' ? (autoAgeGroup || 'auto') : quickActionAge;
+
+    const ageLabel = effectiveAgeGroup === 'adult'
+      ? 'adult learners'
+      : effectiveAgeGroup !== 'auto'
+        ? `ages ${effectiveAgeGroup}`
+        : (ageYears ? `age ${ageYears}` : '');
+    const gradeBand = effectiveAgeGroup !== 'auto' ? resolveGradeBand(effectiveAgeGroup) : null;
+    const learnerHint = gradeBand
+      ? `${gradeBand}${ageLabel ? ` (${ageLabel})` : ''}`
+      : (ageLabel || '');
+
+    const customHint = quickActionPrompt.trim();
+    const topicHint = customHint || action.defaultTopic;
+
+    const enhancedCommand = action.category === 'education'
+      ? [
+          action.command,
+          learnerHint ? `Target learners: ${learnerHint}.` : '',
+          topicHint ? `Topic: ${topicHint}.` : '',
+          'Use CAPS documents and align to CAPS outcomes.',
+          'Be very explanatory with clear steps, multiple examples, and short practice tasks.',
+          'Ask 1-2 follow-up questions to tailor the next response.',
+        ].filter(Boolean).join(' ')
+      : [
+          action.command,
+          customHint ? `Additional details: ${customHint}` : '',
+        ].filter(Boolean).join(' ');
+
     // All quick actions now go directly to the AI
-    processCommand(action.command);
+    processCommand(enhancedCommand);
   };
 
   const rotateInterpolate = rotateAnim.interpolate({
@@ -720,6 +805,10 @@ export default function DashOrb({
         isProcessing={isProcessing}
         showQuickActions={showQuickActions}
         onQuickAction={handleQuickAction}
+        quickActionAge={quickActionAge}
+        onQuickActionAgeChange={setQuickActionAge}
+        quickActionPrompt={quickActionPrompt}
+        onQuickActionPromptChange={setQuickActionPrompt}
         onBackToQuickActions={() => {
           setShowQuickActions(true);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -742,6 +831,7 @@ export default function DashOrb({
             wakeWord.stopListening();
           }
         }}
+        onOpenSettings={() => router.push('/screens/dash-ai-settings' as any)}
       />
     </>
   );

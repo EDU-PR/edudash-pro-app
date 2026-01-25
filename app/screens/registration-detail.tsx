@@ -132,9 +132,11 @@ export default function RegistrationDetailScreen() {
     setAlertState(prev => ({ ...prev, visible: false }));
   };
 
-  // Check if registration can be approved (needs POP)
+  // Check if registration can be approved
   const canApprove = (reg: Registration): boolean => {
-    return !!reg.proof_of_payment_url;
+    const requiresPayment = (reg.registration_fee_amount || 0) > 0;
+    if (!requiresPayment) return true;
+    return !!reg.proof_of_payment_url && !!reg.payment_verified;
   };
 
   // Fetch registration details
@@ -338,91 +340,374 @@ export default function RegistrationDetailScreen() {
     Linking.openURL(`whatsapp://send?phone=${intlPhone}`);
   };
 
+  const approveRegistrationCore = async () => {
+    if (!registration) return;
+    const supabase = assertSupabase();
+    const isInApp = registration.source === 'in-app';
+    const reviewerId = user?.id;
+
+    if (isInApp) {
+      // Fetch full in-app registration
+      const { data: regData, error: regError } = await supabase
+        .from('child_registration_requests')
+        .select('*, parent:profiles!parent_id(id, first_name, last_name)')
+        .eq('id', registration.id)
+        .single();
+
+      if (regError) throw regError;
+
+      // Generate student_id code
+      let studentIdCode: string;
+      try {
+        const { data: org } = await supabase
+          .from('preschools')
+          .select('name')
+          .eq('id', regData.preschool_id)
+          .single();
+
+        const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
+        const year = new Date().getFullYear().toString().slice(-2);
+
+        const { count } = await supabase
+          .from('students')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', regData.preschool_id);
+
+        const nextNum = ((count || 0) + 1).toString().padStart(4, '0');
+        studentIdCode = `${orgCode}-${year}-${nextNum}`;
+      } catch (idErr) {
+        console.warn('Failed to generate student_id, using fallback:', idErr);
+        studentIdCode = `STU-${new Date().getFullYear().toString().slice(-2)}-${Date.now().toString().slice(-4)}`;
+      }
+
+      // Create student record
+      const { data: newStudent, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          student_id: studentIdCode,
+          first_name: regData.child_first_name,
+          last_name: regData.child_last_name,
+          date_of_birth: regData.child_birth_date,
+          gender: regData.child_gender,
+          medical_conditions: regData.medical_info,
+          allergies: regData.dietary_requirements,
+          notes: regData.special_needs ? `Special needs: ${regData.special_needs}` : regData.notes,
+          emergency_contact_name: regData.emergency_contact_name,
+          emergency_contact_phone: regData.emergency_contact_phone,
+          parent_id: regData.parent_id,
+          guardian_id: regData.parent_id,
+          registration_fee_amount: regData.registration_fee_amount || 0,
+          registration_fee_paid: regData.registration_fee_paid || false,
+          payment_verified: regData.payment_verified || false,
+          preschool_id: regData.preschool_id,
+          is_active: true,
+          status: 'active',
+        })
+        .select('id')
+        .single();
+
+      if (studentError) throw studentError;
+
+      // Link parent to student in junction table (for multi-parent support)
+      if (regData.parent_id) {
+        try {
+          const { data: existingLink } = await supabase
+            .from('student_parent_relationships')
+            .select('id')
+            .eq('parent_id', regData.parent_id)
+            .eq('student_id', newStudent.id)
+            .maybeSingle();
+
+          if (!existingLink) {
+            await supabase
+              .from('student_parent_relationships')
+              .insert({
+                parent_id: regData.parent_id,
+                student_id: newStudent.id,
+                relationship_type: 'parent',
+                is_primary: true,
+              });
+          }
+        } catch (linkError) {
+          console.warn('Failed to link parent to student:', linkError);
+        }
+      }
+
+      // Auto-assign tuition fees
+      try {
+        const { data: feeStructure } = await supabase
+          .from('fee_structures')
+          .select('id, amount')
+          .eq('preschool_id', regData.preschool_id)
+          .eq('fee_type', 'tuition')
+          .eq('is_active', true)
+          .single();
+
+        if (feeStructure) {
+          const now = new Date();
+          const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+          const feesToInsert = [currentMonth, nextMonth].map(date => ({
+            student_id: newStudent.id,
+            fee_structure_id: feeStructure.id,
+            amount: feeStructure.amount,
+            final_amount: feeStructure.amount,
+            due_date: date.toISOString().split('T')[0],
+            status: 'pending',
+            amount_outstanding: feeStructure.amount,
+          }));
+
+          await supabase.from('student_fees').insert(feesToInsert);
+        }
+      } catch (feeErr) {
+        console.warn('Failed to auto-assign fees (non-critical):', feeErr);
+      }
+
+      // Update parent preschool_id if needed
+      if (regData.parent_id) {
+        await supabase
+          .from('profiles')
+          .update({ preschool_id: regData.preschool_id })
+          .eq('id', regData.parent_id)
+          .is('preschool_id', null);
+      }
+
+      // Update registration status
+      const { error: updateError } = await supabase
+        .from('child_registration_requests')
+        .update({
+          status: 'approved',
+          reviewed_by: reviewerId,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', registration.id);
+
+      if (updateError) throw updateError;
+
+      // Notify parent
+      try {
+        if (regData.parent_id) {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'child_registration_approved',
+              user_ids: [regData.parent_id],
+              parent_id: regData.parent_id,
+              registration_id: registration.id,
+              preschool_id: regData.preschool_id,
+              student_id: newStudent.id,
+              child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+            },
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send approval notification:', notifErr);
+      }
+
+      showAlert(
+        'Success',
+        '✅ Registration approved!\n\n👶 Student profile created\n👤 Linked to parent\n📱 Parent notified',
+        'success',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
+    }
+
+    // EduSite flow
+    const { data: regData, error: regFetchError } = await supabase
+      .from('registration_requests')
+      .select('*')
+      .eq('id', registration.id)
+      .single();
+
+    if (regFetchError) throw regFetchError;
+
+    let parentId: string | null = null;
+    const { data: existingParent } = await supabase
+      .from('profiles')
+      .select('id, organization_id, preschool_id')
+      .eq('email', regData.guardian_email)
+      .maybeSingle();
+
+    if (existingParent) {
+      parentId = existingParent.id;
+      const needsOrgUpdate = !existingParent.organization_id ||
+        existingParent.organization_id !== regData.organization_id ||
+        existingParent.preschool_id !== regData.organization_id;
+
+      if (needsOrgUpdate) {
+        await supabase
+          .from('profiles')
+          .update({
+            organization_id: regData.organization_id,
+            preschool_id: regData.organization_id,
+          })
+          .eq('id', parentId);
+      }
+    }
+
+    // Generate student_id code
+    let studentIdCode: string;
+    try {
+      const { data: org } = await supabase
+        .from('preschools')
+        .select('name')
+        .eq('id', regData.organization_id)
+        .single();
+
+      const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
+      const year = new Date().getFullYear().toString().slice(-2);
+
+      const { count } = await supabase
+        .from('students')
+        .select('id', { count: 'exact', head: true })
+        .eq('preschool_id', regData.organization_id);
+
+      const nextNum = ((count || 0) + 1).toString().padStart(4, '0');
+      studentIdCode = `${orgCode}-${year}-${nextNum}`;
+    } catch {
+      studentIdCode = `STU-${new Date().getFullYear().toString().slice(-2)}-${Date.now().toString().slice(-4)}`;
+    }
+
+    const { data: newStudent, error: studentError } = await supabase
+      .from('students')
+      .insert({
+        student_id: studentIdCode,
+        first_name: regData.student_first_name,
+        last_name: regData.student_last_name,
+        date_of_birth: regData.student_dob,
+        gender: regData.student_gender,
+        parent_id: parentId,
+        guardian_id: parentId,
+        registration_fee_amount: regData.registration_fee_amount || 0,
+        registration_fee_paid: regData.registration_fee_paid || false,
+        payment_verified: regData.payment_verified || false,
+        preschool_id: regData.organization_id,
+        is_active: true,
+        status: 'active',
+        emergency_contact_name: regData.guardian_name,
+        emergency_contact_phone: regData.guardian_phone,
+      })
+      .select('id')
+      .single();
+
+    if (studentError) throw studentError;
+
+    if (parentId) {
+      try {
+        const { data: existingLink } = await supabase
+          .from('student_parent_relationships')
+          .select('id')
+          .eq('parent_id', parentId)
+          .eq('student_id', newStudent.id)
+          .maybeSingle();
+
+        if (!existingLink) {
+          await supabase
+            .from('student_parent_relationships')
+            .insert({
+              parent_id: parentId,
+              student_id: newStudent.id,
+              relationship_type: 'parent',
+              is_primary: true,
+            });
+        }
+      } catch (linkError) {
+        console.warn('Failed to link parent to student:', linkError);
+      }
+    }
+
+    try {
+      const { data: feeStructure } = await supabase
+        .from('fee_structures')
+        .select('id, amount')
+        .eq('preschool_id', regData.organization_id)
+        .eq('fee_type', 'tuition')
+        .eq('is_active', true)
+        .single();
+
+      if (feeStructure) {
+        const now = new Date();
+        const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+        const feesToInsert = [currentMonth, nextMonth].map(date => ({
+          student_id: newStudent.id,
+          fee_structure_id: feeStructure.id,
+          amount: feeStructure.amount,
+          final_amount: feeStructure.amount,
+          due_date: date.toISOString().split('T')[0],
+          status: 'pending',
+          amount_outstanding: feeStructure.amount,
+        }));
+
+        await supabase.from('student_fees').insert(feesToInsert);
+      }
+    } catch (feeErr) {
+      console.warn('Failed to auto-assign fees:', feeErr);
+    }
+
+    const { error: updateError } = await supabase
+      .from('registration_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: reviewerId,
+        reviewed_date: new Date().toISOString(),
+        edudash_student_id: newStudent.id,
+        edudash_parent_id: parentId,
+      })
+      .eq('id', registration.id);
+
+    if (updateError) throw updateError;
+
+    if (parentId) {
+      try {
+        await supabase.functions.invoke('notifications-dispatcher', {
+          body: {
+            event_type: 'child_registration_approved',
+            user_ids: [parentId],
+            registration_id: registration.id,
+            student_id: newStudent.id,
+            child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+          },
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send approval notification:', notifErr);
+      }
+    }
+
+    showAlert(
+      'Success',
+      `✅ Registration approved!\n\n👶 Student profile created (${studentIdCode})\n${parentId ? '👤 Linked to parent\n📱 Parent notified' : '⚠️ Parent account not found - they need to register'}`,
+      'success',
+      [{ text: 'OK', onPress: () => router.back() }]
+    );
+  };
+
   // Approve registration
   const handleApprove = async () => {
     if (!registration) return;
-    
-    const isInApp = registration.source === 'in-app';
-    const hasUnverifiedPayment = registration.proof_of_payment_url && !registration.payment_verified;
-    
-    let confirmMessage = `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?\n\nThis will:\n• Create student profile`;
-    if (!isInApp) {
-      confirmMessage += '\n• Create parent account\n• Send welcome email';
-    } else {
-      confirmMessage += '\n• Link to parent\n• Notify parent';
+
+    const requiresPayment = (registration.registration_fee_amount || 0) > 0;
+    if (requiresPayment && !registration.payment_verified) {
+      showAlert('Payment Required', 'Please verify payment before approving this registration.', 'warning');
+      return;
     }
-    if (hasUnverifiedPayment) {
-      confirmMessage += '\n\n⚠️ Note: Payment has not been verified yet.';
-    }
-    
+
     showAlert(
       'Approve Registration',
-      confirmMessage,
+      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?`,
       'info',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: hasUnverifiedPayment ? 'Approve Anyway' : 'Approve',
+          text: 'Approve',
           style: 'default',
           onPress: async () => {
             hideAlert();
             setProcessing(true);
             try {
-              const supabase = assertSupabase();
-              
-              if (isInApp) {
-                // In-app registration - update child_registration_requests
-                const { error: updateError } = await supabase
-                  .from('child_registration_requests')
-                  .update({
-                    status: 'approved',
-                    reviewed_by: user?.id,
-                    reviewed_at: new Date().toISOString(),
-                  })
-                  .eq('id', registration.id);
-
-                if (updateError) throw updateError;
-
-                showAlert(
-                  'Success',
-                  '✅ Registration approved!\n\nPlease use the registration list to complete student creation.',
-                  'success',
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
-              } else {
-                // EduSite registration - original flow
-                const { error: updateError } = await supabase
-                  .from('registration_requests')
-                  .update({
-                    status: 'approved',
-                    reviewed_by: user?.email,
-                    reviewed_date: new Date().toISOString(),
-                  })
-                  .eq('id', registration.id);
-
-                if (updateError) throw updateError;
-
-                // Call sync function for EduSite registrations
-                const { error: syncError } = await supabase.functions.invoke('sync-registration-to-edudash', {
-                  body: { registration_id: registration.id },
-                });
-
-                if (syncError) {
-                  showAlert(
-                    'Partial Success',
-                    'Registration approved, but account creation may have failed. Please contact admin.',
-                    'warning',
-                    [{ text: 'OK', onPress: () => router.back() }]
-                  );
-                } else {
-                  showAlert(
-                    'Success',
-                    '✅ Registration approved!\n\n✉️ Welcome email sent\n👤 Parent account created\n👶 Student profile created',
-                    'success',
-                    [{ text: 'OK', onPress: () => router.back() }]
-                  );
-                }
-              }
+              await approveRegistrationCore();
             } catch (err: any) {
               showAlert('Error', err.message || 'Failed to approve registration', 'error');
             } finally {
@@ -492,26 +777,24 @@ export default function RegistrationDetailScreen() {
     }
   };
 
-  // Verify payment
+  // Verify payment (and approve registration)
   const handleVerifyPayment = async () => {
     if (!registration) return;
     
     showAlert(
-      'Verify Payment',
-      'Confirm that the payment has been received and verified?',
+      'Verify Payment & Approve',
+      'Confirm that the payment has been received and approve this registration?',
       'info',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Verify',
+          text: 'Verify & Approve',
           style: 'default',
           onPress: async () => {
             hideAlert();
             setProcessing(true);
             try {
               const supabase = assertSupabase();
-              
-              // Use the correct table based on source
               const tableName = registration.source === 'in-app' 
                 ? 'child_registration_requests' 
                 : 'registration_requests';
@@ -531,8 +814,8 @@ export default function RegistrationDetailScreen() {
                 payment_verified: true,
                 registration_fee_paid: true,
               } : null);
-              
-              showAlert('Success', 'Payment has been verified', 'success');
+
+              await approveRegistrationCore();
             } catch (err: any) {
               showAlert('Error', err.message || 'Failed to verify payment', 'error');
             } finally {
@@ -861,7 +1144,7 @@ export default function RegistrationDetailScreen() {
                     <>
                       <Ionicons name="shield-checkmark" size={20} color="#fff" />
                       <Text style={styles.verifyPaymentText}>
-                        {popViewed ? 'Verify Payment' : 'View POP First to Verify'}
+                        {popViewed ? 'Verify & Approve' : 'View POP First to Verify'}
                       </Text>
                     </>
                   )}
@@ -890,7 +1173,7 @@ export default function RegistrationDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="shield-checkmark" size={20} color="#fff" />
-                  <Text style={styles.verifyPaymentText}>Verify Payment</Text>
+                  <Text style={styles.verifyPaymentText}>Verify & Approve</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -927,7 +1210,7 @@ export default function RegistrationDetailScreen() {
               <View style={[styles.popWarning, { backgroundColor: '#F59E0B20' }]}>
                 <Ionicons name="warning" size={20} color="#F59E0B" />
                 <Text style={styles.popWarningText}>
-                  Proof of Payment is required before you can approve this registration
+                  Proof of Payment must be uploaded and verified before approval
                 </Text>
               </View>
             )}

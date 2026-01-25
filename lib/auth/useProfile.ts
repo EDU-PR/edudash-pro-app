@@ -79,7 +79,7 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
             plan_tier
           )
         `)
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .maybeSingle();
       
       if (!error && data) {

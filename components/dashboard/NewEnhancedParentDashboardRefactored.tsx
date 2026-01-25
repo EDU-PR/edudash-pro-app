@@ -45,6 +45,7 @@ import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
+import DashOrb from '@/components/dash-orb';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -182,6 +183,15 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'ask_dash':
         router.push('/screens/dash-assistant');
         break;
+      case 'dash_explain':
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } });
+        break;
+      case 'dash_quiz':
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for my child.' } });
+        break;
+      case 'dash_study_plan':
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } });
+        break;
       case 'children':
         // Show children list or scroll to child switcher
         // For now, could navigate to profile or show modal
@@ -295,6 +305,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
     { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: '#059669' },
     { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
+    { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
+    { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
+    { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
     { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
   ], [t, theme, tier]);
 
@@ -587,6 +600,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           margin={16} 
         />
       </ScrollView>
+      <DashOrb
+        position="bottom-right"
+        size={56}
+        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'parent_dashboard' })}
+      />
     </View>
   );
 };

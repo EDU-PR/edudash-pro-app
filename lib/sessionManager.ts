@@ -3,6 +3,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track, identifyUser } from '@/lib/analytics';
 import { identifyUserForFlags } from '@/lib/featureFlags';
 import { reportError } from '@/lib/monitoring';
+import type { User } from '@supabase/supabase-js';
 
 // ============================================================================
 // GLOBAL PASSWORD RECOVERY FLAG
@@ -396,6 +397,59 @@ async function getUserCapabilities(role: string, planTier?: string): Promise<str
 }
 
 /**
+ * Build a minimal profile from auth user metadata (fallback when profile fetch fails or times out)
+ */
+async function buildMinimalProfileFromUser(user: User, overrides?: Partial<UserProfile>): Promise<UserProfile> {
+  const userMeta = (user.user_metadata || {}) as Record<string, any>;
+  const appMeta = (user.app_metadata || {}) as Record<string, any>;
+  const role = (overrides?.role ||
+    userMeta.role ||
+    appMeta.role ||
+    'parent') as UserProfile['role'];
+  const planTier =
+    userMeta.plan_tier ||
+    userMeta.subscription_tier ||
+    appMeta.plan_tier ||
+    appMeta.subscription_tier;
+  const capabilities = await getUserCapabilities(role, planTier);
+  const firstName = overrides?.first_name || userMeta.first_name || userMeta.given_name || '';
+  const lastName = overrides?.last_name || userMeta.last_name || userMeta.family_name || '';
+  const fullName =
+    overrides?.full_name ||
+    userMeta.full_name ||
+    userMeta.name ||
+    `${firstName} ${lastName}`.trim() ||
+    undefined;
+  const organizationId =
+    overrides?.organization_id ||
+    userMeta.organization_id ||
+    appMeta.organization_id ||
+    userMeta.preschool_id ||
+    appMeta.preschool_id;
+  const preschoolId =
+    overrides?.preschool_id ||
+    userMeta.preschool_id ||
+    appMeta.preschool_id;
+
+  return {
+    id: user.id,
+    email: overrides?.email || user.email || '',
+    role,
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    avatar_url: overrides?.avatar_url || userMeta.avatar_url || userMeta.picture,
+    organization_id: organizationId,
+    organization_name: overrides?.organization_name || userMeta.organization_name || appMeta.organization_name,
+    preschool_id: preschoolId,
+    seat_status: overrides?.seat_status || 'active',
+    capabilities,
+    created_at: overrides?.created_at || new Date().toISOString(),
+    last_login_at: overrides?.last_login_at || new Date().toISOString(),
+  };
+}
+
+/**
  * Check if session needs refresh
  */
 function needsRefresh(session: UserSession): boolean {
@@ -691,8 +745,17 @@ export async function signInWithSession(
                 user_id: retry.data.user.id,
                 email: retry.data.user.email,
               };
-              const profile = await fetchUserProfile(retry.data.user.id);
-              if (!profile) return { session: null, profile: null, error: 'Failed to load user profile' };
+              const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
+                fetchUserProfile(retry.data.user.id),
+                4000
+              );
+              let profile = fetchedProfile;
+              if (!profile) {
+                if (timedOut) {
+                  console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
+                }
+                profile = await buildMinimalProfileFromUser(retry.data.user);
+              }
               await storeSession(session);
               await storeProfile(profile);
               setupAutoRefresh(session);
@@ -706,13 +769,21 @@ export async function signInWithSession(
               user_id: sessionData.session.user.id,
               email: sessionData.session.user.email,
             };
-            const profile = await fetchUserProfile(sessionData.session.user.id);
-            if (profile) {
-              await storeSession(session);
-              await storeProfile(profile);
-              setupAutoRefresh(session);
-              return { session, profile };
+            const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
+              fetchUserProfile(sessionData.session.user.id),
+              4000
+            );
+            let profile = fetchedProfile;
+            if (!profile) {
+              if (timedOut) {
+                console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
+              }
+              profile = await buildMinimalProfileFromUser(sessionData.session.user);
             }
+            await storeSession(session);
+            await storeProfile(profile);
+            setupAutoRefresh(session);
+            return { session, profile };
           }
         } catch (recoveryError) {
           console.error('[SessionManager] Session recovery failed:', recoveryError);
@@ -752,11 +823,18 @@ export async function signInWithSession(
 
     // Fetch user profile
     if (__DEV__) console.log('[SessionManager] Fetching user profile for:', data.user.id);
-    const profile = await fetchUserProfile(data.user.id);
-
+    const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
+      fetchUserProfile(data.user.id),
+      4000
+    );
+    let profile = fetchedProfile;
     if (!profile) {
-      console.error('[SessionManager] Failed to load user profile for user:', data.user.id);
-      return { session: null, profile: null, error: 'Failed to load user profile' };
+      if (timedOut) {
+        console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
+      } else {
+        console.warn('[SessionManager] fetchUserProfile returned null, using minimal fallback profile');
+      }
+      profile = await buildMinimalProfileFromUser(data.user);
     }
     if (__DEV__) console.log('[SessionManager] Profile loaded successfully. Role:', profile.role, 'Org:', profile.organization_id);
 
@@ -775,10 +853,14 @@ export async function signInWithSession(
 
     // Update last login via RPC to avoid REST conflicts on public.users
     try {
-      const { error: lastLoginError } = await assertSupabase()
-        .rpc('update_user_last_login');
-      if (lastLoginError) {
-        console.warn('Could not update last_login_at via RPC:', lastLoginError);
+      const { result: lastLoginResult, timedOut: lastLoginTimedOut } = await withTimeoutMarker(
+        assertSupabase().rpc('update_user_last_login'),
+        2000
+      );
+      if (lastLoginTimedOut) {
+        console.warn('[SessionManager] update_user_last_login timed out (non-blocking)');
+      } else if ((lastLoginResult as any)?.error) {
+        console.warn('Could not update last_login_at via RPC:', (lastLoginResult as any)?.error);
       }
     } catch (updateError) {
       console.warn('Error updating last_login_at via RPC:', updateError);
@@ -823,6 +905,27 @@ export async function signInWithSession(
       error: error instanceof Error ? error.message : 'Sign-in failed' 
     };
   }
+}
+
+/**
+ * Helper to wrap a promise with a timeout and detect timeout vs result
+ */
+async function withTimeoutMarker<T>(
+  promise: Promise<T>,
+  ms: number
+): Promise<{ result: T | null; timedOut: boolean }> {
+  const timeoutMarker = Symbol('timeout');
+  const timeoutPromise = new Promise<symbol>((resolve) =>
+    setTimeout(() => resolve(timeoutMarker), ms)
+  );
+
+  const result = await Promise.race([promise, timeoutPromise]);
+  const timedOut = result === timeoutMarker;
+
+  return {
+    result: timedOut ? null : (result as T),
+    timedOut,
+  };
 }
 
 /**

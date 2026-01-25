@@ -5,7 +5,7 @@ import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { EnhancedUserRole } from '../../../types/auth-enhanced';
 import { RegistrationFormState } from '../../../hooks/useEnhancedRegistration';
-import { GRADE_LEVELS, SUBJECTS } from './index';
+import { GRADE_LEVELS, SUBJECTS } from './constants';
 import { registrationStepStyles as styles } from './styles';
 
 interface StepTheme {

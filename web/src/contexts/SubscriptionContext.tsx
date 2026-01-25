@@ -93,7 +93,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               const { data: profileData } = await assertSupabase()
                 .from('profiles')
                 .select('preschool_id, organization_id')
-                .eq('id', user.id)
+                .eq('auth_user_id', user.id)
                 .maybeSingle();
               if (profileData?.preschool_id) schoolId = profileData.preschool_id;
               if (profileData?.organization_id) orgId = profileData.organization_id;
@@ -105,7 +105,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 const { data: profileData } = await assertSupabase()
                   .from('profiles')
                   .select('preschool_id, organization_id')
-                  .eq('id', user.id)
+                  .eq('auth_user_id', user.id)
                   .maybeSingle();
                 if (profileData?.preschool_id) schoolId = profileData.preschool_id;
                 if (profileData?.organization_id) orgId = profileData.organization_id;

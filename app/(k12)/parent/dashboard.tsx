@@ -17,6 +17,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -26,11 +27,14 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
-import { styles } from './dashboard.styles';
-import { ChildCard } from './ChildCard';
-import { useK12ParentData } from './useK12ParentData';
+import { styles } from './_dashboard.styles';
+import { ChildCard } from './_ChildCard';
+import { useK12ParentData } from './_useK12ParentData';
 import DashOrb from '@/components/dash-orb';
+import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
 // Quick action items for K-12 parent
 const quickActions = [
@@ -56,10 +60,12 @@ export default function K12ParentDashboardScreen() {
   const permissions = usePermissions();
   const { theme } = useTheme();
   const { tier } = useSubscription();
+  const flags = getFeatureFlagsSync();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
   const notificationCount = useNotificationBadgeCount();
   
   const [refreshing, setRefreshing] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile
   const schoolName = (profile as any)?.organization_membership?.organization_name || 
@@ -135,6 +141,25 @@ export default function K12ParentDashboardScreen() {
     return 'Good evening';
   };
 
+  const normalizeTierForCapabilities = (value?: string | null): Tier => {
+    const raw = String(value || 'free').toLowerCase().replace(/-/g, '_');
+    if (raw === 'trial') return 'starter';
+    if (raw === 'parent_starter' || raw === 'teacher_starter' || raw === 'school_starter' || raw === 'starter' || raw === 'basic') {
+      return 'starter';
+    }
+    if (raw === 'parent_plus' || raw === 'teacher_pro' || raw === 'school_premium' || raw === 'school_pro' || raw === 'premium' || raw === 'pro') {
+      return 'premium';
+    }
+    if (raw === 'school_enterprise' || raw === 'enterprise') {
+      return 'enterprise';
+    }
+    return 'free';
+  };
+
+  const tierForCaps = normalizeTierForCapabilities(tier);
+  const canUseExamPrep = flags.exam_prep_enabled && hasCapability(tierForCaps, 'exam.practice');
+  const requiredExamTier = getRequiredTier('exam.practice');
+
   // Loading state
   if (authLoading || profileLoading) {
     return (
@@ -153,12 +178,17 @@ export default function K12ParentDashboardScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       {/* FIXED HEADER - Does not scroll */}
       <View style={[styles.fixedHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: theme.textSecondary }]}>
-            {getGreeting()},
-          </Text>
-          <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
-          <Text style={[styles.schoolName, { color: theme.textSecondary }]}>{schoolName}</Text>
+        <View style={styles.headerLeftSection}>
+          <TouchableOpacity
+            style={styles.hamburgerButton}
+            onPress={() => setIsDrawerOpen(true)}
+            accessibilityLabel="Open navigation menu"
+          >
+            <Ionicons name="menu" size={28} color={theme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleWrapper}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Parent Dashboard</Text>
+          </View>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity 
@@ -208,6 +238,15 @@ export default function K12ParentDashboardScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Greeting Card */}
+        <View style={[styles.greetingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+            {getGreeting()},
+          </Text>
+          <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
+          <Text style={[styles.schoolName, { color: theme.textSecondary }]}>{schoolName}</Text>
+        </View>
+
         {/* School Type Badge */}
         <View style={styles.schoolTypeBadge}>
           <LinearGradient
@@ -269,19 +308,56 @@ export default function K12ParentDashboardScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>AI & Learning Tools</Text>
           <View style={styles.quickActionsGrid}>
-            {aiQuickActions.map((action) => (
+            {aiQuickActions.map((action) => {
+              const isExamPrep = action.id === 'exam-prep';
+              const isDisabled = isExamPrep && !canUseExamPrep;
+              return (
               <TouchableOpacity
                 key={action.id}
-                style={[styles.quickActionCard, { backgroundColor: theme.surface }]}
-                onPress={() => handleQuickAction(action.route, action.id)}
+                style={[
+                  styles.quickActionCard, 
+                  { backgroundColor: theme.surface },
+                  isDisabled && styles.quickActionDisabled
+                ]}
+                onPress={() => {
+                  if (isDisabled) {
+                    if (!flags.exam_prep_enabled) {
+                      Alert.alert(
+                        'Exam Prep Unavailable',
+                        'Exam Prep is currently disabled in this build. Please try again later.',
+                        [{ text: 'OK', style: 'default' }]
+                      );
+                      return;
+                    }
+
+                    const tierLabel = requiredExamTier ? requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1) : 'Starter';
+                    Alert.alert(
+                      'Exam Prep Locked',
+                      `Exam Prep requires ${tierLabel} plan or higher.\n\nUpgrade your subscription to unlock this feature.`,
+                      [
+                        { text: 'Not now', style: 'cancel' },
+                        { text: 'Upgrade', onPress: () => router.push('/screens/subscription-setup' as any) }
+                      ]
+                    );
+                    return;
+                  }
+                  handleQuickAction(action.route, action.id);
+                }}
                 activeOpacity={0.7}
+                disabled={isDisabled}
               >
+                {isDisabled && (
+                  <View style={[styles.quickActionLockBadge, { backgroundColor: theme.surfaceVariant }]}>
+                    <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
+                  </View>
+                )}
                 <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
                   <Ionicons name={action.icon as any} size={24} color={action.color} />
                 </View>
                 <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         </View>
 
@@ -433,6 +509,24 @@ export default function K12ParentDashboardScreen() {
         position="bottom-right"
         size={56}
         onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'k12_parent_dashboard' })}
+      />
+
+      {/* Mobile Navigation Drawer */}
+      <MobileNavDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        navItems={[
+          { id: 'home', label: 'Dashboard', icon: 'home', route: '/(k12)/parent/dashboard' },
+          { id: 'children', label: 'My Children', icon: 'people', route: '/screens/parent-children' },
+          { id: 'progress', label: 'Progress', icon: 'ribbon', route: '/screens/parent-progress' },
+          { id: 'attendance', label: 'Attendance', icon: 'calendar-outline', route: '/screens/parent-attendance' },
+          { id: 'messages', label: 'Messages', icon: 'chatbubbles', route: '/screens/parent-messages' },
+          { id: 'payments', label: 'Payments', icon: 'card', route: '/screens/parent-payments' },
+          { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/parent-announcements' },
+          { id: 'reports', label: 'Weekly Reports', icon: 'stats-chart', route: '/screens/parent-weekly-report' },
+          { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
+          { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
+        ]}
       />
     </SafeAreaView>
   );

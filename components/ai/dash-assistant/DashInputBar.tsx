@@ -12,7 +12,8 @@ import {
   TouchableOpacity, 
   ScrollView, 
   Text,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -25,6 +26,7 @@ interface DashInputBarProps {
   inputRef: React.RefObject<TextInput>;
   inputText: string;
   setInputText: (text: string) => void;
+  enterToSend?: boolean;
   selectedAttachments: DashAttachment[];
   isLoading: boolean;
   isUploading: boolean;
@@ -41,6 +43,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   inputRef,
   inputText,
   setInputText,
+  enterToSend = true,
   selectedAttachments,
   isLoading,
   isUploading,
@@ -168,43 +171,42 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary} 
           />
         </TouchableOpacity>
+
+        {/* Attach files button (outside input for visibility) */}
+        <TouchableOpacity
+          style={styles.attachButton}
+          onPress={async () => {
+            try {
+              await Haptics.selectionAsync();
+            } catch {}
+            onAttachFile();
+          }}
+          disabled={isLoading || isUploading}
+          accessibilityLabel="Attach files"
+          accessibilityRole="button"
+        >
+          <Ionicons 
+            name="attach" 
+            size={22} 
+            color={selectedAttachments.length > 0 ? theme.primary : (isLoading || isUploading ? theme.textTertiary : theme.textSecondary)} 
+          />
+          {selectedAttachments.length > 0 && (
+            <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
+              <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
+                {selectedAttachments.length}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
         
-        {/* Input wrapper with paperclip inside */}
+        {/* Input wrapper */}
         <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
-          {/* Paperclip icon (inside left of input) */}
-          <TouchableOpacity
-            style={styles.inputLeftIcon}
-            onPress={async () => {
-              try {
-                await Haptics.selectionAsync();
-              } catch {}
-              onAttachFile();
-            }}
-            disabled={isLoading || isUploading}
-            accessibilityLabel="Attach files"
-            accessibilityRole="button"
-          >
-            <Ionicons 
-              name="attach" 
-              size={20} 
-              color={selectedAttachments.length > 0 ? theme.primary : theme.textTertiary} 
-            />
-            {selectedAttachments.length > 0 && (
-              <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
-                  {selectedAttachments.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          
           <TextInput
             ref={inputRef}
             style={[
               styles.textInput,
               { 
                 color: theme.inputText,
-                paddingLeft: 36,
               }
             ]}
             placeholder={
@@ -217,11 +219,21 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}
             onChangeText={setInputText}
+            onKeyPress={(e) => {
+              if (!enterToSend || Platform.OS !== 'web') return;
+              const nativeEvent = (e as any)?.nativeEvent || {};
+              const key = nativeEvent.key;
+              const shiftKey = nativeEvent.shiftKey;
+              if (key === 'Enter' && !shiftKey) {
+                (e as any).preventDefault?.();
+                onSend();
+              }
+            }}
             multiline={true}
             maxLength={500}
             editable={!isLoading && !isUploading && !isRecording}
             onSubmitEditing={undefined}
-            returnKeyType="default"
+            returnKeyType={enterToSend ? 'send' : 'default'}
             blurOnSubmit={false}
           />
         </View>

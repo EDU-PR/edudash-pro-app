@@ -113,7 +113,10 @@ export class DashAIClient {
         ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
         : String(params.content || params.userInput || '');
       const role = (this.getUserProfile()?.role || 'teacher').toString().toLowerCase();
-      const scope: 'teacher' | 'principal' | 'parent' = (['teacher', 'principal', 'parent'].includes(role) ? role : 'teacher') as any;
+      const scope: 'teacher' | 'principal' | 'parent' | 'student' =
+        (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
+          ? (role === 'learner' ? 'student' : role)
+          : 'teacher') as any;
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
           scope,

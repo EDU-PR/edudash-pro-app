@@ -84,9 +84,6 @@ const getStatusIcon = (status: Registration['status']): string => {
 export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   item,
   isProcessing,
-  onApprove,
-  onReject,
-  onVerifyPayment,
   canApprove,
   onSendReminder,
   isSendingReminder,
@@ -300,50 +297,7 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
         </TouchableOpacity>
       )}
 
-      {/* Action Buttons (for pending) */}
-      {item.status === 'pending' && (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[
-              styles.actionButton, 
-              styles.approveButton,
-              !canApproveItem && styles.disabledButton
-            ]}
-            onPress={() => onApprove(item)}
-            disabled={isProcessing || !canApproveItem}
-          >
-            {isProcessing ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={18} color={canApproveItem ? '#fff' : '#999'} />
-                <Text style={[styles.actionButtonText, !canApproveItem && { color: '#999' }]}>
-                  Approve
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => onReject(item)}
-            disabled={isProcessing}
-          >
-            <Ionicons name="close" size={18} color="#fff" />
-            <Text style={styles.actionButtonText}>Reject</Text>
-          </TouchableOpacity>
-          {/* Verify Payment Button - show when POP is uploaded but not yet verified */}
-          {item.proof_of_payment_url && !item.payment_verified && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.verifyButton]}
-              onPress={() => onVerifyPayment(item, true)}
-              disabled={isProcessing}
-            >
-              <Ionicons name="shield-checkmark" size={18} color="#fff" />
-              <Text style={styles.actionButtonText}>Verify</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      {/* Action Buttons removed - approvals are handled in the POP verification screen */}
     </TouchableOpacity>
   );
 };

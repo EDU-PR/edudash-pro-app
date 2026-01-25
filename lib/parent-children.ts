@@ -9,16 +9,21 @@ import { assertSupabase } from '@/lib/supabase';
 
 export interface ChildBasicInfo {
   id: string;
+  student_id?: string | null;
   first_name: string;
   last_name: string;
   date_of_birth: string | null;
   grade: string | null;
+  grade_level?: string | null;
   class_id: string | null;
   preschool_id: string | null;
   is_active: boolean;
   parent_id: string | null;
   guardian_id: string | null;
-  classes?: { id: string; name: string; grade_level: string | null } | null;
+  registration_fee_amount?: number | null;
+  registration_fee_paid?: boolean | null;
+  payment_verified?: boolean | null;
+  classes?: { id: string; name: string; grade_level: string | null } | { id: string; name: string; grade_level: string | null }[] | null;
 }
 
 /**
@@ -45,8 +50,8 @@ export async function fetchParentChildren(
     let directQuery = supabase
       .from('students')
       .select(`
-        id, first_name, last_name, date_of_birth, grade, class_id, 
-        preschool_id, is_active, parent_id, guardian_id,
+        id, student_id, first_name, last_name, date_of_birth, grade, grade_level, class_id, 
+        preschool_id, is_active, parent_id, guardian_id, registration_fee_amount, registration_fee_paid, payment_verified,
         classes!students_class_id_fkey(id, name, grade_level)
       `)
       .or(`parent_id.eq.${parentId},guardian_id.eq.${parentId}`);
@@ -81,8 +86,8 @@ export async function fetchParentChildren(
       let junctionQuery = supabase
         .from('students')
         .select(`
-          id, first_name, last_name, date_of_birth, grade, class_id, 
-          preschool_id, is_active, parent_id, guardian_id,
+          id, student_id, first_name, last_name, date_of_birth, grade, grade_level, class_id, 
+          preschool_id, is_active, parent_id, guardian_id, registration_fee_amount, registration_fee_paid, payment_verified,
           classes!students_class_id_fkey(id, name, grade_level)
         `)
         .in('id', studentIds);

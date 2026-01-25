@@ -152,6 +152,35 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           source = 'profile';
           console.log('[SubscriptionContext] ✅ Tier from profile:', finalTier);
         }
+
+        // If a parent subscription was cancelled and end date has passed, downgrade to free
+        if (profile?.role === 'parent') {
+          try {
+            const { data: cancelledSub } = await assertSupabase()
+              .from('subscriptions')
+              .select('status, end_date')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (cancelledSub?.status === 'cancelled' && cancelledSub.end_date) {
+              const ended = new Date(cancelledSub.end_date) <= new Date();
+              if (ended && finalTier !== 'free') {
+                await assertSupabase()
+                  .from('profiles')
+                  .update({ subscription_tier: 'free' })
+                  .eq('id', userId);
+                
+                finalTier = 'free';
+                source = 'profile';
+                console.log('[SubscriptionContext] ✅ Cancelled subscription ended; downgraded to free');
+              }
+            }
+          } catch (err) {
+            console.warn('[SubscriptionContext] Cancelled subscription check error:', err);
+          }
+        }
         
         // For teachers/principals/admins with 'free' tier, check organization tier
         const isStaff = ['teacher', 'principal', 'admin'].includes(profile?.role || '');

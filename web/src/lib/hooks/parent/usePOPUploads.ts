@@ -157,7 +157,7 @@ export function useCreatePOPUpload() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('preschool_id')
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .single();
         
       if (profileError || !profile?.preschool_id) {

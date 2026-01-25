@@ -70,24 +70,16 @@ export function getPlanColor(tier: string): string {
  * Handles both cents and rands formats from database
  */
 export function convertPriceToRands(rawPrice: number): number {
-  if (rawPrice === 0) {
-    return 0;
-  } else if (rawPrice >= 1000) {
-    // Definitely in cents (R10.00+)
-    return rawPrice / 100;
-  } else if (rawPrice >= 100 && Number.isInteger(rawPrice)) {
-    // Likely in cents (R1.00+)
-    return rawPrice / 100;
-  } else {
-    // Likely already in rands (e.g., 99.50)
-    return Math.max(0.01, rawPrice);
-  }
+  if (!Number.isFinite(rawPrice) || rawPrice === 0) return 0;
+  // Subscription prices are stored in rands (decimal). Keep as-is.
+  // If your database stores cents, fix the data instead of applying heuristics.
+  return Math.max(0.01, rawPrice);
 }
 
 /**
  * Check if launch promo is active
  */
 export function isLaunchPromoActive(): boolean {
-  const promoEndDate = new Date('2025-12-31T23:59:59.999Z');
+  const promoEndDate = new Date('2026-03-31T23:59:59.999Z');
   return new Date() <= promoEndDate;
 }

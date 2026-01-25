@@ -16,6 +16,7 @@ import { DashAINavigator, type NavigatorConfig } from './DashAINavigator';
 import { DashUserProfileManager, type UserProfileManagerConfig } from './DashUserProfileManager';
 import { DashAIClient } from './DashAIClient';
 import { DashPromptBuilder } from './DashPromptBuilder';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 // Import facades
 import {
@@ -78,6 +79,23 @@ const DEFAULT_PERSONALITY: DashPersonality = {
   },
 };
 
+type AgeGroup = 'child' | 'teen' | 'adult';
+
+function inferAgeGroupFromGrade(gradeLevel?: string): AgeGroup | undefined {
+  if (!gradeLevel) return undefined;
+  const normalized = gradeLevel.trim().toUpperCase();
+  if (normalized.includes('R')) {
+    return 'child';
+  }
+  const match = normalized.match(/\d+/);
+  if (!match) return undefined;
+  const gradeNum = Number(match[0]);
+  if (Number.isNaN(gradeNum)) return undefined;
+  if (gradeNum <= 7) return 'child';
+  if (gradeNum <= 12) return 'teen';
+  return 'adult';
+}
+
 export interface DashAICoreConfig {
   supabaseClient: any;
   currentUser?: {
@@ -117,6 +135,8 @@ export class DashAICore {
   // Configuration
   private personality: DashPersonality;
   private supabaseClient: any;
+  private parentChildrenCache: { fetchedAt: number; children: Array<{ id: string; name: string; grade_level?: string; age_group?: 'child' | 'teen' | 'adult' }> } | null = null;
+  private parentChildrenInFlight: Promise<Array<{ id: string; name: string; grade_level?: string; age_group?: 'child' | 'teen' | 'adult' }>> | null = null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
 
@@ -178,17 +198,26 @@ export class DashAICore {
     const mapProfileForPromptBuilder = () => {
       const dashProfile = this.profileManager.getUserProfile();
       if (!dashProfile) return undefined;
-      
+      const gradeLevel = dashProfile.context?.grade_levels?.[0];
+      const inferredAgeGroup = inferAgeGroupFromGrade(gradeLevel);
+      const resolvedAgeGroup = dashProfile.context?.age_group || inferredAgeGroup;
+      const children = this.parentChildrenCache?.children || [];
+
       return {
         role: dashProfile.role,
         full_name: dashProfile.name,
         display_name: dashProfile.name,
-        grade_level: dashProfile.context?.grade_levels?.[0],
+        grade_level: gradeLevel,
         preferred_language: dashProfile.context?.preferred_language,
         subscription_tier: dashProfile.preferences?.ai_autonomy_level, // Map to subscription context
         organization_name: dashProfile.context?.organization_id, // Will be resolved by caller
         organization_type: dashProfile.context?.organization_type,
-        age_group: dashProfile.context?.age_group,
+        age_group: resolvedAgeGroup,
+        children: children.map(child => ({
+          name: child.name,
+          grade_level: child.grade_level,
+          age_group: child.age_group,
+        })),
       };
     };
 
@@ -201,7 +230,7 @@ export class DashAICore {
     this.voice = new DashAIVoiceFacade(this.voiceService);
     this.memory = new DashAIMemoryFacade(this.memoryService);
     // Create conversation facade - it will handle null manager gracefully
-    this.conversation = new DashAIConversationFacade(this.conversationManager);
+    this.conversation = new DashAIConversationFacade(this.conversationManager, config?.currentUser?.id);
     this.tasks = new DashAITaskFacade(this.taskManager);
     this.navigation = new DashAINavigationFacade(this.navigator);
   }
@@ -259,6 +288,9 @@ export class DashAICore {
         this.profileManager.initialize(),
       ]);
 
+      // Hydrate personality from stored user preferences (if any)
+      this.hydratePersonalityFromProfile();
+
       this.isInitialized = true;
       console.log('[DashAICore] Initialization complete');
     } catch (error) {
@@ -273,6 +305,70 @@ export class DashAICore {
 
   public getUserProfile() {
     return this.profileManager.getUserProfile();
+  }
+
+  private async hydrateParentChildren(force: boolean = false): Promise<Array<{ id: string; name: string; grade_level?: string; age_group?: 'child' | 'teen' | 'adult' }>> {
+    const profile = this.getUserProfile();
+    if (!profile || profile.role !== 'parent') {
+      return [];
+    }
+
+    const now = Date.now();
+    if (!force && this.parentChildrenCache && now - this.parentChildrenCache.fetchedAt < 5 * 60 * 1000) {
+      return this.parentChildrenCache.children;
+    }
+
+    if (this.parentChildrenInFlight) {
+      return this.parentChildrenInFlight;
+    }
+
+    this.parentChildrenInFlight = (async () => {
+      try {
+        const schoolId = profile.context?.organization_id;
+        const children = await fetchParentChildren(profile.userId, {
+          includeInactive: false,
+          schoolId,
+        });
+
+        const normalized = (children || []).map((child: any) => {
+          const classData = Array.isArray(child.classes) ? child.classes[0] : child.classes;
+          const gradeLevel = child.grade_level || child.grade || classData?.grade_level || undefined;
+          return {
+            id: child.id,
+            name: `${child.first_name} ${child.last_name}`.trim(),
+            grade_level: gradeLevel,
+            age_group: inferAgeGroupFromGrade(gradeLevel),
+          };
+        }).filter((c: any) => c.id);
+
+        this.parentChildrenCache = { fetchedAt: Date.now(), children: normalized };
+        return normalized;
+      } catch (error) {
+        console.warn('[DashAICore] Failed to load parent children:', error);
+        return [];
+      } finally {
+        this.parentChildrenInFlight = null;
+      }
+    })();
+
+    return this.parentChildrenInFlight;
+  }
+
+  private async buildParentChildrenContext(): Promise<string | null> {
+    const children = await this.hydrateParentChildren();
+    if (!children || children.length === 0) return null;
+    const list = children
+      .map(child => child.grade_level ? `${child.name} (Grade ${child.grade_level})` : child.name)
+      .join(', ');
+    return `Children: ${list}`;
+  }
+
+  private detectLanguageOverride(userInput: string): 'af-ZA' | null {
+    const input = String(userInput || '').toLowerCase();
+    if (input.includes('afrikaans') || input.includes('afrikaans:') || input.includes('in afrikaans')) {
+      return 'af-ZA';
+    }
+    return null;
   }
 
   public async updateUserPreferences(preferences: Partial<any>): Promise<void> {
@@ -295,6 +391,26 @@ export class DashAICore {
     return this.personality;
   }
 
+  private hydratePersonalityFromProfile(): void {
+    const profile = this.profileManager.getUserProfile();
+    const prefs = (profile?.preferences as any) || {};
+    const overrides: Partial<DashPersonality> = {};
+
+    if (prefs.response_style) overrides.response_style = prefs.response_style;
+    if (prefs.personality_traits) overrides.personality_traits = prefs.personality_traits;
+    if (prefs.voice_settings) {
+      overrides.voice_settings = { ...this.personality.voice_settings, ...prefs.voice_settings };
+    }
+    if (prefs.response_language) overrides.response_language = prefs.response_language;
+    if (typeof prefs.strict_language_mode === 'boolean') {
+      overrides.strict_language_mode = prefs.strict_language_mode;
+    }
+
+    if (Object.keys(overrides).length > 0) {
+      this.updatePersonality(overrides);
+    }
+  }
+
   public updatePersonality(personality: Partial<DashPersonality>): void {
     this.personality = { ...this.personality, ...personality };
 
@@ -312,6 +428,21 @@ export class DashAICore {
 
   public async savePersonality(personality: Partial<DashPersonality>): Promise<void> {
     this.updatePersonality(personality);
+    try {
+      const prefsUpdate: Record<string, any> = {};
+      if (personality.response_style) prefsUpdate.response_style = personality.response_style;
+      if (personality.personality_traits) prefsUpdate.personality_traits = personality.personality_traits;
+      if (personality.voice_settings) prefsUpdate.voice_settings = personality.voice_settings;
+      if (personality.response_language) prefsUpdate.response_language = personality.response_language;
+      if (typeof personality.strict_language_mode === 'boolean') {
+        prefsUpdate.strict_language_mode = personality.strict_language_mode;
+      }
+      if (Object.keys(prefsUpdate).length > 0) {
+        await this.profileManager.updatePreferences(prefsUpdate);
+      }
+    } catch (error) {
+      console.warn('[DashAICore] Failed to persist personality preferences:', error);
+    }
   }
 
   public getPersonalizedGreeting(): string {
@@ -370,11 +501,32 @@ export class DashAICore {
       const strictLanguageMode = personality?.strict_language_mode === true;
       const langDirective = this.promptBuilder.buildLanguageDirective(strictLanguageMode);
       const shouldStream = typeof onStreamChunk === 'function';
+      const userProfile = this.getUserProfile();
+      const languageOverride = this.detectLanguageOverride(userInput);
+      const languageOverrideDirective = languageOverride
+        ? `LANGUAGE OVERRIDE: Respond fully in Afrikaans (af-ZA) with Afrikaans examples.`
+        : null;
+
+      let childrenContext: string | null = null;
+      if (userProfile?.role === 'parent') {
+        childrenContext = await this.buildParentChildrenContext();
+      }
+
+      const tutoringGuidance = (userProfile?.role === 'parent' || userProfile?.role === 'student')
+        ? `Tutoring guidance: For homework/math help, use the student_tutor tool. Ask for the exact question and confirm grade/age before proceeding. If the parent has multiple children, ask which child to focus on. Teach step-by-step, include worked examples, then give short practice and ask a follow-up question. Avoid inventing specific tests unless requested.`
+        : '';
+
+      const contextParts = [
+        `User role: ${userProfile?.role || 'educator'}`,
+        childrenContext,
+        tutoringGuidance,
+        languageOverrideDirective || langDirective,
+      ].filter(Boolean);
 
       const response = await this.aiClient.callAIService({
         action: 'general_assistance',
         messages: this.promptBuilder.buildMessageHistory(recentMessages, userInput),
-        context: `User role: ${this.getUserProfile()?.role || 'educator'}\n${langDirective}`,
+        context: contextParts.join('\n'),
         attachments,
         stream: shouldStream,
         onChunk: onStreamChunk,
@@ -385,6 +537,7 @@ export class DashAICore {
         type: 'assistant',
         content: response.content || 'I apologize, but I encountered an issue processing your request.',
         timestamp: Date.now(),
+        metadata: languageOverride ? { detected_language: languageOverride } : undefined,
       };
     } catch (error) {
       console.error('[DashAICore] Failed to generate response:', error);

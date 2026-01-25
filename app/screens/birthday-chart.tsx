@@ -89,7 +89,7 @@ export default function BirthdayChartScreen() {
         .from('classes')
         .select('id, name')
         .eq('preschool_id', organizationId)
-        .eq('is_active', true)
+        .eq('active', true)
         .order('name');
       
       setClasses(data || []);

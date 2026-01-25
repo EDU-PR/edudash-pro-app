@@ -377,9 +377,22 @@ export default function StudentDetailScreen() {
                 });
 
               if (error) {
-                console.error('Error deactivating student:', error);
-                Alert.alert('Error', 'Failed to remove student. Please try again.');
-                return;
+                console.warn('RPC deactivate_student failed, falling back to direct update:', error);
+                const { error: updateError } = await assertSupabase()
+                  .from('students')
+                  .update({
+                    is_active: false,
+                    status: 'inactive',
+                    class_id: null,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', student.id);
+
+                if (updateError) {
+                  console.error('Error deactivating student (fallback):', updateError);
+                  Alert.alert('Error', 'Failed to remove student. Please try again.');
+                  return;
+                }
               }
 
               Alert.alert(

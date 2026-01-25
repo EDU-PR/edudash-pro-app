@@ -100,6 +100,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const [statusText, setStatusText] = useState('Starting...');
   const hasAutoStarted = useRef(false);
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en-ZA');
+  const [lastDetectedLanguage, setLastDetectedLanguage] = useState<SupportedLanguage | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Prevent double-processing
   
@@ -131,9 +132,13 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       }
       
       setStatusText('Transcribing...');
-      const result = await transcribe(uri, selectedLanguage);
+      const result = await transcribe(uri, 'auto');
       
       if (result?.text) {
+        const detected = result.language;
+        if (detected === 'en-ZA' || detected === 'af-ZA' || detected === 'zu-ZA') {
+          setLastDetectedLanguage(detected);
+        }
         onTranscript(result.text);
         setStatusText('Tap to speak');
       } else {
@@ -155,7 +160,8 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     speakText: async (text: string) => {
       onTTSStart?.();
       try {
-        await speak(text, selectedLanguage);
+        const ttsLanguage = lastDetectedLanguage || selectedLanguage;
+        await speak(text, ttsLanguage);
       } finally {
         onTTSEnd?.();
       }

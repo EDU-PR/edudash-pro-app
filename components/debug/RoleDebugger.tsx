@@ -54,7 +54,7 @@ export function RoleDebugger() {
                   role: 'super_admin',
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', user.id)
+                .eq('auth_user_id', user.id)
                 .select();
 
               console.log('🔧 Update result:', { error, data });

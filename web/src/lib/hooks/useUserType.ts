@@ -81,7 +81,7 @@ export function useUserType(): UseUserTypeReturn {
           organization_id,
           subscription_tier
         `)
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .maybeSingle();
 
       if (profileError) throw profileError;

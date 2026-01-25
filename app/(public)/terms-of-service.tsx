@@ -65,14 +65,14 @@ export default function TermsOfService() {
       <LegalText variant="list-item">Enterprise: Full institutional access with administrative tools</LegalText>
 
       <LegalHeading level={3}>Billing & Payment</LegalHeading>
-      <LegalText variant="list-item">Payment Processing: Handled securely through RevenueCat and Google Play Billing</LegalText>
+      <LegalText variant="list-item">Payment Processing: Handled securely through PayFast and approved payment providers</LegalText>
       <LegalText variant="list-item">Subscription Renewal: Automatic renewal unless cancelled</LegalText>
       <LegalText variant="list-item">Currency: Pricing in South African Rand (ZAR) and other supported currencies</LegalText>
       <LegalText variant="list-item">Payment Failure: Service may be suspended for non-payment</LegalText>
 
       <LegalHeading level={3}>Cancellation Policy</LegalHeading>
-      <LegalText variant="list-item">Cancellation Right: Cancel subscription at any time through app settings or Play Store</LegalText>
-      <LegalText variant="list-item">Refund Policy: Follow Google Play Store refund policies</LegalText>
+      <LegalText variant="list-item">Cancellation Right: Cancel subscription at any time through app settings or by contacting support</LegalText>
+      <LegalText variant="list-item">Refund Policy: Determined by the payment provider (e.g., PayFast)</LegalText>
       <LegalText variant="list-item">Data Retention: Account data retained per our Privacy Policy</LegalText>
       <LegalText variant="list-item">No Pro-Rating: No refunds for partial billing periods</LegalText>
 

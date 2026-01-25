@@ -20,6 +20,8 @@ interface DashMessageBubbleProps {
   totalMessages: number;
   speakingMessageId: string | null;
   isLoading: boolean;
+  voiceEnabled?: boolean;
+  showFollowUps?: boolean;
   onSpeak: (message: DashMessage) => void;
   onRetry: (content: string) => void;
   onSendFollowUp: (text: string) => void;
@@ -32,6 +34,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   totalMessages,
   speakingMessageId,
   isLoading,
+  voiceEnabled = true,
+  showFollowUps = true,
   onSpeak,
   onRetry,
   onSendFollowUp,
@@ -64,7 +68,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const isPdf = url ? /\.pdf(\?|$)/i.test(url) : false;
 
   // Get suggestions from metadata or extract from content
-  const suggestions = !isUser && (
+  const suggestions = !isUser && showFollowUps && (
     (message.metadata?.suggested_actions && message.metadata.suggested_actions.length > 0)
       ? message.metadata.suggested_actions
       : extractFollowUps(message.content)
@@ -247,9 +251,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                   styles.inlineSpeakButton, 
                   { 
                     backgroundColor: speakingMessageId === message.id ? theme.error : theme.accent,
+                    opacity: voiceEnabled ? 1 : 0.5,
                   }
                 ]}
                 onPress={() => onSpeak(message)}
+                disabled={!voiceEnabled}
                 activeOpacity={0.7}
                 accessibilityLabel={speakingMessageId === message.id ? "Stop speaking" : "Speak message"}
               >

@@ -30,6 +30,7 @@ import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
+import { cancelSubscription } from '@/lib/payments';
 
 export interface PaymentHistoryItem {
   id: string;
@@ -178,17 +179,24 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
       setPaymentHistory(history);
       
       // Also fetch current subscription details
-      const { data: subscription } = await supabase
+      const isParent = (profile as any)?.role === 'parent' || !(profile as any)?.preschool_id;
+      let subscriptionQuery = supabase
         .from('subscriptions')
         .select(`
           id, status, start_date, end_date, next_billing_date, billing_frequency,
           subscription_plans(name, tier, price_monthly)
         `)
-        .eq('school_id', (profile as any)?.preschool_id || (profile as any)?.organization_id)
-        .in('status', ['active', 'trialing'])
+        .in('status', ['active', 'trialing', 'cancelled'])
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      if (isParent) {
+        subscriptionQuery = subscriptionQuery.eq('user_id', user.id);
+      } else {
+        subscriptionQuery = subscriptionQuery.eq('school_id', (profile as any)?.preschool_id || (profile as any)?.organization_id);
+      }
+
+      const { data: subscription } = await subscriptionQuery.maybeSingle();
       
       setSubscriptionDetails(subscription);
       
@@ -225,16 +233,27 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
                 current_tier: tier,
               });
               
-              // Subscription cancellation is handled via support to prevent accidental cancellations
-              // and to provide opportunity for customer retention.
-              // TODO: [SUBSCRIPTION-CANCEL] Implement self-service cancellation endpoint in payfast-webhook
-              // when business requirements allow for automated cancellation flow.
-              // Current behavior: Direct users to support for manual processing.
+              const scope: 'user' | 'school' = (profile as any)?.role === 'parent' ? 'user' : 'school';
+              const result = await cancelSubscription({
+                scope,
+                userId: scope === 'user' ? user?.id : undefined,
+                schoolId: scope === 'school' ? (profile as any)?.preschool_id : undefined,
+              });
+
+              if (result.error) {
+                Alert.alert('Error', result.error);
+                return;
+              }
+
               Alert.alert(
-                'Contact Support',
-                'To cancel your subscription, please contact support@edudashpro.org.za. We\'ll process your request within 24 hours.',
+                'Cancellation Requested',
+                'Your subscription has been cancelled. You will retain access until the end of your current billing period.',
                 [{ text: 'OK' }]
               );
+
+              refreshTier();
+              refreshSubscription();
+              fetchPaymentHistory();
             } catch (err) {
               console.error('[SubscriptionStatusCard] Cancellation error:', err);
               Alert.alert('Error', 'Failed to cancel subscription. Please try again.');

@@ -26,6 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { fetchParentChildren } from '@/lib/parent-children';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 // TODO: Re-enable after build - WeeklyReportDetail component causing EAS build issues
 // import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
@@ -85,7 +86,7 @@ export default function ParentWeeklyReportScreen() {
 
   useEffect(() => {
     loadStudents();
-  }, [user?.id]);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (selectedStudent) {
@@ -94,22 +95,17 @@ export default function ParentWeeklyReportScreen() {
   }, [selectedStudent, currentWeekStart]);
 
   const loadStudents = async () => {
-    if (!user?.id) return;
+    if (!profile?.id) return;
 
     try {
-      const supabase = assertSupabase();
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, first_name, last_name')
-        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`)
-        .eq('status', 'active')
-        .order('first_name');
+      const children = await fetchParentChildren(profile.id, {
+        includeInactive: false,
+        schoolId: profile.preschool_id || profile.organization_id || undefined,
+      });
 
-      if (error) throw error;
-
-      setStudents(data || []);
-      if (data && data.length > 0 && !selectedStudent) {
-        setSelectedStudent(data[0].id);
+      setStudents(children || []);
+      if (children && children.length > 0 && !selectedStudent) {
+        setSelectedStudent(children[0].id);
       }
     } catch (error) {
       console.error('[ParentWeeklyReport] Error loading students:', error);

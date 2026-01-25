@@ -15,6 +15,9 @@ import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
 import { useLearnerEnrollments } from '@/hooks/useLearnerData';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
+import { QuickActions } from '@/components/learner/QuickActions';
+import DashOrb from '@/components/dash-orb';
+import { track } from '@/lib/analytics';
 
 export default function StudentDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -100,6 +103,33 @@ export default function StudentDashboard() {
   const studentName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'Student';
   const shouldShowUpgrade = tier === 'free' || !tier;
 
+  const dashTools = React.useMemo(() => ([
+    {
+      icon: 'sparkles',
+      title: t('dash_ai.ask', { defaultValue: 'Ask Dash AI' }),
+      subtitle: t('dash_ai.ask_subtitle', { defaultValue: 'Chat with your AI study buddy' }),
+      onPress: () => router.push('/screens/dash-assistant'),
+    },
+    {
+      icon: 'bulb-outline',
+      title: t('dash_ai.explain', { defaultValue: 'Explain a Concept' }),
+      subtitle: t('dash_ai.explain_subtitle', { defaultValue: 'Get a simple explanation' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } }),
+    },
+    {
+      icon: 'help-circle-outline',
+      title: t('dash_ai.quiz', { defaultValue: 'Practice Quiz' }),
+      subtitle: t('dash_ai.quiz_subtitle', { defaultValue: 'Quick questions to test you' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for me.' } }),
+    },
+    {
+      icon: 'map-outline',
+      title: t('dash_ai.study_plan', { defaultValue: 'Study Plan' }),
+      subtitle: t('dash_ai.study_plan_subtitle', { defaultValue: 'Plan your week of study' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } }),
+    },
+  ]), [t]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen 
@@ -166,6 +196,14 @@ export default function StudentDashboard() {
           containerStyle={styles.quotaDisplay}
         />
 
+        {/* Dash AI Tools */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {t('dash_ai.tools', { defaultValue: 'Dash AI Tools' })}
+          </Text>
+          <QuickActions actions={dashTools} />
+        </View>
+
         {/* Upgrade Banner */}
         {shouldShowUpgrade && (
           <InlineUpgradeBanner
@@ -209,6 +247,12 @@ export default function StudentDashboard() {
           <GradesCard />
         </View>
           </ScrollView>
+      
+      <DashOrb
+        position="bottom-right"
+        size={54}
+        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'student_dashboard' })}
+      />
       
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer
@@ -298,6 +342,15 @@ const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   },
   quotaDisplay: {
     marginBottom: 16,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    color: theme?.text || '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
   },
   customHeader: {
     flexDirection: 'row',

@@ -4,9 +4,9 @@
  * Extracted from dashboard.tsx to comply with WARP file size limits.
  */
 
-import { StyleSheet, Dimensions } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-const { width } = Dimensions.get('window');
+// Note: Using percentage-based widths for responsive design
 
 export const styles = StyleSheet.create({
   container: {
@@ -24,10 +24,26 @@ export const styles = StyleSheet.create({
   fixedHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
+  },
+  headerLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  hamburgerButton: {
+    padding: 4,
+  },
+  headerTitleWrapper: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
   },
   scrollContent: {
     padding: 16,
@@ -93,6 +109,12 @@ export const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  greetingCard: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
   },
   schoolTypeBadge: {
     marginBottom: 16,
@@ -198,6 +220,19 @@ export const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginBottom: 12, // Vertical gap between rows
+  },
+  quickActionDisabled: {
+    opacity: 0.55,
+  },
+  quickActionLockBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickActionIcon: {
     width: 48,

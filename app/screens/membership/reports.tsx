@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useYouthReports, MONTHLY_DATA, formatCurrency, formatNumber } from '@/hooks/membership/useYouthReports';
-import { styles } from './reports.styles';
+import { styles } from './_reports.styles';
 
 type PeriodType = 'week' | 'month' | 'quarter' | 'year';
 const PERIODS: { key: PeriodType; label: string }[] = [

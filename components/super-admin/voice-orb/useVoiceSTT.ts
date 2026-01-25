@@ -18,6 +18,7 @@ export const SUPPORTED_LANGUAGES = [
 ] as const;
 
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]['code'];
+export type TranscribeLanguage = SupportedLanguage | 'auto';
 
 export interface STTResult {
   text: string;
@@ -25,7 +26,7 @@ export interface STTResult {
 }
 
 export interface UseVoiceSTTReturn {
-  transcribe: (audioUri: string, language: SupportedLanguage) => Promise<STTResult | null>;
+  transcribe: (audioUri: string, language?: TranscribeLanguage) => Promise<STTResult | null>;
   isTranscribing: boolean;
   error: string | null;
 }
@@ -34,9 +35,19 @@ export function useVoiceSTT(): UseVoiceSTTReturn {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeDetectedLanguage = (input?: string | null): SupportedLanguage | null => {
+    if (!input) return null;
+    const trimmed = input.trim();
+    const direct = SUPPORTED_LANGUAGES.find(lang => lang.code.toLowerCase() === trimmed.toLowerCase());
+    if (direct) return direct.code;
+    const base = trimmed.split('-')[0].toLowerCase();
+    const baseMatch = SUPPORTED_LANGUAGES.find(lang => lang.code.split('-')[0].toLowerCase() === base);
+    return baseMatch?.code ?? null;
+  };
+
   const transcribe = useCallback(async (
     audioUri: string, 
-    language: SupportedLanguage
+    language: TranscribeLanguage = 'auto'
   ): Promise<STTResult | null> => {
     setIsTranscribing(true);
     setError(null);
@@ -62,35 +73,52 @@ export function useVoiceSTT(): UseVoiceSTTReturn {
         reader.readAsDataURL(blob);
       });
       
-      console.log('[VoiceSTT] Sending to STT, language:', language, 'size:', base64.length);
-      
-      const sttResponse = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/stt-proxy`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            audio_base64: base64,
-            language: language,
-            format: 'm4a',
-          }),
+      const sendRequest = async (lang: TranscribeLanguage): Promise<{ text?: string; language?: string }> => {
+        console.log('[VoiceSTT] Sending to STT, language:', lang, 'size:', base64.length);
+        const sttResponse = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/stt-proxy`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              audio_base64: base64,
+              language: lang,
+              auto_detect: lang === 'auto',
+              format: 'm4a',
+            }),
+          }
+        );
+
+        if (!sttResponse.ok) {
+          const errorText = await sttResponse.text();
+          console.error('[VoiceSTT] STT error:', errorText);
+          throw new Error(`STT failed: ${sttResponse.status}`);
         }
-      );
-      
-      if (!sttResponse.ok) {
-        const errorText = await sttResponse.text();
-        console.error('[VoiceSTT] STT error:', errorText);
-        throw new Error(`STT failed: ${sttResponse.status}`);
+
+        return sttResponse.json();
+      };
+
+      let sttData: { text?: string; language?: string };
+      try {
+        sttData = await sendRequest(language);
+      } catch (err) {
+        if (language === 'auto') {
+          console.warn('[VoiceSTT] Auto-detect failed, retrying with en-ZA...');
+          sttData = await sendRequest('en-ZA');
+        } else {
+          throw err;
+        }
       }
-      
-      const { text, language: detectedLang } = await sttResponse.json();
+
+      const { text, language: detectedLang } = sttData || {};
       
       if (text && text.trim()) {
         console.log('[VoiceSTT] Transcribed:', text.substring(0, 50) + '...');
-        return { text, language: detectedLang || language };
+        const normalized = normalizeDetectedLanguage(detectedLang) || normalizeDetectedLanguage(language) || 'en-ZA';
+        return { text, language: normalized };
       } else {
         console.log('[VoiceSTT] No speech in audio');
         return null;

@@ -77,11 +77,11 @@ export const useTeacherDashboard = () => {
         throw new Error('Authentication session invalid');
       }
 
-      // Fetch teacher profile from public.profiles (profiles.id = auth_user_id)
+      // Fetch teacher profile from public.profiles (auth_user_id links to auth.users.id)
       const { data: teacherProfile, error: teacherError } = await supabase
         .from('profiles')
         .select('id, preschool_id, organization_id, first_name, last_name, role')
-        .eq('id', user.id)
+        .eq('auth_user_id', user.id)
         .maybeSingle();
 
       if (teacherError) {
@@ -106,7 +106,7 @@ export const useTeacherDashboard = () => {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
           .select('id, preschool_id, role, first_name, last_name, organization_id')
-          .eq('id', user.id)
+          .eq('auth_user_id', user.id)
           .maybeSingle();
         
         log('👨‍🏫 Profile fallback:', { 

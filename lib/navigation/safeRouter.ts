@@ -78,6 +78,8 @@ const VALID_ROUTES = new Set([
   '/screens/super-admin-analytics',
   '/screens/teacher-reports',
   '/screens/teacher-messages',
+  '/(k12)/parent/dashboard',
+  '/(k12)/student/dashboard',
   // Add more routes as needed
 ]);
 
@@ -95,6 +97,7 @@ const VALID_PATTERNS = [
   /^\/screens\/super-admin/,  // Allow all super-admin routes
   /^\/screens\/.+/,  // Allow all other screens routes (catch-all for screens)
   /^\/screens\/learner\//,  // Allow all learner/* routes (e.g., enroll-by-program-code)
+  /^\/\(k12\)\//,  // Allow all K-12 routes
   /^\/invite/,  // Allow all invite routes
   /^\/pricing/,  // Allow pricing routes
   /^\/marketing/,  // Allow marketing routes
